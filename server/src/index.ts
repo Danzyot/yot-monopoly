@@ -46,6 +46,7 @@ import {
 import { chatEnabled, setChatEnabled } from './chatrules.ts';
 import { eventsForGame, loadEvents, loggedGames } from './eventlog.ts';
 import { hopCountHealth, ipSamples } from './ipdebug.ts';
+import { printStartupReport } from './startupcheck.ts';
 import { parseCustomLevels } from './tournament/blinds.ts';
 import type { SocialRequirements, TournamentConfig } from '../../shared/types.ts';
 
@@ -1243,6 +1244,10 @@ if (existsSync(clientDist)) {
 
 httpServer.listen(PORT, () => {
   console.log(`${BRAND.name} server listening on http://localhost:${PORT}`);
+  // After the address, before anyone can reach it: what this deployment is
+  // actually configured as. See startupcheck.ts for why it is printed rather
+  // than merely available.
+  printStartupReport();
   if (demoMode()) {
     console.warn('DEMO MODE — anyone with the address can sign in without Discord.');
     console.warn('Unset DEMO_MODE before this room runs a real event.');

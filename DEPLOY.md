@@ -94,6 +94,40 @@ Discord Developer Portal → **New Application** (name it *Chog Poker*).
 To get a Discord id: User Settings → Advanced → Developer Mode, then
 right-click a server/channel/user → Copy ID.
 
+### Check they took
+
+Every one of these is typed into a dashboard in another tab, and every way of
+getting one wrong is silent from inside the room. So the server prints what it
+actually sees at boot. **Open Railway → the service → Deploy Logs** after the
+deploy finishes and look for the block that starts `Configuration check`:
+
+```
+────────────────────────────────────────────────────────────────
+Configuration check
+  ·  Durable data: /data
+  ·  Operators: 1 Discord id
+  ·  Discord redirect URI (must be registered in the portal): https://poker.example.com/api/auth/discord/callback
+  ·  Discord application: 1274819260077576364 — the client id and secret must both come from THIS application…
+  ·  Sign-in secret: CHOG_SECRET
+  ok — nothing here will lose data or let the wrong person host.
+────────────────────────────────────────────────────────────────
+```
+
+`·` is a fact, `!` is worth knowing, `✗` is something that will cost you.
+A healthy deployment prints no `!` and no `✗` at all. The three that matter
+most, because each one is invisible until the worst moment:
+
+- **`DATA_DIR is not set`** — the volume is not attached, or is attached to a
+  different service. Everything is lost on the next deploy.
+- **`ADMIN_DISCORD_IDS is empty`** — *every* signed-in visitor is an operator
+  and can cancel a running tournament.
+- **`Discord sign-in is half configured`** — one of the id/secret pair is
+  missing, so every sign-in fails at the token exchange.
+
+The redirect URI line is worth copying straight out of the log into the
+Developer Portal: it is the exact string this deployment will send, which is
+not always the one you think you registered.
+
 ## 5. Domain
 
 Railway → service → **Settings** → **Networking** → **Custom Domain** → enter
