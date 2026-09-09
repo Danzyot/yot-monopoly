@@ -1,0 +1,185 @@
+# Deploying Chog Poker
+
+The server is one long-lived Node process — WebSockets plus in-memory game
+state — so it needs a host that keeps it running. **Vercel will not work**, and
+neither will anything that sleeps when idle: a sleeping server kills a
+tournament in progress.
+
+Railway is the path below (~$5/month Hobby). Any always-on VPS works too.
+
+> **If a Vercel project has already been created for this site**, it cannot
+> host it. Vercel runs serverless functions with no long-lived process and no
+> persistent disk, so the socket connection every table depends on has nothing
+> to stay connected to. Two ways forward, both fine:
+>
+> - **Simplest, and what the sibling sites do:** delete or ignore the Vercel
+>   project and run the whole thing — server and the client it serves — as one
+>   Railway service. The steps below are exactly that.
+> - **If the domain is already pointed at Vercel:** keep Vercel for the
+>   apex/marketing domain and give the poker room its own subdomain
+>   (`poker.…`) pointed at Railway. Do not try to split the client onto Vercel
+>   and the server onto Railway: the client is served by the same process that
+>   holds the game state, and separating them buys nothing but a CORS
+>   problem.
+
+---
+
+## What you need before you start
+
+| # | Thing | Who gets it |
+|---|-------|-------------|
+| 1 | A GitHub repo holding this code | you |
+| 2 | A Railway account + Hobby plan (~$5/mo) | you |
+| 3 | A Railway **volume** attached to the service | you (see below) |
+| 4 | A **Discord application** of Chog's own | Chog, or you on their behalf |
+| 5 | A **Discord bot** in that application, invited to Chog's server | Chog (needs Manage Server) |
+| 6 | A subdomain (e.g. `poker.chog.co`) + a DNS record | whoever runs chog.co |
+| 7 | Chog's Discord **server id**, and the **channel ids** you want to use | Chog |
+| 8 | The Discord **user id** of everyone who should be an operator | them |
+
+Nothing here is shared with any other site. This deployment has its own
+Discord application, its own database on its own volume, and its own players.
+
+---
+
+## 1. Create the service
+
+1. Railway → **New Project** → **Deploy from GitHub repo** → this repo.
+2. It builds from the `Dockerfile` automatically (`railway.toml` is already set
+   up: healthcheck on `/api/health`, restart on failure).
+
+## 2. Attach a volume — do this before the first real game
+
+Service → **Variables**/**Settings** → **Volumes** → **New Volume**, mount path
+`/data`. Then set `DATA_DIR=/data`.
+
+Without it the container's disk is wiped on every deploy and every restart,
+taking results, bans, uploaded music and the live-game snapshot with it. The
+site runs fine without a volume right up until the moment it matters.
+
+## 3. Discord application
+
+Discord Developer Portal → **New Application** (name it *Chog Poker*).
+
+- **OAuth2** → copy `CLIENT ID` and `CLIENT SECRET`.
+- **OAuth2 → Redirects** → add `https://<your-domain>/api/auth/discord/callback`.
+- **Bot** → Add Bot → copy the **token**. Enable **Server Members Intent**
+  (needed to verify that a player is really in Chog's server).
+- **General Information** → copy the **Public Key**.
+- **Interactions Endpoint URL** → `https://<your-domain>/api/discord/interactions`.
+  Save this *after* the service is deployed and `DISCORD_PUBLIC_KEY` is set, or
+  Discord's check fails. Open that URL in a browser any time — it explains in
+  plain English which piece is missing.
+- Invite the bot to Chog's server with `bot` + `applications.commands` scopes.
+
+## 4. Variables
+
+| Variable | Value |
+|---|---|
+| `DATA_DIR` | `/data` (the volume mount) |
+| `CHOG_SECRET` | any long random string — signs login tokens |
+| `PUBLIC_URL` | `https://poker.chog.co` |
+| `ADMIN_DISCORD_IDS` | comma-separated Discord user ids allowed to run games |
+| `DEMO_MODE` | `1` turns on name-only sign-in for showing the room; leave unset otherwise |
+| `DISCORD_CLIENT_ID` | from OAuth2 |
+| `DISCORD_CLIENT_SECRET` | from OAuth2 |
+| `DISCORD_BOT_TOKEN` | from Bot |
+| `DISCORD_PUBLIC_KEY` | from General Information |
+| `DISCORD_GUILD_ID` | Chog's Discord server id |
+| `DISCORD_INVITE_URL` | a permanent invite to that server |
+| `DISCORD_VERIFY_CHANNEL_ID` | channel for the "verify with a code" panel |
+| `DISCORD_ANNOUNCE_CHANNEL_ID` | where winners are announced (optional) |
+| `DISCORD_AUDIT_CHANNEL_ID` | where cheat alerts go — operators only (optional) |
+
+To get a Discord id: User Settings → Advanced → Developer Mode, then
+right-click a server/channel/user → Copy ID.
+
+## 5. Domain
+
+Railway → service → **Settings** → **Networking** → **Custom Domain** → enter
+the subdomain. Railway shows a `CNAME` target; add it at whatever DNS provider
+holds `chog.co`:
+
+```
+Type: CNAME   Host: poker   Value: <the value Railway shows>
+```
+
+Wait for it to go green, then set `PUBLIC_URL` and the OAuth redirect to match.
+The Railway-generated `*.up.railway.app` domain keeps working throughout, so
+you can run games before DNS is sorted.
+
+## 6. First run
+
+1. Sign in with a Discord account whose id is in `ADMIN_DISCORD_IDS`.
+2. **Dashboard** → create a tournament → share the invite link.
+3. Optional: **Dashboard → Promo code advert** if Chog wants their own offer
+   shown. It ships switched off and empty.
+
+---
+
+## Health and diagnosis
+
+- `GET /api/health` — uptime, memory, sockets, live games, event-loop lag,
+  whether the persistent disk is actually attached.
+- `GET /api/discord/interactions` — open in a browser; says exactly which
+  Discord setting is missing or wrong.
+
+
+---
+
+## Standing up to load, and to attack
+
+### What the app does for itself
+
+| Guard | Setting |
+|---|---|
+| HTTP requests per address | 600/min across `/api`, 30/min on sign-in, 20/min on game creation |
+| Socket messages per connection | 40 per 2s; excess packets are refused, sustained flooding disconnects |
+| Sockets per address, anonymous | 12 (`CHOG_MAX_ANON_SOCKETS_PER_IP`) |
+| Sockets per address, signed in | 250 (`CHOG_MAX_SOCKETS_PER_IP`) |
+| Socket message size | 32 KB |
+| Handshake timeout | 10s |
+
+The split between anonymous and signed-in matters for a big community. Mobile
+carriers put thousands of users behind one address, so a single strict cap
+would lock out real players on 4G. Signing in with Discord is the work an
+attacker will not do at scale, so it buys the far higher ceiling. **If a
+shared network ever gets squeezed, raise `CHOG_MAX_SOCKETS_PER_IP`** — the
+server logs every time a cap is hit, with the address and which cap it was.
+
+### What the app cannot do — put Cloudflare in front
+
+None of the above stops a real distributed attack. A volumetric flood
+(SYN/UDP/amplification) never reaches the application at all, and no amount of
+application code helps: the pipe fills before Node sees a byte.
+
+**Put the domain behind Cloudflare.** The free plan covers what a community
+site needs:
+
+1. Add `chog.co` to Cloudflare, or add the `poker` subdomain there.
+2. Point the record at Railway's CNAME target with the **orange cloud on**
+   (proxied). That hides the origin and absorbs L3/L4 floods.
+3. Turn on **Bot Fight Mode** and set Security Level to Medium.
+4. Optional: a rate-limiting rule on `/api/auth/*` as a second line.
+
+Proxying WebSockets works on the free plan and needs no extra configuration.
+Once proxied, the origin should only be reachable through Cloudflare — ask
+Railway support to restrict it, or accept that the `*.up.railway.app` hostname
+remains a bypass and simply do not publish it.
+
+### Capacity, measured
+
+A 1,000-socket test against one container, with a 684-player tournament
+running across 76 tables:
+
+- 15,700 events/second pushed to clients
+- event-loop lag p95 **20ms** (the server is not CPU-bound)
+- resident memory **~1.7 GB**
+- integrity check clean throughout
+
+Two caveats worth knowing. Socket round-trip p95 measured 3.4s, but the load
+generator was 1,000 Socket.IO clients in a single Node process sharing a CPU
+with the server — that number is at least partly the test harness queueing,
+not the server, which the 20ms loop lag argues for. And memory is the real
+planning constraint: **budget roughly 2.5 MB per concurrent player**, so size
+the Railway container from the field you expect (1,000 players ≈ 4 GB).

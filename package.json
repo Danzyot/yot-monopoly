@@ -1,0 +1,20 @@
+{
+  "name": "chog-poker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Wawa Poker \u2014 multi-table tournament poker platform",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w client",
+    "start": "npm run start -w server",
+    "test": "npm test -w server",
+    "loadtest": "node scripts/loadtest-sockets.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
