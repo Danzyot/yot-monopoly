@@ -8,10 +8,15 @@
 // nothing, and needs no CSS filter to be the right colour, so retuning the
 // palette retunes the cards with it.
 //
-// `ChogLogo` prefers a supplied logo file and falls back to the badge. Drop
-// artwork at `client/public/chog-logo.png` (or `.webp`) and it takes over
-// everywhere the lockup appears — header, landing page, table corner — with
-// no code change. Until then the room is complete without it.
+// `ChogLogo` is the supplied artwork — the Chog character, with the plate it
+// was uploaded on keyed out so it sits on the purple ground rather than in a
+// blue square. Replacing `client/public/chog-logo.png` replaces it in the
+// header, on the landing page and in the table's corner with no code change,
+// and if the file is ever missing the drawn badge stands in, so the room is
+// never left with an empty frame where its name should be.
+//
+// The artwork carries no lettering, so anywhere the lockup has to say the
+// site's name — the header — the word is rendered beside it either way.
 import { useId, useState } from 'react';
 import { BRAND } from '../../../shared/brand';
 
@@ -67,30 +72,25 @@ export default function ChogLogo(
   { height?: number; className?: string; word?: boolean },
 ) {
   const [tried, setTried] = useState(resolved);
-  if (tried >= CANDIDATES.length) {
-    // Supplied artwork carries the name inside it; the drawn badge does not,
-    // so where the lockup stands in for the site's name — the header — the
-    // word comes with it. Everywhere the name is already on the page, the
-    // badge stands alone.
-    if (!word) return <ChogBadge size={height} className={className} />;
-    return (
-      <>
-        <ChogBadge size={height} className={className} />
-        <span className="logo-word">{BRAND.org}</span>
-      </>
+  const mark = tried >= CANDIDATES.length
+    ? <ChogBadge size={height} className={className} />
+    : (
+      <img
+        className={className}
+        src={CANDIDATES[tried]}
+        alt={word ? '' : BRAND.org}
+        height={height}
+        draggable={false}
+        // Each miss steps to the next candidate; running off the end draws
+        // the badge instead.
+        onError={() => setTried(t => { resolved = t + 1; return t + 1; })}
+      />
     );
-  }
+  if (!word) return mark;
   return (
-    <img
-      className={className}
-      src={CANDIDATES[tried]}
-      alt={BRAND.org}
-      height={height}
-      draggable={false}
-      // Each miss steps to the next candidate; running off the end draws the
-      // badge instead. A 404 on a logo must never leave an empty frame where
-      // the site's name should be.
-      onError={() => setTried(t => { resolved = t + 1; return t + 1; })}
-    />
+    <>
+      {mark}
+      <span className="logo-word">{BRAND.org}</span>
+    </>
   );
 }

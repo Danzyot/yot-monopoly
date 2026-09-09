@@ -3389,7 +3389,10 @@ body {
 
 /* ---- the brand mark, from the supplied artwork ---- */
 .brand-lockup { height: 26px; width: auto; display: block; }
-.landing-mark .brand-mark { width: 86px; height: auto; display: block; margin: 0 auto; }
+/* The artwork is a character, not a wordmark, and the landing card is the one
+   place it has room to be one. 86px was sized for a wide lockup. */
+.landing-mark .brand-mark { width: 132px; height: auto; display: block; margin: 0 auto; }
+@media (max-width: 720px) { .landing-mark .brand-mark { width: 108px; } }
 @media (max-width: 720px) { .brand-lockup { height: 22px; } }
 
 /* ---- headings: solid white, with the accent word in green ----
