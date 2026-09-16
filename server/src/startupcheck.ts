@@ -15,6 +15,7 @@
 // wrong, what it will cost, and the exact thing to change.
 import { accessSync, constants, mkdirSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
+import { recordBoot, type BootMark } from './bootmark.ts';
 
 export interface ConfigReport {
   ok: boolean;
@@ -54,6 +55,7 @@ export function probeDataDir(dir: string): ProbeResult {
 export function configReport(
   env: NodeJS.ProcessEnv,
   probe: (dir: string) => ProbeResult = probeDataDir,
+  boot: BootMark | null = null,
 ): ConfigReport {
   const problems: string[] = [];
   const warnings: string[] = [];
@@ -83,6 +85,28 @@ export function configReport(
       warnings.push(
         `DATA_DIR is a relative path (${dataDir} → ${abs}). A volume mount is an `
         + 'absolute path; a relative one is almost always the container filesystem.',
+      );
+    } else if (boot?.error) {
+      problems.push(
+        `DATA_DIR is ${abs} and could not be written to (${boot.error}). Nothing `
+        + 'will persist — check the volume is attached to THIS service.',
+      );
+    } else if (boot?.noRecordFound) {
+      // Only ambiguous once. On a service that has deployed before, this is
+      // the disk announcing that it threw the last boot away.
+      warnings.push(
+        `DATA_DIR is ${abs}, but there is no record of a previous boot in it. `
+        + 'If this is the first deploy of this service, that is expected and this '
+        + 'line will not appear again. If it is NOT — if you have deployed before '
+        + '— then nothing is persisting: the directory is inside the container, '
+        + 'not on a volume, and every deploy is wiping results, bans, uploaded '
+        + 'music and the sign-in secret. Attach a volume (Railway → service → '
+        + 'Volumes) whose mount path is exactly this.',
+      );
+    } else if (boot) {
+      notes.push(
+        `Durable data: ${abs} (boot #${boot.boots}, last seen `
+        + `${new Date(boot.previousBootAt!).toISOString()}) — persistence confirmed`,
       );
     } else {
       notes.push(`Durable data: ${abs}`);
@@ -219,7 +243,9 @@ export function printStartupReport(
   log: (s: string) => void = console.log,
   warn: (s: string) => void = console.warn,
 ): ConfigReport {
-  const r = configReport(env);
+  // Leaving the mark is part of reporting: the answer for the NEXT boot is
+  // written now, and this boot reports on what the last one left behind.
+  const r = configReport(env, probeDataDir, recordBoot());
   const line = '─'.repeat(64);
   log(line);
   log('Configuration check');

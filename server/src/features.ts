@@ -66,14 +66,16 @@ export function isOn(name: keyof Features): boolean {
 }
 
 export function setFeatures(patch: Partial<Features>): Features {
-  features = normalise({ ...features, ...patch });
-  try {
-    mkdirSync(DATA_DIR, { recursive: true });
-    const tmp = `${FILE}.tmp`;
-    writeFileSync(tmp, JSON.stringify(features, null, 2));
-    renameSync(tmp, FILE);
-  } catch (e) {
-    console.error('Could not save features:', e);
-  }
+  const next = normalise({ ...features, ...patch });
+  // Write first, believe it second. The old order updated memory and then
+  // swallowed a failed write, so the dashboard said "saved", the switch sat
+  // there looking on, and the setting was gone at the next restart with
+  // nothing on screen that had ever suggested a problem. A switch that cannot
+  // be stored must fail loudly at the moment it is flipped.
+  mkdirSync(DATA_DIR, { recursive: true });
+  const tmp = `${FILE}.tmp`;
+  writeFileSync(tmp, JSON.stringify(next, null, 2));
+  renameSync(tmp, FILE);
+  features = next;
   return { ...features };
 }

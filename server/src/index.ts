@@ -947,7 +947,18 @@ app.get('/api/admin/features', (req, res) => {
 
 app.put('/api/admin/features', (req, res) => {
   if (!requireAdmin(req, res)) return;
-  res.json({ features: setFeatures((req.body ?? {}) as Partial<Features>) });
+  try {
+    res.json({ features: setFeatures((req.body ?? {}) as Partial<Features>) });
+  } catch (e) {
+    // The only way this throws is a disk that would not take the write, which
+    // is the same disk the results and the sign-in secret live on. Say so.
+    console.error('Could not save features:', e);
+    res.status(500).json({
+      error: 'Could not save to disk — this deployment has no working persistent '
+        + 'volume, so nothing here will survive a restart. Check DATA_DIR and the '
+        + 'attached volume.',
+    });
+  }
 });
 
 // ---------- direct messages ----------
