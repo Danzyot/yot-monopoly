@@ -287,6 +287,23 @@ let loopLagMs = 0;
   iv.unref?.();
 }
 
+// Nothing under /api is cacheable. Every one of these is live state, and a
+// cached copy of live state is indistinguishable from the server having
+// ignored you: the operator flips a switch, the save lands, the page is
+// reloaded, and a stale copy of /api/config puts the old answer back. That
+// reads as "my settings do not save" and sends you looking at the disk, which
+// is the one place that is working.
+//
+// It matters more than the usual "browsers are conservative with JSON"
+// argument, because the response does not have to reach a browser cache to be
+// stored — a CDN, a company proxy or a security suite doing TLS interception
+// on the operator's own machine will all happily keep a response that never
+// said not to.
+app.use('/api', (_req, res, next) => {
+  res.setHeader('cache-control', 'no-store, max-age=0');
+  next();
+});
+
 // ---------- auth ----------
 app.get('/api/config', (_req, res) => {
   res.json({

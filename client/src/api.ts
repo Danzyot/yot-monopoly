@@ -29,6 +29,10 @@ export function clearAuth() {
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getToken();
   const res = await fetch(path, {
+    // Belt and braces with the server's no-store: the header stops anything in
+    // the middle keeping a copy, and this stops the browser reaching for one it
+    // already has.
+    cache: 'no-store',
     ...options,
     headers: {
       'Content-Type': 'application/json',
