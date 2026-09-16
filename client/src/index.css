@@ -4277,3 +4277,9 @@ input[type='time']:hover::-webkit-calendar-picker-indicator {
 .action-dock.settling .action-buttons,
 .action-dock.settling .raise-panel { pointer-events: none; }
 .queued-note { font-weight: 700; color: var(--gold, #e6aa3c); }
+
+/* Copying a library across from a sibling site: an address and one button. */
+.music-import { margin-top: 14px; }
+.music-import-row { display: flex; gap: 8px; align-items: center; }
+.music-import-row .input { flex: 1 1 auto; min-width: 0; }
+.music-import-row .btn { flex: 0 0 auto; }

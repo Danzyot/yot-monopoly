@@ -314,6 +314,10 @@ export const api = {
   // memory first: Safari's fetch is flaky streaming a File directly (bare
   // "Load failed"), and reading also surfaces not-actually-downloaded
   // iCloud files as a clear error instead of a mid-transfer death.
+  musicImport: (from: string, rename?: Record<string, string>) =>
+    request<{ added: number; skipped: number; failed: { name: string; why: string }[] }>(
+      '/api/admin/music/import',
+      { method: 'POST', body: JSON.stringify({ from, rename: rename ?? {} }) }),
   musicUpload: async (file: File, name: string, vibe: string): Promise<SongRow> => {
     const token = getToken();
     let data: ArrayBuffer;

@@ -32,7 +32,7 @@ import {
 import { armPersistence, lastSnapshotAge, restoreLive, snapshotLive } from './persist.ts';
 import {
   addSong, listPlaylists, listSongs, loadSongs, manifestRows, MAX_SONG_BYTES,
-  removeSong, renamePlaylist, songFilePath, updateSong,
+  removeSong, renamePlaylist, songFilePath, updateSong, importFrom,
 } from './music.ts';
 import {
   addGraphic, graphicFilePath, listGraphics, loadGraphics, MAX_GRAPHIC_BYTES,
@@ -808,6 +808,19 @@ app.patch('/api/admin/music/:id', (req, res) => {
   });
   if (!row) { res.status(404).json({ error: 'No such song' }); return; }
   res.json({ song: row });
+});
+
+// Pull an entire library across from a sibling deployment in one call.
+app.post('/api/admin/music/import', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const from = String(req.body?.from ?? '').trim();
+  if (!from) { res.status(400).json({ error: 'Give the address of the site to import from' }); return; }
+  const rename = req.body?.rename && typeof req.body.rename === 'object'
+    ? req.body.rename as Record<string, string>
+    : {};
+  importFrom(from, rename)
+    .then(r => res.json(r))
+    .catch(e => res.status(400).json({ error: e instanceof Error ? e.message : 'Import failed' }));
 });
 
 app.get('/api/admin/playlists', (req, res) => {

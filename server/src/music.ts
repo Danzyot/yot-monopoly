@@ -144,3 +144,73 @@ export function songFilePath(file: string): string | null {
 export function manifestRows(): { name: string; url: string; vibe: string }[] {
   return listSongs().map(s => ({ name: s.name, url: `/music/lib/${s.file}`, vibe: s.vibe }));
 }
+
+// ---------- import a whole library from another deployment ----------
+//
+// The sibling sites publish two public routes — /music/manifest.json and
+// /music/lib/<file> — so one site can read another's library directly. Doing
+// the copy here rather than in a browser is not a convenience: an operator's
+// machine sits behind whatever antivirus and TLS interception it happens to
+// run, and a security suite rewriting CORS headers or substituting
+// certificates makes a browser-side copy impossible to complete. The server
+// talks to the other server, and none of that is in the path.
+export interface ImportResult {
+  added: number;
+  skipped: number;
+  failed: { name: string; why: string }[];
+}
+
+// Admin-only, but still worth bounding: an operator pasting a wrong address
+// should get an error, not a request to something inside the private network.
+function assertPublicHttp(raw: string): URL {
+  let u: URL;
+  try { u = new URL(raw); } catch { throw new Error('That is not a URL'); }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') {
+    throw new Error('Only http and https addresses can be imported from');
+  }
+  const h = u.hostname.toLowerCase();
+  const private_ = h === 'localhost' || h === '::1' || h.endsWith('.local')
+    || /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h)
+    || /^169\.254\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h);
+  if (private_ && process.env.ALLOW_PRIVATE_IMPORT !== '1') {
+    throw new Error('That address is on a private network');
+  }
+  return u;
+}
+
+export async function importFrom(
+  from: string,
+  rename: Record<string, string> = {},
+): Promise<ImportResult> {
+  const base = assertPublicHttp(from).toString().replace(/\/+$/, '');
+  const res = await fetch(`${base}/music/manifest.json`, {
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) throw new Error(`The source answered HTTP ${res.status}`);
+  const rows = await res.json() as { name?: string; url?: string; vibe?: string }[];
+  if (!Array.isArray(rows)) throw new Error('The source did not return a song list');
+
+  const have = new Set(songs.map(s => s.name));
+  const out: ImportResult = { added: 0, skipped: 0, failed: [] };
+  for (const r of rows.slice(0, MAX_SONGS)) {
+    const name = String(r?.name ?? '').trim();
+    const url = String(r?.url ?? '');
+    if (!name || !url) continue;
+    if (have.has(name)) { out.skipped++; continue; }
+    try {
+      const src = /^https?:\/\//.test(url) ? url : `${base}${url.startsWith('/') ? '' : '/'}${url}`;
+      // Each file gets its own bound: one unreachable song must not hang the
+      // whole import, and the operator is watching a spinner while this runs.
+      const f = await fetch(src, { signal: AbortSignal.timeout(60_000) });
+      if (!f.ok) throw new Error(`HTTP ${f.status}`);
+      const buf = Buffer.from(await f.arrayBuffer());
+      const vibe = rename[String(r.vibe ?? '')] ?? String(r.vibe ?? '') ?? '';
+      addSong(name, vibe, buf);
+      have.add(name);
+      out.added++;
+    } catch (e) {
+      out.failed.push({ name, why: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return out;
+}

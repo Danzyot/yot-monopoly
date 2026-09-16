@@ -19,6 +19,8 @@ export default function MusicManager() {
   const [playlistChoice, setPlaylistChoice] = useState(NEW_PLAYLIST);
   const [newPlaylist, setNewPlaylist] = useState('');
   const [uploading, setUploading] = useState<string | null>(null);
+  const [importFrom, setImportFrom] = useState('');
+  const [importing, setImporting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const refresh = () => api.musicList().then(r => setSongs(r.songs)).catch(() => {});
@@ -57,6 +59,31 @@ export default function MusicManager() {
     await refresh();
     // Players pick the new library up without reloading.
     void loadCustomTracks();
+  };
+
+  // Copy a whole library across from a sibling site. The server does the
+  // fetching, so this works regardless of what the operator's own machine has
+  // in front of its network — a security suite rewriting CORS headers or
+  // swapping TLS certificates makes the same copy impossible from a browser.
+  const runImport = async () => {
+    const from = importFrom.trim();
+    if (!from) { toast('error', 'Paste the address of the site to copy from'); return; }
+    setImporting(true);
+    try {
+      const r = await api.musicImport(from);
+      const bits = [`${r.added} copied`];
+      if (r.skipped) bits.push(`${r.skipped} already here`);
+      if (r.failed.length) bits.push(`${r.failed.length} failed`);
+      toast(r.added ? 'success' : 'error', bits.join(', '));
+      if (r.failed.length) console.warn('Music import failures:', r.failed);
+      setImportFrom('');
+      await refresh();
+      void loadCustomTracks();
+    } catch (e) {
+      toast('error', e instanceof Error ? e.message : 'Import failed');
+    } finally {
+      setImporting(false);
+    }
   };
 
   const rename = async (from: string, to: string) => {
@@ -140,6 +167,24 @@ export default function MusicManager() {
           </div>
         </div>
         {uploading && <p className="tag">Uploading “{uploading}”…</p>}
+        <div className="field music-import">
+          <label htmlFor="mu-import">Or copy the whole library from another site</label>
+          <div className="music-import-row">
+            <input
+              id="mu-import" className="input" value={importFrom} disabled={importing}
+              placeholder="https://poker.example.com"
+              onChange={e => setImportFrom(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') void runImport(); }}
+            />
+            <button className="btn btn-primary" disabled={importing} onClick={() => void runImport()}>
+              {importing ? 'Copying…' : 'Copy'}
+            </button>
+          </div>
+          <span className="field-hint">
+            Pulls every song and playlist name straight from that site's server.
+            Songs already here by name are skipped, so it is safe to run twice.
+          </span>
+        </div>
         <p className="tag">
           Uploads go to the server's disk and reach every player straight away.
           Only add music you hold the rights to play to a room.
