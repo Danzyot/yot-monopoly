@@ -377,6 +377,100 @@ app.get('/api/auth/discord/start', (req, res) => {
   res.redirect(authorizeUrl(signState(stateData), redirectUriFor(requestBase(req))));
 });
 
+// Health probe for sign-in, in the same spirit as the interactions one below:
+// open it in a browser ON THE DOMAIN THAT IS FAILING and it answers the only
+// question that matters, which is one nobody can answer from the outside.
+//
+// Discord matches `redirect_uri` as an exact string, and this server derives
+// it from the host in the address bar rather than from PUBLIC_URL — that is
+// deliberate, so one deployment can serve a Railway domain and a custom domain
+// at once. The cost is that "I registered the redirect" and "I registered the
+// redirect for the domain I am actually using" are different statements, and
+// Discord's error page says the same eleven words either way.
+//
+// Nothing secret is exposed: the client id and the redirect are both sent to
+// Discord in a URL the player's own browser follows, and the secret is only
+// ever reported as present or absent.
+app.get('/api/auth/discord/check', (req, res) => {
+  const base = requestBase(req);
+  const override = process.env.DISCORD_REDIRECT_URI?.trim() || null;
+  const derived = `${base.replace(/\/$/, '')}/api/auth/discord/callback`;
+  const sent = redirectUriFor(base);
+  const clientId = process.env.DISCORD_CLIENT_ID?.trim() ?? '';
+  const hasSecret = !!process.env.DISCORD_CLIENT_SECRET?.trim();
+  const problems: string[] = [];
+  const warnings: string[] = [];
+
+  if (!clientId) {
+    problems.push(
+      'DISCORD_CLIENT_ID is not set, so the sign-in link goes to Discord with no '
+      + 'application on it. Copy the Application ID from the Developer Portal '
+      + '(your app → General Information) into this service\'s variables.',
+    );
+  } else if (!/^\d{17,20}$/.test(clientId)) {
+    problems.push(
+      `DISCORD_CLIENT_ID is "${clientId}", which is not an application id — those `
+      + 'are 17–20 digits. Discord will refuse the authorize link outright. Make '
+      + 'sure this is the Application ID and not the public key, bot token or '
+      + 'client secret.',
+    );
+  }
+  if (!hasSecret) {
+    problems.push(
+      'DISCORD_CLIENT_SECRET is not set. Sign-in is switched off entirely until '
+      + 'it is — /api/auth/discord/start answers "not configured" rather than '
+      + 'sending anyone to Discord.',
+    );
+  }
+  // localhost is Discord's one exception to the https rule, so warning about
+  // it while developing would be noise that trains the eye to skip the block.
+  const local = /^(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(req.get('host') ?? '');
+  if (req.protocol !== 'https' && !local) {
+    warnings.push(
+      `This request arrived as ${req.protocol}, so the redirect below is not https. `
+      + 'Discord refuses a non-https redirect for anything but localhost. If you '
+      + 'are on the real domain, the proxy header is not reaching us — check '
+      + 'TRUSTED_PROXY_HOPS.',
+    );
+  }
+  if (override && override !== derived) {
+    warnings.push(
+      `DISCORD_REDIRECT_URI is set to "${override}" and overrides everything, but `
+      + `this domain would otherwise have used "${derived}". Sign-in on this `
+      + 'domain works only if the override is the one registered in the portal. '
+      + 'Unless this service is reached through another host, unset it.',
+    );
+  }
+
+  res.json({
+    ok: true,
+    endpoint: 'discord-sign-in',
+    // The single question that matters, and the exact string to paste.
+    registerThisRedirectUri: sent,
+    readyToTry: problems.length === 0,
+    youAreOn: base,
+    derivedFromThisDomain: derived,
+    redirectUriOverride: override,
+    clientId: clientId || null,
+    clientSecretConfigured: hasSecret,
+    botTokenConfigured: !!process.env.DISCORD_BOT_TOKEN?.trim(),
+    signInEnabled: discordEnabled(),
+    publicUrlVariable: process.env.PUBLIC_URL?.trim() || null,
+    problems,
+    warnings,
+    nextStep: problems.length
+      ? problems[0]
+      : 'Discord Developer Portal → your application → OAuth2 → Redirects. The '
+        + 'list must contain registerThisRedirectUri EXACTLY — same scheme, same '
+        + 'host, no trailing slash — then press Save Changes. Discord compares it '
+        + 'as plain text, so http vs https, a www that is or is not there, and '
+        + 'the Railway domain vs your custom domain are each a different entry. '
+        + 'Open this URL on every domain players reach the site on and register '
+        + 'each answer. Check clientId is the same application whose redirect '
+        + 'list you are editing.',
+  });
+});
+
 app.get('/api/auth/discord/callback', async (req, res) => {
   try {
     const state = verifyState(String(req.query.state ?? ''));

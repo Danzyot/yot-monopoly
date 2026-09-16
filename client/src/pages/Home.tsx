@@ -90,8 +90,12 @@ export default function Home() {
         ) : profile ? (
           <LiveGames />
         ) : (
+          /* The label named Discord unconditionally, on a deployment that may
+             not have Discord configured at all — and then the modal it opens
+             offers a name box instead, which reads as the site being broken.
+             It says what it opens, and the modal says what is available. */
           <button className="btn btn-lit btn-lg" onClick={() => setModal('auth')}>
-            Sign in with Discord
+            Sign in
           </button>
         )}
       </section>
