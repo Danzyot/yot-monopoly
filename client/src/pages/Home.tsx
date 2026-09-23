@@ -92,6 +92,7 @@ export default function Home() {
           <div className="editions">
             {THEMES.map(t => (
               <div key={t.id} className="edition" style={{ background: t.palette.board, color: t.palette.boardText, borderColor: t.palette.boardLine }}>
+                {t.logoUrl && <img className="edition-logo" src={t.logoUrl} alt="" />}
                 <div className="swatches">
                   {Object.values(t.groupColors).map(c => <i key={c} style={{ background: c }} />)}
                 </div>

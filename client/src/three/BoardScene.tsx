@@ -19,7 +19,16 @@ function Board({ theme, onPick, onHover }: {
   // Redraw once web fonts are ready so the board text uses them.
   const [fontsReady, setFontsReady] = useState(false);
   useEffect(() => { document.fonts?.ready.then(() => setFontsReady(true)); }, []);
-  const tex = useMemo(() => boardTexture(theme), [theme, fontsReady]);
+  // Editions with artwork: load it, then redraw the board with it in place.
+  const [logo, setLogo] = useState<HTMLImageElement | null>(null);
+  useEffect(() => {
+    setLogo(null);
+    if (!theme.logoUrl) return;
+    const img = new Image();
+    img.onload = () => setLogo(img);
+    img.src = theme.logoUrl;
+  }, [theme.logoUrl]);
+  const tex = useMemo(() => boardTexture(theme, logo), [theme, fontsReady, logo]);
   useEffect(() => () => tex.dispose(), [tex]);
 
   const materials = useMemo(() => {
@@ -107,12 +116,14 @@ function Ownership({ game, theme }: { game: GameView; theme: Theme }) {
           </mesh>
         );
       })}
-      <Buildings game={game} />
+      <Buildings game={game} theme={theme} />
     </group>
   );
 }
 
-function Buildings({ game }: { game: GameView }) {
+function Buildings({ game, theme }: { game: GameView; theme: Theme }) {
+  const house = theme.palette.house ?? '#1f9d49';
+  const hotel = theme.palette.hotel ?? '#d2202f';
   return (
     <group>
       {Object.entries(game.owned).flatMap(([k, o]) => {
@@ -123,13 +134,13 @@ function Buildings({ game }: { game: GameView }) {
         return buildingSpots(i, o.houses).map(([x, z], n) =>
           o.houses === 5 ? (
             <group key={`${i}-h`} position={[x, 0, z]} rotation={[0, rotY, 0]}>
-              <mesh castShadow position={[0, 0.1, 0]}><boxGeometry args={[0.36, 0.2, 0.2]} /><meshStandardMaterial color="#d2202f" roughness={0.4} /></mesh>
-              <mesh castShadow position={[0, 0.24, 0]} rotation={[0, 0, Math.PI / 4]} scale={[1, 1, 1]}><boxGeometry args={[0.12, 0.12, 0.2]} /><meshStandardMaterial color="#a8141f" /></mesh>
+              <mesh castShadow position={[0, 0.1, 0]}><boxGeometry args={[0.36, 0.2, 0.2]} /><meshStandardMaterial color={hotel} roughness={0.4} /></mesh>
+              <mesh castShadow position={[0, 0.24, 0]} rotation={[0, 0, Math.PI / 4]} scale={[1, 1, 1]}><boxGeometry args={[0.12, 0.12, 0.2]} /><meshStandardMaterial color={hotel} roughness={0.6} /></mesh>
             </group>
           ) : (
             <group key={`${i}-${n}`} position={[x, 0, z]} rotation={[0, rotY, 0]}>
-              <mesh castShadow position={[0, 0.06, 0]}><boxGeometry args={[0.13, 0.12, 0.15]} /><meshStandardMaterial color="#1f9d49" roughness={0.4} /></mesh>
-              <mesh castShadow position={[0, 0.15, 0]} rotation={[0, 0, Math.PI / 4]}><boxGeometry args={[0.1, 0.1, 0.15]} /><meshStandardMaterial color="#17803a" /></mesh>
+              <mesh castShadow position={[0, 0.06, 0]}><boxGeometry args={[0.13, 0.12, 0.15]} /><meshStandardMaterial color={house} roughness={0.4} /></mesh>
+              <mesh castShadow position={[0, 0.15, 0]} rotation={[0, 0, Math.PI / 4]}><boxGeometry args={[0.1, 0.1, 0.15]} /><meshStandardMaterial color={house} roughness={0.6} /></mesh>
             </group>
           ),
         );
@@ -200,10 +211,10 @@ export default function BoardScene({ themeId, game, selected, onSelect, spin }: 
           <>
             <Ownership game={game} theme={theme} />
             <Tokens players={game.players} current={game.current} />
-            <Dice dice={game.dice} seq={game.rollSeq} />
+            <Dice dice={game.dice} seq={game.rollSeq} body={theme.palette.die} pip={theme.palette.pip} />
           </>
         )}
-        {!game && <Dice dice={[6, 6]} seq={0} />}
+        {!game && <Dice dice={[6, 6]} seq={0} body={theme.palette.die} pip={theme.palette.pip} />}
       </Spinner>
       <ContactShadows position={[0, 0.001, 0]} scale={W} opacity={0.35} blur={2.2} far={1} />
 

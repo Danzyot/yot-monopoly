@@ -17,7 +17,7 @@ html, body, #root { height: 100%; margin: 0; }
 body {
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.4 Inter, system-ui, sans-serif;
+  font: 14px/1.4 var(--font, Inter), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
 }
@@ -238,3 +238,22 @@ button.edition:disabled { cursor: default; }
   .trade-arrow { display: none; }
   h1 { font-size: 34px; }
 }
+
+/* ---- editions with their own UI skin (e.g. Chog) ---- */
+.lobby.branded, .game.branded { background: var(--bg); color: var(--text); font-family: var(--font, Inter), system-ui, sans-serif; }
+.branded h1, .branded h2, .branded h3, .branded h4,
+.branded .btn, .branded .tabs button, .branded input, .branded select,
+.branded .deed-head b, .branded .auction-head b, .branded .big-num { font-family: var(--font, Inter), system-ui, sans-serif; }
+.branded .btn.primary { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 70%, #fff), var(--accent)); box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 35%, transparent); }
+.branded .cash { color: #35c97a; }
+.branded .deed { background: #fdf6cd; }
+.branded .deed-actions .btn { background: #2b1764; }
+.branded .auction-head, .branded .deed-head { color: #0a0518; }
+.brand-mark { width: 30px; height: 30px; object-fit: contain; border-radius: 50%; background: color-mix(in srgb, var(--accent) 20%, transparent); }
+.corner-mark { position: absolute; right: 16px; bottom: 14px; width: 88px; height: 88px; object-fit: contain; pointer-events: none; filter: drop-shadow(0 6px 18px rgba(0,0,0,0.5)); }
+.edition-logo { width: 56px; height: 56px; object-fit: contain; align-self: flex-start; }
+.edition.small .edition-logo { width: 40px; height: 40px; }
+.card-pop.branded { background: var(--panel-solid); color: var(--text); border: 2px solid var(--accent); }
+.card-pop.branded small { color: var(--accent); }
+.card-logo { width: 64px; height: 64px; object-fit: contain; display: block; margin: -48px auto 4px; filter: drop-shadow(0 6px 12px rgba(0,0,0,0.5)); }
+@media (max-width: 760px) { .corner-mark { display: none; } }

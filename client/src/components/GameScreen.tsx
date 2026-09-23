@@ -5,6 +5,7 @@ import type { GameView, RoomView } from '../../../shared/types.ts';
 import { act, call, useConnected, type ChatMsg } from '../net.ts';
 import { TOKEN_EMOJI } from '../format.ts';
 import { toastError } from '../toast.tsx';
+import { themeStyle } from '../themeStyle.ts';
 import BoardScene from '../three/BoardScene.tsx';
 import Chat from './Chat.tsx';
 import Deed from './Deed.tsx';
@@ -35,11 +36,12 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   };
 
   return (
-    <div className="game" style={{ ['--accent' as string]: theme.palette.accent }}>
+    <div className={`game ${theme.ui ? 'branded' : ''}`} style={themeStyle(theme)}>
       <div className="scene"><BoardScene themeId={game.themeId} game={game} selected={selected} onSelect={setSelected} /></div>
 
       <header className="topbar">
         <div className="row">
+          {theme.logoUrl && <img className="brand-mark" src={theme.logoUrl} alt="" />}
           <b className="mono accent">{room.code}</b>
           <span className="muted small">{theme.name} · turn {game.turnNumber}</span>
           {!connected && <span className="tag warn">reconnecting…</span>}
@@ -74,6 +76,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
       <AuctionPanel game={game} me={me} skew={skew} />
       <CardPopup game={game} />
       <ActionBar game={game} me={me} />
+      {theme.logoUrl && <img className="corner-mark" src={theme.logoUrl} alt={theme.name} />}
 
       {tradeWith && <TradeModal game={game} me={me} withId={tradeWith} onClose={() => setTradeWith(null)} />}
       {game.winner && <Winner game={game} onHome={() => nav('/')} />}
@@ -267,7 +270,8 @@ function CardPopup({ game }: { game: GameView }) {
   if (!card || shown !== card.seq) return null;
   const who = game.players.find(p => p.id === card.player);
   return (
-    <div className={`card-pop ${card.deck}`} onClick={() => setShown(null)}>
+    <div className={`card-pop ${card.deck} ${theme.ui ? 'branded' : ''}`} onClick={() => setShown(null)}>
+      {theme.logoUrl && <img className="card-logo" src={theme.logoUrl} alt="" />}
       <small>{theme.deckNames[card.deck].toUpperCase()}</small>
       <p>{card.text}</p>
       <span className="small muted">drawn by <b style={{ color: who?.color }}>{who?.name}</b></span>

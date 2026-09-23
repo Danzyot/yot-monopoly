@@ -30,11 +30,11 @@ const PIPS: Record<number, [number, number][]> = {
   6: [[0.28, 0.22], [0.72, 0.22], [0.28, 0.5], [0.72, 0.5], [0.28, 0.78], [0.72, 0.78]],
 };
 
-function faceTexture(v: number, pip: string): CanvasTexture {
+function faceTexture(v: number, pip: string, body: string): CanvasTexture {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
   const g = c.getContext('2d')!;
-  g.fillStyle = '#fbfbf7';
+  g.fillStyle = body;
   g.fillRect(0, 0, 128, 128);
   g.fillStyle = pip;
   for (const [x, y] of PIPS[v]) {
@@ -47,11 +47,11 @@ function faceTexture(v: number, pip: string): CanvasTexture {
   return t;
 }
 
-function Die({ value, seq, home, delay, pip }: { value: number; seq: number; home: [number, number]; delay: number; pip: string }) {
+function Die({ value, seq, home, delay, pip, body }: { value: number; seq: number; home: [number, number]; delay: number; pip: string; body: string }) {
   const ref = useRef<Mesh>(null);
   const materials = useMemo(
-    () => FACE_VALUES.map(v => new MeshStandardMaterial({ map: faceTexture(v, pip), roughness: 0.35 })),
-    [pip],
+    () => FACE_VALUES.map(v => new MeshStandardMaterial({ map: faceTexture(v, pip, body), roughness: 0.35 })),
+    [pip, body],
   );
   const st = useRef({ seq: -1, t0: 0, yaw: 0, spin: new Euler(), from: [0, 0] as [number, number] });
 
@@ -91,12 +91,14 @@ function Die({ value, seq, home, delay, pip }: { value: number; seq: number; hom
   );
 }
 
-export function Dice({ dice, seq, pip = '#111' }: { dice: [number, number] | null; seq: number; pip?: string }) {
+export function Dice({ dice, seq, pip = '#111', body = '#fbfbf7' }: {
+  dice: [number, number] | null; seq: number; pip?: string; body?: string;
+}) {
   const [a, b] = dice ?? [5, 2];
   return (
     <group>
-      <Die value={a} seq={seq} home={[-0.45, 1.4]} delay={0} pip={pip} />
-      <Die value={b} seq={seq} home={[0.4, 1.7]} delay={60} pip={pip} />
+      <Die value={a} seq={seq} home={[-0.45, 1.4]} delay={0} pip={pip} body={body} />
+      <Die value={b} seq={seq} home={[0.4, 1.7]} delay={60} pip={pip} body={body} />
     </group>
   );
 }

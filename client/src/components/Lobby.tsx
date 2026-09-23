@@ -6,6 +6,7 @@ import { TOKEN_EMOJI, TOKEN_LABEL } from '../format.ts';
 import { toast, toastError } from '../toast.tsx';
 import Chat from './Chat.tsx';
 import BoardScene from '../three/BoardScene.tsx';
+import { themeStyle } from '../themeStyle.ts';
 
 const TOGGLES: [keyof RuleConfig, string, string][] = [
   ['auctions', 'Auctions', 'Unbought property goes to auction'],
@@ -28,12 +29,12 @@ export default function Lobby({ room, me, spectating, chat }: {
   const leave = async () => { await call('room:leave').catch(() => {}); nav('/'); };
 
   return (
-    <div className="lobby" style={{ ['--accent' as string]: theme.palette.accent }}>
+    <div className={`lobby ${theme.ui ? 'branded' : ''}`} style={themeStyle(theme)}>
       <div className="lobby-bg"><BoardScene themeId={room.themeId} game={null} spin /></div>
       <div className="lobby-panels">
         <section className="panel">
           <div className="row between">
-            <h2>Room <span className="mono accent">{room.code}</span></h2>
+            <h2 className="row">{theme.logoUrl && <img className="brand-mark" src={theme.logoUrl} alt="" />}Room <span className="mono accent">{room.code}</span></h2>
             <button className="btn small ghost" onClick={leave}>Leave</button>
           </div>
           <div className="row">
@@ -96,6 +97,7 @@ export default function Lobby({ room, me, spectating, chat }: {
                 className={`edition small ${t.id === room.themeId ? 'on' : ''}`}
                 style={{ background: t.palette.board, color: t.palette.boardText, borderColor: t.id === room.themeId ? t.palette.accent : t.palette.boardLine }}
                 onClick={() => configure({ themeId: t.id })}>
+                {t.logoUrl && <img className="edition-logo" src={t.logoUrl} alt="" />}
                 <b>{t.name}</b>
                 <span className="small">{t.tagline}</span>
               </button>

@@ -47,6 +47,24 @@ export interface ThemePalette {
   boardText: string;
   /** UI accent. */
   accent: string;
+  /** Dice body / pip colours. */
+  die?: string;
+  pip?: string;
+  /** House / hotel colours. */
+  house?: string;
+  hotel?: string;
+}
+
+/** Optional reskin of the HTML interface (lobby + HUD) while this edition is played. */
+export interface ThemeUi {
+  bg: string;
+  panel: string;
+  panelSolid: string;
+  line: string;
+  text: string;
+  muted: string;
+  /** CSS font-family for the whole UI and the board lettering. */
+  font?: string;
 }
 
 export interface Theme {
@@ -62,6 +80,9 @@ export interface Theme {
   chest: CardDef[];
   deckNames: { chance: string; chest: string };
   palette: ThemePalette;
+  ui?: ThemeUi;
+  /** Artwork drawn in the middle of the board and on the edition's cards (path under client/public). */
+  logoUrl?: string;
   rules: Partial<RuleConfig>;
 }
 
@@ -136,7 +157,65 @@ export const YOT: Theme = edition(CLASSIC, {
   rules: { freeParkingPot: true },
 });
 
-export const THEMES: Theme[] = [CLASSIC, YOT];
+// Chog, built from the chog-poker room's design system: purple grounds, Chog
+// pink for anything you press, the mascot's cream for the one thing that has
+// to be read first, set in Outfit. Values are lifted from that repo's
+// client/src/index.css so the two sites read as one brand.
+export const CHOG: Theme = edition(CLASSIC, {
+  id: 'chog',
+  name: 'Chog Edition',
+  tagline: 'Chog Poker’s purple room, now as a board. Jackpot on, double on START.',
+  centerTitle: 'CHOG',
+  currency: '$',
+  logoUrl: '/editions/chog/logo.png',
+  deckNames: { chance: 'Chog Luck', chest: 'Chog Stash' },
+  names: {
+    0: 'START', 1: 'Cream Alley', 3: 'Blush Lane', 4: 'Rake', 5: 'Pink Line',
+    6: 'Spade Street', 8: 'Club Court', 9: 'Diamond Drive', 10: 'Chog Cage',
+    11: 'Flop Plaza', 12: 'Card Shuffler', 13: 'Turn Terrace', 14: 'River Road',
+    15: 'Purple Line', 16: 'Blind Boulevard', 18: 'Ante Avenue', 19: 'Button Row',
+    20: 'Chog’s Couch', 21: 'Check Street', 23: 'Raise Road', 24: 'All-In Alley',
+    25: 'Cream Line', 26: 'Pocket Pairs', 27: 'Full House Row', 28: 'Chip Stacker',
+    29: 'Straight Flush', 30: 'Busted!', 31: 'High Roller Heights', 32: 'VIP Lounge',
+    34: 'Final Table', 35: 'Magenta Line', 37: 'Chog Tower', 38: 'Buy-In Fee', 39: 'Chog Palace',
+  },
+  // Eight sets, all pulled toward the brand: tan, cream, pink, amber, red,
+  // magenta, blue and the deep purple the felt is cut from.
+  groupColors: {
+    brown: '#dd9974',
+    lightblue: '#56b6ff',
+    pink: '#f078a9',
+    orange: '#ff9a4d',
+    red: '#ff5f57',
+    yellow: '#fdf6cd',
+    green: '#35c97a',
+    darkblue: '#9e3381',
+  },
+  palette: {
+    sky: '#0a0518',
+    table: '#2b1764',
+    board: '#1c1140',
+    boardLine: '#4a2a9e',
+    boardText: '#fdf6cd',
+    accent: '#d53f7c',
+    die: '#fdf6cd',
+    pip: '#902752',
+    house: '#d53f7c',
+    hotel: '#fdf6cd',
+  },
+  ui: {
+    bg: '#0a0518',
+    panel: 'rgba(21, 12, 48, 0.9)',
+    panelSolid: '#150c30',
+    line: '#2b1a5c',
+    text: '#ffffff',
+    muted: '#b3a4d6',
+    font: "'Outfit', Inter, system-ui, sans-serif",
+  },
+  rules: { freeParkingPot: true, doubleOnGo: true },
+});
+
+export const THEMES: Theme[] = [CLASSIC, CHOG, YOT];
 
 export function getTheme(id: string): Theme {
   return THEMES.find(t => t.id === id) ?? CLASSIC;
