@@ -1,12 +1,12 @@
 import { Game } from '../src/engine/game.ts';
-import { CLASSIC, DEFAULT_RULES, type RuleConfig } from '../../shared/themes.ts';
+import { DEFAULT_RULES, resolveTheme, type RuleConfig } from '../../shared/themes.ts';
 
 /** A game whose dice are scripted: push faces with roll(). */
-export function scripted(n = 2, rules: Partial<RuleConfig> = {}) {
+export function scripted(n = 2, rules: Partial<RuleConfig> = {}, mapId = 'classic') {
   const queue: number[] = [];
   let clock = 1_000_000;
   const g = new Game({
-    theme: CLASSIC,
+    theme: resolveTheme('classic', mapId),
     rules: { ...DEFAULT_RULES, ...rules },
     players: Array.from({ length: n }, (_, i) => ({
       id: `p${i}`, name: `P${i}`, token: 'car' as const, color: '#fff', isBot: false,

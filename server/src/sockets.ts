@@ -1,58 +1,125 @@
-// Socket.IO wiring. A player is identified by a random secret their browser
-// keeps in localStorage; the public id is its hash, so ids can be broadcast
-// without letting anyone impersonate anyone else. Reconnecting with the same
-// secret resumes the same seat in every room.
+// Socket.IO wiring. Identity comes from the signed session token (Discord or
+// demo sign-in); anyone may connect to browse and watch, but taking a seat,
+// creating rooms and chatting need an account. Bans are enforced at every door:
+// connecting, joining a room, and again whenever an operator adds one.
 
-import { createHash } from 'node:crypto';
 import type { Server, Socket } from 'socket.io';
+import { verifyToken } from './auth.ts';
+import { banMatches, banMessage, findBan, type Ban } from './bans.ts';
+import { checkChat } from './chat.ts';
+import { recordConnection } from './connections.ts';
+import { announceChannelId, postToChannel } from './discord.ts';
 import { EngineError } from './engine/game.ts';
-import { Registry, Room, RoomError } from './rooms.ts';
-import type { Action, TokenId } from '../../shared/types.ts';
+import { logGameEvent } from './eventlog.ts';
+import { isOn } from './features.ts';
+import { clientIp } from './ip.ts';
+import { Registry, Room, RoomError, type Member } from './rooms.ts';
+import { recordResult } from './stats.ts';
+import { getMap } from '../../shared/maps.ts';
+import { getTheme } from '../../shared/themes.ts';
+import type { Action, PlayerProfile, TokenId } from '../../shared/types.ts';
 import type { RuleConfig } from '../../shared/themes.ts';
 
 type Ack = (res: { ok: true; [k: string]: unknown } | { ok: false; error: string }) => void;
 
 interface SocketData {
-  playerId: string;
-  name: string;
+  profile: PlayerProfile | null;
+  ip: string | null;
   room: string | null;
+  /** Token bucket for action flood control. */
+  tokens: number;
+  refilledAt: number;
 }
 
-export function playerIdFor(secret: string): string {
-  return createHash('sha256').update(`yot:${secret}`).digest('hex').slice(0, 16);
+const MAX_SOCKETS_PER_IP = Number(process.env.MAX_SOCKETS_PER_IP ?? 24);
+const ACTIONS_PER_SEC = 12;
+const ACTION_BURST = 30;
+
+export interface SocketLayer {
+  registry: Registry;
+  /** Apply a new ban right now: disconnect and unseat whoever it matches. */
+  enforceBan(ban: Ban): number;
+  /** Broadcast a room's state (after an admin HTTP action). */
+  broadcast(room: Room): void;
+  connectedCount(): number;
+  /** Everyone currently connected, for the admin view. */
+  online(): { id: string; name: string; ip: string | null; room: string | null }[];
 }
 
-function cleanName(v: unknown): string {
-  const s = String(v ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 20);
-  return s || 'Player';
-}
-
-export function attachSockets(io: Server) {
+export function attachSockets(io: Server): SocketLayer {
   const broadcast = (room: Room) => io.to(`room:${room.code}`).emit('room:state', room.view());
-  const registry = new Registry(broadcast);
   const lobbyChanged = () => io.to('lobby').emit('rooms', registry.list());
 
+  const registry: Registry = new Registry({
+    onChange: room => { broadcast(room); },
+    onEvent: (room, text) => logGameEvent(room.code, `${getMap(room.mapId).name} · ${room.hostName()}`, text),
+    onFinished: room => finished(room),
+  });
+
+  function finished(room: Room) {
+    const g = room.game;
+    if (!g) return;
+    const standings = g.standings();
+    recordResult({
+      code: room.code, mapId: room.mapId, themeId: room.themeId,
+      startedAt: room.startedAt ?? Date.now(), endedAt: Date.now(), turns: g.turnNumber,
+      places: standings.map(s => {
+        const p = g.player(s.id);
+        return { id: p.id, name: p.name, isBot: p.isBot, netWorth: s.netWorth };
+      }),
+    });
+    lobbyChanged();
+    const channel = announceChannelId();
+    if (channel && isOn('announceResults')) {
+      const medals = ['🥇', '🥈', '🥉'];
+      const lines = standings.slice(0, 5).map((s, i) => `${medals[i] ?? `**${i + 1}.**`} ${g.player(s.id).name}`);
+      void postToChannel(channel, {
+        title: `🏆 ${g.player(standings[0].id).name} wins!`,
+        description: `${lines.join('\n')}\n\n${getMap(room.mapId).name} · ${getTheme(room.themeId).name} · ${g.turnNumber} turns`,
+      });
+    }
+  }
+
+  const perIp = new Map<string, number>();
+
   io.use((socket, next) => {
-    const secret = String(socket.handshake.auth?.key ?? '');
-    if (secret.length < 16 || secret.length > 128) return next(new Error('bad key'));
     const data = socket.data as SocketData;
-    data.playerId = playerIdFor(secret);
-    data.name = cleanName(socket.handshake.auth?.name);
+    data.ip = clientIp(socket.handshake.headers['x-forwarded-for'], socket.handshake.address || null, socket.handshake.headers);
+    data.profile = verifyToken(socket.handshake.auth?.token);
     data.room = null;
+    data.tokens = ACTION_BURST;
+    data.refilledAt = Date.now();
+    const ban = findBan({ id: data.profile?.id, discordId: data.profile?.discord?.id, ip: data.ip });
+    if (ban) return next(new Error(`banned:${banMessage(ban)}`));
+    if (data.ip) {
+      const n = perIp.get(data.ip) ?? 0;
+      if (n >= MAX_SOCKETS_PER_IP) return next(new Error('Too many connections from your network'));
+      perIp.set(data.ip, n + 1);
+    }
     next();
   });
 
   io.on('connection', (socket: Socket) => {
     const data = socket.data as SocketData;
-    socket.emit('hello', { playerId: data.playerId });
+    if (data.profile) recordConnection(data.profile, data.ip);
+    socket.emit('hello', { profile: data.profile });
 
-    // Wrap a handler so every failure becomes a tidy ack instead of a crash.
-    const on = <T>(event: string, fn: (payload: T, room: Room | null) => Record<string, unknown> | void) => {
+    const member = (): Member => {
+      const p = data.profile;
+      if (!p) throw new RoomError('Sign in first');
+      return { id: p.id, name: p.name, avatar: p.avatar };
+    };
+    const isAdmin = () => !!data.profile?.isAdmin;
+    const me = () => data.profile?.id ?? '';
+
+    /** Every handler goes through here: errors become acks, never crashes. */
+    const on = <T>(event: string, fn: (payload: T, room: Room | null) => Record<string, unknown> | void, limited = true) => {
       socket.on(event, (payload: T, ack?: Ack) => {
         const reply: Ack = typeof ack === 'function' ? ack : () => {};
+        if (limited && !take(data)) return reply({ ok: false, error: 'Slow down' });
         try {
           const room = data.room ? registry.get(data.room) ?? null : null;
-          const extra = fn(payload ?? ({} as T), room) ?? {};
+          const extra = fn((payload ?? {}) as T, room) ?? {};
           reply({ ok: true, ...extra });
         } catch (e) {
           if (e instanceof EngineError || e instanceof RoomError) reply({ ok: false, error: e.message });
@@ -66,24 +133,35 @@ export function attachSockets(io: Server) {
 
     const inRoom = (room: Room | null): Room => room ?? (() => { throw new RoomError('Join a room first'); })();
 
-    const enter = (room: Room, spectate: boolean) => {
+    const enter = (room: Room, seated: boolean) => {
       if (data.room && data.room !== room.code) leaveCurrent(false);
+      if (data.room !== room.code && !seated) room.spectators++;
       data.room = room.code;
       socket.join(`room:${room.code}`);
-      if (!spectate) room.setConnected(data.playerId, true);
+      if (seated) room.setConnected(me(), true);
       broadcast(room);
       lobbyChanged();
     };
 
     const leaveCurrent = (forfeit: boolean) => {
       const room = data.room ? registry.get(data.room) : undefined;
+      data.room = null;
       if (!room) return;
       socket.leave(`room:${room.code}`);
-      data.room = null;
-      if (forfeit) room.leave(data.playerId);
-      else room.setConnected(data.playerId, false);
+      const seated = !!room.seat(me());
+      if (!seated) room.spectators = Math.max(0, room.spectators - 1);
+      else if (forfeit) room.leave(me());
+      else if (!otherSocketInRoom(room.code, me(), socket.id)) room.setConnected(me(), false);
       broadcast(room);
       lobbyChanged();
+    };
+
+    const otherSocketInRoom = (code: string, id: string, except: string) => {
+      for (const s of io.sockets.sockets.values()) {
+        const d = s.data as SocketData;
+        if (s.id !== except && d.room === code && d.profile?.id === id) return true;
+      }
+      return false;
     };
 
     on<{ subscribe?: boolean }>('rooms:list', p => {
@@ -91,77 +169,149 @@ export function attachSockets(io: Server) {
       return { rooms: registry.list() };
     });
 
-    on<{ name?: string }>('room:create', p => {
-      data.name = cleanName(p.name ?? data.name);
-      const room = registry.create(data.playerId);
-      room.join(data.playerId, data.name);
-      enter(room, false);
+    on('room:create', () => {
+      const m = member();
+      if (!isOn('publicRooms') && !isAdmin()) throw new RoomError('Only operators can create rooms right now');
+      if (registry.roomsOf(m.id).filter(r => r.hostId === m.id && r.status === 'lobby').length >= 3) {
+        throw new RoomError('You already have 3 open lobbies — start or leave one first');
+      }
+      const room = registry.create(m.id);
+      room.join(m);
+      enter(room, true);
       return { code: room.code };
     });
 
-    on<{ code: string; name?: string }>('room:join', p => {
-      const room = registry.get(String(p.code ?? '')) ?? (() => { throw new RoomError('No room with that code'); })();
-      data.name = cleanName(p.name ?? data.name);
-      let spectating = false;
-      try {
-        room.join(data.playerId, data.name);
-      } catch (e) {
-        if (!(e instanceof RoomError)) throw e;
-        spectating = true; // started or full: watch instead
+    on<{ code: string }>('room:join', p => {
+      const room = registry.get(String(p.code ?? '').slice(0, 8)) ?? (() => { throw new RoomError('No room with that code'); })();
+      const prof = data.profile;
+      const ban = findBan({ id: prof?.id, discordId: prof?.discord?.id, ip: data.ip }, room.code);
+      if (ban) throw new RoomError(banMessage(ban));
+      let seated = false;
+      if (prof) {
+        try {
+          room.join(member());
+          seated = true;
+        } catch (e) {
+          if (!(e instanceof RoomError)) throw e; // started or full: watch instead
+        }
       }
-      enter(room, spectating);
-      return { spectating };
+      enter(room, seated);
+      return { spectating: !seated };
     });
 
     on('room:leave', () => { leaveCurrent(true); });
 
-    on<{ themeId?: string; rules?: Partial<RuleConfig> }>('room:configure', (p, room) => {
-      inRoom(room).configure(data.playerId, p.themeId, p.rules);
-      broadcast(room!);
+    on<{ themeId?: string; mapId?: string; rules?: Partial<RuleConfig>; private?: boolean }>('room:configure', (p, room) => {
+      const r = inRoom(room);
+      r.configure(me(), isAdmin(), {
+        themeId: typeof p.themeId === 'string' ? p.themeId : undefined,
+        mapId: typeof p.mapId === 'string' ? p.mapId : undefined,
+        rules: p.rules && typeof p.rules === 'object' ? p.rules : undefined,
+        private: typeof p.private === 'boolean' ? p.private : undefined,
+      });
+      broadcast(r);
       lobbyChanged();
     });
 
-    on<{ token: TokenId }>('room:token', (p, room) => {
-      inRoom(room).pickToken(data.playerId, p.token);
-      broadcast(room!);
+    on<{ token?: TokenId; color?: string }>('room:seat', (p, room) => {
+      const r = inRoom(room);
+      if (p.token) r.pickToken(me(), p.token);
+      if (p.color) r.pickColor(me(), String(p.color));
+      broadcast(r);
     });
 
     on('room:addBot', (_p, room) => {
-      inRoom(room).addBot(data.playerId);
-      broadcast(room!);
+      if (!isOn('bots') && !isAdmin()) throw new RoomError('Bots are switched off');
+      const r = inRoom(room);
+      r.addBot(me(), isAdmin());
+      broadcast(r);
       lobbyChanged();
     });
 
     on<{ id: string }>('room:kick', (p, room) => {
-      inRoom(room).kick(data.playerId, String(p.id));
-      broadcast(room!);
+      const r = inRoom(room);
+      r.kick(me(), String(p.id), isAdmin());
+      broadcast(r);
       lobbyChanged();
     });
 
     on('room:start', (_p, room) => {
-      inRoom(room).start(data.playerId);
-      broadcast(room!);
+      const r = inRoom(room);
+      r.start(me(), isAdmin());
+      logGameEvent(r.code, getMap(r.mapId).name, `Game started: ${getMap(r.mapId).name} / ${getTheme(r.themeId).name}, ${r.seats.length} players`);
+      broadcast(r);
       lobbyChanged();
     });
 
     on<Action>('game:action', (a, room) => {
-      inRoom(room).act(data.playerId, a);
-      broadcast(room!);
-      if (room!.status === 'finished') lobbyChanged();
+      const r = inRoom(room);
+      if (!data.profile) throw new RoomError('Sign in first');
+      if (!a || typeof a !== 'object' || typeof (a as { type?: unknown }).type !== 'string') throw new RoomError('Bad action');
+      r.act(me(), a);
+      broadcast(r);
     });
 
     on<{ text: string }>('chat', (p, room) => {
       const r = inRoom(room);
-      const text = String(p.text ?? '').trim().slice(0, 300);
-      if (!text) return;
-      const seat = r.seat(data.playerId);
-      io.to(`room:${r.code}`).emit('chat', {
-        t: Date.now(), name: seat?.name ?? `${data.name} (watching)`, color: seat?.color ?? '#aaa', text,
-      });
+      if (!isOn('chat')) throw new RoomError('Chat is switched off');
+      const prof = data.profile ?? (() => { throw new RoomError('Sign in to chat'); })();
+      const text = checkChat(prof.id, p.text);
+      const seat = r.seat(prof.id);
+      const msg = {
+        t: Date.now(), id: prof.id, name: prof.name, color: seat?.color ?? '#aaa', text,
+        spectator: !seat, admin: !!prof.isAdmin,
+      };
+      io.to(`room:${r.code}`).emit('chat', msg);
+      logGameEvent(r.code, getMap(r.mapId).name, `💬 ${prof.name}: ${text}`);
     });
 
-    socket.on('disconnect', () => leaveCurrent(false));
+    socket.on('disconnect', () => {
+      leaveCurrent(false);
+      if (data.ip) {
+        const n = (perIp.get(data.ip) ?? 1) - 1;
+        if (n <= 0) perIp.delete(data.ip);
+        else perIp.set(data.ip, n);
+      }
+    });
   });
 
-  return registry;
+  return {
+    registry,
+    broadcast,
+    enforceBan(ban: Ban): number {
+      let hit = 0;
+      for (const s of io.sockets.sockets.values()) {
+        const d = s.data as SocketData;
+        if (!banMatches(ban, { id: d.profile?.id, discordId: d.profile?.discord?.id, ip: d.ip })) continue;
+        hit++;
+        const id = d.profile?.id;
+        const rooms = ban.scope === 'room' ? [registry.get(ban.gameId ?? '')].filter(Boolean) as Room[] : id ? registry.roomsOf(id) : [];
+        for (const r of rooms) {
+          if (id && r.seat(id)) {
+            try { r.remove(id); } catch { /* already out */ }
+            broadcast(r);
+          }
+        }
+        s.emit('banned', { message: banMessage(ban) });
+        if (ban.scope === 'lifetime') s.disconnect(true);
+        else if (d.room === ban.gameId) { s.leave(`room:${d.room}`); d.room = null; }
+      }
+      lobbyChanged();
+      return hit;
+    },
+    connectedCount: () => io.engine.clientsCount,
+    online: () => [...io.sockets.sockets.values()].map(s => {
+      const d = s.data as SocketData;
+      return { id: d.profile?.id ?? '(guest)', name: d.profile?.name ?? '(not signed in)', ip: d.ip, room: d.room };
+    }),
+  };
+}
+
+function take(d: SocketData): boolean {
+  const now = Date.now();
+  d.tokens = Math.min(ACTION_BURST, d.tokens + ((now - d.refilledAt) / 1000) * ACTIONS_PER_SEC);
+  d.refilledAt = now;
+  if (d.tokens < 1) return false;
+  d.tokens -= 1;
+  return true;
 }

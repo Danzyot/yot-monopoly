@@ -2,8 +2,9 @@
 // here: rename spaces, recolour groups, rewrite cards, restyle the table, and
 // tweak default house rules. The engine never branches on theme id.
 
-import { CLASSIC_GROUP_COLORS, CLASSIC_SPACES, type SpaceDef } from './board.ts';
-import { CLASSIC_CHANCE, CLASSIC_CHEST, type CardDef } from './cards.ts';
+import { CLASSIC_GROUP_COLORS, type SpaceDef } from './board.ts';
+import { cardText, type CardDef } from './cards.ts';
+import { getMap } from './maps.ts';
 
 export interface RuleConfig {
   startingCash: number;
@@ -67,17 +68,18 @@ export interface ThemeUi {
   font?: string;
 }
 
-export interface Theme {
+/** A skin: names, colours, look and default house rules. Works on every map. */
+export interface Edition {
   id: string;
   name: string;
   tagline: string;
   /** Printed large in the middle of the board. */
   centerTitle: string;
   currency: string;
-  spaces: SpaceDef[];
+  /** Overrides for set colours (a map's extra sets fall back to the defaults). */
   groupColors: Record<string, string>;
-  chance: CardDef[];
-  chest: CardDef[];
+  /** Space renames, per map id then space index. */
+  mapNames?: Record<string, Record<number, string>>;
   deckNames: { chance: string; chest: string };
   palette: ThemePalette;
   ui?: ThemeUi;
@@ -86,16 +88,22 @@ export interface Theme {
   rules: Partial<RuleConfig>;
 }
 
-export const CLASSIC: Theme = {
+/** An edition resolved onto a map: everything the engine and renderer need. */
+export interface Theme extends Edition {
+  mapId: string;
+  spaces: SpaceDef[];
+  /** Card text already filled in for this board. */
+  chance: CardDef[];
+  chest: CardDef[];
+}
+
+export const CLASSIC: Edition = {
   id: 'classic',
   name: 'Classic',
   tagline: 'The original Atlantic City board.',
   centerTitle: 'MONOPOLY',
   currency: '$',
-  spaces: CLASSIC_SPACES,
   groupColors: CLASSIC_GROUP_COLORS,
-  chance: CLASSIC_CHANCE,
-  chest: CLASSIC_CHEST,
   deckNames: { chance: 'Chance', chest: 'Community Chest' },
   palette: {
     sky: '#1b2330',
@@ -108,18 +116,23 @@ export const CLASSIC: Theme = {
   rules: {},
 };
 
-/** Build a theme from Classic by renaming spaces; anything else can be overridden too. */
+/** Build an edition from another; `names` renames spaces on the Classic map. */
 function edition(
-  base: Theme,
-  over: Omit<Partial<Theme>, 'spaces'> & { id: string; name: string; names?: Record<number, string> },
-): Theme {
+  base: Edition,
+  over: Partial<Edition> & { id: string; name: string; names?: Record<number, string> },
+): Edition {
   const { names, ...rest } = over;
-  const spaces = base.spaces.map((s, i) => (names?.[i] ? { ...s, name: names[i] } : s));
-  return { ...base, ...rest, spaces, palette: { ...base.palette, ...over.palette } };
+  return {
+    ...base,
+    ...rest,
+    groupColors: { ...base.groupColors, ...over.groupColors },
+    mapNames: { ...base.mapNames, ...over.mapNames, ...(names ? { classic: names } : {}) },
+    palette: { ...base.palette, ...over.palette },
+  };
 }
 
 // A worked example of a custom edition. Copy this block for each new version.
-export const YOT: Theme = edition(CLASSIC, {
+export const YOT: Edition = edition(CLASSIC, {
   id: 'yot',
   name: 'Yot City',
   tagline: 'Neon edition — night mode, free-parking jackpot on.',
@@ -161,7 +174,7 @@ export const YOT: Theme = edition(CLASSIC, {
 // pink for anything you press, the mascot's cream for the one thing that has
 // to be read first, set in Outfit. Values are lifted from that repo's
 // client/src/index.css so the two sites read as one brand.
-export const CHOG: Theme = edition(CLASSIC, {
+export const CHOG: Edition = edition(CLASSIC, {
   id: 'chog',
   name: 'Chog Edition',
   tagline: 'Chog Poker’s purple room, now as a board. Jackpot on, double on START.',
@@ -190,6 +203,8 @@ export const CHOG: Theme = edition(CLASSIC, {
     yellow: '#fdf6cd',
     green: '#35c97a',
     darkblue: '#9e3381',
+    teal: '#4ad8c7',
+    purple: '#6b3fd1',
   },
   palette: {
     sky: '#0a0518',
@@ -215,8 +230,38 @@ export const CHOG: Theme = edition(CLASSIC, {
   rules: { freeParkingPot: true, doubleOnGo: true },
 });
 
-export const THEMES: Theme[] = [CLASSIC, CHOG, YOT];
+export const THEMES: Edition[] = [CLASSIC, CHOG, YOT];
 
-export function getTheme(id: string): Theme {
+export function getTheme(id: string): Edition {
   return THEMES.find(t => t.id === id) ?? CLASSIC;
+}
+
+const resolved = new Map<string, Theme>();
+
+/** An edition on a map: renamed spaces and card text filled in for that board. */
+export function resolveTheme(themeId: string, mapId: string): Theme {
+  const key = `${themeId}:${mapId}`;
+  const hit = resolved.get(key);
+  if (hit) return hit;
+  const ed = getTheme(themeId);
+  const map = getMap(mapId);
+  const names = ed.mapNames?.[map.id] ?? {};
+  // Generic corner and deck names follow the edition's own vocabulary.
+  const spaces = map.spaces.map((s, i) => {
+    let name = names[i] ?? s.name;
+    if (!names[i] && s.kind === 'chance') name = ed.deckNames.chance;
+    if (!names[i] && s.kind === 'chest') name = ed.deckNames.chest;
+    return name === s.name ? s : { ...s, name };
+  });
+  const fill = (cards: CardDef[]) => cards.map(c => ({ ...c, text: cardText(c.text, spaces, ed.currency) }));
+  const theme: Theme = {
+    ...ed,
+    groupColors: { ...CLASSIC_GROUP_COLORS, ...ed.groupColors },
+    mapId: map.id,
+    spaces,
+    chance: fill(map.chance),
+    chest: fill(map.chest),
+  };
+  resolved.set(key, theme);
+  return theme;
 }

@@ -4,8 +4,12 @@
 
 export const W = 11;          // board width
 export const C = 1.5;         // corner tile size / edge tile depth
-export const T = (W - 2 * C) / 9; // edge tile width
 export const BAND = 0.3;      // colour band depth on properties
+
+/** Edge tile width for a board of `n` spaces (n/4 - 1 tiles between corners). */
+export function tileWidth(n: number): number {
+  return (W - 2 * C) / (n / 4 - 1);
+}
 
 export type Side = 0 | 1 | 2 | 3; // bottom, left, top, right
 
@@ -24,9 +28,11 @@ export interface TileGeom {
 
 const H = W / 2;
 
-export function tile(i: number): TileGeom {
-  const side = Math.floor(i / 10) as Side;
-  const k = i % 10;
+export function tile(i: number, n: number): TileGeom {
+  const per = n / 4;
+  const T = tileWidth(n);
+  const side = Math.floor(i / per) as Side;
+  const k = i % per;
   const corner = k === 0;
   const off = corner ? C / 2 : C + (k - 0.5) * T; // distance from the side's starting corner edge
   switch (side) {
@@ -38,29 +44,32 @@ export function tile(i: number): TileGeom {
 }
 
 /** Which space is under a point on the board, or null for the middle. */
-export function tileAt(x: number, z: number): number | null {
+export function tileAt(x: number, z: number, n: number): number | null {
   if (Math.abs(x) > H || Math.abs(z) > H) return null;
   const inner = H - C;
   if (Math.abs(x) < inner && Math.abs(z) < inner) return null;
-  const k = (d: number) => Math.min(9, Math.max(1, Math.floor((d - C) / T) + 1));
+  const per = n / 4;
+  const T = tileWidth(n);
+  const k = (d: number) => Math.min(per - 1, Math.max(1, Math.floor((d - C) / T) + 1));
   if (z > inner) { // bottom row
     if (x > inner) return 0;
-    if (x < -inner) return 10;
+    if (x < -inner) return per;
     return k(H - x);
   }
   if (z < -inner) {
-    if (x < -inner) return 20;
-    if (x > inner) return 30;
-    return 20 + k(x + H);
+    if (x < -inner) return 2 * per;
+    if (x > inner) return 3 * per;
+    return 2 * per + k(x + H);
   }
-  if (x < -inner) return 10 + k(H - z);
-  return 30 + k(z + H);
+  if (x < -inner) return per + k(H - z);
+  return 3 * per + k(z + H);
 }
 
 /** Where a token stands: spread several tokens on one tile so none overlap. */
-export function tokenSpot(i: number, slot: number, count: number, inJail: boolean): [number, number] {
-  const g = tile(i);
-  if (i === 10) {
+export function tokenSpot(i: number, slot: number, count: number, inJail: boolean, n: number): [number, number] {
+  const g = tile(i, n);
+  const T = tileWidth(n);
+  if (i === n / 4) {
     if (inJail) {
       // Inside the cell, the inner square of the corner.
       const cx = g.x + 0.22, cz = g.z - 0.22;
@@ -79,15 +88,16 @@ export function tokenSpot(i: number, slot: number, count: number, inJail: boolea
   const cols = count <= 2 ? 2 : count <= 4 ? 2 : 3;
   const rows = Math.ceil(count / cols);
   const col = slot % cols, row = Math.floor(slot / cols);
-  const spread = g.corner ? 0.42 : 0.26;
+  const spread = g.corner ? 0.42 : Math.min(0.26, T * 0.3);
   const u = (col - (cols - 1) / 2) * spread;
   const v = (row - (rows - 1) / 2) * spread;
   return [cx + g.along[0] * u + g.out[0] * v, cz + g.along[1] * u + g.out[1] * v];
 }
 
 /** House/hotel positions on a property's colour band. */
-export function buildingSpots(i: number, houses: number): [number, number][] {
-  const g = tile(i);
+export function buildingSpots(i: number, houses: number, n: number): [number, number][] {
+  const g = tile(i, n);
+  const T = tileWidth(n);
   const inset = C / 2 - BAND / 2;
   const cx = g.x - g.out[0] * inset, cz = g.z - g.out[1] * inset;
   if (houses >= 5) return [[cx, cz]];

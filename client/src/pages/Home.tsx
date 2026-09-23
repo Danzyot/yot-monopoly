@@ -1,31 +1,26 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { call, getName, setName, useConnected, useRoomList } from '../net.ts';
+import { call, useConnected, useRoomList } from '../net.ts';
 import { THEMES, getTheme } from '../../../shared/themes.ts';
+import { MAPS, getMap } from '../../../shared/maps.ts';
+import { BRAND } from '../../../shared/brand.ts';
+import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 
 export default function Home() {
   const nav = useNavigate();
-  const [name, setNameState] = useState(getName());
+  const { profile, config, openSignIn } = useAuth();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const rooms = useRoomList();
   const connected = useConnected();
-
-  const needName = () => {
-    if (!name.trim()) {
-      toastError(new Error('Pick a name first'));
-      return true;
-    }
-    setName(name);
-    return false;
-  };
+  const canCreate = !!profile && (config.features.publicRooms || profile.isAdmin);
 
   const create = async () => {
-    if (needName()) return;
+    if (!profile) return openSignIn();
     setBusy(true);
     try {
-      const r = await call<{ code: string }>('room:create', { name });
+      const r = await call<{ code: string }>('room:create');
       nav(`/r/${r.code}`);
     } catch (e) {
       toastError(e);
@@ -35,7 +30,6 @@ export default function Home() {
   };
 
   const join = (c: string) => {
-    if (needName()) return;
     const clean = c.trim().toUpperCase();
     if (clean.length < 4) return toastError(new Error('Enter a room code'));
     nav(`/r/${clean}`);
@@ -45,21 +39,20 @@ export default function Home() {
     <div className="home">
       <div className="home-hero">
         <div className="logo">🎩</div>
-        <h1>Yot Monopoly</h1>
-        <p className="muted">Buy it all. Bankrupt your friends. Several editions, many tables at once.</p>
+        <h1>{BRAND.name}</h1>
+        <p className="muted">Buy it all. Bankrupt your friends. Several maps and editions, many tables at once.</p>
       </div>
 
       <div className="home-grid">
         <section className="panel">
           <h2>Play</h2>
-          <label className="field">
-            <span>Your name</span>
-            <input value={name} maxLength={20} placeholder="e.g. Rich Uncle"
-              onChange={e => { setNameState(e.target.value); setName(e.target.value); }} />
-          </label>
-          <button className="btn primary big" disabled={busy || !connected} onClick={create}>
-            Create a game
-          </button>
+          {profile ? (
+            <button className="btn primary big" disabled={busy || !connected || !canCreate} onClick={create}>
+              {canCreate ? 'Create a game' : 'Room creation is operators-only right now'}
+            </button>
+          ) : (
+            <button className="btn primary big" onClick={openSignIn}>Sign in to play</button>
+          )}
           <div className="or">or join with a code</div>
           <form className="row" onSubmit={e => { e.preventDefault(); join(code); }}>
             <input className="code-input" value={code} maxLength={5} placeholder="ABCDE"
@@ -76,7 +69,7 @@ export default function Home() {
             {rooms.map(r => (
               <li key={r.code}>
                 <div>
-                  <b className="mono">{r.code}</b> · {getTheme(r.themeId).name}
+                  <b className="mono">{r.code}</b> · {getMap(r.mapId).name} · {getTheme(r.themeId).name}
                   <div className="muted small">host {r.hostName} · {r.players}/{r.maxPlayers} players</div>
                 </div>
                 <button className="btn small" onClick={() => join(r.code)}>
@@ -88,13 +81,23 @@ export default function Home() {
         </section>
 
         <section className="panel wide">
-          <h2>Editions</h2>
+          <h2>Maps</h2>
+          <div className="editions">
+            {MAPS.map(m => (
+              <div key={m.id} className="edition map-card">
+                <b>{m.name}</b>
+                <span className="small muted">{m.description}</span>
+                <span className="small">{m.spaces.length} spaces · {m.players[0]}–{m.players[1]} players</span>
+              </div>
+            ))}
+          </div>
+          <h2 style={{ marginTop: 18 }}>Editions</h2>
           <div className="editions">
             {THEMES.map(t => (
               <div key={t.id} className="edition" style={{ background: t.palette.board, color: t.palette.boardText, borderColor: t.palette.boardLine }}>
                 {t.logoUrl && <img className="edition-logo" src={t.logoUrl} alt="" />}
                 <div className="swatches">
-                  {Object.values(t.groupColors).map(c => <i key={c} style={{ background: c }} />)}
+                  {Object.values(t.groupColors).slice(0, 8).map(c => <i key={c} style={{ background: c }} />)}
                 </div>
                 <b>{t.name}</b>
                 <span className="small">{t.tagline}</span>

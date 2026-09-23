@@ -1,5 +1,5 @@
 import { isOwnable, mortgageValue, unmortgageCost } from '../../../shared/board.ts';
-import { getTheme } from '../../../shared/themes.ts';
+import { resolveTheme } from '../../../shared/themes.ts';
 import type { GameView } from '../../../shared/types.ts';
 import { act } from '../net.ts';
 import { toastError } from '../toast.tsx';
@@ -8,7 +8,7 @@ import { toastError } from '../toast.tsx';
 export default function Deed({ game, index, me, onClose }: {
   game: GameView; index: number; me: string; onClose?: () => void;
 }) {
-  const theme = getTheme(game.themeId);
+  const theme = resolveTheme(game.themeId, game.mapId);
   const s = theme.spaces[index];
   const o = game.owned[index];
   const owner = o ? game.players.find(p => p.id === o.owner) : null;

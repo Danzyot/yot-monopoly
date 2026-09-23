@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { getTheme } from '../../../shared/themes.ts';
+import { resolveTheme } from '../../../shared/themes.ts';
 import type { GameView, PlayerState, Trade, TradeSide } from '../../../shared/types.ts';
 import { act } from '../net.ts';
 import { toastError } from '../toast.tsx';
@@ -9,7 +9,7 @@ const EMPTY: TradeSide = { cash: 0, spaces: [], jailCards: 0 };
 function SidePicker({ game, who, side, onChange, title }: {
   game: GameView; who: PlayerState; side: TradeSide; onChange: (s: TradeSide) => void; title: string;
 }) {
-  const theme = getTheme(game.themeId);
+  const theme = resolveTheme(game.themeId, game.mapId);
   const props = Object.entries(game.owned)
     .filter(([, o]) => o.owner === who.id)
     .map(([k]) => Number(k))
@@ -78,7 +78,7 @@ export function TradeModal({ game, me, withId, onClose }: {
 }
 
 function describe(game: GameView, s: TradeSide): string {
-  const theme = getTheme(game.themeId);
+  const theme = resolveTheme(game.themeId, game.mapId);
   const parts = [
     ...(s.cash ? [`${theme.currency}${s.cash}`] : []),
     ...s.spaces.map(i => theme.spaces[i].name),

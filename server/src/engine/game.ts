@@ -3,8 +3,7 @@
 // Rooms own pacing (auction deadlines, bots); this file owns the rules.
 
 import {
-  BOARD_SIZE, JAIL_INDEX, groupIndices, isOwnable, mortgageValue,
-  unmortgageCost, type SpaceDef,
+  groupIndices, isOwnable, mortgageValue, unmortgageCost, type SpaceDef,
 } from '../../../shared/board.ts';
 import type { CardEffect, DeckId } from '../../../shared/cards.ts';
 import type { RuleConfig, Theme } from '../../../shared/themes.ts';
@@ -37,6 +36,34 @@ export interface GameInit {
   players: NewPlayer[];
   rng?: Rng;
   now?: () => number;
+  /** Mirror of every log line, for the durable room log. */
+  onLog?: (text: string) => void;
+}
+
+/** Everything needed to rebuild a game after a restart (see Game.restore). */
+export interface GameSnapshot {
+  players: PlayerState[];
+  owned: Record<number, OwnedSpace>;
+  currentIdx: number;
+  phase: TurnPhase;
+  dice: [number, number] | null;
+  rollSeq: number;
+  doublesCount: number;
+  extraRoll: boolean;
+  debts: Debt[];
+  auction: Auction | null;
+  trades: Trade[];
+  pot: number;
+  housesLeft: number;
+  hotelsLeft: number;
+  lastCard: CardShown | null;
+  winner: string | null;
+  log: LogEntry[];
+  turnNumber: number;
+  decks: Record<DeckId, number[]>;
+  cardSeq: number;
+  tradeSeq: number;
+  outOrder: string[];
 }
 
 interface LandingOpts {
@@ -52,6 +79,9 @@ export class Game {
   readonly theme: Theme;
   readonly rules: RuleConfig;
   readonly spaces: SpaceDef[];
+  /** Board length and jail position: every map is a square, sizes vary. */
+  readonly size: number;
+  readonly jailIndex: number;
   players: PlayerState[];
   owned: Record<number, OwnedSpace> = {};
   currentIdx = 0;
@@ -71,8 +101,11 @@ export class Game {
   log: LogEntry[] = [];
   turnNumber = 1;
   decks: Record<DeckId, number[]>;
+  /** Bankrupt players, first out first — gives finishing places. */
+  outOrder: string[] = [];
   private cardSeq = 0;
   private tradeSeq = 0;
+  private onLog?: (text: string) => void;
   private rng: Rng;
   private now: () => number;
 
@@ -81,8 +114,12 @@ export class Game {
     this.theme = init.theme;
     this.rules = init.rules;
     this.spaces = init.theme.spaces;
+    this.size = this.spaces.length;
+    this.jailIndex = this.spaces.findIndex(s => s.kind === 'jail');
+    if (this.jailIndex < 0) fail('Board has no jail');
     this.rng = init.rng ?? (n => Math.floor(Math.random() * n));
     this.now = init.now ?? Date.now;
+    this.onLog = init.onLog;
     this.players = init.players.map(p => ({
       ...p, cash: init.rules.startingCash, position: 0, inJail: false, jailTurns: 0,
       jailCards: [], bankrupt: false,
@@ -123,6 +160,7 @@ export class Game {
 
   private say(text: string, who?: string) {
     this.log.push({ t: this.now(), text, who });
+    this.onLog?.(text);
     if (this.log.length > MAX_LOG) this.log.splice(0, this.log.length - MAX_LOG);
   }
 
@@ -187,27 +225,27 @@ export class Game {
 
   private moveBy(p: PlayerState, steps: number) {
     const target = p.position + steps;
-    if (target >= BOARD_SIZE) {
-      const landedOnGo = target % BOARD_SIZE === 0;
+    if (target >= this.size) {
+      const landedOnGo = target % this.size === 0;
       const pay = this.rules.goSalary * (landedOnGo && this.rules.doubleOnGo ? 2 : 1);
       p.cash += pay;
       this.say(`${p.name} ${landedOnGo ? 'landed on' : 'passed'} ${this.spaces[0].name} and collected ${this.money(pay)}.`, p.id);
     }
-    p.position = target % BOARD_SIZE;
+    p.position = target % this.size;
   }
 
   private advanceTo(p: PlayerState, to: number) {
-    const steps = (to - p.position + BOARD_SIZE) % BOARD_SIZE;
-    this.moveBy(p, steps === 0 ? BOARD_SIZE : steps);
+    const steps = (to - p.position + this.size) % this.size;
+    this.moveBy(p, steps === 0 ? this.size : steps);
   }
 
   private sendToJail(p: PlayerState) {
-    p.position = JAIL_INDEX;
+    p.position = this.jailIndex;
     p.inJail = true;
     p.jailTurns = 0;
     this.doublesCount = 0;
     if (p === this.current) this.extraRoll = false;
-    this.say(`${p.name} was sent to ${this.spaces[JAIL_INDEX].name}!`, p.id);
+    this.say(`${p.name} was sent to ${this.spaces[this.jailIndex].name}!`, p.id);
   }
 
   private resolveLanding(p: PlayerState, opts: LandingOpts = {}) {
@@ -263,7 +301,7 @@ export class Game {
     const idx = this.decks[deck].shift();
     if (idx === undefined) return; // every card is held as a jail card — nothing to draw
     const card = cards[idx];
-    const text = card.text.replaceAll('$', this.theme.currency);
+    const text = card.text; // placeholders already filled for this board
     if (card.effect.type === 'jailFree') p.jailCards.push(deck);
     else this.decks[deck].push(idx);
     this.lastCard = { deck, text, player: p.id, seq: ++this.cardSeq };
@@ -279,14 +317,15 @@ export class Game {
         this.resolveLanding(p);
         break;
       case 'nearest': {
+        if (!this.spaces.some(s => s.kind === e.kind)) break; // this map has none
         let i = p.position;
-        do i = (i + 1) % BOARD_SIZE; while (this.spaces[i].kind !== e.kind);
+        do i = (i + 1) % this.size; while (this.spaces[i].kind !== e.kind);
         this.advanceTo(p, i);
         this.resolveLanding(p, e.kind === 'railroad' ? { railroadMultiplier: 2 } : { utilityTenX: true });
         break;
       }
       case 'back':
-        p.position = (p.position - e.steps + BOARD_SIZE) % BOARD_SIZE;
+        p.position = (p.position - e.steps + this.size) % this.size;
         this.resolveLanding(p);
         break;
       case 'jail':
@@ -672,6 +711,7 @@ export class Game {
     p.cash = 0;
     p.jailCards = [];
     p.bankrupt = true;
+    this.outOrder.push(p.id);
 
     if (this.checkWinner()) return;
     if (this.auction) {
@@ -743,9 +783,42 @@ export class Game {
 
   // ---- views ----------------------------------------------------------------
 
+  snapshot(): GameSnapshot {
+    return structuredClone({
+      players: this.players, owned: this.owned, currentIdx: this.currentIdx, phase: this.phase,
+      dice: this.dice, rollSeq: this.rollSeq, doublesCount: this.doublesCount, extraRoll: this.extraRoll,
+      debts: this.debts, auction: this.auction, trades: this.trades, pot: this.pot,
+      housesLeft: this.housesLeft, hotelsLeft: this.hotelsLeft, lastCard: this.lastCard,
+      winner: this.winner, log: this.log, turnNumber: this.turnNumber, decks: this.decks,
+      cardSeq: this.cardSeq, tradeSeq: this.tradeSeq, outOrder: this.outOrder,
+    });
+  }
+
+  /** Rebuild a game from a snapshot taken by the same code on the same board. */
+  static restore(init: Omit<GameInit, 'players'>, snap: GameSnapshot): Game {
+    const g = new Game({ ...init, players: snap.players.map(p => ({ ...p })), onLog: undefined });
+    Object.assign(g, structuredClone(snap));
+    g.onLog = init.onLog;
+    // An auction's clock is wall time; give bidders a fresh window after a restart.
+    if (g.auction) g.auction.endsAt = g.now() + AUCTION_MS;
+    return g;
+  }
+
+  /** Final standings: winner (or richest survivors), then last-out to first-out. */
+  standings(): { id: string; netWorth: number }[] {
+    const worth = (p: PlayerState) => p.cash + this.ownedBy(p.id).reduce((a, i) => {
+      const s = this.spaces[i], o = this.owned[i];
+      return a + (o.mortgaged ? 0 : mortgageValue(s)) + Math.floor((s.houseCost ?? 0) / 2) * o.houses;
+    }, 0);
+    const alive = this.active().sort((a, b) => worth(b) - worth(a));
+    const out = [...this.outOrder].reverse().map(id => this.player(id));
+    return [...alive, ...out].map(p => ({ id: p.id, netWorth: p.bankrupt ? 0 : worth(p) }));
+  }
+
   view(): GameView {
     return structuredClone({
       themeId: this.theme.id,
+      mapId: this.theme.mapId,
       rules: this.rules,
       players: this.players,
       owned: this.owned,

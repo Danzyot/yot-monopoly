@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getTheme } from '../../../shared/themes.ts';
+import { resolveTheme } from '../../../shared/themes.ts';
+import { getMap } from '../../../shared/maps.ts';
 import type { GameView, RoomView } from '../../../shared/types.ts';
 import { act, call, useConnected, type ChatMsg } from '../net.ts';
+import { useAuth } from '../auth.tsx';
 import { TOKEN_EMOJI } from '../format.ts';
 import { toastError } from '../toast.tsx';
 import { themeStyle } from '../themeStyle.ts';
@@ -14,7 +16,7 @@ import { TradeModal, TradeOffers } from './Trade.tsx';
 export default function GameScreen({ room, game, me, chat, skew }: {
   room: RoomView; game: GameView; me: string; chat: ChatMsg[]; skew: number;
 }) {
-  const theme = getTheme(game.themeId);
+  const theme = resolveTheme(game.themeId, game.mapId);
   const [selected, setSelected] = useState<number | null>(null);
   const [tradeWith, setTradeWith] = useState<string | null>(null);
   const [tab, setTab] = useState<'log' | 'chat' | 'mine'>('log');
@@ -25,6 +27,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
     setTab(t);
   };
   const connected = useConnected();
+  const { config } = useAuth();
   const nav = useNavigate();
   const myPlayer = game.players.find(p => p.id === me);
 
@@ -37,13 +40,13 @@ export default function GameScreen({ room, game, me, chat, skew }: {
 
   return (
     <div className={`game ${theme.ui ? 'branded' : ''}`} style={themeStyle(theme)}>
-      <div className="scene"><BoardScene themeId={game.themeId} game={game} selected={selected} onSelect={setSelected} /></div>
+      <div className="scene"><BoardScene themeId={game.themeId} mapId={game.mapId} game={game} selected={selected} onSelect={setSelected} /></div>
 
       <header className="topbar">
         <div className="row">
           {theme.logoUrl && <img className="brand-mark" src={theme.logoUrl} alt="" />}
           <b className="mono accent">{room.code}</b>
-          <span className="muted small">{theme.name} · turn {game.turnNumber}</span>
+          <span className="muted small">{getMap(game.mapId).name} · {theme.name} · turn {game.turnNumber}</span>
           {!connected && <span className="tag warn">reconnecting…</span>}
         </div>
         <div className="row">
@@ -59,7 +62,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
         <TradeOffers game={game} me={me} />
         <div className="tabs">
           <button className={tab === 'log' && panelOpen ? 'on' : ''} onClick={() => pickTab('log')}>Log</button>
-          <button className={tab === 'chat' && panelOpen ? 'on' : ''} onClick={() => pickTab('chat')}>Chat</button>
+          {config.features.chat && <button className={tab === 'chat' && panelOpen ? 'on' : ''} onClick={() => pickTab('chat')}>Chat</button>}
           {myPlayer && <button className={tab === 'mine' && panelOpen ? 'on' : ''} onClick={() => pickTab('mine')}>My deeds</button>}
         </div>
         <div className="tab-body">
@@ -87,7 +90,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
 function Players({ game, room, me, onTrade }: {
   game: GameView; room: RoomView; me: string; onTrade: (id: string) => void;
 }) {
-  const theme = getTheme(game.themeId);
+  const theme = resolveTheme(game.themeId, game.mapId);
   const amIn = game.players.some(p => p.id === me && !p.bankrupt);
   return (
     <div className="players">
@@ -124,7 +127,7 @@ function Players({ game, room, me, onTrade }: {
 }
 
 function ActionBar({ game, me }: { game: GameView; me: string }) {
-  const theme = getTheme(game.themeId);
+  const theme = resolveTheme(game.themeId, game.mapId);
   const cur = (n: number) => `${theme.currency}${n}`;
   const p = game.players.find(x => x.id === me);
   const current = game.players.find(x => x.id === game.current)!;
@@ -206,7 +209,7 @@ function ActionBar({ game, me }: { game: GameView; me: string }) {
 
 function AuctionPanel({ game, me, skew }: { game: GameView; me: string; skew: number }) {
   const a = game.auction;
-  const theme = getTheme(game.themeId);
+  const theme = resolveTheme(game.themeId, game.mapId);
   const [now, setNow] = useState(Date.now());
   const [custom, setCustom] = useState('');
   useEffect(() => {
@@ -258,7 +261,7 @@ function AuctionPanel({ game, me, skew }: { game: GameView; me: string; skew: nu
 
 function CardPopup({ game }: { game: GameView }) {
   const card = game.lastCard;
-  const theme = getTheme(game.themeId);
+  const theme = resolveTheme(game.themeId, game.mapId);
   const firstSeq = useRef(card?.seq ?? 0);
   const [shown, setShown] = useState<number | null>(null);
   useEffect(() => {
@@ -294,7 +297,7 @@ function Log({ game }: { game: GameView }) {
 }
 
 function MyDeeds({ game, me, onPick }: { game: GameView; me: string; onPick: (i: number) => void }) {
-  const theme = getTheme(game.themeId);
+  const theme = resolveTheme(game.themeId, game.mapId);
   const mine = Object.entries(game.owned).filter(([, o]) => o.owner === me).map(([k]) => Number(k)).sort((a, b) => a - b);
   if (!mine.length) return <p className="muted small">You don't own anything yet.</p>;
   return (

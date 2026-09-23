@@ -2,47 +2,50 @@ import { io, type Socket } from 'socket.io-client';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { Action, RoomSummary, RoomView } from '../../shared/types.ts';
 
-// Identity: a random secret kept in this browser. The server derives your
-// public player id from it, so the same browser always gets its seat back.
-function secret(): string {
-  let k = localStorage.getItem('yot:key');
-  if (!k) {
-    const b = new Uint8Array(24);
-    crypto.getRandomValues(b);
-    k = Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
-    localStorage.setItem('yot:key', k);
-  }
-  return k;
-}
-
-export function getName(): string {
-  return localStorage.getItem('yot:name') ?? '';
-}
-
-export function setName(n: string) {
-  localStorage.setItem('yot:name', n.trim().slice(0, 20));
-}
+import { getToken } from './api.ts';
 
 let socket: Socket | null = null;
 let myId = '';
 const idListeners = new Set<() => void>();
+const banListeners = new Set<(msg: string) => void>();
+
+/** Called when the server refuses us for a ban (at connect or mid-session). */
+export function onBanned(fn: (msg: string) => void): () => void {
+  banListeners.add(fn);
+  return () => { banListeners.delete(fn); };
+}
 
 export function getSocket(): Socket {
   if (!socket) {
     socket = io({
-      auth: cb => cb({ key: secret(), name: getName() }),
+      auth: cb => cb({ token: getToken() }),
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 400,
       reconnectionDelayMax: 3000,
     });
-    socket.on('hello', (h: { playerId: string }) => {
-      myId = h.playerId;
+    socket.on('hello', (h: { profile: { id: string } | null }) => {
+      myId = h.profile?.id ?? '';
       idListeners.forEach(f => f());
     });
+    const banned = (msg: string) => banListeners.forEach(f => f(msg));
+    socket.on('connect_error', (e: Error) => {
+      if (e.message.startsWith('banned:')) {
+        banned(e.message.slice(7));
+        socket?.disconnect(); // stop the reconnect loop
+      }
+    });
+    socket.on('banned', (b: { message: string }) => banned(b.message));
   }
   return socket;
+}
+
+/** Reconnect with the current token (after signing in or out). */
+export function resetSocket() {
+  if (!socket) return;
+  socket.disconnect();
+  socket.connect();
 }
 
 export function useMyId(): string {
@@ -87,7 +90,7 @@ export function useConnected(): boolean {
   return c;
 }
 
-export interface ChatMsg { t: number; name: string; color: string; text: string }
+export interface ChatMsg { t: number; id: string; name: string; color: string; text: string; spectator?: boolean; admin?: boolean }
 
 export function useRoom(code: string) {
   const [room, setRoom] = useState<RoomView | null>(null);
@@ -106,7 +109,7 @@ export function useRoom(code: string) {
     s.on('room:state', onState);
     s.on('chat', onChat);
     const off = onEveryConnect(() => {
-      call<{ spectating: boolean }>('room:join', { code, name: getName() })
+      call<{ spectating: boolean }>('room:join', { code })
         .then(r => { setSpectating(r.spectating); setError(null); })
         .catch(e => setError(e.message));
     });

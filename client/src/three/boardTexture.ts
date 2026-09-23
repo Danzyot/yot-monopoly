@@ -4,7 +4,7 @@
 
 import { CanvasTexture, SRGBColorSpace } from 'three';
 import type { Theme } from '../../../shared/themes.ts';
-import { BAND, C, T, W, tile } from './layout.ts';
+import { BAND, C, W, tile, tileWidth } from './layout.ts';
 
 const PX = 2048;
 const S = PX / W; // pixels per world unit
@@ -115,8 +115,12 @@ export function drawBoard(theme: Theme, logo?: HTMLImageElement | null): HTMLCan
   // ---- tiles ----
   const chanceIcon = '?';
   let utilityN = 0;
+  const n = theme.spaces.length;
+  const T = tileWidth(n);
+  // Narrow tiles (big maps) get smaller lettering.
+  const scale = Math.min(1, T / 0.8889);
   theme.spaces.forEach((s, i) => {
-    const g = tile(i);
+    const g = tile(i, n);
     ctx.save();
     ctx.translate((g.x + W / 2) * S, (g.z + W / 2) * S);
     const w = (g.corner ? C : T) * S;
@@ -128,7 +132,7 @@ export function drawBoard(theme: Theme, logo?: HTMLImageElement | null): HTMLCan
     ctx.fillStyle = pal.boardText;
     const pad = 10;
 
-    const name = (y: number, size = 30) => {
+    const name = (y: number, size = Math.round(30 * scale)) => {
       ctx.font = `600 ${size}px ${FACE}`;
       const lines = wrap(ctx, s.name.toUpperCase(), w - pad * 2);
       lines.forEach((l, k) => {
@@ -142,6 +146,7 @@ export function drawBoard(theme: Theme, logo?: HTMLImageElement | null): HTMLCan
       ctx.fillText(text, 0, d / 2 - 30);
     };
     const icon = (glyph: string, y: number, size = 90) => {
+      size = Math.round(size * Math.max(0.7, scale));
       ctx.font = `${size}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
       ctx.fillText(glyph, 0, y);
     };
@@ -164,7 +169,7 @@ export function drawBoard(theme: Theme, logo?: HTMLImageElement | null): HTMLCan
         ctx.fill();
       } else if (s.kind === 'jail') {
         ctx.restore();
-        drawJail(ctx, i, theme);
+        drawJail(ctx, i, theme, n);
         return;
       } else if (s.kind === 'parking') {
         big('FREE', -70, 50);
@@ -213,6 +218,13 @@ export function drawBoard(theme: Theme, logo?: HTMLImageElement | null): HTMLCan
         ctx.font = `700 150px ${FACE}`;
         ctx.fillText(chanceIcon, 0, 40);
         break;
+      case 'arcade':
+        name(-d / 2 + 36);
+        icon('🕹️', 25);
+        ctx.fillStyle = pal.accent;
+        ctx.font = `700 ${Math.round(26 * scale)}px ${FACE}`;
+        ctx.fillText('MINI-GAME', 0, d / 2 - 30);
+        break;
       case 'chest':
         name(-d / 2 + 36);
         if (logo) ctx.drawImage(logo, -60, -25, 120, 120);
@@ -231,8 +243,8 @@ export function drawBoard(theme: Theme, logo?: HTMLImageElement | null): HTMLCan
   return cv;
 }
 
-function drawJail(ctx: CanvasRenderingContext2D, i: number, theme: Theme) {
-  const g = tile(i);
+function drawJail(ctx: CanvasRenderingContext2D, i: number, theme: Theme, n: number) {
+  const g = tile(i, n);
   const pal = theme.palette;
   const x0 = (g.x - C / 2 + W / 2) * S, z0 = (g.z - C / 2 + W / 2) * S;
   const size = C * S;

@@ -4,7 +4,9 @@
 
 export type SpaceKind =
   | 'go' | 'property' | 'railroad' | 'utility' | 'tax'
-  | 'chance' | 'chest' | 'jail' | 'parking' | 'gotojail';
+  | 'chance' | 'chest' | 'jail' | 'parking' | 'gotojail'
+  /** Mini-game space: landing starts an arcade round (when mini-games are on). */
+  | 'arcade';
 
 export interface SpaceDef {
   kind: SpaceKind;
@@ -19,9 +21,8 @@ export interface SpaceDef {
   tax?: number;
 }
 
-export const BOARD_SIZE = 40;
-export const JAIL_INDEX = 10;
-export const GO_TO_JAIL_INDEX = 30;
+// Boards are squares: GO at index 0 and one corner every `size / 4` spaces,
+// in the order GO, jail, free parking, go-to-jail. Sizes must be multiples of 4.
 
 const p = (name: string, group: string, price: number, houseCost: number, rent: number[]): SpaceDef =>
   ({ kind: 'property', name, group, price, houseCost, rent });
@@ -74,6 +75,8 @@ export const CLASSIC_SPACES: SpaceDef[] = [
 
 export const CLASSIC_GROUP_COLORS: Record<string, string> = {
   brown: '#8b4a2b',
+  teal: '#00a6a6',
+  purple: '#7b3fb5',
   lightblue: '#a9dcf5',
   pink: '#d83c96',
   orange: '#f5921e',

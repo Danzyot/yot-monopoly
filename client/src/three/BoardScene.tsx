@@ -2,10 +2,10 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { ContactShadows, OrbitControls } from '@react-three/drei';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MeshStandardMaterial, type Group, type Mesh } from 'three';
-import { getTheme, type Theme } from '../../../shared/themes.ts';
+import { resolveTheme, type Theme } from '../../../shared/themes.ts';
 import type { GameView } from '../../../shared/types.ts';
 import { boardTexture } from './boardTexture.ts';
-import { C, T, W, buildingSpots, tile, tileAt } from './layout.ts';
+import { C, W, buildingSpots, tile, tileAt, tileWidth } from './layout.ts';
 import { Tokens } from './Tokens.tsx';
 import { Dice } from './Dice.tsx';
 
@@ -39,9 +39,9 @@ function Board({ theme, onPick, onHover }: {
 
   const pick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
-    onPick?.(tileAt(e.point.x, e.point.z));
+    onPick?.(tileAt(e.point.x, e.point.z, theme.spaces.length));
   };
-  const hover = (e: ThreeEvent<PointerEvent>) => onHover?.(tileAt(e.point.x, e.point.z));
+  const hover = (e: ThreeEvent<PointerEvent>) => onHover?.(tileAt(e.point.x, e.point.z, theme.spaces.length));
 
   return (
     <mesh receiveShadow material={materials} position={[0, -THICK / 2, 0]}
@@ -67,7 +67,7 @@ function Table({ theme }: { theme: Theme }) {
 }
 
 /** Tile outline glow for hover / selection. */
-function TileHighlight({ index, color, pulse }: { index: number | null; color: string; pulse?: boolean }) {
+function TileHighlight({ index, color, pulse, n }: { index: number | null; color: string; pulse?: boolean; n: number }) {
   const ref = useRef<Mesh>(null);
   useFrame(() => {
     if (ref.current && pulse) {
@@ -76,8 +76,8 @@ function TileHighlight({ index, color, pulse }: { index: number | null; color: s
     }
   });
   if (index === null) return null;
-  const g = tile(index);
-  const along = g.corner ? C : T;
+  const g = tile(index, n);
+  const along = g.corner ? C : tileWidth(n);
   const w = g.out[0] !== 0 ? C : along;
   const d = g.out[0] !== 0 ? along : C;
   return (
@@ -90,11 +90,13 @@ function TileHighlight({ index, color, pulse }: { index: number | null; color: s
 
 function Ownership({ game, theme }: { game: GameView; theme: Theme }) {
   const colorOf = useMemo(() => Object.fromEntries(game.players.map(p => [p.id, p.color])), [game.players]);
+  const n = theme.spaces.length;
+  const T = tileWidth(n);
   return (
     <group>
       {Object.entries(game.owned).map(([k, o]) => {
         const i = Number(k);
-        const g = tile(i);
+        const g = tile(i, n);
         // A strip along the tile's outer edge in the owner's colour.
         const inset = C / 2 - 0.06;
         const x = g.x + g.out[0] * inset, z = g.z + g.out[1] * inset;
@@ -107,7 +109,7 @@ function Ownership({ game, theme }: { game: GameView; theme: Theme }) {
         );
       })}
       {Object.entries(game.owned).filter(([, o]) => o.mortgaged).map(([k]) => {
-        const g = tile(Number(k));
+        const g = tile(Number(k), n);
         const horiz = g.out[0] === 0;
         return (
           <mesh key={`m${k}`} position={[g.x, 0.006, g.z]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -129,9 +131,9 @@ function Buildings({ game, theme }: { game: GameView; theme: Theme }) {
       {Object.entries(game.owned).flatMap(([k, o]) => {
         const i = Number(k);
         if (!o.houses) return [];
-        const g = tile(i);
+        const g = tile(i, theme.spaces.length);
         const rotY = g.out[0] === 0 ? 0 : Math.PI / 2;
-        return buildingSpots(i, o.houses).map(([x, z], n) =>
+        return buildingSpots(i, o.houses, theme.spaces.length).map(([x, z], n) =>
           o.houses === 5 ? (
             <group key={`${i}-h`} position={[x, 0, z]} rotation={[0, rotY, 0]}>
               <mesh castShadow position={[0, 0.1, 0]}><boxGeometry args={[0.36, 0.2, 0.2]} /><meshStandardMaterial color={hotel} roughness={0.4} /></mesh>
@@ -176,14 +178,15 @@ function Spinner({ children, spin }: { children: React.ReactNode; spin?: boolean
   return <group ref={ref}>{children}</group>;
 }
 
-export default function BoardScene({ themeId, game, selected, onSelect, spin }: {
+export default function BoardScene({ themeId, mapId, game, selected, onSelect, spin }: {
   themeId: string;
+  mapId: string;
   game: GameView | null;
   selected?: number | null;
   onSelect?: (i: number | null) => void;
   spin?: boolean;
 }) {
-  const theme = getTheme(themeId);
+  const theme = resolveTheme(themeId, mapId);
   const [hover, setHover] = useState<number | null>(null);
 
   useEffect(() => {
@@ -205,12 +208,12 @@ export default function BoardScene({ themeId, game, selected, onSelect, spin }: 
       <Spinner spin={spin}>
         <Table theme={theme} />
         <Board theme={theme} onPick={onSelect} onHover={onSelect ? setHover : undefined} />
-        <TileHighlight index={hover} color="#ffffff" />
-        <TileHighlight index={selected ?? null} color={theme.palette.accent} pulse />
+        <TileHighlight index={hover} color="#ffffff" n={theme.spaces.length} />
+        <TileHighlight index={selected ?? null} color={theme.palette.accent} pulse n={theme.spaces.length} />
         {game && (
           <>
             <Ownership game={game} theme={theme} />
-            <Tokens players={game.players} current={game.current} />
+            <Tokens players={game.players} current={game.current} n={theme.spaces.length} />
             <Dice dice={game.dice} seq={game.rollSeq} body={theme.palette.die} pip={theme.palette.pip} />
           </>
         )}

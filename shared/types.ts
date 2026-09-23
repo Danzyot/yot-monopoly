@@ -87,6 +87,7 @@ export interface CardShown {
 
 export interface GameView {
   themeId: string;
+  mapId: string;
   rules: RuleConfig;
   players: PlayerState[];
   owned: Record<number, OwnedSpace>;
@@ -135,6 +136,8 @@ export type Action =
 export interface RoomSeat {
   id: string;
   name: string;
+  /** Emoji or Discord avatar URL. */
+  avatar: string;
   token: TokenId;
   color: string;
   isBot: boolean;
@@ -145,6 +148,10 @@ export interface RoomView {
   code: string;
   hostId: string;
   themeId: string;
+  mapId: string;
+  /** Room is hidden from the public list (join by link/code only). */
+  private: boolean;
+  spectators: number;
   rules: RuleConfig;
   status: 'lobby' | 'playing' | 'finished';
   seats: RoomSeat[];
@@ -156,8 +163,81 @@ export interface RoomView {
 export interface RoomSummary {
   code: string;
   themeId: string;
+  mapId: string;
   status: RoomView['status'];
   players: number;
   maxPlayers: number;
   hostName: string;
+}
+
+// ---- accounts ---------------------------------------------------------------
+
+export interface PlayerProfile {
+  id: string;
+  name: string;
+  /** Emoji or Discord CDN avatar URL. */
+  avatar: string;
+  /** 'demo' exists only while DEMO_MODE=1; demo tokens stop working when it is off. */
+  provider: 'discord' | 'demo';
+  discord?: { id: string; username: string } | null;
+  /** Site operator (ADMIN_DISCORD_IDS). */
+  isAdmin?: boolean;
+}
+
+/** One message per this long, per player. Shared so the UI countdown matches. */
+export const CHAT_COOLDOWN_MS = 2_000;
+
+export type BanKind = 'player' | 'ip';
+export type BanScope = 'room' | 'lifetime';
+
+export const BAN_REASONS = [
+  'Alt accounts',
+  'Colluding / feeding money',
+  'Abusive chat',
+  'Griefing / stalling',
+  'Cheating or exploits',
+  'Evading a previous ban',
+] as const;
+
+/** The line a banned player is shown. Shared so the admin preview matches. */
+export function banMessageFor(scope: BanScope, reason: string, expiresAt: number | null): string {
+  const where = scope === 'lifetime' ? 'You are banned from this site.' : 'You are banned from this room.';
+  const until = expiresAt ? ` Until ${new Date(expiresAt).toUTCString()}.` : '';
+  const why = (reason ?? '').trim();
+  return `${where}${until}${why ? ` Reason: ${why}` : ''}`;
+}
+
+/** Site-wide switches an operator can flip in the dashboard. */
+export interface Features {
+  /** Anyone signed in may create rooms (operators always can). */
+  publicRooms: boolean;
+  chat: boolean;
+  music: boolean;
+  minigames: boolean;
+  bots: boolean;
+  leaderboard: boolean;
+  /** Announce finished games to DISCORD_ANNOUNCE_CHANNEL_ID. */
+  announceResults: boolean;
+}
+
+export const DEFAULT_FEATURES: Features = {
+  publicRooms: true,
+  chat: true,
+  music: true,
+  minigames: true,
+  bots: true,
+  leaderboard: true,
+  announceResults: false,
+};
+
+/** Public config the client reads at boot. */
+export interface SiteConfig {
+  discordEnabled: boolean;
+  demoMode: boolean;
+  adminMode: boolean;
+  codeVerify: boolean;
+  codeVerifyChannel: string | null;
+  codeVerifyButton: boolean;
+  inviteUrl: string | null;
+  features: Features;
 }

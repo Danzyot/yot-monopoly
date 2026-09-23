@@ -2,7 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Game } from '../src/engine/game.ts';
 import { botAction } from '../src/engine/bot.ts';
-import { CLASSIC, DEFAULT_RULES, YOT } from '../../shared/themes.ts';
+import { DEFAULT_RULES, YOT, resolveTheme } from '../../shared/themes.ts';
+import { MAPS, validateMap } from '../../shared/maps.ts';
+
+const CLASSIC = resolveTheme('classic', 'classic');
 import { scripted, seeded } from './helpers.ts';
 
 test('roll, move, buy', () => {
@@ -238,25 +241,53 @@ test('free parking pot house rule', () => {
   assert.equal(g.player('p1').cash, 1700);
 });
 
-test('themes only change cosmetics: YOT uses classic economics', () => {
-  assert.equal(YOT.spaces.length, 40);
-  YOT.spaces.forEach((s, i) => {
+test('editions only change cosmetics: YOT uses classic economics', () => {
+  const yot = resolveTheme(YOT.id, 'classic');
+  assert.equal(yot.spaces.length, 40);
+  yot.spaces.forEach((s, i) => {
     assert.equal(s.kind, CLASSIC.spaces[i].kind);
     assert.equal(s.price, CLASSIC.spaces[i].price);
   });
-  assert.notEqual(YOT.spaces[39].name, CLASSIC.spaces[39].name);
+  assert.notEqual(yot.spaces[39].name, CLASSIC.spaces[39].name);
+  // Card text names the edition's own spaces, not the classic ones.
+  assert.ok(yot.chance.some(c => c.text.includes('Yot Tower')));
+  assert.ok(!yot.chance.some(c => c.text.includes('Boardwalk')));
+});
+
+test('every map is well-formed for every edition', () => {
+  for (const m of MAPS) {
+    validateMap(m);
+    for (const ed of ['classic', 'chog', 'yot']) {
+      const t = resolveTheme(ed, m.id);
+      assert.equal(t.spaces.length, m.spaces.length);
+      for (const c of [...t.chance, ...t.chest]) assert.ok(!/[{}]/.test(c.text), `unfilled card text: ${c.text}`);
+      for (const s of t.spaces) if (s.group) assert.ok(t.groupColors[s.group], `${ed}/${m.id}: no colour for ${s.group}`);
+    }
+  }
+});
+
+test('non-classic maps: jail, GO and wrap-around use the board size', () => {
+  const { g, dice, act } = scripted(2, {}, 'speed');
+  assert.equal(g.size, 32);
+  assert.equal(g.jailIndex, 8);
+  g.player('p0').position = 30;
+  dice(1, 2);
+  act('p0', { type: 'roll' });
+  assert.equal(g.player('p0').position, 1);
+  assert.equal(g.player('p0').cash, 1700);
 });
 
 // Bots play complete games across many seeds; every step must be legal and
 // money/buildings must stay consistent.
 test('bot games run to completion without illegal moves', () => {
   let finished = 0;
-  for (let seed = 1; seed <= 40; seed++) {
+  for (let seed = 1; seed <= 60; seed++) {
     let clock = 0;
-    const n = 2 + (seed % 5);
+    const n = 2 + (seed % 7);
+    const map = MAPS[seed % MAPS.length];
     const g = new Game({
-      theme: seed % 2 ? CLASSIC : YOT,
-      rules: { ...DEFAULT_RULES, ...(seed % 2 ? {} : YOT.rules) },
+      theme: resolveTheme(seed % 2 ? 'classic' : 'yot', map.id),
+      rules: { ...DEFAULT_RULES, ...(seed % 2 ? {} : YOT.rules), startingCash: map.startingCash ?? 1500 },
       players: Array.from({ length: n }, (_, i) => ({ id: `b${i}`, name: `Bot${i}`, token: 'car' as const, color: '#fff', isBot: true })),
       rng: seeded(seed),
       now: () => clock,
@@ -284,5 +315,5 @@ test('bot games run to completion without illegal moves', () => {
     }
     if (g.phase === 'over') finished++;
   }
-  assert.ok(finished >= 30, `only ${finished}/40 bot games finished`);
+  assert.ok(finished >= 50, `only ${finished}/60 bot games finished`);
 });

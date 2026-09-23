@@ -1,33 +1,79 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Registry, sanitizeRules } from '../src/rooms.ts';
+import { Registry, Room, sanitizeRules, type RoomHooks } from '../src/rooms.ts';
+
+const hooks = (): RoomHooks & { events: string[]; finished: number } => {
+  const h = {
+    events: [] as string[], finished: 0,
+    onChange() {}, onEvent(_r: Room, t: string) { h.events.push(t); }, onFinished() { h.finished++; },
+  };
+  return h;
+};
+const m = (id: string, name = id) => ({ id, name, avatar: '🙂' });
 
 test('rooms: many at once, unique codes, lobby rules', () => {
-  const reg = new Registry(() => {});
+  const reg = new Registry(hooks(), 1e9);
   const a = reg.create('host-a');
   const b = reg.create('host-b');
   assert.notEqual(a.code, b.code);
   assert.equal(reg.get(a.code.toLowerCase()), a);
 
-  a.join('host-a', 'Alice');
-  a.join('bob', 'Bob');
-  assert.throws(() => a.start('bob'), /host/);
+  a.join(m('host-a', 'Alice'));
+  a.join(m('bob', 'Bob'));
+  assert.throws(() => a.start('bob', false), /host/);
+  assert.doesNotThrow(() => a.configure('bob', true, { mapId: 'speed' }), 'operators can configure any room');
+  assert.equal(a.mapId, 'speed');
+  assert.equal(a.rules.startingCash, 1200, 'map brings its starting cash');
   assert.throws(() => a.pickToken('bob', a.seat('host-a')!.token), /taken/);
-  a.configure('host-a', 'yot');
+  a.configure('host-a', false, { themeId: 'yot' });
   assert.equal(a.rules.freeParkingPot, true, 'edition brings its house rules');
-  a.configure('host-a', undefined, { maxPlayers: 3 });
-  a.addBot('host-a');
-  assert.throws(() => a.addBot('host-a'), /full/);
-  assert.throws(() => a.join('carol', 'Carol'), /full/);
+  a.configure('host-a', false, { rules: { maxPlayers: 3 } });
+  a.addBot('host-a', false);
+  assert.throws(() => a.addBot('host-a', false), /full/);
+  assert.throws(() => a.join(m('carol')), /full/);
 
-  a.start('host-a');
+  a.start('host-a', false);
   assert.equal(a.status, 'playing');
   assert.equal(a.view().game!.players.length, 3);
-  assert.throws(() => a.join('dave', 'Dave'), /started/);
-  // Rejoining an existing seat is always allowed (reconnect).
-  assert.doesNotThrow(() => a.join('bob', 'Bob'));
+  assert.equal(a.view().game!.mapId, 'speed');
+  assert.throws(() => a.join(m('dave')), /started/);
+  assert.doesNotThrow(() => a.join(m('bob')), 'rejoining a seat is always allowed');
   a.dispose();
   b.dispose();
+});
+
+test('host leaving the lobby hands the room on; kicks are logged', () => {
+  const h = hooks();
+  const reg = new Registry(h, 1e9);
+  const r = reg.create('a');
+  r.join(m('a')); r.join(m('b')); r.join(m('c'));
+  r.kick('a', 'c', false);
+  assert.equal(r.seat('c'), undefined);
+  assert.ok(h.events.some(e => e.includes('removed')));
+  r.leave('a');
+  assert.equal(r.hostId, 'b');
+  r.dispose();
+});
+
+test('snapshot / restore keeps a game mid-play', () => {
+  const reg = new Registry(hooks(), 1e9);
+  const r = reg.create('a');
+  r.join(m('a')); r.join(m('b'));
+  r.start('a', false);
+  const g = r.game!;
+  const cur = g.current.id;
+  r.act(cur, { type: 'roll' });
+  const snap = JSON.parse(JSON.stringify(reg.snapshot()));
+  r.dispose();
+
+  const reg2 = new Registry(hooks(), 1e9);
+  assert.equal(reg2.restore(snap), 1);
+  const r2 = reg2.get(r.code)!;
+  assert.equal(r2.status, 'playing');
+  assert.deepEqual(r2.game!.view().players.map(p => p.position), g.view().players.map(p => p.position));
+  assert.equal(r2.game!.current.id, cur);
+  assert.equal(r2.seat('a')!.connected, false, 'humans come back as disconnected until they reconnect');
+  r2.dispose();
 });
 
 test('rules are clamped', () => {

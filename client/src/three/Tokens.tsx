@@ -106,12 +106,12 @@ interface Anim {
   dur: number;
 }
 
-function Token({ p, slot, count, highlight }: { p: PlayerState; slot: number; count: number; highlight: boolean }) {
+function Token({ p, slot, count, highlight, n }: { p: PlayerState; slot: number; count: number; highlight: boolean; n: number }) {
   const ref = useRef<Group>(null);
   const anim = useRef<Anim | null>(null);
 
   // Build the hop path whenever the server position changes.
-  const target = tokenSpot(p.position, slot, count, p.inJail);
+  const target = tokenSpot(p.position, slot, count, p.inJail, n);
   // Initial placement only; afterwards useFrame owns the position (a changing
   // prop here would snap the piece and kill the hop animation).
   const [initial] = useState<[number, number, number]>(() => [target[0], 0, target[1]]);
@@ -120,10 +120,10 @@ function Token({ p, slot, count, highlight }: { p: PlayerState; slot: number; co
   } else if (anim.current.queue.at(-1) !== p.position && anim.current.shown !== p.position) {
     const a = anim.current;
     const start = a.queue.at(-1) ?? a.shown;
-    const steps = (p.position - start + 40) % 40;
+    const steps = (p.position - start + n) % n;
     // Teleports (jail, "go back 3") fly straight; normal moves hop tile by tile.
     if (p.inJail || steps > 12 || steps === 0) a.queue.push(p.position);
-    else for (let k = 1; k <= steps; k++) a.queue.push((start + k) % 40);
+    else for (let k = 1; k <= steps; k++) a.queue.push((start + k) % n);
   }
 
   useFrame(() => {
@@ -136,7 +136,7 @@ function Token({ p, slot, count, highlight }: { p: PlayerState; slot: number; co
       const next = a.queue.shift()!;
       const final = a.queue.length === 0;
       a.from = [g.position.x, g.position.z];
-      a.to = final ? tokenSpot(next, slot, count, p.inJail) : tokenSpot(next, 0, 1, false);
+      a.to = final ? tokenSpot(next, slot, count, p.inJail, n) : tokenSpot(next, 0, 1, false, n);
       a.dur = Math.hypot(a.to[0] - a.from[0], a.to[1] - a.from[1]) > 2 ? 750 : HOP_MS;
       a.shown = next;
       a.t0 = now;
@@ -144,7 +144,7 @@ function Token({ p, slot, count, highlight }: { p: PlayerState; slot: number; co
     }
     if (k >= 1) {
       // Settle into the (possibly changed) slot when other tokens arrive/leave.
-      const [x, z] = tokenSpot(a.shown, slot, count, p.inJail);
+      const [x, z] = tokenSpot(a.shown, slot, count, p.inJail, n);
       g.position.x += (x - g.position.x) * 0.2;
       g.position.z += (z - g.position.z) * 0.2;
       g.position.y += (0 - g.position.y) * 0.3;
@@ -174,14 +174,14 @@ function Token({ p, slot, count, highlight }: { p: PlayerState; slot: number; co
   );
 }
 
-export function Tokens({ players, current }: { players: PlayerState[]; current: string }) {
+export function Tokens({ players, current, n }: { players: PlayerState[]; current: string; n: number }) {
   // Slot assignment per tile so pieces sharing a space don't overlap.
   const slots = useMemo(() => {
     const m = new Map<string, { slot: number; count: number }>();
     const byTile = new Map<string, PlayerState[]>();
     for (const p of players) {
       if (p.bankrupt) continue;
-      const key = `${p.position}:${p.position === 10 && p.inJail ? 'in' : 'out'}`;
+      const key = `${p.position}:${p.inJail ? 'in' : 'out'}`;
       byTile.set(key, [...(byTile.get(key) ?? []), p]);
     }
     for (const list of byTile.values()) list.forEach((p, k) => m.set(p.id, { slot: k, count: list.length }));
@@ -192,7 +192,7 @@ export function Tokens({ players, current }: { players: PlayerState[]; current: 
     <>
       {players.filter(p => !p.bankrupt).map(p => {
         const s = slots.get(p.id)!;
-        return <Token key={p.id} p={p} slot={s.slot} count={s.count} highlight={p.id === current} />;
+        return <Token key={p.id} p={p} slot={s.slot} count={s.count} highlight={p.id === current} n={n} />;
       })}
     </>
   );

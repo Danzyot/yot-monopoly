@@ -1,10 +1,13 @@
 import { useNavigate } from 'react-router-dom';
 import { call, type ChatMsg } from '../net.ts';
 import { THEMES, getTheme, type RuleConfig } from '../../../shared/themes.ts';
-import { TOKENS, type RoomView } from '../../../shared/types.ts';
+import { MAPS, getMap } from '../../../shared/maps.ts';
+import { PLAYER_COLORS, TOKENS, type RoomView } from '../../../shared/types.ts';
 import { TOKEN_EMOJI, TOKEN_LABEL } from '../format.ts';
 import { toast, toastError } from '../toast.tsx';
+import { useAuth } from '../auth.tsx';
 import Chat from './Chat.tsx';
+import { Avatar } from './Avatar.tsx';
 import BoardScene from '../three/BoardScene.tsx';
 import { themeStyle } from '../themeStyle.ts';
 
@@ -20,17 +23,20 @@ export default function Lobby({ room, me, spectating, chat }: {
   room: RoomView; me: string; spectating: boolean; chat: ChatMsg[];
 }) {
   const nav = useNavigate();
-  const isHost = room.hostId === me;
+  const { profile, config } = useAuth();
+  const isHost = room.hostId === me || !!profile?.isAdmin;
   const theme = getTheme(room.themeId);
+  const map = getMap(room.mapId);
   const mySeat = room.seats.find(s => s.id === me);
   const link = `${location.origin}/r/${room.code}`;
 
-  const configure = (p: { themeId?: string; rules?: Partial<RuleConfig> }) => call('room:configure', p).catch(toastError);
+  const configure = (p: { themeId?: string; mapId?: string; rules?: Partial<RuleConfig>; private?: boolean }) =>
+    call('room:configure', p).catch(toastError);
   const leave = async () => { await call('room:leave').catch(() => {}); nav('/'); };
 
   return (
     <div className={`lobby ${theme.ui ? 'branded' : ''}`} style={themeStyle(theme)}>
-      <div className="lobby-bg"><BoardScene themeId={room.themeId} game={null} spin /></div>
+      <div className="lobby-bg"><BoardScene themeId={room.themeId} mapId={room.mapId} game={null} spin /></div>
       <div className="lobby-panels">
         <section className="panel">
           <div className="row between">
@@ -39,41 +45,52 @@ export default function Lobby({ room, me, spectating, chat }: {
           </div>
           <div className="row">
             <input readOnly value={link} onFocus={e => e.target.select()} />
-            <button className="btn small" onClick={() => { navigator.clipboard?.writeText(link); toast('Invite link copied'); }}>Copy</button>
+            <button className="btn small" onClick={() => { void navigator.clipboard?.writeText(link); toast('Invite link copied'); }}>Copy</button>
           </div>
-          {spectating && <p className="muted small">The room is full — you are watching.</p>}
+          {spectating && profile && <p className="muted small">The room is full — you are watching.</p>}
 
-          <h3>Players {room.seats.length}/{room.rules.maxPlayers}</h3>
+          <h3>Players {room.seats.length}/{room.rules.maxPlayers}{room.spectators > 0 && <span className="muted small"> · {room.spectators} watching</span>}</h3>
           <ul className="seats">
             {room.seats.map(s => (
               <li key={s.id} style={{ borderColor: s.color }}>
                 <span className="token-badge" style={{ background: s.color }}>{TOKEN_EMOJI[s.token]}</span>
+                <Avatar src={s.avatar} size={24} />
                 <span className="grow">
                   {s.name} {s.id === room.hostId && <em className="tag">host</em>} {s.isBot && <em className="tag">bot</em>}
                   {!s.connected && <em className="tag warn">away</em>}
                 </span>
                 {isHost && s.id !== me && (
-                  <button className="btn tiny ghost" onClick={() => call('room:kick', { id: s.id }).catch(toastError)}>✕</button>
+                  <button className="btn tiny ghost" title="Remove" onClick={() => call('room:kick', { id: s.id }).catch(toastError)}>✕</button>
                 )}
               </li>
             ))}
           </ul>
-          {isHost && room.seats.length < room.rules.maxPlayers && (
+          {isHost && room.seats.length < room.rules.maxPlayers && (config.features.bots || profile?.isAdmin) && (
             <button className="btn small" onClick={() => call('room:addBot').catch(toastError)}>+ Add bot</button>
           )}
 
           {mySeat && (
             <>
-              <h3>Your token</h3>
+              <h3>Your piece</h3>
               <div className="token-grid">
                 {TOKENS.map(t => {
                   const taken = room.seats.some(s => s.token === t && s.id !== me);
                   return (
                     <button key={t} title={TOKEN_LABEL[t]} disabled={taken}
                       className={`token-pick ${mySeat.token === t ? 'on' : ''}`}
-                      onClick={() => call('room:token', { token: t }).catch(toastError)}>
+                      onClick={() => call('room:seat', { token: t }).catch(toastError)}>
                       {TOKEN_EMOJI[t]}
                     </button>
+                  );
+                })}
+              </div>
+              <div className="color-grid">
+                {PLAYER_COLORS.map(c => {
+                  const taken = room.seats.some(s => s.color === c && s.id !== me);
+                  return (
+                    <button key={c} disabled={taken} aria-label={`Colour ${c}`}
+                      className={`color-pick ${mySeat.color === c ? 'on' : ''}`} style={{ background: c }}
+                      onClick={() => call('room:seat', { color: c }).catch(toastError)} />
                   );
                 })}
               </div>
@@ -90,6 +107,18 @@ export default function Lobby({ room, me, spectating, chat }: {
         </section>
 
         <section className="panel">
+          <h3>Map</h3>
+          <div className="edition-pick">
+            {MAPS.map(m => (
+              <button key={m.id} disabled={!isHost} className={`edition small map-card ${m.id === room.mapId ? 'on' : ''}`}
+                onClick={() => configure({ mapId: m.id })}>
+                <b>{m.name}</b>
+                <span className="small muted">{m.description}</span>
+                <span className="small">{m.spaces.length} spaces · best with {m.players[0]}–{m.players[1]}</span>
+              </button>
+            ))}
+          </div>
+
           <h3>Edition</h3>
           <div className="edition-pick">
             {THEMES.map(t => (
@@ -125,13 +154,20 @@ export default function Lobby({ room, me, spectating, chat }: {
                 <span>{label}<small className="muted"> — {hint}</small></span>
               </label>
             ))}
+            <label className="rule toggle" title="Hide from the public room list">
+              <input type="checkbox" disabled={!isHost} checked={room.private} onChange={e => configure({ private: e.target.checked })} />
+              <span>Private room<small className="muted"> — join by invite link only</small></span>
+            </label>
           </div>
+          <p className="muted small">{map.name}: {map.spaces.length} spaces.</p>
         </section>
 
-        <section className="panel chat-panel">
-          <h3>Chat</h3>
-          <Chat chat={chat} />
-        </section>
+        {config.features.chat && (
+          <section className="panel chat-panel">
+            <h3>Chat</h3>
+            <Chat chat={chat} />
+          </section>
+        )}
       </div>
     </div>
   );

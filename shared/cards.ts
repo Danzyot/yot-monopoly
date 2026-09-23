@@ -16,36 +16,82 @@ export type CardEffect =
 export type DeckId = 'chance' | 'chest';
 
 export interface CardDef {
+  /**
+   * Card text. `{12}` is replaced with the name of space 12 on the board it is
+   * played on, `{jail}` with the jail's name, and `$` with the currency, so the
+   * same card reads right on every map and edition.
+   */
   text: string;
   effect: CardEffect;
 }
 
+/** Fill a card's placeholders from the board it is being played on. */
+export function cardText(text: string, spaces: { name: string; kind: string }[], currency: string): string {
+  const jail = spaces.find(s => s.kind === 'jail')?.name ?? 'Jail';
+  return text
+    .replace(/\{(\d+)\}/g, (_, n) => spaces[Number(n)]?.name ?? '?')
+    .replace(/\{jail\}/g, jail)
+    .replaceAll('$', currency);
+}
+
+/**
+ * Decks for any board, built from its layout: named destinations are picked
+ * from the map (its priciest property, first railroad, a mid-board street) so
+ * a new map gets sensible Chance / Community Chest cards with no extra work.
+ */
+export function standardDecks(spaces: { kind: string; price?: number }[]): { chance: CardDef[]; chest: CardDef[] } {
+  const props = spaces.map((s, i) => ({ s, i })).filter(x => x.s.kind === 'property');
+  const priciest = props.reduce((a, b) => ((b.s.price ?? 0) >= (a.s.price ?? 0) ? b : a)).i;
+  const mid = props[Math.floor(props.length / 2)].i;
+  const early = props[Math.floor(props.length / 4)].i;
+  const rail = spaces.findIndex(s => s.kind === 'railroad');
+  const chance: CardDef[] = [
+    { text: `Advance to {${priciest}}.`, effect: { type: 'advance', to: priciest } },
+    { text: 'Advance to {0}. Collect $200.', effect: { type: 'advance', to: 0 } },
+    { text: `Advance to {${mid}}. If you pass {0}, collect $200.`, effect: { type: 'advance', to: mid } },
+    { text: `Advance to {${early}}. If you pass {0}, collect $200.`, effect: { type: 'advance', to: early } },
+    { text: 'Advance to the nearest Railroad. If owned, pay the owner twice the rental.', effect: { type: 'nearest', kind: 'railroad' } },
+    { text: 'Advance to the nearest Railroad. If owned, pay the owner twice the rental.', effect: { type: 'nearest', kind: 'railroad' } },
+    { text: 'Advance to the nearest Utility. If owned, roll the dice and pay the owner 10× the roll.', effect: { type: 'nearest', kind: 'utility' } },
+    { text: 'Bank pays you a dividend of $50.', effect: { type: 'collect', amount: 50 } },
+    { text: 'Get Out of Jail Free.', effect: { type: 'jailFree' } },
+    { text: 'Go back 3 spaces.', effect: { type: 'back', steps: 3 } },
+    { text: 'Go to {jail}. Do not pass {0}, do not collect $200.', effect: { type: 'jail' } },
+    { text: 'Make general repairs on all your property: $25 per house, $100 per hotel.', effect: { type: 'repairs', perHouse: 25, perHotel: 100 } },
+    { text: 'Speeding fine $15.', effect: { type: 'pay', amount: 15 } },
+    { text: 'You have been elected Chairman of the Board. Pay each player $50.', effect: { type: 'payEach', amount: 50 } },
+    { text: 'Your building loan matures. Collect $150.', effect: { type: 'collect', amount: 150 } },
+  ];
+  if (rail >= 0) chance.push({ text: `Take a trip to {${rail}}. If you pass {0}, collect $200.`, effect: { type: 'advance', to: rail } });
+  return { chance, chest: CLASSIC_CHEST };
+}
+
 export const CLASSIC_CHANCE: CardDef[] = [
-  { text: 'Advance to Boardwalk.', effect: { type: 'advance', to: 39 } },
-  { text: 'Advance to GO. Collect $200.', effect: { type: 'advance', to: 0 } },
-  { text: 'Advance to Illinois Avenue. If you pass GO, collect $200.', effect: { type: 'advance', to: 24 } },
-  { text: 'Advance to St. Charles Place. If you pass GO, collect $200.', effect: { type: 'advance', to: 11 } },
+  { text: 'Advance to {39}.', effect: { type: 'advance', to: 39 } },
+  { text: 'Advance to {0}. Collect $200.', effect: { type: 'advance', to: 0 } },
+  { text: 'Advance to {24}. If you pass {0}, collect $200.', effect: { type: 'advance', to: 24 } },
+  { text: 'Advance to {11}. If you pass {0}, collect $200.', effect: { type: 'advance', to: 11 } },
   { text: 'Advance to the nearest Railroad. If owned, pay the owner twice the rental.', effect: { type: 'nearest', kind: 'railroad' } },
   { text: 'Advance to the nearest Railroad. If owned, pay the owner twice the rental.', effect: { type: 'nearest', kind: 'railroad' } },
   { text: 'Advance to the nearest Utility. If owned, roll the dice and pay the owner 10× the roll.', effect: { type: 'nearest', kind: 'utility' } },
   { text: 'Bank pays you a dividend of $50.', effect: { type: 'collect', amount: 50 } },
   { text: 'Get Out of Jail Free.', effect: { type: 'jailFree' } },
   { text: 'Go back 3 spaces.', effect: { type: 'back', steps: 3 } },
-  { text: 'Go to Jail. Do not pass GO, do not collect $200.', effect: { type: 'jail' } },
+  { text: 'Go to {jail}. Do not pass {0}, do not collect $200.', effect: { type: 'jail' } },
   { text: 'Make general repairs on all your property: $25 per house, $100 per hotel.', effect: { type: 'repairs', perHouse: 25, perHotel: 100 } },
   { text: 'Speeding fine $15.', effect: { type: 'pay', amount: 15 } },
-  { text: 'Take a trip to Reading Railroad. If you pass GO, collect $200.', effect: { type: 'advance', to: 5 } },
+  { text: 'Take a trip to {5}. If you pass {0}, collect $200.', effect: { type: 'advance', to: 5 } },
   { text: 'You have been elected Chairman of the Board. Pay each player $50.', effect: { type: 'payEach', amount: 50 } },
   { text: 'Your building loan matures. Collect $150.', effect: { type: 'collect', amount: 150 } },
 ];
 
 export const CLASSIC_CHEST: CardDef[] = [
-  { text: 'Advance to GO. Collect $200.', effect: { type: 'advance', to: 0 } },
+  { text: 'Advance to {0}. Collect $200.', effect: { type: 'advance', to: 0 } },
   { text: 'Bank error in your favour. Collect $200.', effect: { type: 'collect', amount: 200 } },
   { text: "Doctor's fee. Pay $50.", effect: { type: 'pay', amount: 50 } },
   { text: 'From sale of stock you get $50.', effect: { type: 'collect', amount: 50 } },
   { text: 'Get Out of Jail Free.', effect: { type: 'jailFree' } },
-  { text: 'Go to Jail. Do not pass GO, do not collect $200.', effect: { type: 'jail' } },
+  { text: 'Go to {jail}. Do not pass {0}, do not collect $200.', effect: { type: 'jail' } },
   { text: 'Holiday fund matures. Receive $100.', effect: { type: 'collect', amount: 100 } },
   { text: 'Income tax refund. Collect $20.', effect: { type: 'collect', amount: 20 } },
   { text: 'It is your birthday. Collect $10 from every player.', effect: { type: 'collectEach', amount: 10 } },

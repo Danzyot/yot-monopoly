@@ -1,8 +1,8 @@
 import type { CSSProperties } from 'react';
-import type { Theme } from '../../shared/themes.ts';
+import type { Edition } from '../../shared/themes.ts';
 
 /** CSS variables that reskin the HTML interface for an edition. */
-export function themeStyle(theme: Theme): CSSProperties {
+export function themeStyle(theme: Edition): CSSProperties {
   const ui = theme.ui;
   const vars: Record<string, string> = { '--accent': theme.palette.accent };
   if (ui) {
