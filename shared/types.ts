@@ -1,6 +1,7 @@
 // Protocol types shared by server and client.
 
 import type { DeckId } from './cards.ts';
+import type { MinigameMove, MinigameView } from './minigames.ts';
 import type { RuleConfig } from './themes.ts';
 
 export type TokenId = 'car' | 'hat' | 'dog' | 'ship' | 'boot' | 'iron' | 'cat' | 'duck';
@@ -34,6 +35,7 @@ export type TurnPhase =
   | 'roll'      // current player may roll (or pay/use card when jailed)
   | 'buy'       // landed on an unowned space: buy or auction
   | 'auction'
+  | 'minigame'  // an arcade round is running; turn actions wait for it
   | 'done'      // rolled; may manage properties and end the turn
   | 'over';
 
@@ -109,6 +111,8 @@ export interface GameView {
   winner: string | null;
   log: LogEntry[];
   turnNumber: number;
+  /** The arcade round in progress (phase 'minigame'), result screen included. */
+  minigame: MinigameView | null;
 }
 
 /** Everything a player can ask the engine to do. */
@@ -129,7 +133,8 @@ export type Action =
   | { type: 'bankrupt' }
   | { type: 'proposeTrade'; to: string; give: TradeSide; get: TradeSide }
   | { type: 'acceptTrade'; id: string }
-  | { type: 'rejectTrade'; id: string };
+  | { type: 'rejectTrade'; id: string }
+  | { type: 'minigame'; move: MinigameMove };
 
 // ---- rooms -----------------------------------------------------------------
 

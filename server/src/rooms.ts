@@ -6,6 +6,7 @@
 import { randomInt } from 'node:crypto';
 import { EngineError, Game, type GameSnapshot } from './engine/game.ts';
 import { botAction } from './engine/bot.ts';
+import { isOn } from './features.ts';
 import { DEFAULT_RULES, getTheme, resolveTheme, type RuleConfig } from '../../shared/themes.ts';
 import { getMap } from '../../shared/maps.ts';
 import {
@@ -13,6 +14,10 @@ import {
 } from '../../shared/types.ts';
 
 const BOT_DELAY_MS = 900;
+/** Mini-game moves bring their own human-like delay (see the modules' bot()); this is just a nudge. */
+const MINIGAME_BOT_DELAY_MS = 60;
+/** How often to look in on bots waiting to make a mini-game move. */
+const MINIGAME_POLL_MS = 150;
 /** A disconnected player's turn is auto-played after this long. */
 export const AUTOPILOT_GRACE_MS = 45_000;
 /** Rooms with no connected humans are removed after this long. */
@@ -77,6 +82,7 @@ export class Room {
   spectators = 0;
   private botTimer: NodeJS.Timeout | null = null;
   private auctionTimer: NodeJS.Timeout | null = null;
+  private minigameTimer: NodeJS.Timeout | null = null;
   private autopilotTimer: NodeJS.Timeout | null = null;
 
   constructor(readonly code: string, public hostId: string, private hooks: RoomHooks) {}
@@ -239,6 +245,8 @@ export class Room {
       players: order.map(s => ({ id: s.id, name: s.name, token: s.token, color: s.color, isBot: s.isBot })),
       rng: n => randomInt(n),
       onLog: text => this.hooks.onEvent(this, text),
+      // The operator's site-wide switch wins over the room's house rule, even mid-game.
+      minigamesEnabled: () => isOn('minigames'),
     });
     this.status = 'playing';
     this.startedAt = Date.now();
@@ -298,7 +306,25 @@ export class Room {
     }
 
     const now = Date.now();
-    if (this.nextAutomatedAction(now)) {
+    const mgDue = g.minigameDeadline();
+    if (mgDue !== null) {
+      // Wake at the round's next deadline, or sooner while a computer player is
+      // still to move — bots decide on their own delay, so they need polling.
+      const botWaiting = g.minigame?.stage === 'play'
+        && this.seats.some(s => this.automated(s, now) === 'bot' && !g.player(s.id).bankrupt);
+      const wait = Math.max(0, mgDue - now) + 20;
+      this.minigameTimer = setTimeout(() => {
+        if (this.game?.minigameTimeout()) {
+          this.afterChange();
+          this.hooks.onChange(this);
+        } else {
+          this.schedule();
+        }
+      }, botWaiting ? Math.min(wait, MINIGAME_POLL_MS) : wait);
+    }
+
+    const next = this.nextAutomatedAction(now);
+    if (next) {
       this.botTimer = setTimeout(() => {
         const next = this.nextAutomatedAction(Date.now());
         if (!next) return;
@@ -308,10 +334,12 @@ export class Room {
           // A bot choosing an illegal move is a bug, but it must never wedge
           // the room: log it and fall back to something always legal.
           console.error(`[room ${this.code}] automated ${next.action.type} failed:`, (e as Error).message);
-          this.fallback(next.id);
+          // A mini-game move can go stale (the round moved on); that's never worth a fallback.
+          if (next.action.type !== 'minigame') this.fallback(next.id);
+          else this.schedule();
         }
         this.hooks.onChange(this);
-      }, BOT_DELAY_MS);
+      }, next.action.type === 'minigame' ? MINIGAME_BOT_DELAY_MS : BOT_DELAY_MS);
       return;
     }
 
@@ -337,6 +365,8 @@ export class Room {
       // Autopilot keeps an absent player's game moving but never spends their
       // money on a whim or makes deals in their name.
       if (mode === 'autopilot') {
+        // Absent players just let a mini-game's clock run out (it plays safe for them).
+        if (action.type === 'minigame') continue;
         if (action.type === 'bid') action = { type: 'pass' };
         else if (action.type === 'acceptTrade') action = { type: 'rejectTrade', id: action.id };
         else if (action.type === 'proposeTrade' || action.type === 'build' || action.type === 'unmortgage') {
@@ -355,8 +385,8 @@ export class Room {
   }
 
   private clearTimers() {
-    for (const t of [this.botTimer, this.auctionTimer, this.autopilotTimer]) if (t) clearTimeout(t);
-    this.botTimer = this.auctionTimer = this.autopilotTimer = null;
+    for (const t of [this.botTimer, this.auctionTimer, this.minigameTimer, this.autopilotTimer]) if (t) clearTimeout(t);
+    this.botTimer = this.auctionTimer = this.minigameTimer = this.autopilotTimer = null;
   }
 
   dispose() {
@@ -418,7 +448,7 @@ export class Room {
     if (s.game) {
       r.game = Game.restore({
         theme: resolveTheme(r.themeId, r.mapId), rules: r.rules, rng: n => randomInt(n),
-        onLog: text => hooks.onEvent(r, text),
+        onLog: text => hooks.onEvent(r, text), minigamesEnabled: () => isOn('minigames'),
       }, s.game);
     }
     if (r.status === 'finished') r.finishedAt = now;
@@ -445,6 +475,8 @@ export function sanitizeRules(r: Partial<RuleConfig>): RuleConfig {
     limitedBuildings: bool(r.limitedBuildings, d.limitedBuildings),
     jailFine: clampInt(r.jailFine, 0, 10_000, d.jailFine),
     maxPlayers: clampInt(r.maxPlayers, 2, 8, d.maxPlayers),
+    minigames: bool(r.minigames, d.minigames),
+    arcadeParking: bool(r.arcadeParking, d.arcadeParking),
   };
 }
 
