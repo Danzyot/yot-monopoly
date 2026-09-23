@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useMyId, useRoom } from '../net.ts';
 import { useAuth } from '../auth.tsx';
 import Lobby from '../components/Lobby.tsx';
@@ -7,7 +7,8 @@ import GameScreen from '../components/GameScreen.tsx';
 
 export default function RoomPage() {
   const { code = '' } = useParams();
-  const { room, error, spectating, chat, skew } = useRoom(code.toUpperCase());
+  const watch = useSearchParams()[0].get('watch') === '1';
+  const { room, error, spectating, chat, skew } = useRoom(code.toUpperCase(), watch);
   const me = useMyId();
   const { profile, ready, openSignIn } = useAuth();
 

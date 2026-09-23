@@ -12,11 +12,13 @@ import { announceChannelId, postToChannel } from './discord.ts';
 import { EngineError } from './engine/game.ts';
 import { logGameEvent } from './eventlog.ts';
 import { isOn } from './features.ts';
+import { isLibraryFile } from './graphics.ts';
 import { clientIp } from './ip.ts';
 import { Registry, Room, RoomError, type Member } from './rooms.ts';
 import { recordResult } from './stats.ts';
 import { getMap } from '../../shared/maps.ts';
 import { getTheme } from '../../shared/themes.ts';
+import { DEFAULT_TABLE_STYLE, libraryFileOf, sanitizeTableStyle } from '../../shared/tableStyles.ts';
 import type { Action, PlayerProfile, TokenId } from '../../shared/types.ts';
 import type { RuleConfig } from '../../shared/themes.ts';
 
@@ -181,13 +183,15 @@ export function attachSockets(io: Server): SocketLayer {
       return { code: room.code };
     });
 
-    on<{ code: string }>('room:join', p => {
+    // `watch` lets someone (typically an operator opening a room from the
+    // dashboard) look in without taking a free lobby seat.
+    on<{ code: string; watch?: boolean }>('room:join', p => {
       const room = registry.get(String(p.code ?? '').slice(0, 8)) ?? (() => { throw new RoomError('No room with that code'); })();
       const prof = data.profile;
       const ban = findBan({ id: prof?.id, discordId: prof?.discord?.id, ip: data.ip }, room.code);
       if (ban) throw new RoomError(banMessage(ban));
       let seated = false;
-      if (prof) {
+      if (prof && (p.watch !== true || room.seat(prof.id))) {
         try {
           room.join(member());
           seated = true;
@@ -211,6 +215,22 @@ export function attachSockets(io: Server): SocketLayer {
       });
       broadcast(r);
       lobbyChanged();
+    });
+
+    // A patch: only the fields sent change, so two quick picks in a row (a
+    // swatch, then a logo) cannot undo each other.
+    on<unknown>('room:style', (p, room) => {
+      const r = inRoom(room);
+      const patch = Object.fromEntries(Object.entries(p && typeof p === 'object' ? p : {})
+        .filter(([k]) => k in DEFAULT_TABLE_STYLE));
+      const style = sanitizeTableStyle({ ...r.style, ...patch });
+      // Library images must still exist; a stale pick would 404 for everyone.
+      for (const url of [style.boardLogoUrl, style.backgroundUrl]) {
+        const file = libraryFileOf(url);
+        if (file && !isLibraryFile(file)) throw new RoomError('That image is no longer in the library');
+      }
+      r.setStyle(me(), isAdmin(), style);
+      broadcast(r);
     });
 
     on<{ token?: TokenId; color?: string }>('room:seat', (p, room) => {

@@ -1,12 +1,14 @@
 // Operator API. Every route checks the caller is an operator, and every
 // change is written to the durable "admin" log with who did it.
 import express from 'express';
+import { adminModeConfigured, demoMode } from '../auth.ts';
 import { addBan, listBans, removeBan, type BanKind, type BanScope } from '../bans.ts';
-import { listMutes, setMute } from '../chat.ts';
+import { isMuted, listMutes, setMute } from '../chat.ts';
 import { forgetAccount, getAccount, searchAccounts, sharedIpGroups } from '../connections.ts';
 import { botEnabled, postVerifyMessage, sendDirectMessage } from '../discord.ts';
 import { eventsForGame, loggedGames } from '../eventlog.ts';
 import { getFeatures, setFeatures } from '../features.ts';
+import { listGraphics } from '../graphics.ts';
 import { adminLog, fail, requireAdmin } from '../http.ts';
 import { lastSnapshotAge } from '../persist.ts';
 import type { SocketLayer } from '../sockets.ts';
@@ -46,6 +48,11 @@ export function adminRoutes(sockets: SocketLayer, loopLag: () => number): expres
       persistentDisk: !!process.env.DATA_DIR && existsSync(DATA_DIR),
       lastSnapshotAgeMs: lastSnapshotAge(),
       discordBot: botEnabled(),
+      // Settings an operator should be told about when they look wrong.
+      demoMode: demoMode(),
+      adminMode: adminModeConfigured(),
+      graphics: listGraphics().length,
+      node: process.version,
     });
   });
 
@@ -118,6 +125,7 @@ export function adminRoutes(sockets: SocketLayer, loopLag: () => number): expres
       account: acc,
       bans: listBans().filter(b => b.value === acc.id || b.value === acc.discordId || (b.kind === 'ip' && ips.has(b.value))),
       rooms: registry.roomsOf(acc.id).map(x => ({ code: x.code, status: x.status })),
+      mute: isMuted(acc.id) ? listMutes().find(m => m.id === acc.id) ?? null : null,
       // Other accounts that have used any of the same addresses.
       linked: sharedIpGroups().filter(g => ips.has(g.ip)).flatMap(g => g.accounts).filter(a => a.id !== acc.id)
         .filter((a, i, all) => all.findIndex(b => b.id === a.id) === i),
@@ -152,6 +160,17 @@ export function adminRoutes(sockets: SocketLayer, loopLag: () => number): expres
         expiresAt: Number.isFinite(hours) && hours > 0 ? Date.now() + hours * 3_600_000 : null,
       });
       const hit = sockets.enforceBan(ban);
+      // enforceBan reaches connected sockets only; a banned account that is
+      // offline right now must lose its seat too, or autopilot keeps playing
+      // for it and it walks back in when the ban lapses mid-game.
+      if (ban.kind === 'player') {
+        const rooms = ban.scope === 'room' ? [registry.get(ban.gameId ?? '')] : registry.roomsOf(ban.value);
+        for (const room of rooms) {
+          if (!room?.seat(ban.value)) continue;
+          try { room.remove(ban.value); } catch { /* already out of the game */ }
+          sockets.broadcast(room);
+        }
+      }
       adminLog(who(res), `banned ${ban.kind} ${ban.value}${ban.name ? ` (${ban.name})` : ''} — ${ban.scope}${ban.gameId ? ` ${ban.gameId}` : ''}`
         + `${ban.expiresAt ? ` until ${new Date(ban.expiresAt).toISOString()}` : ''}${ban.reason ? `: ${ban.reason}` : ''}`);
       res.json({ ban, disconnected: hit });

@@ -11,12 +11,14 @@ import { loadAccounts } from './connections.ts';
 import { defaultInviteUrl, discordEnabled } from './discord.ts';
 import { loadEvents } from './eventlog.ts';
 import { getFeatures, isOn, loadFeatures } from './features.ts';
+import { loadGraphics } from './graphics.ts';
 import { rateLimit } from './http.ts';
 import { trustedProxyHops } from './ip.ts';
 import { armPersistence, restoreLive } from './persist.ts';
 import { adminRoutes } from './routes/admin.ts';
 import { authRoutes, mountInteractions } from './routes/auth.ts';
 import { mountMusic } from './routes/music.ts';
+import { mountGraphics } from './routes/graphics.ts';
 import { attachSockets } from './sockets.ts';
 import { leaderboard, loadResults } from './stats.ts';
 import { buttonFlowAvailable, codeVerifyAvailable, primeVerifyChannel, verifyChannelName } from './verifycode.ts';
@@ -31,6 +33,7 @@ loadMutes();
 loadAccounts();
 loadEvents();
 loadResults();
+loadGraphics();
 void primeVerifyChannel();
 
 const app = express();
@@ -107,6 +110,7 @@ app.get('/api/config', (_req, res) => {
 app.use('/api/auth', authRoutes());
 app.use('/api/admin', adminRoutes(sockets, () => loopLagMs));
 mountMusic(app);
+mountGraphics(app, sockets);
 
 app.get('/api/leaderboard', (_req, res) => {
   if (!isOn('leaderboard')) { res.status(404).json({ error: 'The leaderboard is switched off' }); return; }

@@ -3,6 +3,7 @@
 import type { DeckId } from './cards.ts';
 import type { MinigameMove, MinigameView } from './minigames.ts';
 import type { RuleConfig } from './themes.ts';
+import type { TableStyle } from './tableStyles.ts';
 
 export type TokenId = 'car' | 'hat' | 'dog' | 'ship' | 'boot' | 'iron' | 'cat' | 'duck';
 export const TOKENS: TokenId[] = ['car', 'hat', 'dog', 'ship', 'boot', 'iron', 'cat', 'duck'];
@@ -161,6 +162,8 @@ export interface RoomView {
   status: 'lobby' | 'playing' | 'finished';
   seats: RoomSeat[];
   game: GameView | null;
+  /** Table finish, centre logo and backdrop the host picked (shared/tableStyles.ts). */
+  style: TableStyle;
   /** Server clock, so clients can render auction countdowns without drift. */
   now: number;
 }

@@ -9,6 +9,7 @@ import { botAction } from './engine/bot.ts';
 import { isOn } from './features.ts';
 import { DEFAULT_RULES, getTheme, resolveTheme, type RuleConfig } from '../../shared/themes.ts';
 import { getMap } from '../../shared/maps.ts';
+import { DEFAULT_TABLE_STYLE, sanitizeTableStyle, type TableStyle } from '../../shared/tableStyles.ts';
 import {
   PLAYER_COLORS, TOKENS, type Action, type RoomSeat, type RoomSummary, type RoomView, type TokenId,
 } from '../../shared/types.ts';
@@ -64,6 +65,8 @@ export interface RoomSnapshot {
   status: RoomView['status'];
   seats: Seat[];
   game: GameSnapshot | null;
+  /** Absent in snapshots written before table styles existed. */
+  style?: TableStyle;
 }
 
 export class Room {
@@ -74,6 +77,8 @@ export class Room {
   mapId = 'classic';
   rules: RuleConfig = { ...DEFAULT_RULES };
   private = false;
+  /** Table look chosen by the host; purely cosmetic, so it never touches the game. */
+  style: TableStyle = { ...DEFAULT_TABLE_STYLE };
   readonly createdAt = Date.now();
   startedAt: number | null = null;
   finishedAt: number | null = null;
@@ -181,6 +186,13 @@ export class Room {
     if (this.seats.length > this.rules.maxPlayers) {
       this.rules = { ...this.rules, maxPlayers: this.seats.length };
     }
+  }
+
+  /** Host (or operator) picks the table look. Always sanitised: every viewer loads these URLs. */
+  setStyle(id: string, isAdmin: boolean, raw: unknown) {
+    this.requireHost(id, isAdmin);
+    this.requireLobby();
+    this.style = sanitizeTableStyle(raw);
   }
 
   pickToken(id: string, token: TokenId) {
@@ -409,6 +421,7 @@ export class Room {
       status: this.status,
       seats: this.seats.map(({ disconnectedAt: _d, ...s }) => s),
       game: this.game?.view() ?? null,
+      style: this.style,
       now: Date.now(),
     };
   }
@@ -432,6 +445,7 @@ export class Room {
       code: this.code, hostId: this.hostId, createdAt: this.createdAt, startedAt: this.startedAt,
       themeId: this.themeId, mapId: this.mapId, rules: this.rules, private: this.private,
       status: this.status, seats: structuredClone(this.seats), game: this.game?.snapshot() ?? null,
+      style: { ...this.style },
     };
   }
 
@@ -440,6 +454,7 @@ export class Room {
     Object.assign(r, {
       createdAt: s.createdAt, startedAt: s.startedAt, themeId: s.themeId, mapId: s.mapId,
       rules: sanitizeRules(s.rules), private: !!s.private, status: s.status,
+      style: sanitizeTableStyle(s.style),
     });
     // Everyone starts disconnected: they reclaim their seats on reconnect, and
     // autopilot covers anyone who never comes back.
