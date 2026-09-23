@@ -7,6 +7,7 @@ import { TOKEN_EMOJI, TOKEN_LABEL } from '../format.ts';
 import { toast, toastError } from '../toast.tsx';
 import { useAuth } from '../auth.tsx';
 import Chat from './Chat.tsx';
+import MusicPlayer from './MusicPlayer.tsx';
 import { Avatar } from './Avatar.tsx';
 import BoardScene from '../three/BoardScene.tsx';
 import { themeStyle } from '../themeStyle.ts';
@@ -41,7 +42,7 @@ export default function Lobby({ room, me, spectating, chat }: {
         <section className="panel">
           <div className="row between">
             <h2 className="row">{theme.logoUrl && <img className="brand-mark" src={theme.logoUrl} alt="" />}Room <span className="mono accent">{room.code}</span></h2>
-            <button className="btn small ghost" onClick={leave}>Leave</button>
+            <div className="row lobby-audio"><MusicPlayer /><button className="btn small ghost" onClick={leave}>Leave</button></div>
           </div>
           <div className="row">
             <input readOnly value={link} onFocus={e => e.target.select()} />

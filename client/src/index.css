@@ -288,3 +288,54 @@ button.edition:disabled { cursor: default; }
 .color-pick:disabled { opacity: 0.2; cursor: not-allowed; }
 .map-card { background: rgba(0,0,0,0.3); border-color: var(--line); color: var(--text); }
 .signin-bar { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 15; background: var(--panel-solid); border: 1px solid var(--accent); padding: 8px 14px; border-radius: 12px; display: flex; gap: 10px; align-items: center; }
+
+/* ==== music player, sound-effects toggle & music manager (music feature) ==== */
+.audio-ctl { position: relative; display: inline-flex; align-items: center; gap: 2px; background: rgba(0,0,0,0.35); border: 1px solid var(--line); border-radius: 99px; padding: 2px; }
+.audio-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; padding: 0;
+  background: transparent; color: var(--text); border: 0; border-radius: 99px; cursor: pointer;
+}
+.audio-btn:hover { background: rgba(255,255,255,0.12); }
+.audio-btn.on { color: var(--accent); }
+.audio-btn.off { color: var(--muted); }
+.audio-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.music-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+.music-bars i { width: 3px; background: currentColor; border-radius: 1px; animation: music-bar 0.9s ease-in-out infinite; }
+.music-bars i:nth-child(2) { animation-delay: -0.3s; }
+.music-bars i:nth-child(3) { animation-delay: -0.6s; }
+@keyframes music-bar { 0%, 100% { height: 3px; } 50% { height: 12px; } }
+@media (prefers-reduced-motion: reduce) { .music-bars i { animation: none; height: 8px; } }
+.audio-panel {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 30; width: min(270px, calc(100vw - 32px));
+  display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--panel-solid);
+  border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+}
+.audio-now { display: flex; flex-direction: column; min-width: 0; }
+.audio-track { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.audio-transport { display: flex; gap: 6px; }
+.audio-transport .btn { flex: 1; }
+.audio-field { display: flex; flex-direction: column; gap: 4px; }
+.audio-vol { display: flex; align-items: center; gap: 6px; }
+.audio-vol input[type="range"] { flex: 1; padding: 0; border: 0; background: transparent; accent-color: var(--accent); }
+@media (max-width: 760px) { .audio-btn { width: 26px; height: 24px; } }
+/* Room lobby header: the controls drop under the room code when the panel is narrow. */
+.row.between:has(> .lobby-audio) { flex-wrap: wrap; row-gap: 6px; }
+.lobby-audio { margin-left: auto; }
+
+.music-admin { display: flex; flex-direction: column; gap: 14px; }
+.music-drop { border: 2px dashed var(--line); border-radius: var(--radius); padding: 18px; text-align: center; transition: border-color 0.15s, background 0.15s; }
+.music-drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.music-uploads { display: flex; flex-direction: column; gap: 6px; }
+.music-upload-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px auto; gap: 8px; align-items: center; font-size: 13px; }
+.music-upload-row progress { width: 100%; height: 8px; accent-color: var(--accent); }
+.music-upload-row .err { color: var(--warn); }
+.music-pl-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.music-song { display: grid; grid-template-columns: minmax(0, 1fr) 70px 150px auto; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+.music-song .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.music-song input, .music-song select { padding: 5px 8px; }
+@media (max-width: 760px) {
+  .music-song { grid-template-columns: minmax(0, 1fr) auto; }
+  .music-song .size { display: none; }
+  .music-song select { grid-column: 1 / -1; }
+  .music-upload-row { grid-template-columns: minmax(0, 1fr) 80px; }
+}
