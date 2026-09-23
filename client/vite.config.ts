@@ -9,6 +9,8 @@ export default defineConfig({
     proxy: {
       '/api': { target: 'http://localhost:8080', changeOrigin: true },
       '/socket.io': { target: 'http://localhost:8080', ws: true, changeOrigin: true },
+      // Operator-uploaded table graphics (server/src/routes/graphics.ts).
+      '/graphics': { target: 'http://localhost:8080', changeOrigin: true },
     },
   },
   build: {

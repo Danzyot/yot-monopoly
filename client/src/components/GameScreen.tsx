@@ -11,6 +11,7 @@ import { themeStyle } from '../themeStyle.ts';
 import BoardScene from '../three/BoardScene.tsx';
 import Chat from './Chat.tsx';
 import Deed from './Deed.tsx';
+import PlayerMenu from './PlayerMenu.tsx';
 import { TradeModal, TradeOffers } from './Trade.tsx';
 
 export default function GameScreen({ room, game, me, chat, skew }: {
@@ -40,7 +41,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
 
   return (
     <div className={`game ${theme.ui ? 'branded' : ''}`} style={themeStyle(theme)}>
-      <div className="scene"><BoardScene themeId={game.themeId} mapId={game.mapId} game={game} selected={selected} onSelect={setSelected} /></div>
+      <div className="scene"><BoardScene themeId={game.themeId} mapId={game.mapId} game={game} selected={selected} onSelect={setSelected} tableStyle={room.style} /></div>
 
       <header className="topbar">
         <div className="row">
@@ -119,6 +120,7 @@ function Players({ game, room, me, onTrade }: {
             {amIn && p.id !== me && !p.bankrupt && game.phase !== 'over' && (
               <button className="btn tiny" onClick={() => onTrade(p.id)}>Trade</button>
             )}
+            <PlayerMenu room={room} player={p} me={me} />
           </div>
         );
       })}

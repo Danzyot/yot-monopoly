@@ -9,6 +9,7 @@ import { useAuth } from '../auth.tsx';
 import Chat from './Chat.tsx';
 import { Avatar } from './Avatar.tsx';
 import BoardScene from '../three/BoardScene.tsx';
+import TableStylePicker from './TableStylePicker.tsx';
 import { themeStyle } from '../themeStyle.ts';
 
 const TOGGLES: [keyof RuleConfig, string, string][] = [
@@ -36,7 +37,7 @@ export default function Lobby({ room, me, spectating, chat }: {
 
   return (
     <div className={`lobby ${theme.ui ? 'branded' : ''}`} style={themeStyle(theme)}>
-      <div className="lobby-bg"><BoardScene themeId={room.themeId} mapId={room.mapId} game={null} spin /></div>
+      <div className="lobby-bg"><BoardScene themeId={room.themeId} mapId={room.mapId} game={null} spin tableStyle={room.style} /></div>
       <div className="lobby-panels">
         <section className="panel">
           <div className="row between">
@@ -47,7 +48,7 @@ export default function Lobby({ room, me, spectating, chat }: {
             <input readOnly value={link} onFocus={e => e.target.select()} />
             <button className="btn small" onClick={() => { void navigator.clipboard?.writeText(link); toast('Invite link copied'); }}>Copy</button>
           </div>
-          {spectating && profile && <p className="muted small">The room is full — you are watching.</p>}
+          {spectating && profile && <p className="muted small">{room.seats.length >= room.rules.maxPlayers ? 'The room is full — you are watching.' : 'You are watching.'}</p>}
 
           <h3>Players {room.seats.length}/{room.rules.maxPlayers}{room.spectators > 0 && <span className="muted small"> · {room.spectators} watching</span>}</h3>
           <ul className="seats">
@@ -132,6 +133,9 @@ export default function Lobby({ room, me, spectating, chat }: {
               </button>
             ))}
           </div>
+
+          <h3>Table style</h3>
+          <TableStylePicker style={room.style} canEdit={isHost} />
 
           <h3>House rules</h3>
           <div className="rules">

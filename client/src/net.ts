@@ -92,7 +92,8 @@ export function useConnected(): boolean {
 
 export interface ChatMsg { t: number; id: string; name: string; color: string; text: string; spectator?: boolean; admin?: boolean }
 
-export function useRoom(code: string) {
+/** `watch` joins as a spectator even when a lobby seat is free (operators looking in). */
+export function useRoom(code: string, watch = false) {
   const [room, setRoom] = useState<RoomView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [spectating, setSpectating] = useState(false);
@@ -109,7 +110,7 @@ export function useRoom(code: string) {
     s.on('room:state', onState);
     s.on('chat', onChat);
     const off = onEveryConnect(() => {
-      call<{ spectating: boolean }>('room:join', { code })
+      call<{ spectating: boolean }>('room:join', { code, watch })
         .then(r => { setSpectating(r.spectating); setError(null); })
         .catch(e => setError(e.message));
     });
@@ -118,7 +119,7 @@ export function useRoom(code: string) {
       s.off('room:state', onState);
       s.off('chat', onChat);
     };
-  }, [code]);
+  }, [code, watch]);
 
   return { room, error, spectating, chat, skew };
 }

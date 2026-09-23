@@ -288,3 +288,179 @@ button.edition:disabled { cursor: default; }
 .color-pick:disabled { opacity: 0.2; cursor: not-allowed; }
 .map-card { background: rgba(0,0,0,0.3); border-color: var(--line); color: var(--text); }
 .signin-bar { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 15; background: var(--panel-solid); border: 1px solid var(--accent); padding: 8px 14px; border-radius: 12px; display: flex; gap: 10px; align-items: center; }
+
+/* ==========================================================================
+   Operator dashboard (/admin), lobby Table style picker, in-game player menu.
+   Everything here is prefixed adm- / tstyle- / pmenu so it cannot collide.
+   ========================================================================== */
+.btn.danger { background: #c62828; border-color: transparent; color: #fff; }
+.btn.danger:hover:not(:disabled) { background: #d83a3a; }
+.adm-danger-text { color: #ff8a80; }
+.nowrap { white-space: nowrap; }
+
+.adm { max-width: 1280px; display: flex; flex-direction: column; gap: 14px; }
+.adm h3 { margin: 0 0 8px; }
+.adm h4 { margin: 0 0 6px; color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
+.adm textarea {
+  background: rgba(0, 0, 0, 0.35); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 10px; font: inherit; width: 100%; resize: vertical;
+}
+.adm textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.adm input[type=search] { min-width: 160px; }
+.adm-auto { width: auto; }
+.adm-stack { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.adm-hint { padding: 24px; text-align: center; border: 1px dashed var(--line); border-radius: var(--radius); }
+.adm-ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Tab strip: wraps on laptops, scrolls sideways on phones. */
+.adm-tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.adm-tabs a {
+  text-decoration: none; color: var(--muted); font-weight: 600; font-size: 13px; padding: 7px 11px; border-radius: 8px;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.adm-tabs a:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+.adm-tabs a.on { color: var(--text); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+
+.adm-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; min-width: 0; }
+.adm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 12px; align-items: start; }
+.adm-split { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 14px; align-items: start; }
+.adm-name { margin: 0; font-size: 20px; }
+.adm-scroll { overflow-x: auto; }
+
+.adm-alert { padding: 10px 14px; border-radius: 10px; border: 1px solid; font-size: 13px; }
+.adm-alert.good { border-color: color-mix(in srgb, var(--good) 50%, transparent); background: color-mix(in srgb, var(--good) 10%, transparent); color: var(--good); }
+.adm-alert.warn { border-color: color-mix(in srgb, var(--warn) 50%, transparent); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.adm-alert.bad { border-color: #ff5a5a88; background: #ff5a5a1c; color: #ffc9c9; }
+.adm-good { color: var(--good); }
+.adm-bad { color: #ff6b6b; }
+.adm-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.adm-stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.adm-stat b { font-size: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Segmented control (filters, kind/scope pickers). */
+.adm-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; flex-wrap: wrap; }
+.adm-seg button { background: transparent; color: var(--muted); border: 0; padding: 6px 11px; font: 600 13px Inter, sans-serif; cursor: pointer; }
+.adm-seg button + button { border-left: 1px solid var(--line); }
+.adm-seg button.on { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--text); }
+
+.adm-code { font-size: 18px; }
+.adm-status { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 7px; border-radius: 6px; background: rgba(255,255,255,0.1); }
+.adm-status.playing { background: color-mix(in srgb, var(--good) 22%, transparent); color: var(--good); }
+.adm-status.lobby { background: color-mix(in srgb, #3cb4ff 22%, transparent); color: #7cd0ff; }
+.adm-status.finished { color: var(--muted); }
+.adm-card > .small { margin: 4px 0 8px; }
+.adm-seats { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.adm-seats li { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 7px; background: rgba(0,0,0,0.22); flex-wrap: wrap; }
+.adm-seats li.out { opacity: 0.55; }
+.adm-seats .grow { flex-basis: 90px; }
+.adm-seat-actions { display: flex; gap: 4px; margin-left: auto; }
+.adm-dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.adm-conn { width: 8px; height: 8px; border-radius: 50%; background: #666; flex: none; }
+.adm-conn.on { background: var(--good); box-shadow: 0 0 6px var(--good); }
+.adm a.btn { text-decoration: none; }
+.adm-rows a { text-decoration: none; }
+.adm-rows a:hover { text-decoration: underline; }
+
+.adm-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.adm-rows > li { min-width: 0; }
+.adm-rowbtn {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; font: inherit; color: var(--text);
+  background: rgba(0,0,0,0.2); border: 1px solid transparent; border-radius: 8px; padding: 6px 8px; cursor: pointer;
+}
+.adm-rowbtn:hover:not(:disabled) { border-color: var(--line); }
+.adm-rowbtn.on { border-color: var(--accent); }
+.adm-rowbtn:disabled { cursor: default; opacity: 0.7; }
+.adm-ip { display: flex; align-items: center; gap: 8px; padding: 4px 6px; background: rgba(0,0,0,0.2); border-radius: 7px; }
+.adm-ban-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; background: rgba(0,0,0,0.2); border-radius: 8px; }
+.adm-ban-row .tag { margin-left: 0; }
+.adm-inline { gap: 4px; }
+.adm-inline select { width: auto; padding: 5px 8px; }
+
+.adm-log { max-height: 60vh; overflow-y: auto; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; }
+.adm-log-line { padding: 2px 0; word-break: break-word; }
+.adm-log-line time { font-size: 11px; letter-spacing: 0; margin-right: 4px; }
+.adm-log-day { position: sticky; top: -8px; background: var(--panel-solid); color: var(--muted); font-size: 11px; font-weight: 700; padding: 4px 0; margin-top: 4px; }
+
+.adm-switch-row { display: flex; align-items: center; gap: 12px; padding: 10px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.adm-switch {
+  appearance: none; -webkit-appearance: none; width: 44px; height: 24px; border-radius: 99px; padding: 0;
+  background: rgba(255,255,255,0.15); border: 1px solid var(--line); position: relative; cursor: pointer; flex: none; transition: background 0.15s;
+}
+.adm-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
+.adm-switch:checked { background: var(--good); }
+.adm-switch:checked::after { transform: translateX(20px); }
+.adm-switch:disabled { opacity: 0.5; }
+
+.adm-diag { border-top: 1px solid var(--line); padding-top: 10px; }
+.adm-pre { background: rgba(0,0,0,0.35); border-radius: 8px; padding: 10px; font-size: 12px; overflow-x: auto; margin: 8px 0 0; white-space: pre-wrap; word-break: break-all; }
+
+.adm-drop { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; border: 2px dashed var(--line); border-radius: var(--radius); background: var(--panel); }
+.adm-drop.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel-solid)); }
+.adm-drop p { margin: 4px 0 0; }
+.adm-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.adm-graphic { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.adm-graphic input { padding: 5px 8px; }
+/* Checkerboard so transparent logos are visible. */
+.adm-thumb {
+  display: block; aspect-ratio: 4 / 3; border-radius: 7px; overflow: hidden;
+  background: repeating-conic-gradient(#2a3040 0 25%, #1c2130 0 50%) 0 0 / 16px 16px;
+}
+.adm-thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+.modal.adm-ban { display: flex; flex-direction: column; gap: 12px; max-width: 460px; }
+.modal.adm-ban h2 { margin: 0; overflow-wrap: anywhere; }
+.adm-field { display: flex; flex-direction: column; gap: 6px; }
+.adm-field > span { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.adm-field .adm-seg { align-self: flex-start; }
+.adm-preview { background: #0b0e15; border: 1px solid #ff5a5a55; border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+
+/* Lobby: Table style. */
+.tstyle { display: flex; flex-direction: column; gap: 8px; }
+.tstyle-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(66px, 1fr)); gap: 6px; }
+.tstyle-swatch {
+  position: relative; height: 46px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.15); cursor: pointer; padding: 0;
+  display: flex; align-items: flex-end; overflow: hidden;
+}
+.tstyle-swatch span {
+  width: 100%; font: 600 10px Inter, sans-serif; color: #fff; padding: 2px 4px; text-align: left;
+  background: linear-gradient(transparent, rgba(0,0,0,0.65)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tstyle-swatch.on { border-color: #fff; box-shadow: 0 0 0 2px var(--accent); }
+.tstyle-swatch:disabled { cursor: default; }
+.tstyle-swatch:disabled:not(.on) { opacity: 0.55; }
+.tstyle-pick { display: flex; flex-direction: column; gap: 3px; }
+.tstyle-thumb { width: 34px; height: 34px; object-fit: cover; border-radius: 6px; flex: none; background: rgba(0,0,0,0.3); }
+
+/* In-game player menu (host / operator). */
+.pmenu-btn { padding: 2px 6px; font-size: 14px; line-height: 1; }
+/* Sits right after Trade on a player row; give hosts' rows the room it takes. */
+.player .pmenu-btn { margin-left: -6px; }
+.players:has(.pmenu-btn) { width: 272px; }
+.pmenu {
+  position: fixed; z-index: 30; transform: translateX(-100%); min-width: 170px; display: flex; flex-direction: column;
+  background: var(--panel-solid); border: 1px solid var(--line); border-radius: 10px; padding: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+.pmenu button { background: none; border: 0; color: var(--text); text-align: left; padding: 8px 10px; border-radius: 7px; font: 500 13px Inter, sans-serif; cursor: pointer; }
+.pmenu button:hover { background: rgba(255,255,255,0.08); }
+.pmenu button.danger { color: #ff8a80; }
+
+@media (max-width: 760px) {
+  /* With the operator's Dashboard link the header no longer fits a phone and
+     widened the whole page (modals ran off-screen); let the nav wrap instead. */
+  .site-header { flex-wrap: wrap; row-gap: 4px; }
+  .site-header nav { flex-wrap: wrap; justify-content: flex-end; margin-left: auto; row-gap: 4px; min-width: 0; }
+  .site-header .navlink { padding: 6px 5px; }
+  .players:has(.pmenu-btn) { width: auto; }
+  .player:has(.pmenu-btn) { min-width: 236px; }
+  .adm { padding: 12px 12px 32px; gap: 10px; }
+  .adm-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -12px; padding: 0 12px 8px; }
+  .adm-tabs::-webkit-scrollbar { display: none; }
+  .adm-split { grid-template-columns: minmax(0, 1fr); }
+  /* On a phone the account detail replaces the list rather than sitting under it. */
+  .adm-split.has-detail .adm-list-col { display: none; }
+  .adm-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .adm-drop { flex-direction: column; align-items: stretch; }
+  .adm-card { padding: 12px; }
+  .adm-log { max-height: 55vh; }
+  .adm input[type=search] { min-width: 0; }
+}

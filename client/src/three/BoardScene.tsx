@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { MeshStandardMaterial, type Group, type Mesh } from 'three';
 import { resolveTheme, type Theme } from '../../../shared/themes.ts';
 import type { GameView } from '../../../shared/types.ts';
+import { cleanAssetUrl, getTablePreset, type TableStyle } from '../../../shared/tableStyles.ts';
 import { boardTexture } from './boardTexture.ts';
 import { C, W, buildingSpots, tile, tileAt, tileWidth } from './layout.ts';
 import { Tokens } from './Tokens.tsx';
@@ -11,8 +12,10 @@ import { Dice } from './Dice.tsx';
 
 const THICK = 0.28;
 
-function Board({ theme, onPick, onHover }: {
+function Board({ theme, customLogo, onPick, onHover }: {
   theme: Theme;
+  /** A room's own centre logo; wins over the edition's artwork. */
+  customLogo?: string | null;
   onPick?: (i: number | null) => void;
   onHover?: (i: number | null) => void;
 }) {
@@ -20,14 +23,25 @@ function Board({ theme, onPick, onHover }: {
   const [fontsReady, setFontsReady] = useState(false);
   useEffect(() => { document.fonts?.ready.then(() => setFontsReady(true)); }, []);
   // Editions with artwork: load it, then redraw the board with it in place.
+  // A room's custom logo takes the edition artwork's place. It is painted into
+  // a WebGL texture, so it must load with CORS: an https image whose host does
+  // not allow that fails here, and the edition's own artwork is used instead.
   const [logo, setLogo] = useState<HTMLImageElement | null>(null);
   useEffect(() => {
     setLogo(null);
-    if (!theme.logoUrl) return;
-    const img = new Image();
-    img.onload = () => setLogo(img);
-    img.src = theme.logoUrl;
-  }, [theme.logoUrl]);
+    const urls = [customLogo, theme.logoUrl].filter((u): u is string => !!u);
+    let cancelled = false;
+    const load = (i: number) => {
+      if (i >= urls.length) return;
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => { if (!cancelled) setLogo(img); };
+      img.onerror = () => { if (!cancelled) load(i + 1); };
+      img.src = urls[i];
+    };
+    load(0);
+    return () => { cancelled = true; };
+  }, [theme.logoUrl, customLogo]);
   const tex = useMemo(() => boardTexture(theme, logo), [theme, fontsReady, logo]);
   useEffect(() => () => tex.dispose(), [tex]);
 
@@ -51,16 +65,19 @@ function Board({ theme, onPick, onHover }: {
   );
 }
 
-function Table({ theme }: { theme: Theme }) {
+function Table({ theme, presetId }: { theme: Theme; presetId?: string }) {
+  // The room's table preset, or the edition's own colour for 'edition'.
+  const preset = getTablePreset(presetId);
+  const color = preset.color ?? theme.palette.table;
   return (
     <group>
       <mesh receiveShadow position={[0, -THICK - 0.25, 0]}>
         <cylinderGeometry args={[11, 11.3, 0.5, 96]} />
-        <meshStandardMaterial color={theme.palette.table} roughness={0.85} />
+        <meshStandardMaterial color={color} roughness={preset.roughness} metalness={preset.metalness} />
       </mesh>
       <mesh position={[0, -THICK - 3.5, 0]}>
         <cylinderGeometry args={[1.2, 2.2, 6, 32]} />
-        <meshStandardMaterial color={theme.palette.table} roughness={0.9} />
+        <meshStandardMaterial color={color} roughness={Math.min(1, preset.roughness + 0.05)} metalness={preset.metalness} />
       </mesh>
     </group>
   );
@@ -178,15 +195,20 @@ function Spinner({ children, spin }: { children: React.ReactNode; spin?: boolean
   return <group ref={ref}>{children}</group>;
 }
 
-export default function BoardScene({ themeId, mapId, game, selected, onSelect, spin }: {
+export default function BoardScene({ themeId, mapId, game, selected, onSelect, spin, tableStyle }: {
   themeId: string;
   mapId: string;
   game: GameView | null;
   selected?: number | null;
   onSelect?: (i: number | null) => void;
   spin?: boolean;
+  /** The room's table look (preset, centre logo, backdrop); absent = the edition's. */
+  tableStyle?: TableStyle | null;
 }) {
   const theme = resolveTheme(themeId, mapId);
+  // Re-checked here as well as on the server: this string ends up in CSS.
+  const backdrop = cleanAssetUrl(tableStyle?.backgroundUrl);
+  const customLogo = cleanAssetUrl(tableStyle?.boardLogoUrl);
   const [hover, setHover] = useState<number | null>(null);
 
   useEffect(() => {
@@ -196,9 +218,13 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
 
   return (
     <Canvas shadows dpr={[1, 2]} camera={{ position: [0, 11.5, 10.5], fov: 45 }}
-      onPointerMissed={() => onSelect?.(null)}>
-      <color attach="background" args={[theme.palette.sky]} />
-      <fog attach="fog" args={[theme.palette.sky, 22, 40]} />
+      onPointerMissed={() => onSelect?.(null)}
+      // A backdrop is painted behind a transparent canvas: it keeps its aspect
+      // ratio on any screen, and needs no CORS, so any https image works.
+      style={backdrop ? { background: `${theme.palette.sky} url("${backdrop}") center / cover no-repeat` } : undefined}>
+      {!backdrop && <color attach="background" args={[theme.palette.sky]} />}
+      {/* Fog fades the table into the sky colour, which would look wrong against a picture. */}
+      {!backdrop && <fog attach="fog" args={[theme.palette.sky, 22, 40]} />}
       <hemisphereLight args={['#ffffff', theme.palette.table, 0.7]} />
       <directionalLight castShadow position={[6, 12, 5]} intensity={2.2}
         shadow-mapSize={[2048, 2048]} shadow-camera-left={-8} shadow-camera-right={8}
@@ -206,8 +232,8 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
       <pointLight position={[-8, 5, -6]} intensity={30} color={theme.palette.accent} />
 
       <Spinner spin={spin}>
-        <Table theme={theme} />
-        <Board theme={theme} onPick={onSelect} onHover={onSelect ? setHover : undefined} />
+        <Table theme={theme} presetId={tableStyle?.table} />
+        <Board theme={theme} customLogo={customLogo} onPick={onSelect} onHover={onSelect ? setHover : undefined} />
         <TileHighlight index={hover} color="#ffffff" n={theme.spaces.length} />
         <TileHighlight index={selected ?? null} color={theme.palette.accent} pulse n={theme.spaces.length} />
         {game && (

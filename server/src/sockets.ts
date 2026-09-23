@@ -18,7 +18,7 @@ import { Registry, Room, RoomError, type Member } from './rooms.ts';
 import { recordResult } from './stats.ts';
 import { getMap } from '../../shared/maps.ts';
 import { getTheme } from '../../shared/themes.ts';
-import { libraryFileOf, sanitizeTableStyle } from '../../shared/tableStyles.ts';
+import { DEFAULT_TABLE_STYLE, libraryFileOf, sanitizeTableStyle } from '../../shared/tableStyles.ts';
 import type { Action, PlayerProfile, TokenId } from '../../shared/types.ts';
 import type { RuleConfig } from '../../shared/themes.ts';
 
@@ -217,9 +217,13 @@ export function attachSockets(io: Server): SocketLayer {
       lobbyChanged();
     });
 
+    // A patch: only the fields sent change, so two quick picks in a row (a
+    // swatch, then a logo) cannot undo each other.
     on<unknown>('room:style', (p, room) => {
       const r = inRoom(room);
-      const style = sanitizeTableStyle(p);
+      const patch = Object.fromEntries(Object.entries(p && typeof p === 'object' ? p : {})
+        .filter(([k]) => k in DEFAULT_TABLE_STYLE));
+      const style = sanitizeTableStyle({ ...r.style, ...patch });
       // Library images must still exist; a stale pick would 404 for everyone.
       for (const url of [style.boardLogoUrl, style.backgroundUrl]) {
         const file = libraryFileOf(url);
