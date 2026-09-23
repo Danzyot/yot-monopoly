@@ -12,9 +12,18 @@ export function botAction(g: Game, id: string): Action | null {
   if (g.phase === 'over') return null;
   const me = g.player(id);
   if (me.bankrupt) return null;
+  const owe = g.debtOf(id);
+
+  // 0. Arcade round: play it (each game's module knows how, and when — bots
+  // wait a human-ish moment). Property management is locked until it ends, so
+  // the only other useful thing is paying a debt we can already cover.
+  if (g.phase === 'minigame') {
+    const move = g.minigameBotMove(id);
+    if (move) return { type: 'minigame', move };
+    return owe > 0 && me.cash >= owe ? { type: 'payDebt' } : null;
+  }
 
   // 1. Debts come first, even out of turn.
-  const owe = g.debtOf(id);
   if (owe > 0) {
     if (me.cash >= owe) return { type: 'payDebt' };
     return raiseFunds(g, id) ?? { type: 'bankrupt' };

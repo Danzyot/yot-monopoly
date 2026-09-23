@@ -281,18 +281,23 @@ test('non-classic maps: jail, GO and wrap-around use the board size', () => {
 // money/buildings must stay consistent.
 test('bot games run to completion without illegal moves', () => {
   let finished = 0;
+  let arcadeRounds = 0;
   for (let seed = 1; seed <= 60; seed++) {
     let clock = 0;
     const n = 2 + (seed % 7);
     const map = MAPS[seed % MAPS.length];
     const g = new Game({
       theme: resolveTheme(seed % 2 ? 'classic' : 'yot', map.id),
-      rules: { ...DEFAULT_RULES, ...(seed % 2 ? {} : YOT.rules), startingCash: map.startingCash ?? 1500 },
+      // Every third game also makes Free Parking an arcade, so Classic plays mini-games too.
+      rules: { ...DEFAULT_RULES, ...(seed % 2 ? {} : YOT.rules), startingCash: map.startingCash ?? 1500, arcadeParking: seed % 3 === 0 },
       players: Array.from({ length: n }, (_, i) => ({ id: `b${i}`, name: `Bot${i}`, token: 'car' as const, color: '#fff', isBot: true })),
       rng: seeded(seed),
       now: () => clock,
     });
-    for (let step = 0; step < 20_000 && g.phase !== 'over'; step++) {
+    let lastRound = -1;
+    // Only real moves count toward the step budget; mini-game waiting (bots
+    // thinking, result screens) just advances the clock, with its own guard.
+    for (let step = 0, idle = 0; step < 20_000 && g.phase !== 'over';) {
       clock += 100;
       let acted = false;
       for (const p of g.players) {
@@ -302,10 +307,16 @@ test('bot games run to completion without illegal moves', () => {
         acted = true;
         break;
       }
-      if (!acted) {
+      if (g.minigame && g.minigame.seq !== lastRound) { lastRound = g.minigame.seq; arcadeRounds++; }
+      if (acted) { step++; idle = 0; } else if (g.phase === 'minigame') {
+        // Like the room's timer: fire the round's deadline once it has passed.
+        assert.ok(++idle < 600, `mini-game stalled (seed ${seed})`);
+        g.minigameTimeout();
+      } else {
         assert.equal(g.phase, 'auction', `stuck in ${g.phase} (seed ${seed})`);
         clock += 60_000;
         g.auctionTimeout();
+        step++;
       }
       for (const p of g.players) assert.ok(p.cash >= 0, `negative cash seed ${seed}`);
       const houses = Object.values(g.owned).reduce((s, o) => s + (o.houses < 5 ? o.houses : 0), 0);
@@ -316,4 +327,5 @@ test('bot games run to completion without illegal moves', () => {
     if (g.phase === 'over') finished++;
   }
   assert.ok(finished >= 50, `only ${finished}/60 bot games finished`);
+  assert.ok(arcadeRounds >= 60, `only ${arcadeRounds} mini-games were played`);
 });

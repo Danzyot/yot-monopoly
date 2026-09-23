@@ -18,6 +18,8 @@ const TOGGLES: [keyof RuleConfig, string, string][] = [
   ['limitedBuildings', 'Limited houses', 'Bank has 32 houses / 12 hotels'],
   ['freeParkingPot', 'Free Parking jackpot', 'Taxes & fines pile up on Free Parking'],
   ['doubleOnGo', 'Double on GO', 'Landing exactly on GO pays double'],
+  ['minigames', 'Mini-games', 'Arcade spaces start a quick mini-game for cash prizes'],
+  ['arcadeParking', 'Free Parking arcade', 'Free Parking is an arcade too (mini-games on Classic)'],
 ];
 
 export default function Lobby({ room, me, spectating, chat }: {
@@ -148,7 +150,7 @@ export default function Lobby({ room, me, spectating, chat }: {
                 {[2, 3, 4, 5, 6, 7, 8].map(n => <option key={n}>{n}</option>)}
               </select>
             </label>
-            {TOGGLES.map(([k, label, hint]) => (
+            {TOGGLES.filter(([k]) => config.features.minigames || (k !== 'minigames' && k !== 'arcadeParking')).map(([k, label, hint]) => (
               <label key={k} className="rule toggle" title={hint}>
                 <input type="checkbox" disabled={!isHost} checked={!!room.rules[k]}
                   onChange={e => configure({ rules: { [k]: e.target.checked } })} />

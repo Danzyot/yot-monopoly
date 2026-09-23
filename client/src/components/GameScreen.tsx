@@ -14,6 +14,7 @@ import Deed from './Deed.tsx';
 import MusicPlayer from './MusicPlayer.tsx';
 import { useGameSounds } from '../useGameSounds.ts';
 import { TradeModal, TradeOffers } from './Trade.tsx';
+import MinigamePanel from './MinigamePanel.tsx';
 
 export default function GameScreen({ room, game, me, chat, skew }: {
   room: RoomView; game: GameView; me: string; chat: ChatMsg[]; skew: number;
@@ -81,6 +82,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
       )}
 
       <AuctionPanel game={game} me={me} skew={skew} />
+      <MinigamePanel game={game} me={me} skew={skew} />
       <CardPopup game={game} />
       <ActionBar game={game} me={me} />
       {theme.logoUrl && <img className="corner-mark" src={theme.logoUrl} alt={theme.name} />}
@@ -161,6 +163,7 @@ function ActionBar({ game, me }: { game: GameView; me: string }) {
     );
   }
 
+  if (game.phase === 'minigame') return <div className="actionbar"><span className="muted">🎮 Mini-game in progress…</span>{dice}</div>;
   if (game.current !== me) {
     if (game.phase === 'auction') return <div className="actionbar"><span className="muted">Auction running…</span>{dice}</div>;
     const what = game.phase === 'buy' ? 'is deciding whether to buy' : 'is playing';

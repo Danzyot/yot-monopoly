@@ -21,6 +21,10 @@ export interface RuleConfig {
   limitedBuildings: boolean;
   jailFine: number;
   maxPlayers: number;
+  /** Arcade spaces start a mini-game (the site-wide switch must be on too). */
+  minigames: boolean;
+  /** House rule: Free Parking is an arcade as well (gives Classic mini-games). */
+  arcadeParking: boolean;
 }
 
 export const DEFAULT_RULES: RuleConfig = {
@@ -33,6 +37,8 @@ export const DEFAULT_RULES: RuleConfig = {
   limitedBuildings: true,
   jailFine: 50,
   maxPlayers: 6,
+  minigames: true,
+  arcadeParking: false,
 };
 
 export interface ThemePalette {

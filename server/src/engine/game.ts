@@ -7,10 +7,16 @@ import {
 } from '../../../shared/board.ts';
 import type { CardEffect, DeckId } from '../../../shared/cards.ts';
 import type { RuleConfig, Theme } from '../../../shared/themes.ts';
+import {
+  MINIGAME_INFO, MINIGAME_KINDS, type MinigameKind, type MinigameMove, type MinigamePayout,
+  type MinigameResult, type MinigameView,
+} from '../../../shared/minigames.ts';
 import type {
   Action, Auction, CardShown, Debt, GameView, LogEntry, OwnedSpace, PlayerState, TokenId,
   Trade, TradeSide, TurnPhase,
 } from '../../../shared/types.ts';
+import { MINIGAMES, MinigameError, hash } from './minigames/index.ts';
+import type { Ctx as MinigameCtx, Names } from './minigames/types.ts';
 
 export class EngineError extends Error {}
 
@@ -38,6 +44,20 @@ export interface GameInit {
   now?: () => number;
   /** Mirror of every log line, for the durable room log. */
   onLog?: (text: string) => void;
+  /** Site-wide mini-game switch, read live so flipping it affects running games. Default on. */
+  minigamesEnabled?: () => boolean;
+}
+
+/** A running arcade round. `data` belongs to the module named by `kind` (and may hold secrets). */
+export interface MinigameState {
+  seq: number;
+  kind: MinigameKind;
+  host: string;
+  stage: 'play' | 'result';
+  /** When the result screen closes (stage 'result' only). */
+  resultEndsAt: number;
+  result: MinigameResult | null;
+  data: unknown;
 }
 
 /** Everything needed to rebuild a game after a restart (see Game.restore). */
@@ -64,6 +84,11 @@ export interface GameSnapshot {
   cardSeq: number;
   tradeSeq: number;
   outOrder: string[];
+  /** Optional: snapshots written before mini-games existed lack these. */
+  minigame?: MinigameState | null;
+  minigameSeq?: number;
+  /** Game clock when the snapshot was taken, to carry a live round's timers across a restart. */
+  savedAt?: number;
 }
 
 interface LandingOpts {
@@ -103,6 +128,9 @@ export class Game {
   decks: Record<DeckId, number[]>;
   /** Bankrupt players, first out first — gives finishing places. */
   outOrder: string[] = [];
+  minigame: MinigameState | null = null;
+  private minigameSeq = 0;
+  private minigamesEnabled: () => boolean;
   private cardSeq = 0;
   private tradeSeq = 0;
   private onLog?: (text: string) => void;
@@ -120,6 +148,7 @@ export class Game {
     this.rng = init.rng ?? (n => Math.floor(Math.random() * n));
     this.now = init.now ?? Date.now;
     this.onLog = init.onLog;
+    this.minigamesEnabled = init.minigamesEnabled ?? (() => true);
     this.players = init.players.map(p => ({
       ...p, cash: init.rules.startingCash, position: 0, inJail: false, jailTurns: 0,
       jailCards: [], bankrupt: false,
@@ -290,6 +319,11 @@ export class Game {
           p.cash += this.pot;
           this.pot = 0;
         }
+        if (this.rules.arcadeParking && this.minigamesOn()) this.startMinigame(p);
+        break;
+      case 'arcade':
+        if (this.minigamesOn()) this.startMinigame(p);
+        else this.say('The arcade is closed today.');
         break;
       default:
         break;
@@ -383,6 +417,7 @@ export class Game {
       this.winner = alive[0].id;
       this.phase = 'over';
       this.auction = null;
+      this.minigame = null;
       this.say(`${alive[0].name} wins the game!`, alive[0].id);
       return true;
     }
@@ -413,6 +448,7 @@ export class Game {
       case 'proposeTrade': return this.proposeTrade(p, a.to, a.give, a.get);
       case 'acceptTrade': return this.acceptTrade(p, a.id);
       case 'rejectTrade': return this.rejectTrade(p, a.id);
+      case 'minigame': return this.minigameMove(p, a.move);
       default: fail('Unknown action');
     }
   }
@@ -586,6 +622,7 @@ export class Game {
     const o = this.owned[space];
     if (!o || o.owner !== p.id) fail('You do not own that');
     if (this.phase === 'auction') fail('Wait for the auction to finish');
+    if (this.phase === 'minigame') fail('Wait for the mini-game to finish');
     return { s: this.spaces[space], o };
   }
 
@@ -718,6 +755,7 @@ export class Game {
       this.leaveAuction(p.id); // may finish the auction, which advances the turn if p was current
       return;
     }
+    if (this.minigame) this.dropFromMinigame(p);
     if (p === this.current) this.nextTurn();
   }
 
@@ -755,6 +793,7 @@ export class Game {
     const t = this.trades.find(x => x.id === id) ?? fail('That offer is gone');
     if (t.to !== p.id) fail('That offer is not for you');
     if (this.phase === 'auction') fail('Wait for the auction to finish');
+    if (this.phase === 'minigame') fail('Wait for the mini-game to finish');
     const from = this.player(t.from);
     this.validateSide(from, t.give);
     this.validateSide(p, t.get);
@@ -781,6 +820,173 @@ export class Game {
     this.say(t.from === p.id ? `${p.name} withdrew a trade offer.` : `${p.name} declined a trade.`, p.id);
   }
 
+  // ---- mini-games -----------------------------------------------------------
+  // An arcade landing pauses the turn in phase 'minigame'. The module decides
+  // who won; the Game moves the money (bank payouts, `charge` for losses),
+  // logs it, shows the result for a few seconds, then resumes the turn via
+  // afterResolution() so doubles still earn their extra roll. Like auctions,
+  // deadlines are stored here and the room calls minigameTimeout() on time.
+
+  private minigamesOn(): boolean {
+    return this.rules.minigames !== false && this.minigamesEnabled();
+  }
+
+  private minigameCtx(): MinigameCtx {
+    return { now: this.now(), rng: this.rng };
+  }
+
+  private names(): Names {
+    return { name: id => this.player(id).name, money: n => this.money(n) };
+  }
+
+  private startMinigame(p: PlayerState, kind?: MinigameKind) {
+    const k = kind ?? MINIGAME_KINDS[this.rng(MINIGAME_KINDS.length)];
+    const others = this.active().filter(o => o !== p).map(o => o.id);
+    const data = MINIGAMES[k].start({ ...this.minigameCtx(), host: p.id, others });
+    this.minigame = { seq: ++this.minigameSeq, kind: k, host: p.id, stage: 'play', resultEndsAt: 0, result: null, data };
+    this.phase = 'minigame';
+    const info = MINIGAME_INFO[k];
+    const vs = k === 'diceDuel' ? ` — ${p.name} vs ${this.player((data as { opponent: string }).opponent).name}` : '';
+    this.say(`${info.icon} Arcade: ${info.title}${vs}!`, p.id);
+  }
+
+  private minigameMove(p: PlayerState, move: MinigameMove) {
+    const mg = this.minigame;
+    if (this.phase !== 'minigame' || !mg) fail('No mini-game is running');
+    if (!move || typeof move !== 'object' || typeof move.kind !== 'string') fail('Bad move');
+    if (mg.stage === 'result') {
+      if (move.kind !== 'continue') fail('This round is over');
+      if (p.id !== mg.host) fail(`Waiting for ${this.player(mg.host).name}`);
+      this.finishMinigame();
+      return;
+    }
+    const def = MINIGAMES[mg.kind];
+    if (!def.players(mg.data).includes(p.id)) fail('You are not playing this round');
+    try {
+      def.move(mg.data, p.id, move, this.minigameCtx());
+    } catch (e) {
+      if (e instanceof MinigameError) fail(e.message);
+      throw e;
+    }
+    if (def.done(mg.data)) this.settleMinigame();
+  }
+
+  /** When the room must call minigameTimeout() next (internal: may be a secret GO time). */
+  minigameDeadline(): number | null {
+    const mg = this.minigame;
+    if (!mg || this.phase !== 'minigame') return null;
+    return mg.stage === 'result' ? mg.resultEndsAt : MINIGAMES[mg.kind].deadline(mg.data);
+  }
+
+  /** Called by the room when a mini-game deadline passes. True if anything changed. */
+  minigameTimeout(): boolean {
+    const mg = this.minigame;
+    const due = this.minigameDeadline();
+    if (!mg || due === null || this.now() < due) return false;
+    if (mg.stage === 'result') {
+      this.finishMinigame();
+      return true;
+    }
+    const def = MINIGAMES[mg.kind];
+    def.tick(mg.data, this.minigameCtx());
+    if (def.done(mg.data)) this.settleMinigame();
+    return true;
+  }
+
+  /** The bot's next mini-game move (null = nothing to press yet). */
+  minigameBotMove(id: string): MinigameMove | null {
+    const mg = this.minigame;
+    if (!mg || this.phase !== 'minigame' || mg.stage !== 'play') return null;
+    const def = MINIGAMES[mg.kind];
+    if (!def.players(mg.data).includes(id)) return null;
+    return def.bot(mg.data, id, { now: this.now(), seed: hash(mg.seq, id) });
+  }
+
+  /** Pay out the round and switch to the result screen. */
+  private settleMinigame() {
+    const mg = this.minigame!;
+    const def = MINIGAMES[mg.kind];
+    const title = MINIGAME_INFO[mg.kind].title;
+    const out = def.outcome(mg.data, this.names());
+    this.say(`${title}: ${out.headline}`, mg.host);
+    const paid: MinigamePayout[] = [];
+    for (const po of out.payouts) {
+      const p = this.player(po.player);
+      if (p.bankrupt) continue;
+      if (po.jailCard) {
+        if (this.grantJailCard(p)) {
+          this.say(`${p.name} got a Get Out of Jail Free card.`, p.id);
+          paid.push(po);
+          continue;
+        }
+        // Both cards are already in someone's hand: pay cash instead.
+        po.amount = 50;
+      }
+      if (po.amount > 0) {
+        p.cash += po.amount;
+        this.say(`${p.name} won ${this.money(po.amount)} from the bank (${title}).`, p.id);
+      } else if (po.amount < 0) {
+        this.charge(p, null, -po.amount, title, true);
+      }
+      paid.push({ player: po.player, amount: po.amount });
+    }
+    mg.stage = 'result';
+    mg.result = { headline: out.headline, payouts: paid };
+    mg.resultEndsAt = this.now() + def.resultMs;
+  }
+
+  /** Take a Get Out of Jail Free card out of whichever deck still has one. */
+  private grantJailCard(p: PlayerState): boolean {
+    for (const deck of ['chance', 'chest'] as DeckId[]) {
+      const cards = deck === 'chance' ? this.theme.chance : this.theme.chest;
+      const idx = cards.findIndex(c => c.effect.type === 'jailFree');
+      const at = idx < 0 ? -1 : this.decks[deck].indexOf(idx);
+      if (at < 0) continue;
+      this.decks[deck].splice(at, 1);
+      p.jailCards.push(deck);
+      return true;
+    }
+    return false;
+  }
+
+  private finishMinigame() {
+    this.minigame = null;
+    this.afterResolution();
+  }
+
+  /** A player went bankrupt mid-round (the caller then advances the turn if they were current). */
+  private dropFromMinigame(p: PlayerState) {
+    const mg = this.minigame!;
+    if (mg.stage === 'result') {
+      if (p.id === mg.host) this.minigame = null;
+      return;
+    }
+    const def = MINIGAMES[mg.kind];
+    if (p.id !== mg.host && !def.players(mg.data).includes(p.id)) return;
+    if (p.id === mg.host || def.drop(mg.data, p.id)) {
+      this.say(`The ${MINIGAME_INFO[mg.kind].title} was called off.`);
+      this.minigame = null;
+      if (p !== this.current) this.afterResolution();
+      return;
+    }
+    if (def.done(mg.data)) this.settleMinigame();
+  }
+
+  private minigameView(): MinigameView | null {
+    const mg = this.minigame;
+    if (!mg) return null;
+    const def = MINIGAMES[mg.kind];
+    return {
+      seq: mg.seq,
+      host: mg.host,
+      players: [...def.players(mg.data)],
+      stage: mg.stage,
+      endsAt: mg.stage === 'result' ? mg.resultEndsAt : def.publicEndsAt(mg.data),
+      result: mg.result,
+      ...def.body(mg.data),
+    };
+  }
+
   // ---- views ----------------------------------------------------------------
 
   snapshot(): GameSnapshot {
@@ -791,16 +997,27 @@ export class Game {
       housesLeft: this.housesLeft, hotelsLeft: this.hotelsLeft, lastCard: this.lastCard,
       winner: this.winner, log: this.log, turnNumber: this.turnNumber, decks: this.decks,
       cardSeq: this.cardSeq, tradeSeq: this.tradeSeq, outOrder: this.outOrder,
+      minigame: this.minigame, minigameSeq: this.minigameSeq, savedAt: this.now(),
     });
   }
 
   /** Rebuild a game from a snapshot taken by the same code on the same board. */
   static restore(init: Omit<GameInit, 'players'>, snap: GameSnapshot): Game {
     const g = new Game({ ...init, players: snap.players.map(p => ({ ...p })), onLog: undefined });
-    Object.assign(g, structuredClone(snap));
+    const { savedAt, ...state } = structuredClone(snap);
+    Object.assign(g, state);
+    g.minigame ??= null;
+    g.minigameSeq ??= 0;
     g.onLog = init.onLog;
     // An auction's clock is wall time; give bidders a fresh window after a restart.
     if (g.auction) g.auction.endsAt = g.now() + AUCTION_MS;
+    // A mini-game resumes where it stood: every timer moves on by the downtime.
+    const mg = g.minigame;
+    const down = savedAt === undefined ? 0 : g.now() - savedAt;
+    if (mg && down > 0) {
+      if (mg.stage === 'result') mg.resultEndsAt += down;
+      else MINIGAMES[mg.kind].shift(mg.data, down);
+    }
     return g;
   }
 
@@ -838,6 +1055,7 @@ export class Game {
       winner: this.winner,
       log: this.log.slice(-80),
       turnNumber: this.turnNumber,
+      minigame: this.minigameView(),
     });
   }
 }
