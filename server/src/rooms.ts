@@ -8,8 +8,9 @@ import { EngineError, Game, type GameSnapshot } from './engine/game.ts';
 import { botAction } from './engine/bot.ts';
 import { DEFAULT_RULES, getTheme, resolveTheme, type RuleConfig } from '../../shared/themes.ts';
 import { getMap } from '../../shared/maps.ts';
+import { migrateCharacter } from '../../shared/characters.ts';
 import {
-  PLAYER_COLORS, TOKENS, type Action, type RoomSeat, type RoomSummary, type RoomView, type TokenId,
+  PLAYER_COLORS, CHARACTERS, type Action, type CharacterId, type RoomSeat, type RoomSummary, type RoomView,
 } from '../../shared/types.ts';
 
 const BOT_DELAY_MS = 900;
@@ -106,7 +107,7 @@ export class Room {
     if (this.seats.length >= this.rules.maxPlayers) fail('The room is full — you can watch');
     const s: Seat = {
       id: m.id, name: m.name, avatar: m.avatar, isBot: false, connected: true, disconnectedAt: null,
-      token: this.freeToken(), color: this.freeColor(),
+      character: this.freeCharacter(), color: this.freeColor(),
     };
     this.seats.push(s);
     if (!this.seat(this.hostId)) this.hostId = m.id;
@@ -114,8 +115,8 @@ export class Room {
     return s;
   }
 
-  private freeToken(): TokenId {
-    return TOKENS.find(t => !this.seats.some(s => s.token === t)) ?? TOKENS[0];
+  private freeCharacter(): CharacterId {
+    return CHARACTERS.find(c => !this.seats.some(s => s.character === c)) ?? CHARACTERS[0];
   }
 
   private freeColor(): string {
@@ -177,12 +178,12 @@ export class Room {
     }
   }
 
-  pickToken(id: string, token: TokenId) {
+  pickCharacter(id: string, character: CharacterId) {
     this.requireLobby();
-    if (!TOKENS.includes(token)) fail('Unknown token');
+    if (!CHARACTERS.includes(character)) fail('Unknown character');
     const s = this.seat(id) ?? fail('You are not seated');
-    if (this.seats.some(o => o !== s && o.token === token)) fail('That token is taken');
-    s.token = token;
+    if (this.seats.some(o => o !== s && o.character === character)) fail('That character is taken');
+    s.character = character;
   }
 
   pickColor(id: string, color: string) {
@@ -201,7 +202,7 @@ export class Room {
     const name = BOT_NAMES.find(n => !used.has(n)) ?? `Bot ${this.seats.length + 1}`;
     this.seats.push({
       id: `bot-${this.code}-${randomInt(1e9)}`, name, avatar: '🤖', isBot: true, connected: true, disconnectedAt: null,
-      token: this.freeToken(), color: this.freeColor(),
+      character: this.freeCharacter(), color: this.freeColor(),
     });
   }
 
@@ -236,7 +237,7 @@ export class Room {
     this.game = new Game({
       theme: resolveTheme(this.themeId, this.mapId),
       rules: this.rules,
-      players: order.map(s => ({ id: s.id, name: s.name, token: s.token, color: s.color, isBot: s.isBot })),
+      players: order.map(s => ({ id: s.id, name: s.name, character: s.character, color: s.color, isBot: s.isBot })),
       rng: n => randomInt(n),
       onLog: text => this.hooks.onEvent(this, text),
     });
@@ -414,12 +415,19 @@ export class Room {
     // Everyone starts disconnected: they reclaim their seats on reconnect, and
     // autopilot covers anyone who never comes back.
     const now = Date.now();
-    r.seats = s.seats.map(x => ({ ...x, connected: x.isBot, disconnectedAt: x.isBot ? null : now }));
+    // Snapshots from before characters existed carry `token`; migrateCharacter
+    // maps those (and anything unknown) onto a character.
+    const withCharacter = <T extends object>(x: T) => {
+      const { token: _legacy, ...rest } = x as T & { token?: unknown };
+      return { ...rest, character: migrateCharacter(x) };
+    };
+    r.seats = s.seats.map(x => ({ ...withCharacter(x), connected: x.isBot, disconnectedAt: x.isBot ? null : now }));
     if (s.game) {
+      const game = { ...s.game, players: s.game.players.map(withCharacter) };
       r.game = Game.restore({
         theme: resolveTheme(r.themeId, r.mapId), rules: r.rules, rng: n => randomInt(n),
         onLog: text => hooks.onEvent(r, text),
-      }, s.game);
+      }, game);
     }
     if (r.status === 'finished') r.finishedAt = now;
     r.schedule();

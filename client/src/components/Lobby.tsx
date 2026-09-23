@@ -2,13 +2,15 @@ import { useNavigate } from 'react-router-dom';
 import { call, type ChatMsg } from '../net.ts';
 import { THEMES, getTheme, type RuleConfig } from '../../../shared/themes.ts';
 import { MAPS, getMap } from '../../../shared/maps.ts';
-import { PLAYER_COLORS, TOKENS, type RoomView } from '../../../shared/types.ts';
-import { TOKEN_EMOJI, TOKEN_LABEL } from '../format.ts';
+import { PLAYER_COLORS, type RoomView } from '../../../shared/types.ts';
+import { CHARACTER_DEFS, getCharacter } from '../../../shared/characters.ts';
+import { characterEmoji } from '../format.ts';
 import { toast, toastError } from '../toast.tsx';
 import { useAuth } from '../auth.tsx';
 import Chat from './Chat.tsx';
 import { Avatar } from './Avatar.tsx';
 import BoardScene from '../three/BoardScene.tsx';
+import CharacterPreview from '../three/characters/CharacterPreview.tsx';
 import { themeStyle } from '../themeStyle.ts';
 
 const TOGGLES: [keyof RuleConfig, string, string][] = [
@@ -53,7 +55,7 @@ export default function Lobby({ room, me, spectating, chat }: {
           <ul className="seats">
             {room.seats.map(s => (
               <li key={s.id} style={{ borderColor: s.color }}>
-                <span className="token-badge" style={{ background: s.color }}>{TOKEN_EMOJI[s.token]}</span>
+                <span className="token-badge" style={{ background: s.color }}>{characterEmoji(s.character)}</span>
                 <Avatar src={s.avatar} size={24} />
                 <span className="grow">
                   {s.name} {s.id === room.hostId && <em className="tag">host</em>} {s.isBot && <em className="tag">bot</em>}
@@ -71,18 +73,30 @@ export default function Lobby({ room, me, spectating, chat }: {
 
           {mySeat && (
             <>
-              <h3>Your piece</h3>
-              <div className="token-grid">
-                {TOKENS.map(t => {
-                  const taken = room.seats.some(s => s.token === t && s.id !== me);
-                  return (
-                    <button key={t} title={TOKEN_LABEL[t]} disabled={taken}
-                      className={`token-pick ${mySeat.token === t ? 'on' : ''}`}
-                      onClick={() => call('room:seat', { token: t }).catch(toastError)}>
-                      {TOKEN_EMOJI[t]}
-                    </button>
-                  );
-                })}
+              <h3>Your character</h3>
+              <div className="char-picker">
+                <div className="char-preview">
+                  <CharacterPreview character={mySeat.character} color={mySeat.color} />
+                  <div className="char-about">
+                    <b>{getCharacter(mySeat.character).name}</b>
+                    <span className="small muted">{getCharacter(mySeat.character).blurb}</span>
+                  </div>
+                </div>
+                <div className="char-grid">
+                  {CHARACTER_DEFS.map(c => {
+                    const holder = room.seats.find(s => s.character === c.id && s.id !== me);
+                    return (
+                      <button key={c.id} disabled={!!holder}
+                        title={holder ? `${c.name} — taken by ${holder.name}` : `${c.name} — ${c.blurb}`}
+                        className={`char-pick ${mySeat.character === c.id ? 'on' : ''}`}
+                        onClick={() => call('room:seat', { character: c.id }).catch(toastError)}>
+                        <span className="char-emoji">{c.emoji}</span>
+                        <span className="char-name">{c.name}</span>
+                        {holder && <span className="char-taken" style={{ background: holder.color }} />}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div className="color-grid">
                 {PLAYER_COLORS.map(c => {

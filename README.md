@@ -5,9 +5,12 @@ A multiplayer 3D property-trading board game for the browser, with custom editio
 
 - **Many games at once**: each table is a room with a 5-letter code and a share link.
   One server runs as many rooms as you like, each with 2–8 players.
-- **3D board** (three.js via React Three Fiber): animated tokens hop tile by tile, dice
-  tumble, houses and hotels sit on the board, and owned deeds show the owner's colour.
-  Orbit, zoom, and click any space for its title deed.
+- **3D board** (three.js via React Three Fiber): each player picks one of ten procedural
+  chibi characters (tinted in their colour) that hop tile by tile, cheer when they buy
+  or earn, slump in jail and dance when they win; dice tumble, houses and hotels sit on
+  the board, and owned deeds show the owner's colour. Each map has its own surroundings
+  (a cosy lounge, a floodlit speedway, a night-time rooftop). Orbit, zoom, and click
+  any space for its title deed.
 - **Full rules engine**: rent (sets, houses, railroads, utilities), doubles and
   three-doubles jail, jail fines and cards, Chance and Community Chest (all 32 cards),
   auctions, even building, the 32/12 building supply, mortgages, debts, bankruptcy to a
@@ -77,7 +80,9 @@ server/
   src/sockets.ts       Socket.IO wiring, identity, acks
   test/                node:test suite
 client/
-  src/three/           3D scene: board texture, layout maths, tokens, dice
+  src/three/           3D scene: board texture, layout maths, dice
+  src/three/characters/  procedural character models, rig and piece animation
+  src/three/environments/ per-map surroundings (lounge, speedway, skyline)
   src/components/      lobby, HUD, deeds, trades, auctions
   src/pages/           home, room
 ```
@@ -87,9 +92,9 @@ server broadcasts after every change.
 
 ## Roadmap ideas
 
-- Real 3D assets: drop GLB models in `client/public/models/` and swap `TokenModel`
-  (see the comment in `client/src/three/Tokens.tsx`). Same for houses, the table and
-  the room environment.
+- Real 3D assets: characters are built from primitives on a shared rig
+  (`client/src/three/characters/looks.tsx`); a GLB per character could replace a look
+  without touching the animation. Same for houses and the table.
 - Discord sign-in, leaderboard, and operator-only room creation (port from the poker repo).
 - Persisting live games across restarts (snapshot `Game` to disk).
-- Turn timer, sounds, camera follow, and a per-edition 3D environment.
+- Turn timer, sounds, camera follow.

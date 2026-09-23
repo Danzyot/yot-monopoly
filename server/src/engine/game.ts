@@ -8,7 +8,7 @@ import {
 import type { CardEffect, DeckId } from '../../../shared/cards.ts';
 import type { RuleConfig, Theme } from '../../../shared/themes.ts';
 import type {
-  Action, Auction, CardShown, Debt, GameView, LogEntry, OwnedSpace, PlayerState, TokenId,
+  Action, Auction, CardShown, Debt, GameView, LogEntry, OwnedSpace, PlayerState, CharacterId,
   Trade, TradeSide, TurnPhase,
 } from '../../../shared/types.ts';
 
@@ -25,7 +25,7 @@ export type Rng = (n: number) => number; // integer in [0, n)
 export interface NewPlayer {
   id: string;
   name: string;
-  token: TokenId;
+  character: CharacterId;
   color: string;
   isBot: boolean;
 }

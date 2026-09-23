@@ -2,15 +2,18 @@
 
 import type { DeckId } from './cards.ts';
 import type { RuleConfig } from './themes.ts';
+import type { CharacterId } from './characters.ts';
 
-export type TokenId = 'car' | 'hat' | 'dog' | 'ship' | 'boot' | 'iron' | 'cat' | 'duck';
-export const TOKENS: TokenId[] = ['car', 'hat', 'dog', 'ship', 'boot', 'iron', 'cat', 'duck'];
+// The character catalogue lives in characters.ts; re-exported so protocol
+// code can keep importing everything from here.
+export { CHARACTERS, type CharacterId } from './characters.ts';
 export const PLAYER_COLORS = ['#e6194b', '#3cb4ff', '#ffd23f', '#3ddc84', '#b15cff', '#ff8c1a', '#ff5fa2', '#00d6c2'];
 
 export interface PlayerState {
   id: string;
   name: string;
-  token: TokenId;
+  character: CharacterId;
+  /** Tints the character's main material, so no two players look alike. */
   color: string;
   cash: number;
   position: number;
@@ -138,7 +141,7 @@ export interface RoomSeat {
   name: string;
   /** Emoji or Discord avatar URL. */
   avatar: string;
-  token: TokenId;
+  character: CharacterId;
   color: string;
   isBot: boolean;
   connected: boolean;
