@@ -290,7 +290,7 @@ test('bot games run to completion without illegal moves', () => {
       theme: resolveTheme(seed % 2 ? 'classic' : 'yot', map.id),
       // Every third game also makes Free Parking an arcade, so Classic plays mini-games too.
       rules: { ...DEFAULT_RULES, ...(seed % 2 ? {} : YOT.rules), startingCash: map.startingCash ?? 1500, arcadeParking: seed % 3 === 0 },
-      players: Array.from({ length: n }, (_, i) => ({ id: `b${i}`, name: `Bot${i}`, token: 'car' as const, color: '#fff', isBot: true })),
+      players: Array.from({ length: n }, (_, i) => ({ id: `b${i}`, name: `Bot${i}`, character: 'spiky' as const, color: '#fff', isBot: true })),
       rng: seeded(seed),
       now: () => clock,
     });

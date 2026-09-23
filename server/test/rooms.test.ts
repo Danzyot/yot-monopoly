@@ -24,7 +24,7 @@ test('rooms: many at once, unique codes, lobby rules', () => {
   assert.doesNotThrow(() => a.configure('bob', true, { mapId: 'speed' }), 'operators can configure any room');
   assert.equal(a.mapId, 'speed');
   assert.equal(a.rules.startingCash, 1200, 'map brings its starting cash');
-  assert.throws(() => a.pickToken('bob', a.seat('host-a')!.token), /taken/);
+  assert.throws(() => a.pickCharacter('bob', a.seat('host-a')!.character), /taken/);
   a.configure('host-a', false, { themeId: 'yot' });
   assert.equal(a.rules.freeParkingPot, true, 'edition brings its house rules');
   a.configure('host-a', false, { rules: { maxPlayers: 3 } });
@@ -73,6 +73,27 @@ test('snapshot / restore keeps a game mid-play', () => {
   assert.deepEqual(r2.game!.view().players.map(p => p.position), g.view().players.map(p => p.position));
   assert.equal(r2.game!.current.id, cur);
   assert.equal(r2.seat('a')!.connected, false, 'humans come back as disconnected until they reconnect');
+  r2.dispose();
+});
+
+test('restoring a pre-characters snapshot maps old tokens onto characters', () => {
+  const reg = new Registry(hooks(), 1e9);
+  const r = reg.create('a');
+  r.join(m('a')); r.join(m('b'));
+  r.start('a', false);
+  const snap = JSON.parse(JSON.stringify(reg.snapshot()));
+  r.dispose();
+  // Rewrite it the way the old code stored it: `token`, no `character`.
+  const legacy = (x: Record<string, unknown>, token: string) => { delete x.character; x.token = token; };
+  legacy(snap[0].seats[0], 'car'); legacy(snap[0].seats[1], 'duck');
+  for (const p of snap[0].game.players) legacy(p, p.id === 'a' ? 'car' : 'duck');
+
+  const reg2 = new Registry(hooks(), 1e9);
+  assert.equal(reg2.restore(snap), 1);
+  const r2 = reg2.get(r.code)!;
+  assert.deepEqual(r2.view().seats.map(s => s.character).sort(), ['alien', 'spiky']);
+  assert.equal(r2.game!.view().players.find(p => p.id === 'a')!.character, 'spiky');
+  assert.ok(!('token' in r2.view().seats[0]), 'the legacy field is dropped');
   r2.dispose();
 });
 

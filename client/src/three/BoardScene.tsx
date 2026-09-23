@@ -3,11 +3,13 @@ import { ContactShadows, OrbitControls } from '@react-three/drei';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MeshStandardMaterial, type Group, type Mesh } from 'three';
 import { resolveTheme, type Theme } from '../../../shared/themes.ts';
+import { getMap } from '../../../shared/maps.ts';
 import type { GameView } from '../../../shared/types.ts';
 import { cleanAssetUrl, getTablePreset, type TableStyle } from '../../../shared/tableStyles.ts';
 import { boardTexture } from './boardTexture.ts';
 import { C, W, buildingSpots, tile, tileAt, tileWidth } from './layout.ts';
-import { Tokens } from './Tokens.tsx';
+import { Pieces } from './characters/Pieces.tsx';
+import { Environment, FLOOR, TABLE_R, envLook } from './environments/index.tsx';
 import { Dice } from './Dice.tsx';
 
 const THICK = 0.28;
@@ -69,14 +71,21 @@ function Table({ theme, presetId }: { theme: Theme; presetId?: string }) {
   // The room's table preset, or the edition's own colour for 'edition'.
   const preset = getTablePreset(presetId);
   const color = preset.color ?? theme.palette.table;
+  // Pedestal from under the top down to the environment's floor.
+  const legTop = -THICK - 0.5;
+  const leg = legTop - FLOOR;
   return (
     <group>
       <mesh receiveShadow position={[0, -THICK - 0.25, 0]}>
-        <cylinderGeometry args={[11, 11.3, 0.5, 96]} />
+        <cylinderGeometry args={[TABLE_R, TABLE_R + 0.3, 0.5, 96]} />
         <meshStandardMaterial color={color} roughness={preset.roughness} metalness={preset.metalness} />
       </mesh>
-      <mesh position={[0, -THICK - 3.5, 0]}>
-        <cylinderGeometry args={[1.2, 2.2, 6, 32]} />
+      <mesh position={[0, legTop - leg / 2, 0]}>
+        <cylinderGeometry args={[1.2, 2.2, leg, 32]} />
+        <meshStandardMaterial color={color} roughness={Math.min(1, preset.roughness + 0.05)} metalness={preset.metalness} />
+      </mesh>
+      <mesh position={[0, FLOOR + 0.15, 0]}>
+        <cylinderGeometry args={[3, 3.2, 0.3, 32]} />
         <meshStandardMaterial color={color} roughness={Math.min(1, preset.roughness + 0.05)} metalness={preset.metalness} />
       </mesh>
     </group>
@@ -169,7 +178,7 @@ function Buildings({ game, theme }: { game: GameView; theme: Theme }) {
 }
 
 /** Pull the camera back on narrow screens so the whole board stays in view. */
-function CameraFit({ hud }: { hud: boolean }) {
+function CameraFit({ hud, fogNear, fogFar }: { hud: boolean; fogNear: number; fogFar: number }) {
   const { camera, size, scene } = useThree();
   useEffect(() => {
     const aspect = size.width / size.height;
@@ -182,10 +191,10 @@ function CameraFit({ hud }: { hud: boolean }) {
     camera.lookAt(0, 0, 0);
     // Keep the fog behind the board however far back the camera sits.
     if (scene.fog && 'near' in scene.fog) {
-      scene.fog.near = 22 * k;
-      scene.fog.far = 40 * k;
+      scene.fog.near = fogNear * k;
+      scene.fog.far = fogFar * k;
     }
-  }, [camera, scene, size.width, size.height, hud]);
+  }, [camera, scene, size.width, size.height, hud, fogNear, fogFar]);
   return null;
 }
 
@@ -209,6 +218,8 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
   // Re-checked here as well as on the server: this string ends up in CSS.
   const backdrop = cleanAssetUrl(tableStyle?.backgroundUrl);
   const customLogo = cleanAssetUrl(tableStyle?.boardLogoUrl);
+  const env = getMap(mapId).environment;
+  const look = envLook(env, theme);
   const [hover, setHover] = useState<number | null>(null);
 
   useEffect(() => {
@@ -219,17 +230,19 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
   return (
     <Canvas shadows dpr={[1, 2]} camera={{ position: [0, 11.5, 10.5], fov: 45 }}
       onPointerMissed={() => onSelect?.(null)}
-      // A backdrop is painted behind a transparent canvas: it keeps its aspect
-      // ratio on any screen, and needs no CORS, so any https image works.
+      // A custom backdrop replaces the map's 3D surroundings: it is painted
+      // behind a transparent canvas, keeps its aspect ratio on any screen and
+      // needs no CORS, so any https image works.
       style={backdrop ? { background: `${theme.palette.sky} url("${backdrop}") center / cover no-repeat` } : undefined}>
-      {!backdrop && <color attach="background" args={[theme.palette.sky]} />}
-      {/* Fog fades the table into the sky colour, which would look wrong against a picture. */}
-      {!backdrop && <fog attach="fog" args={[theme.palette.sky, 22, 40]} />}
-      <hemisphereLight args={['#ffffff', theme.palette.table, 0.7]} />
-      <directionalLight castShadow position={[6, 12, 5]} intensity={2.2}
+      {!backdrop && <color attach="background" args={[look.background]} />}
+      {/* Fog fades the scene into the sky colour, which would look wrong against a picture. */}
+      {!backdrop && <fog attach="fog" args={[look.background, look.fogNear, look.fogFar]} />}
+      {backdrop
+        ? <hemisphereLight args={['#ffffff', theme.palette.table, 0.9]} />
+        : <Environment kind={env} theme={theme} />}
+      <directionalLight castShadow position={[6, 12, 5]} intensity={look.keyIntensity} color={look.keyColor}
         shadow-mapSize={[2048, 2048]} shadow-camera-left={-8} shadow-camera-right={8}
         shadow-camera-top={8} shadow-camera-bottom={-8} shadow-bias={-0.0004} />
-      <pointLight position={[-8, 5, -6]} intensity={30} color={theme.palette.accent} />
 
       <Spinner spin={spin}>
         <Table theme={theme} presetId={tableStyle?.table} />
@@ -239,7 +252,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
         {game && (
           <>
             <Ownership game={game} theme={theme} />
-            <Tokens players={game.players} current={game.current} n={theme.spaces.length} />
+            <Pieces game={game} n={theme.spaces.length} />
             <Dice dice={game.dice} seq={game.rollSeq} body={theme.palette.die} pip={theme.palette.pip} />
           </>
         )}
@@ -247,7 +260,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
       </Spinner>
       <ContactShadows position={[0, 0.001, 0]} scale={W} opacity={0.35} blur={2.2} far={1} />
 
-      <CameraFit hud={!!game} />
+      <CameraFit hud={!!game} fogNear={look.fogNear} fogFar={look.fogFar} />
       <OrbitControls makeDefault enablePan={false} enabled={!spin}
         minDistance={6} maxDistance={60} minPolarAngle={0.05} maxPolarAngle={Math.PI / 2.4}
         target={[0, 0, 0]} />

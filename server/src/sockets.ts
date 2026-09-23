@@ -19,7 +19,7 @@ import { recordResult } from './stats.ts';
 import { getMap } from '../../shared/maps.ts';
 import { getTheme } from '../../shared/themes.ts';
 import { DEFAULT_TABLE_STYLE, libraryFileOf, sanitizeTableStyle } from '../../shared/tableStyles.ts';
-import type { Action, PlayerProfile, TokenId } from '../../shared/types.ts';
+import type { Action, CharacterId, PlayerProfile } from '../../shared/types.ts';
 import type { RuleConfig } from '../../shared/themes.ts';
 
 type Ack = (res: { ok: true; [k: string]: unknown } | { ok: false; error: string }) => void;
@@ -233,9 +233,9 @@ export function attachSockets(io: Server): SocketLayer {
       broadcast(r);
     });
 
-    on<{ token?: TokenId; color?: string }>('room:seat', (p, room) => {
+    on<{ character?: CharacterId; color?: string }>('room:seat', (p, room) => {
       const r = inRoom(room);
-      if (p.token) r.pickToken(me(), p.token);
+      if (p.character) r.pickCharacter(me(), p.character);
       if (p.color) r.pickColor(me(), String(p.color));
       broadcast(r);
     });

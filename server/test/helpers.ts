@@ -9,7 +9,7 @@ export function scripted(n = 2, rules: Partial<RuleConfig> = {}, mapId = 'classi
     theme: resolveTheme('classic', mapId),
     rules: { ...DEFAULT_RULES, ...rules },
     players: Array.from({ length: n }, (_, i) => ({
-      id: `p${i}`, name: `P${i}`, token: 'car' as const, color: '#fff', isBot: false,
+      id: `p${i}`, name: `P${i}`, character: 'spiky' as const, color: '#fff', isBot: false,
     })),
     rng: k => (queue.length ? queue.shift()! % k : 0),
     now: () => clock,

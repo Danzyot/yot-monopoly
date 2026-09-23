@@ -12,7 +12,7 @@ import {
   type MinigameResult, type MinigameView,
 } from '../../../shared/minigames.ts';
 import type {
-  Action, Auction, CardShown, Debt, GameView, LogEntry, OwnedSpace, PlayerState, TokenId,
+  Action, Auction, CardShown, Debt, GameView, LogEntry, OwnedSpace, PlayerState, CharacterId,
   Trade, TradeSide, TurnPhase,
 } from '../../../shared/types.ts';
 import { MINIGAMES, MinigameError, hash } from './minigames/index.ts';
@@ -31,7 +31,7 @@ export type Rng = (n: number) => number; // integer in [0, n)
 export interface NewPlayer {
   id: string;
   name: string;
-  token: TokenId;
+  character: CharacterId;
   color: string;
   isBot: boolean;
 }

@@ -5,7 +5,7 @@ import { getMap } from '../../../shared/maps.ts';
 import type { GameView, RoomView } from '../../../shared/types.ts';
 import { act, call, useConnected, type ChatMsg } from '../net.ts';
 import { useAuth } from '../auth.tsx';
-import { TOKEN_EMOJI } from '../format.ts';
+import { characterEmoji } from '../format.ts';
 import { toastError } from '../toast.tsx';
 import { themeStyle } from '../themeStyle.ts';
 import BoardScene from '../three/BoardScene.tsx';
@@ -107,7 +107,7 @@ function Players({ game, room, me, onTrade }: {
         const owes = game.debts.filter(d => d.from === p.id).reduce((a, d) => a + d.amount, 0);
         return (
           <div key={p.id} className={`player ${p.id === game.current ? 'turn' : ''} ${p.bankrupt ? 'out' : ''}`} style={{ borderColor: p.color }}>
-            <span className="token-badge" style={{ background: p.color }}>{TOKEN_EMOJI[p.token]}</span>
+            <span className="token-badge" style={{ background: p.color }}>{characterEmoji(p.character)}</span>
             <div className="grow">
               <div className="pname">
                 {p.name}{p.id === me && ' (you)'}

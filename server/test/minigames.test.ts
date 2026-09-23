@@ -23,7 +23,7 @@ function setup(o: { n?: number; rules?: Partial<RuleConfig>; map?: string; enabl
     theme: resolveTheme('classic', o.map ?? 'speed'),
     rules: { ...DEFAULT_RULES, ...o.rules },
     players: Array.from({ length: o.n ?? 2 }, (_, i) => ({
-      id: `p${i}`, name: `P${i}`, token: 'car' as const, color: '#fff', isBot: false,
+      id: `p${i}`, name: `P${i}`, character: 'spiky' as const, color: '#fff', isBot: false,
     })),
     rng: k => (queue.length ? queue.shift()! % k : 0),
     now: () => clock,
@@ -452,7 +452,7 @@ test('bots play every mini-game legally, at a human pace, and never jump the gun
       let clock = 0;
       const g = new Game({
         theme: resolveTheme('classic', 'speed'), rules: DEFAULT_RULES,
-        players: Array.from({ length: 4 }, (_, i) => ({ id: `b${i}`, name: `B${i}`, token: 'car' as const, color: '#fff', isBot: true })),
+        players: Array.from({ length: 4 }, (_, i) => ({ id: `b${i}`, name: `B${i}`, character: 'spiky' as const, color: '#fff', isBot: true })),
         rng: seeded(seed), now: () => clock,
       });
       g.phase = 'done';
