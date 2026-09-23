@@ -11,6 +11,8 @@ import { themeStyle } from '../themeStyle.ts';
 import BoardScene from '../three/BoardScene.tsx';
 import Chat from './Chat.tsx';
 import Deed from './Deed.tsx';
+import MusicPlayer from './MusicPlayer.tsx';
+import { useGameSounds } from '../useGameSounds.ts';
 import { TradeModal, TradeOffers } from './Trade.tsx';
 
 export default function GameScreen({ room, game, me, chat, skew }: {
@@ -30,6 +32,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   const { config } = useAuth();
   const nav = useNavigate();
   const myPlayer = game.players.find(p => p.id === me);
+  useGameSounds(game, me);
 
   const leave = async () => {
     if (myPlayer && !myPlayer.bankrupt && game.phase !== 'over'
@@ -52,6 +55,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
         <div className="row">
           {game.rules.freeParkingPot && <span className="pill hide-sm">🅿️ pot {theme.currency}{game.pot}</span>}
           <span className="pill hide-sm" title="Houses / hotels left in the bank">🏠 {game.housesLeft} · 🏨 {game.hotelsLeft}</span>
+          <MusicPlayer />
           <button className="btn tiny ghost" onClick={leave}>Leave</button>
         </div>
       </header>
