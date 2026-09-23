@@ -42,7 +42,10 @@ export default function ActionBar({ legal, bigBlind, onAction }: Props) {
     { label: '½ pot', value: callTotal + Math.round(potAfterCall * 0.5) },
     { label: '¾ pot', value: callTotal + Math.round(potAfterCall * 0.75) },
     { label: 'Pot', value: callTotal + potAfterCall },
-    { label: 'All-in', value: legal.maxRaiseTo },
+    // Under the opening bet cap the ceiling is not an all-in — chips stay
+    // behind. Calling that button "All-in" would be a lie the player only
+    // discovers after pressing it.
+    { label: legal.capped ? 'Max' : 'All-in', value: legal.maxRaiseTo },
   ];
 
   const raiseWord = legal.toCall > 0 ? 'Raise to' : 'Bet';
@@ -51,6 +54,12 @@ export default function ActionBar({ legal, bigBlind, onAction }: Props) {
 
   return (
     <div className={`action-dock${armed ? '' : ' settling'}`}>
+      {showRaise && legal.canRaise && legal.capped && (
+        // Say why the slider stops short, or it reads as a broken control.
+        <div className="cap-note">
+          Opening cap — at most half your stack in one bet
+        </div>
+      )}
       {showRaise && legal.canRaise && (
         <div className="raise-panel">
           <div className="quick-bets">

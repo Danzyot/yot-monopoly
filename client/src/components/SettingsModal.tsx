@@ -19,6 +19,8 @@ export default function SettingsModal({ view, onClose }: {
     ![3, 5, 8, 10, 12, 15, 20].includes(view.config.levelMinutes));
   const [lateRegMinutes, setLateRegMinutes] = useState(view.config.lateRegMinutes);
   const [joinMinutes, setJoinMinutes] = useState(view.config.joinMinutes ?? 15);
+  const [betCapOn, setBetCapOn] = useState((view.config.betCapMinutes ?? null) !== null);
+  const [betCapMinutes, setBetCapMinutes] = useState(view.config.betCapMinutes ?? 15);
   const [lateRegCustom, setLateRegCustom] = useState(
     ![0, 5, 10, 15, 20, 30, 45, 60].includes(view.config.lateRegMinutes));
   const [approve, setApprove] = useState(view.config.approveRegistrations);
@@ -50,6 +52,7 @@ export default function SettingsModal({ view, onClose }: {
       levelMinutes,
       lateRegMinutes,
       joinMinutes,
+      betCapMinutes: betCapOn ? betCapMinutes : null,
       approveRegistrations: approve,
       prizeText: prizeText.trim() || null,
       actionSeconds,
@@ -144,6 +147,28 @@ export default function SettingsModal({ view, onClose }: {
             <div className="field-hint">
               Registering reserves a place; players press <strong>Join table</strong> to
               claim it. Minutes from the start before an unclaimed place is given up.
+            </div>
+          </div>
+          <div className="field">
+            <label>Opening bet cap</label>
+            <div className="cap-row">
+              <label className="cap-toggle">
+                <input
+                  type="checkbox" checked={betCapOn}
+                  onChange={e => setBetCapOn(e.target.checked)}
+                />
+                <span>On</span>
+              </label>
+              <input
+                className="input" type="number" min={1} max={240}
+                value={betCapMinutes} disabled={!betCapOn}
+                onChange={e => setBetCapMinutes(Math.max(1, Math.min(240, Math.floor(Number(e.target.value) || 1))))}
+              />
+            </div>
+            <div className="field-hint">
+              For this many minutes from the start, nobody may put more than
+              half the chips behind them into one bet or raise. Calling is
+              never capped, and blinds and antes are unaffected.
             </div>
           </div>
         </div>

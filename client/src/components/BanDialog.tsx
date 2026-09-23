@@ -13,6 +13,10 @@ export interface BanTarget {
   name: string;
   kind: 'player' | 'ip';
   scope: 'game' | 'lifetime';
+  // Whether this person has a Discord account behind them. Only offered when
+  // the caller actually knows — an address has nobody behind it, and a guest
+  // has no account to ban.
+  discordLinked?: boolean;
 }
 
 // Re-exported so callers preview the message without needing to know it
@@ -21,10 +25,14 @@ export const banMessagePreview = banMessageFor;
 
 export default function BanDialog({ target, onConfirm, onCancel }: {
   target: BanTarget;
-  onConfirm: (reason: string) => void;
+  onConfirm: (reason: string, discordBan: boolean) => void;
   onCancel: () => void;
 }) {
   const [reason, setReason] = useState('');
+  // Off by default and always a deliberate choice. A Discord ban is public,
+  // reaches beyond the card room, and is not what every poker ban deserves.
+  const [discordBan, setDiscordBan] = useState(false);
+  const canDiscordBan = target.kind === 'player' && target.discordLinked === true;
 
   const what = target.kind === 'ip'
     ? `${target.name}'s address — and everyone else on it`
@@ -62,7 +70,7 @@ export default function BanDialog({ target, onConfirm, onCancel }: {
             id="ban-reason" value={reason} maxLength={200}
             placeholder="…or type your own"
             onChange={e => setReason(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') onConfirm(reason.trim()); }}
+            onKeyDown={e => { if (e.key === 'Enter') onConfirm(reason.trim(), discordBan && canDiscordBan); }}
           />
         </div>
 
@@ -71,9 +79,29 @@ export default function BanDialog({ target, onConfirm, onCancel }: {
           <div className="ban-preview">{banMessagePreview(target.scope, reason)}</div>
         </div>
 
+        {canDiscordBan && (
+          <div className="field">
+            <label className="ban-discord">
+              <input
+                type="checkbox" checked={discordBan}
+                onChange={e => setDiscordBan(e.target.checked)}
+              />
+              <span>
+                Ban from the Discord server too
+                <span className="field-hint">
+                  They are removed and cannot rejoin. Lifting this ban here lifts
+                  that one as well — a ban you placed on Discord by hand is never
+                  touched. Needs the bot to have Ban Members, with its role above
+                  theirs.
+                </span>
+              </span>
+            </label>
+          </div>
+        )}
+
         <div className="modal-actions">
           <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
-          <button className="btn btn-danger" onClick={() => onConfirm(reason.trim())}>
+          <button className="btn btn-danger" onClick={() => onConfirm(reason.trim(), discordBan && canDiscordBan)}>
             {target.scope === 'lifetime' ? 'Suspend for life' : 'Suspend from this game'}
           </button>
         </div>

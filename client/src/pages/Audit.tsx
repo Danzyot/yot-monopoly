@@ -98,16 +98,20 @@ export default function Audit() {
   // gets identified, so the action belongs on the row that proves it. These
   // are the lifetime ones — a single event is barred from that event's own
   // screen, where the game is unambiguous.
-  const confirmBan = async (reason: string) => {
+  const confirmBan = async (reason: string, discordBan: boolean) => {
     if (!pendingBan) return;
     const { value, name, kind } = pendingBan;
     setPendingBan(null);
     try {
-      const r = await api.ban({ kind, scope: 'lifetime', value, name, reason });
+      const r = await api.ban({ kind, scope: 'lifetime', value, name, reason, discordBan });
       const gone = r.ejected.tournaments + r.ejected.tables;
-      toast('success', gone
+      const base = gone
         ? `${name} suspended, and removed from ${gone} live game${gone === 1 ? '' : 's'}`
-        : `${name} suspended`);
+        : `${name} suspended`;
+      // A Discord ban that quietly did not happen is worse than one never
+      // attempted — the operator would believe they were gone.
+      const failed = !!r.discordNote && /NOT on Discord/.test(r.discordNote);
+      toast(failed ? 'error' : 'success', r.discordNote ? `${base}. ${r.discordNote}` : base);
     } catch (e) {
       toast('error', e instanceof Error ? e.message : 'Could not ban');
     }
@@ -224,7 +228,7 @@ export default function Audit() {
       {pendingBan && (
         <BanDialog
           target={pendingBan}
-          onConfirm={r => void confirmBan(r)}
+          onConfirm={(r, d) => void confirmBan(r, d)}
           onCancel={() => setPendingBan(null)}
         />
       )}
@@ -550,7 +554,10 @@ export default function Audit() {
                       <button
                         className="btn btn-sm btn-danger"
                         title="Lifetime ban for this account (covers their Discord too)"
-                        onClick={() => setPendingBan({ value: p.id, name: p.name, kind: 'player', scope: 'lifetime' })}
+                        onClick={() => setPendingBan({
+                          value: p.id, name: p.name, kind: 'player', scope: 'lifetime',
+                          discordLinked: !!discordIdOf(p.id),
+                        })}
                       >
                         Lifetime ban
                       </button>

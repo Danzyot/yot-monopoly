@@ -11,6 +11,7 @@ import SettingsModal from '../components/SettingsModal';
 import Promo from '../components/Promo';
 import { PropStrip } from '../components/PropRail';
 import BanDialog, { type BanTarget } from '../components/BanDialog';
+import CopyId, { discordIdOf } from '../components/CopyId';
 import { useFeatures } from '../features';
 import DmDialog, { type DmTarget } from '../components/DmDialog';
 import SeatPlayerPanel from '../components/SeatPlayerPanel';
@@ -150,18 +151,45 @@ export default function TournamentPage() {
 
   // Four ways to bar someone, from the screen that lists everyone in the
   // event — a player who is not at your table has to be reachable too.
-  const confirmBan = async (reason: string) => {
+  // The operator's extra standings columns. Fetched separately and only for
+  // them: the standings broadcast reaches every player, and both the ids and
+  // the shared-address flags are things the room must not see about itself.
+  const [identities, setIdentities] = useState<Map<string, { discordId: string | null; sharesWith: string[] }>>(new Map());
+  useEffect(() => {
+    if (!isHost || !id) { setIdentities(new Map()); return; }
+    let stale = false;
+    const pull = () => {
+      api.standingIdentities(id)
+        .then(r => {
+          if (stale) return;
+          setIdentities(new Map(r.identities.map(x => [x.id, { discordId: x.discordId, sharesWith: x.sharesWith }])));
+        })
+        .catch(() => {});
+    };
+    pull();
+    // Late registrations and address changes arrive during an event, but this
+    // walks every address on the site — a minute is often enough, and it stays
+    // off the several-times-a-second broadcast path.
+    const iv = setInterval(pull, 60_000);
+    return () => { stale = true; clearInterval(iv); };
+  }, [isHost, id]);
+
+  const confirmBan = async (reason: string, discordBan = false) => {
     if (!pendingBan) return;
     const { playerId, name, kind, scope } = pendingBan;
     setPendingBan(null);
     try {
-      await api.ban({
+      const r = await api.ban({
         kind, scope,
         gameId: scope === 'game' ? id : null,
         ...(kind === 'ip' ? { playerId } : { value: playerId }),
-        name, reason,
+        name, reason, discordBan,
       });
-      toast('success', `${name} suspended ${scope === 'game' ? `from ${view.name}` : 'for life'}`);
+      const base = `${name} suspended ${scope === 'game' ? `from ${view.name}` : 'for life'}`;
+      // A Discord ban that quietly did not happen is worse than one never
+      // attempted — the operator would believe they were gone.
+      const failed = !!r.discordNote && /NOT on Discord/.test(r.discordNote);
+      toast(failed ? 'error' : 'success', r.discordNote ? `${base}. ${r.discordNote}` : base);
     } catch (e) {
       toast('error', e instanceof Error ? e.message : 'Could not ban');
     }
@@ -500,7 +528,12 @@ export default function TournamentPage() {
                 return (
               <table className="standings-table">
                 <thead>
-                  <tr><th>#</th><th>Player</th><th>Stack</th>{canKick && <th />}</tr>
+                  <tr>
+                    <th>#</th><th>Player</th><th>Stack</th>
+                    {isHost && <th>Id</th>}
+                    {isHost && <th title="Shares an address with another player in this event">Shared</th>}
+                    {canKick && <th />}
+                  </tr>
                 </thead>
                 <tbody>
                   {view.standings.map(s => (
@@ -519,6 +552,23 @@ export default function TournamentPage() {
                           </span>
                         )}
                       </td>
+                      {isHost && (
+                        <td className="ident-cell">
+                          <CopyId value={s.id} label={(identities.get(s.id)?.discordId) ?? s.id} title="Click to copy" />
+                        </td>
+                      )}
+                      {isHost && (
+                        <td className="ident-cell">
+                          {(identities.get(s.id)?.sharesWith.length ?? 0) > 0 ? (
+                            <span
+                              className="shared-flag"
+                              title={`Shares an address with ${identities.get(s.id)!.sharesWith.join(', ')}`}
+                            >
+                              ⚠ {identities.get(s.id)!.sharesWith.length}
+                            </span>
+                          ) : <span className="ident-none">—</span>}
+                        </td>
+                      )}
                       <td>
                         {s.busted ? '—' : chips(s.stack)}
                         {!s.busted && s.seated === false && view.state !== 'registering' && (
@@ -584,7 +634,10 @@ export default function TournamentPage() {
                                 if (!v) return;
                                 const [kind, scope] = v.split('-') as
                                   ['player' | 'ip', 'game' | 'lifetime'];
-                                setPendingBan({ playerId: s.id, name: s.name, kind, scope });
+                                setPendingBan({
+                                  playerId: s.id, name: s.name, kind, scope,
+                                  discordLinked: !!discordIdOf(s.id),
+                                });
                               }}
                             >
                               <option value="">Ban…</option>
@@ -699,7 +752,7 @@ export default function TournamentPage() {
       {pendingBan && (
         <BanDialog
           target={pendingBan}
-          onConfirm={r => void confirmBan(r)}
+          onConfirm={(r, d) => void confirmBan(r, d)}
           onCancel={() => setPendingBan(null)}
         />
       )}

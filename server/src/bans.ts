@@ -37,6 +37,11 @@ export interface Ban {
   reason: string;
   at: number;
   by: string;
+  // True only when THIS site issued a Discord server ban alongside it. Lifting
+  // the site ban lifts that one too — and because the flag records what we
+  // did rather than what Discord currently holds, an unban here can never
+  // undo a ban a moderator made by hand for something unrelated.
+  discordBanned?: boolean;
 }
 
 let bans: Ban[] = [];
@@ -158,13 +163,41 @@ export function addBan(b: Omit<Ban, 'at' | 'scope' | 'gameId' | 'gameName'> & {
     reason: (b.reason ?? '').trim().slice(0, 200),
     at: b.at ?? Date.now(),
     by: (b.by ?? '').slice(0, 60),
+    // Only stored when true. An absent flag and a false one mean the same
+    // thing — this site issued no Discord ban — and leaving it out keeps
+    // every row written before the feature existed honest by default.
+    ...(b.discordBanned ? { discordBanned: true as const } : {}),
   };
-  // Re-banning updates the note rather than stacking duplicates.
+  // Re-banning updates the note rather than stacking duplicates. A re-ban
+  // that did NOT touch Discord must not erase the record of one that did:
+  // the flag is what an unban later reads to decide whether to lift it.
   const i = bans.findIndex(x => key(x) === key(ban));
-  if (i >= 0) bans[i] = ban;
+  if (i >= 0) {
+    if (bans[i].discordBanned) ban.discordBanned = true;
+    bans[i] = ban;
+  }
   else bans.push(ban);
   save();
   return ban;
+}
+
+// The exact stored ban a delete would remove. `findBan` above answers "is this
+// person barred" from a person's identifiers; this answers "which row is this"
+// from the row's own key, which is what the unban route holds. It is needed
+// because removeBan reports only whether something was deleted — a contract
+// the tests rely on — and lifting a Discord ban requires knowing whether this
+// site ever issued one.
+export function banAt(
+  kind: BanKind, value: string,
+  scope: BanScope = 'lifetime', gameId: string | null = null,
+): Ban | null {
+  const k = key({
+    kind,
+    value: kind === 'ip' ? normaliseIp(value) : value.trim(),
+    scope,
+    gameId: scope === 'game' ? gameId : null,
+  });
+  return bans.find(b => key(b) === k) ?? null;
 }
 
 export function removeBan(

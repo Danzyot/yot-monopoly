@@ -61,7 +61,7 @@ export default function Seat({
   }
 
   return (
-    <div className={cls} style={{ ...style, ['--fire' as string]: fireColor }}>
+    <div className={cls} data-hero={isSelf ? '1' : undefined} style={{ ...style, ['--fire' as string]: fireColor }}>
       {/* Real animated flames behind an all-in seat, glowing in the
           player's own fire color. */}
       {seat.allIn && !seat.folded && (

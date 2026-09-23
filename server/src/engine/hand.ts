@@ -37,6 +37,14 @@ export interface HandOptions {
   bb: number;
   ante: number;
   deck?: CardT[]; // injectable for tests
+  // The most of their own remaining stack a player may put in with a single
+  // voluntary bet or raise, as a fraction. 1 is normal No-Limit. A tournament
+  // running the opening half-stack cap deals its hands with 0.5.
+  //
+  // Decided once, when the hand is dealt, rather than read per action: a hand
+  // that begins under the cap plays out under the cap, so the rules cannot
+  // change between the flop and the river of the same pot.
+  maxBetFraction?: number;
 }
 
 export interface LegalActionInfo {
@@ -47,6 +55,11 @@ export interface LegalActionInfo {
   canRaise: boolean;
   minRaiseTo: number;
   maxRaiseTo: number;
+  // True when maxRaiseTo is the tournament's opening bet cap rather than this
+  // player's all-in. The client needs to tell the two apart: a slider that
+  // tops out short is a rule, not a bug, and the button there must not say
+  // "All-in" when chips would remain behind.
+  capped: boolean;
   pot: number;
   myBet: number; // chips the actor already has in this street
 }
@@ -69,6 +82,9 @@ export class HoldemHand {
   result: HandResult | null = null;
   // Set when everyone remaining is all-in: table should pace out remaining streets.
   runoutPending = false;
+  // See HandOptions.maxBetFraction. 1 means no cap and every path below
+  // behaves exactly as it did before the cap existed.
+  readonly maxBetFraction: number;
 
   constructor(opts: HandOptions) {
     if (opts.players.length < 2) throw new Error('need at least 2 players');
@@ -76,6 +92,9 @@ export class HoldemHand {
     this.sb = opts.sb;
     this.bb = opts.bb;
     this.ante = opts.ante;
+    // Clamped rather than trusted: a fraction outside (0, 1] would either
+    // forbid every bet or hand out chips nobody has.
+    this.maxBetFraction = Math.min(1, Math.max(0.01, opts.maxBetFraction ?? 1));
     this.deck = opts.deck ? [...opts.deck] : shuffledDeck();
 
     for (const p of opts.players) {
@@ -189,16 +208,31 @@ export class HoldemHand {
     const minTo = this.currentBet === 0
       ? Math.max(this.bb, 1)
       : this.currentBet + this.lastFullRaiseIncrement;
-    const maxTo = s.committed + s.stack; // all-in
-    const canRaise = maxTo > this.currentBet && (toCall < s.stack);
+    const allInTo = s.committed + s.stack;
+    // The cap limits the chips a player VOLUNTEERS, so it is a fraction of
+    // what is still behind — not of the pot, and not of what they have
+    // already been forced to put in as a blind or an ante this hand.
+    const capTo = s.committed + Math.floor(s.stack * this.maxBetFraction);
+    const maxTo = Math.min(allInTo, capTo);
+    const capped = maxTo < allInTo;
+    // Under the cap a raise must still reach the legal minimum. Without this
+    // clause a capped player could make an underraise that No-Limit only
+    // permits as an all-in — and theirs is not one, since chips remain behind.
+    const canRaise = maxTo > this.currentBet
+      && toCall < s.stack
+      && (!capped || maxTo >= minTo);
     return {
       seat: s.seat,
       canFold: toCall > 0,
       canCheck,
+      // Calling is never capped: the cap exists to stop players volunteering
+      // their stack early, and forbidding a call would leave someone facing a
+      // legal bet they are not allowed to answer.
       toCall,
       canRaise,
       minRaiseTo: Math.min(minTo, maxTo),
       maxRaiseTo: maxTo,
+      capped,
       pot: this.totalPot,
       myBet: s.committed,
     };
@@ -244,7 +278,10 @@ export class HoldemHand {
           s.lastAction = s.allIn ? 'All-in' : 'Call';
           break;
         }
-        const isAllIn = target === legal.maxRaiseTo;
+        // Against the real all-in figure, not legal.maxRaiseTo, which the cap
+        // may have lowered. Getting this wrong would treat a capped half-stack
+        // raise as an all-in and wave it past the minimum-raise check.
+        const isAllIn = target === s.committed + s.stack;
         if (target < legal.minRaiseTo && !isAllIn) throw new Error('raise below minimum');
         const increment = target - this.currentBet;
         this.commit(s, target - s.committed);

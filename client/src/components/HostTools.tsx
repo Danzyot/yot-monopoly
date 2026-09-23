@@ -13,6 +13,7 @@ import { useAuth } from '../auth';
 import { getSocket } from '../socket';
 import { useToast } from '../toast';
 import BanDialog, { type BanTarget } from './BanDialog';
+import { discordIdOf } from './CopyId';
 
 export default function HostTools({ view, onClose }: { view: TableView; onClose: () => void }) {
   const { profile } = useAuth();
@@ -46,19 +47,23 @@ export default function HostTools({ view, onClose }: { view: TableView; onClose:
   const gameId = view.tournamentId ?? view.id;
   const gameLabel = view.tournamentId ? 'this tournament' : 'this table';
 
-  const confirmBan = async (reason: string) => {
+  const confirmBan = async (reason: string, discordBan = false) => {
     if (!pending) return;
     const { playerId, name, kind, scope } = pending;
     setPending(null);
     setBanning(playerId);
     try {
-      await api.ban({
+      const r = await api.ban({
         kind, scope,
         gameId: scope === 'game' ? gameId : null,
         ...(kind === 'ip' ? { playerId } : { value: playerId }),
-        name, reason,
+        name, reason, discordBan,
       });
-      toast('success', `${name} suspended ${scope === 'game' ? `from ${gameLabel}` : 'for life'}`);
+      const base = `${name} suspended ${scope === 'game' ? `from ${gameLabel}` : 'for life'}`;
+      // A Discord ban that quietly did not happen is worse than one never
+      // attempted — the operator would believe they were gone.
+      const failed = !!r.discordNote && /NOT on Discord/.test(r.discordNote);
+      toast(failed ? 'error' : 'success', r.discordNote ? `${base}. ${r.discordNote}` : base);
     } catch (e) {
       toast('error', e instanceof Error ? e.message : 'Could not ban');
     } finally {
@@ -135,11 +140,17 @@ export default function HostTools({ view, onClose }: { view: TableView; onClose:
                 <span className="hs-name">{s.player!.name}</span>
                 <div className="host-ban-btns">
                   <button className="btn btn-sm" disabled={banning === s.player!.id}
-                    onClick={() => setPending({ playerId: s.player!.id, name: s.player!.name, kind: 'player', scope: 'game' })}>Ban</button>
+                    onClick={() => setPending({
+                      playerId: s.player!.id, name: s.player!.name, kind: 'player', scope: 'game',
+                      discordLinked: !!discordIdOf(s.player!.id),
+                    })}>Ban</button>
                   <button className="btn btn-sm" disabled={banning === s.player!.id}
                     onClick={() => setPending({ playerId: s.player!.id, name: s.player!.name, kind: 'ip', scope: 'game' })}>Ban IP</button>
                   <button className="btn btn-sm btn-danger" disabled={banning === s.player!.id}
-                    onClick={() => setPending({ playerId: s.player!.id, name: s.player!.name, kind: 'player', scope: 'lifetime' })}>Lifetime</button>
+                    onClick={() => setPending({
+                      playerId: s.player!.id, name: s.player!.name, kind: 'player', scope: 'lifetime',
+                      discordLinked: !!discordIdOf(s.player!.id),
+                    })}>Lifetime</button>
                   <button className="btn btn-sm btn-danger" disabled={banning === s.player!.id}
                     onClick={() => setPending({ playerId: s.player!.id, name: s.player!.name, kind: 'ip', scope: 'lifetime' })}>Lifetime IP</button>
                 </div>
@@ -155,7 +166,7 @@ export default function HostTools({ view, onClose }: { view: TableView; onClose:
       {pending && (
         <BanDialog
           target={pending}
-          onConfirm={r => void confirmBan(r)}
+          onConfirm={(r, d) => void confirmBan(r, d)}
           onCancel={() => setPending(null)}
         />
       )}

@@ -641,6 +641,25 @@ button.seat-empty:hover { border-color: var(--gold); color: var(--gold); backgro
      two glyphs read as the same button twice, and half the time the wrong one
      gets pressed. */
   .side-hide { display: none; }
+
+  /* A phone has no room for a stack of three chat pop-ups. Two at a time, one
+     line each: the stack drops from 115px to about 46px, which is what lets it
+     sit in the gap between the hero's seat and the pot instead of covering the
+     pot and the board — the two things a player is reading while they decide.
+     The full conversation is one tap away in the sheet; these are a nudge that
+     something was said, not the chat itself. */
+  .chat-toasts .chat-toast:nth-last-child(n + 3) { display: none; }
+  .chat-toast {
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .chat-toast-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
   .side-backdrop {
     display: block; position: fixed; inset: 0;
     background: rgba(0, 0, 0, 0.5); z-index: 75; touch-action: none;
@@ -648,7 +667,10 @@ button.seat-empty:hover { border-color: var(--gold); color: var(--gold); backgro
   .chat-fab {
     display: flex; align-items: center; justify-content: center;
     position: fixed; right: 12px;
-    bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+    /* Above the dock, measured rather than guessed. At 92px it hung over the
+       rightmost action button by 8px — and unlike the toasts it takes pointer
+       events, so that strip of Raise or All-in belonged to the chat button. */
+    bottom: calc(var(--dock-gap, 84px) + 10px);
     width: 46px; height: 46px; border-radius: 50%;
     background: var(--panel); border: 1px solid var(--line);
     font-size: 1.25rem; z-index: 74;
@@ -1962,6 +1984,19 @@ h1, h2, h3 { letter-spacing: -0.015em; }
     font-size: 0.55rem; padding: 1px 5px;
     max-width: 100%; white-space: normal; text-align: center;
     line-height: 1.15; letter-spacing: 0.03em; word-break: normal;
+    /* Above the cards on a phone, not below the whole seat. The badge only
+       ever renders on the hero's own seat, and the hero is anchored to the
+       bottom of the felt — so hanging underneath put it into the action dock
+       on a short screen, measured at 12px of overlap on an iPhone SE.
+       Ordering it first lifts it into the felt instead.
+
+       This does not reopen the collision the desktop `order: 2` was written
+       for: that was the badge sharing a row with the turn countdown, which
+       lives inside the seat BOX. Above the CARDS is a different place, and
+       nothing else is drawn there. */
+    order: -1;
+    margin-top: 0;
+    margin-bottom: 1px;
   }
   .timer-seconds { font-size: 0.7rem; }
   .bet-chip { font-size: 0.66rem; padding: 2px 7px; gap: 3px; }
@@ -3993,7 +4028,13 @@ input[type='time']:hover::-webkit-calendar-picker-indicator {
 /* Pop-ups for people who are not watching the panel. Fixed to the viewport, so
    they cannot lengthen anything, and they take themselves away. */
 .chat-toasts {
-  position: fixed; left: 14px; bottom: 84px; z-index: 78;
+  position: fixed; left: 14px; z-index: 78;
+  /* Clear of the action dock, whatever height it happens to be. The old fixed
+     84px sat exactly on top of it: measured on three phones, the toasts
+     covered the full 44px height of the action buttons across 267px of their
+     width. They take no pointer events, so the taps still landed — the player
+     simply could not see what they were pressing. */
+  bottom: calc(max(var(--dock-gap, 84px), var(--hero-gap, 0px)) + 10px);
   display: flex; flex-direction: column; gap: 6px;
   max-width: min(360px, 74vw); pointer-events: none;
 }
@@ -4283,3 +4324,37 @@ input[type='time']:hover::-webkit-calendar-picker-indicator {
 .music-import-row { display: flex; gap: 8px; align-items: center; }
 .music-import-row .input { flex: 1 1 auto; min-width: 0; }
 .music-import-row .btn { flex: 0 0 auto; }
+
+/* Why the raise slider stops short of a player's stack while the opening bet
+   cap is running. Without a word here the control just looks broken.
+   Tinted from the accent rather than a fixed colour, so it belongs to
+   whichever palette the deployment wears. */
+.cap-note {
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em;
+  color: var(--gold); text-align: center;
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gold) 32%, transparent);
+  border-radius: 8px; padding: 4px 10px;
+}
+.cap-row { display: flex; gap: 10px; align-items: center; }
+.cap-row .input { flex: 1 1 auto; min-width: 0; }
+.cap-toggle { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.cap-toggle input { width: 16px; height: 16px; }
+
+/* The "also ban on Discord" choice: a checkbox with its consequences beside
+   it, because this one reaches outside the poker room. */
+.ban-discord { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.ban-discord input { width: 16px; height: 16px; margin-top: 2px; flex: 0 0 auto; }
+.ban-discord > span { display: flex; flex-direction: column; gap: 2px; }
+
+/* Operator-only standings columns: the id behind a name, and whether anyone
+   else in the field is on the same address. */
+.ident-cell { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ident-none { color: var(--text-faint); }
+.shared-flag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.74rem; font-weight: 800;
+  color: #ffb02e; background: rgba(255, 176, 46, 0.12);
+  border: 1px solid rgba(255, 176, 46, 0.35);
+  border-radius: 999px; padding: 1px 8px; cursor: help;
+}

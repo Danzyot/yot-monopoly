@@ -111,7 +111,9 @@ export interface LegalActions {
   toCall: number; // additional chips needed to call (capped by stack)
   canRaise: boolean;
   minRaiseTo: number; // total bet target
-  maxRaiseTo: number; // total bet target (all-in)
+  maxRaiseTo: number; // total bet target (all-in, or the opening cap)
+  // maxRaiseTo is the tournament's opening half-stack cap, not an all-in.
+  capped: boolean;
   pot: number; // current total pot for sizing buttons
   myBet: number; // my chips already committed this street
 }
@@ -164,6 +166,15 @@ export interface TableTourneyInfo {
   playersLeft: number;
   totalEntries: number;
   onBreak: boolean;
+  // The opening bet cap while it is running: for one bet or raise a player
+  // may volunteer at most `fraction` of the chips still behind them. Null
+  // once the window has passed, or when the host never switched it on.
+  //
+  // It travels with the table's tournament context rather than being copied
+  // onto each table, which is what makes moving a player between tables
+  // harmless — there is one clock for the event, read live, not a per-table
+  // counter that a seat change could reset or double-count.
+  betCap?: { endsAt: number; fraction: number } | null;
 }
 
 // Custom table look, PokerNow-style: a felt color preset plus optional
@@ -291,6 +302,9 @@ export interface TournamentView {
   // the end of late registration, or fifteen minutes from the start,
   // whichever is later.
   joinEndsAt?: number | null;
+  // When the opening bet cap stops applying. Null when the rule is off or the
+  // event has not started. The lobby counts down to it.
+  betCapEndsAt?: number | null;
   lateRegOpen: boolean;
   // Host-only: registrations waiting for approval.
   pending: { id: string; name: string; avatar: string }[];
@@ -331,6 +345,12 @@ export interface TournamentConfig {
   // How long after the start a registered player has to press Join table and
   // claim the place they reserved. Registering never seats anyone.
   joinMinutes?: number;
+  // Opening bet cap: for this many minutes after the start, a player may not
+  // put more than half the chips behind them into any single bet or raise.
+  // Null or absent switches the rule off entirely; it is off unless the host
+  // asks for it. Calling is never restricted, and blinds and antes are forced
+  // posts that never go through the bet path at all.
+  betCapMinutes?: number | null;
   // Host must approve each registration before the player is seated.
   approveRegistrations: boolean;
   buyIn: number; // legacy, always 0 — there is no in-site currency

@@ -9,9 +9,9 @@ import {
   signState, signToken, verifyState, verifyToken, withAdminFlag, withDiscord,
 } from './auth.ts';
 import {
-  announceChannelId, authorizeUrl, botEnabled, completeOAuth, defaultGuildId,
+  announceChannelId, authorizeUrl, banFromGuild, botEnabled, completeOAuth, defaultGuildId,
   defaultInviteUrl, discordEnabled, fetchGuildRoles, postVerifyMessage,
-  redirectUriFor, registerIdentity, sendDirectMessage,
+  redirectUriFor, registerIdentity, sendDirectMessage, unbanFromGuild,
 } from './discord.ts';
 import { handleInteraction, interactionsConfigured, validSignature } from './interactions.ts';
 import {
@@ -20,10 +20,11 @@ import {
 } from './verifycode.ts';
 import {
   altGroups, auditCounts, connectionsFor, flaggedHands, forgetPlayer, loadAudit, playerRows, recentActions,
-  saveAudit, suspiciousPairs,
+  saveAudit, suspiciousPairs, standingIdentities,
 } from './audit.ts';
 import { BRAND } from '../../shared/brand.ts';
 import { registry } from './registry.ts';
+import { DEFAULT_BET_CAP_MINUTES } from './tournament/tournament.ts';
 import { attachSockets, disconnectBanned, trustedProxyHops } from './sockets.ts';
 import {
   allCashRecords, allRecords, archivedNames, findRecord, leaderboard, loadCashRecords, repairTournamentPlaces,
@@ -41,7 +42,7 @@ import {
 import { getPromo, loadPromo, type Promo, publicPromo, setPromo } from './promo.ts';
 import { type Features, getFeatures, isOn, loadFeatures, setFeatures } from './features.ts';
 import {
-  addBan, type BanKind, type BanScope, listBans, loadBans, normaliseIp, removeBan, removeGameBans,
+  addBan, banAt, type BanKind, type BanScope, listBans, loadBans, normaliseIp, removeBan, removeGameBans,
 } from './bans.ts';
 import { chatEnabled, setChatEnabled } from './chatrules.ts';
 import { eventsForGame, loadEvents, loggedGames } from './eventlog.ts';
@@ -1006,6 +1007,18 @@ app.post('/api/admin/dm', (req, res) => {
 // Two kinds: the account (which also covers its verified Discord id) and the
 // address. Banning does not wait for the next login — anyone caught by it is
 // taken out of whatever they are playing right now.
+// Who the names in a tournament's standings actually are: the ids an operator
+// needs to act on someone, and whether anyone in the field shares an address.
+// Operator-only and fetched on demand, because the standings themselves go to
+// every player and a player id is a Discord snowflake with a prefix.
+app.get('/api/admin/tournaments/:id/identities', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const t = registry.tournaments.get(String(req.params.id));
+  if (!t) { res.status(404).json({ error: 'No such tournament' }); return; }
+  const ids = t.standings().map(s => s.id);
+  res.json({ identities: standingIdentities(ids) });
+});
+
 app.get('/api/admin/bans', (req, res) => {
   if (!requireAdmin(req, res)) return;
   res.json({ bans: listBans() });
@@ -1032,6 +1045,7 @@ app.get('/api/admin/bannable-games', (req, res) => {
 });
 
 app.post('/api/admin/bans', (req, res) => {
+  void (async () => {
   const me = requireAdmin(req, res);
   if (!me) return;
   try {
@@ -1053,12 +1067,41 @@ app.post('/api/admin/bans', (req, res) => {
       value = row?.ips.at(-1) ?? '';
       if (!value) throw new Error('No address on record for that player yet');
     }
+    // Close the Discord door too, if the operator asked. Only a player ban
+    // can: an address has no Discord account behind it, and a guest has none
+    // either. Done BEFORE the row is stored so a refusal from Discord — the
+    // bot outranked by the target, no Ban Members permission — is reported
+    // instead of leaving a row claiming something that never happened.
+    let discordBanned = false;
+    let discordNote: string | null = null;
+    if (b.discordBan === true) {
+      // The site ban is the primary action and always goes through. Discord
+      // failing — the bot outranked by the target, no Ban Members permission,
+      // no linked account — must not throw away the ban the operator actually
+      // came here to make. It is reported instead, so they know to finish the
+      // job by hand rather than believing it is done.
+      try {
+        if (kind !== 'player') {
+          throw new Error('an address has no Discord account behind it');
+        }
+        const row = playerRows().find(p => p.id === value);
+        const snowflake = row?.discordVerifiedId ?? null;
+        if (!snowflake) throw new Error(`${row?.name ?? 'they'} signed in as a guest — no Discord account to ban`);
+        await banFromGuild(snowflake, String(b.reason ?? ''));
+        discordBanned = true;
+        discordNote = 'Banned from Discord too.';
+      } catch (e) {
+        discordNote = `Banned here, but NOT on Discord: ${e instanceof Error ? e.message : 'unknown error'}`;
+      }
+    }
+
     const ban = addBan({
       kind, scope, gameId, gameName: liveName,
       value,
       name: String(b.name ?? ''),
       reason: String(b.reason ?? ''),
       by: me.name,
+      discordBanned,
     });
 
     // Who to remove: a player ban names them, an IP ban has to look them up.
@@ -1080,23 +1123,48 @@ app.post('/api/admin/bans', (req, res) => {
     // A lifetime ban also cuts live connections; a game ban must not, or it
     // would knock someone off the whole site over one event.
     const disconnected = ban.scope === 'lifetime' ? disconnectBanned() : 0;
-    res.json({ ban, ejected, disconnected });
+    res.json({ ban, ejected, disconnected, discordNote });
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : 'Could not ban' });
   }
+  })();
 });
 
 app.delete('/api/admin/bans/:kind/:value', (req, res) => {
+  void (async () => {
   if (!requireAdmin(req, res)) return;
   try {
     const scope: BanScope = req.query.scope === 'game' ? 'game' : 'lifetime';
     const gameId = typeof req.query.gameId === 'string' ? req.query.gameId : null;
-    const gone = removeBan(banKind(req.params.kind), String(req.params.value), scope, gameId);
+    const kind = banKind(req.params.kind);
+    const value = String(req.params.value);
+    // Read the row before deleting it: whether this site issued a Discord ban
+    // alongside it is recorded there, and it is the only thing that makes
+    // lifting one safe. A ban a moderator placed by hand, for something that
+    // had nothing to do with poker, carries no such flag and is left alone.
+    const existing = banAt(kind, value, scope, gameId);
+    const gone = removeBan(kind, value, scope, gameId);
     if (!gone) { res.status(404).json({ error: 'No such ban' }); return; }
-    res.json({ ok: true });
+    let discordNote: string | null = null;
+    if (existing?.discordBanned) {
+      const row = playerRows().find(p => p.id === existing.value);
+      const snowflake = row?.discordVerifiedId ?? (existing.kind === 'player' ? existing.value : null);
+      if (snowflake) {
+        try {
+          await unbanFromGuild(snowflake);
+          discordNote = 'Discord ban lifted too';
+        } catch (e) {
+          // The site ban is already gone; say what still needs doing by hand
+          // rather than pretending the whole thing worked.
+          discordNote = `Unbanned here, but Discord refused: ${e instanceof Error ? e.message : 'unknown error'}`;
+        }
+      }
+    }
+    res.json({ ok: true, discordNote });
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : 'Bad request' });
   }
+  })();
 });
 
 // ---------- operator game management ----------
@@ -1278,6 +1346,12 @@ app.post('/api/tournaments', (req, res) => {
       minPlayers: clampInt(b.minPlayers, 2, 100, 2),
       lateRegMinutes: clampInt(b.lateRegMinutes, 0, 240, 15),
       joinMinutes: clampInt(b.joinMinutes, 1, 240, 15),
+      // Off unless the host asks for it: absent, null and a non-positive
+      // number all mean off, so an old client that never heard of the rule
+      // creates exactly the tournament it used to.
+      betCapMinutes: b.betCapMinutes === null || b.betCapMinutes === undefined
+        ? null
+        : clampInt(b.betCapMinutes, 1, 240, DEFAULT_BET_CAP_MINUTES) || null,
       approveRegistrations: !!b.approveRegistrations,
       buyIn: 0, // no in-site currency — prizes are described in prizeText
       prizeText: typeof b.prizeText === 'string' && b.prizeText.trim()

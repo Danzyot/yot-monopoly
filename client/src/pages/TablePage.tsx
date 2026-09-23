@@ -42,12 +42,23 @@ import { useToast } from '../toast';
 function seatPositions(n: number, narrow: boolean): { x: number; y: number }[] {
   const rx = narrow ? 36 : 45;
   const ry = narrow ? 44 : 46;
+  // A seat is centred on its point, so the bottom of the ellipse puts half of
+  // the hero's seat below the felt — at 50 + 44 = 94%, with a seat 82px tall,
+  // roughly 40px of it lands in the action dock. On a tall phone that is a
+  // pixel or two; measured on an iPhone SE it was 16px of the player's own
+  // stack box sitting under the buttons they act with.
+  //
+  // Only the bottom of the arc is pulled in. Shrinking ry instead would drag
+  // the top seats down onto the board, and the problem is not the ellipse —
+  // it is that one edge of it has a 60px dock beneath it and the others do
+  // not.
+  const maxY = narrow ? 89 : 96;
   const out: { x: number; y: number }[] = [];
   for (let k = 0; k < n; k++) {
     const theta = Math.PI / 2 + (2 * Math.PI * k) / n;
     out.push({
       x: 50 + rx * Math.cos(theta),
-      y: 50 + ry * Math.sin(theta),
+      y: Math.min(maxY, 50 + ry * Math.sin(theta)),
     });
   }
   return out;
@@ -269,6 +280,53 @@ export default function TablePage() {
   }, []);
   // Leaving the page resets the title once — not on every state update.
   useEffect(() => () => { document.title = BRAND.name; }, []);
+  // The action dock publishes its own height, the way the header already
+  // does. Anything pinned to the bottom of a phone screen — the chat toasts,
+  // the floating chat button — has to sit clear of the buttons a player acts
+  // with, and the dock's height is not a constant to guess at: it wraps to two
+  // rows on a narrow phone, grows again when the raise panel opens, and
+  // disappears entirely while spectating. Measured beats assumed; the previous
+  // fixed 84px put every chat pop-up directly on top of Fold and Raise.
+  const dockRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const root = document.documentElement;
+    const el = document.querySelector('.action-dock') as HTMLElement | null;
+    const apply = () => {
+      const live = document.querySelector('.action-dock') as HTMLElement | null;
+      if (!live) { root.style.setProperty('--dock-gap', '0px'); return; }
+      // How far the dock's TOP edge sits above the bottom of the screen —
+      // not the dock's height. The dock is not flush with the viewport
+      // bottom, so positioning against its height left the toasts still
+      // sitting on the buttons: right size, wrong origin.
+      const r = live.getBoundingClientRect();
+      root.style.setProperty('--dock-gap', `${Math.max(0, Math.round(window.innerHeight - r.top))}px`);
+      // The hero's own seat is off limits too. Clearing the dock alone moved
+      // the chat pop-ups off the buttons and straight onto the player's own
+      // cards, stack and hand strength — which is the one part of the felt
+      // they are reading on every street.
+      const me = document.querySelector('.seat[data-hero]') as HTMLElement | null;
+      const mr = me?.getBoundingClientRect();
+      root.style.setProperty('--hero-gap',
+        mr ? `${Math.max(0, Math.round(window.innerHeight - mr.top))}px` : '0px');
+    };
+    apply();
+    if (el === dockRef.current) return;
+    dockRef.current = el;
+    if (!el) return;
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    // The dock can move without resizing — the felt above it growing is
+    // enough — so the viewport is watched too.
+    window.addEventListener('resize', apply);
+    return () => { ro.disconnect(); window.removeEventListener('resize', apply); };
+  });
+  // Leaving the table must not leave the rest of the app offset by a dock
+  // that is no longer on screen.
+  useEffect(() => () => {
+    document.documentElement.style.removeProperty('--dock-gap');
+    document.documentElement.style.removeProperty('--hero-gap');
+  }, []);
+
 
   useEffect(() => {
     const sock = getSocket();

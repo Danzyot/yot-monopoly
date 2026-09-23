@@ -72,6 +72,12 @@ export const DEFAULT_JOIN_MINUTES = 15;
 // two-handed one. Tables hold their first deal for this long after the start.
 export const SEATING_GRACE_MS = 45_000;
 
+// Opening bet cap: how long it runs by default when the host switches it on,
+// and how much of the chips behind them a player may volunteer in one bet or
+// raise while it does.
+export const DEFAULT_BET_CAP_MINUTES = 15;
+export const BET_CAP_FRACTION = 0.5;
+
 // How much conversation an event holds. A long tournament generates a lot of
 // it, and the panel is the only record players have.
 const CHAT_KEEP = 400;
@@ -193,6 +199,38 @@ export class Tournament {
   get joinWindowMs(): number {
     const mins = this.config.joinMinutes ?? DEFAULT_JOIN_MINUTES;
     return clamp(Math.floor(mins), 1, 240) * 60_000;
+  }
+
+  // Time the bet cap spent frozen while the event was paused, handed back so
+  // a director's twenty-minute pause does not silently spend the protection
+  // the rule was switched on to provide.
+  private capShiftMs = 0;
+  private pausedAt: number | null = null;
+
+  get betCapWindowMs(): number | null {
+    const mins = this.config.betCapMinutes;
+    if (mins === null || mins === undefined) return null;
+    const n = Math.floor(mins);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return clamp(n, 1, 240) * 60_000;
+  }
+
+  get betCapEndsAt(): number | null {
+    // null, not falsy: a start time of zero is a real instant.
+    if (this.startedAt === null) return null;
+    const win = this.betCapWindowMs;
+    if (win === null) return null;
+    // While paused the deadline is held out in front of now, so the countdown
+    // players are watching sits still rather than draining through a freeze.
+    if (this.pausedAt !== null) {
+      return this.startedAt + win + this.capShiftMs + (Date.now() - this.pausedAt);
+    }
+    return this.startedAt + win + this.capShiftMs;
+  }
+
+  get betCapActive(): boolean {
+    const ends = this.betCapEndsAt;
+    return ends !== null && Date.now() < ends;
   }
 
   get lateRegOpen(): boolean {
@@ -747,6 +785,13 @@ export class Tournament {
       playersLeft: this.alivePlayers().length,
       totalEntries: this.totalEntries,
       onBreak: this.state === 'break',
+      // Read live on every broadcast rather than copied onto the table, so
+      // one clock governs the whole event. Moving a player between tables —
+      // or breaking a table entirely — cannot reset, extend or double-count
+      // it, because no table owns any part of it.
+      betCap: this.betCapActive
+        ? { endsAt: this.betCapEndsAt!, fraction: BET_CAP_FRACTION }
+        : null,
     });
     table.rankOf = (playerId: string) => this.rankOf(playerId);
     this.tables.set(table.id, table);
@@ -836,6 +881,7 @@ export class Tournament {
     customLevels?: unknown;
     blinds?: { sb: number; bb: number; ante: number } | null;
     jumpLevel?: number;
+    betCapMinutes?: number | null;
     theme?: import('../../../shared/types.ts').TableTheme | null;
   }) {
     if (this.state === 'finished' || this.state === 'cancelled') {
@@ -884,6 +930,19 @@ export class Tournament {
         changes.push(`join window ${mins}m`);
         // Editing it mid-event moves the deadline, so the timer has to follow.
         if (this.startedAt !== null) this.armJoinWindow();
+      }
+    }
+    if (p.betCapMinutes !== undefined) {
+      const before = this.config.betCapMinutes ?? null;
+      const next = p.betCapMinutes === null ? null : clamp(Math.floor(p.betCapMinutes), 1, 240);
+      if (next !== before) {
+        this.config.betCapMinutes = next;
+        // Nothing to re-arm: the cap has no timer, it is read from the clock
+        // each time a hand is dealt. Hands already in the air keep the rule
+        // they were dealt under.
+        changes.push(next === null
+          ? 'opening bet cap off'
+          : `opening bet cap ${next}m (max ${Math.round(BET_CAP_FRACTION * 100)}% of stack per bet)`);
       }
     }
     if (p.lateRegMinutes !== undefined) {
@@ -1075,6 +1134,10 @@ export class Tournament {
       clearTimeout(this.joinTimer);
       this.joinTimer = null;
     }
+    // The bet cap is a wall clock, so a pause has to stop it too — for the
+    // same reason the join window does. Nothing needs to fire when it expires,
+    // so recording when the freeze began is enough; resume gives the time back.
+    this.pausedAt = Date.now();
     this.state = 'paused';
     for (const t of this.tables.values()) t.pause();
     this.systemChat('Tournament paused by the director.');
@@ -1091,6 +1154,10 @@ export class Tournament {
       const remaining = this.pauseRemainingMs ?? (mins ?? this.config.levelMinutes) * 60_000;
       this.levelEndsAt = Date.now() + remaining;
       this.levelTimer = background(setTimeout(() => this.advanceLevel(), remaining));
+    }
+    if (this.pausedAt !== null) {
+      this.capShiftMs += Date.now() - this.pausedAt;
+      this.pausedAt = null;
     }
     this.pauseRemainingMs = null;
     // Hand back exactly what was left of the join window, by pushing the
@@ -1636,6 +1703,7 @@ export class Tournament {
       startedAt: this.startedAt,
       endedAt: this.endedAt,
       joinEndsAt: this.joinEndsAt,
+      betCapEndsAt: this.betCapEndsAt,
       scheduledStart: this.scheduledStart,
       config: this.config,
       playersRegistered: this.approvedPlayers().length,

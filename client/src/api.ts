@@ -239,14 +239,27 @@ export const api = {
     request<{ features: import('./features').Features }>('/api/admin/features', {
       method: 'PUT', body: JSON.stringify(f),
     }).then(r => r.features),
+  // Operator-only: the ids behind the names in a tournament's standings, and
+  // who shares an address with whom. Deliberately not part of the standings
+  // broadcast — that goes to every player, and a player id is a Discord
+  // snowflake with a prefix.
+  standingIdentities: (tournamentId: string) =>
+    request<{ identities: { id: string; discordId: string | null; sharesWith: string[] }[] }>(
+      `/api/admin/tournaments/${encodeURIComponent(tournamentId)}/identities`),
   bans: () => request<{ bans: BanRow[] }>('/api/admin/bans'),
   ban: (b: {
     kind: 'player' | 'ip'; value?: string; name?: string; reason?: string;
     scope?: 'game' | 'lifetime'; gameId?: string | null;
     // For an IP ban when you know the player but not the address.
     playerId?: string;
+    // Also ban them from the Discord server. The site ban goes through either
+    // way; a Discord failure comes back as discordNote rather than as an error.
+    discordBan?: boolean;
   }) =>
-    request<{ ban: BanRow; ejected: { tournaments: number; tables: number } }>('/api/admin/bans', {
+    request<{
+      ban: BanRow; ejected: { tournaments: number; tables: number };
+      discordNote?: string | null;
+    }>('/api/admin/bans', {
       method: 'POST', body: JSON.stringify(b),
     }),
   unban: (b: BanRow) => {

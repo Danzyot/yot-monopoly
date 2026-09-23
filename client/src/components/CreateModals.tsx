@@ -43,6 +43,9 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
   const [scheduledStart, setScheduledStart] = useState(''); // datetime-local, optional
   const [lateRegMinutes, setLateRegMinutes] = useState(15);
   const [joinMinutes, setJoinMinutes] = useState(15);
+  // Off unless the host asks for it.
+  const [betCapOn, setBetCapOn] = useState(false);
+  const [betCapMinutes, setBetCapMinutes] = useState(15);
   const [lateRegCustom, setLateRegCustom] = useState(false);
   const [approveRegistrations, setApproveRegistrations] = useState(false);
   const [speedHelp, setSpeedHelp] = useState(false);
@@ -99,6 +102,7 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
       const { id } = await api.createTournament({
         name: name.trim(), startingStack, levelMinutes, structure,
         maxPlayers, prizeText, lateRegMinutes, joinMinutes, approveRegistrations,
+        betCapMinutes: betCapOn ? betCapMinutes : null,
         breakEveryLevels, maxReentries, minPlayers: 2, seatsPerTable,
         rabbitHunting, displayMode, actionSeconds, timebankSeconds,
         theme: theme ?? undefined,
@@ -300,6 +304,28 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
             <div className="field-hint">
               Registering reserves a place; players press <strong>Join table</strong> to
               claim it. Minutes from the start before an unclaimed place is given up.
+            </div>
+          </div>
+          <div className="field">
+            <label>Opening bet cap</label>
+            <div className="cap-row">
+              <label className="cap-toggle">
+                <input
+                  type="checkbox" checked={betCapOn}
+                  onChange={e => setBetCapOn(e.target.checked)}
+                />
+                <span>On</span>
+              </label>
+              <input
+                className="input" type="number" min={1} max={240}
+                value={betCapMinutes} disabled={!betCapOn}
+                onChange={e => setBetCapMinutes(Math.max(1, Math.min(240, Math.floor(Number(e.target.value) || 1))))}
+              />
+            </div>
+            <div className="field-hint">
+              For this many minutes from the start, nobody may put more than
+              half the chips behind them into one bet or raise. Calling is
+              never capped, and blinds and antes are unaffected.
             </div>
           </div>
         </div>

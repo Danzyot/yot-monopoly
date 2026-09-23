@@ -571,8 +571,15 @@ export class Table {
     this.lastBoard = [];
     this.rabbitCards = [];
     this.rabbitShown = false;
+    // The opening bet cap is read once, here, from the tournament's own clock
+    // — so a hand is dealt either under the rule or not, and cannot change
+    // rules between its flop and its river. Cash tables carry no tournament
+    // context and are never capped.
+    const cap = this.tourneyInfo?.()?.betCap ?? null;
+    const maxBetFraction = cap && Date.now() < cap.endsAt ? cap.fraction : 1;
     this.hand = new HoldemHand({
       players, buttonSeat: this.buttonSeat, sb: this.sb, bb: this.bb, ante: this.ante,
+      maxBetFraction,
     });
     // Start a replayer record for this hand.
     this.currentRecord = {

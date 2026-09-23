@@ -463,3 +463,65 @@ export async function announceWinners(
     console.error('Discord winner announcement failed:', e);
   }
 }
+
+// ---------- banning from the Discord server ----------
+//
+// The site's ban list and a Discord server are two different doors, and a
+// cheat thrown out of one walks straight back in through the other. An
+// operator banning someone can now close both at once.
+//
+// Failures here are reported, never swallowed. A Discord ban that silently
+// did not happen is worse than one that was never attempted: the operator
+// believes the person is gone.
+function guildBanUrl(discordUserId: string): string {
+  const guild = defaultGuildId();
+  if (!guild) throw new Error('No DISCORD_GUILD_ID configured — there is no server to ban them from');
+  return `${API}/guilds/${guild}/bans/${encodeURIComponent(discordUserId)}`;
+}
+
+function botAuth(reason?: string): Record<string, string> {
+  const h: Record<string, string> = {
+    Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN!.trim()}`,
+    'Content-Type': 'application/json',
+  };
+  // Shows up in the server's audit log, so a moderator reading it later can
+  // see this came from the poker room and why.
+  if (reason) h['X-Audit-Log-Reason'] = reason.slice(0, 500);
+  return h;
+}
+
+function guildBanError(status: number, verb: string): Error {
+  if (status === 403) {
+    return new Error(
+      `Discord refused to ${verb} them: the bot needs the Ban Members permission, `
+      + 'and its role must sit ABOVE theirs in the server settings.',
+    );
+  }
+  if (status === 404) return new Error('Discord does not know that account, or the bot is not in that server');
+  return new Error(`Discord returned ${status} when trying to ${verb} them`);
+}
+
+export async function banFromGuild(discordUserId: string, reason: string): Promise<void> {
+  if (!botEnabled()) throw new Error('No bot token configured — a Discord ban needs DISCORD_BOT_TOKEN');
+  const res = await fetch(guildBanUrl(discordUserId), {
+    method: 'PUT',
+    headers: botAuth(`Poker ban: ${reason || 'no reason given'}`),
+    // Nothing is deleted: a ban is about access, and wiping someone's message
+    // history takes evidence with it.
+    body: JSON.stringify({ delete_message_seconds: 0 }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) throw guildBanError(res.status, 'ban');
+}
+
+export async function unbanFromGuild(discordUserId: string): Promise<void> {
+  if (!botEnabled()) throw new Error('No bot token configured — DISCORD_BOT_TOKEN');
+  const res = await fetch(guildBanUrl(discordUserId), {
+    method: 'DELETE',
+    headers: botAuth('Poker ban lifted'),
+    signal: AbortSignal.timeout(10_000),
+  });
+  // Already gone is the outcome we wanted, not a failure.
+  if (res.status === 404) return;
+  if (!res.ok) throw guildBanError(res.status, 'unban');
+}

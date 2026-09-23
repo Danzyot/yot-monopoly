@@ -778,3 +778,60 @@ export function loadAudit(): void {
     console.error('Audit load failed:', e);
   }
 }
+
+// ---------- who is who, for the live standings ----------
+//
+// The standings list is broadcast to every player at the event, and it is
+// built ONCE and shared across all of them for cost. So neither of these
+// columns can ride in it: a site player id is a Discord snowflake with `dc_`
+// in front, and shared-address flags would out households and alt accounts to
+// the whole room. This is fetched separately, by the operator, on request.
+//
+// It also keeps the address walk off the hot path — that work would otherwise
+// run on every broadcast, several times a second, for the whole field.
+export interface StandingIdentity {
+  id: string;
+  /** The bare Discord snowflake, when the account is a linked one. */
+  discordId: string | null;
+  /** Other players sharing an address with them, by name. */
+  sharesWith: string[];
+}
+
+export function standingIdentities(ids: string[]): StandingIdentity[] {
+  const want = new Set(ids);
+
+  // Same address map, and the same two exclusions, as the audit's alt groups —
+  // so a flag here means what the audit means by it. Our own proxies are not
+  // players, and a crowded address is a carrier or a VPN exit holding
+  // strangers, not a household: folding through one would mark most of the
+  // field as everybody's alt.
+  const byIp = new Map<string, PlayerRecord[]>();
+  for (const p of players.values()) {
+    for (const ip of p.ips.keys()) {
+      if (isInfraPeer(ip)) continue;
+      const list = byIp.get(ip) ?? [];
+      list.push(p);
+      byIp.set(ip, list);
+    }
+  }
+
+  const sharers = new Map<string, Set<string>>();
+  for (const [, list] of byIp) {
+    if (list.length < 2 || list.length > CROWD_LIMIT) continue;
+    for (const p of list) {
+      if (!want.has(p.id)) continue;
+      const mine = sharers.get(p.id) ?? new Set<string>();
+      for (const other of list) if (other.id !== p.id) mine.add(other.name);
+      sharers.set(p.id, mine);
+    }
+  }
+
+  return ids.map(id => {
+    const rec = players.get(id);
+    return {
+      id,
+      discordId: rec?.discordId ?? (id.startsWith('dc_') ? id.slice(3) : null),
+      sharesWith: [...(sharers.get(id) ?? [])].sort(),
+    };
+  });
+}
