@@ -1,0 +1,100 @@
+// Board geometry, in world units. The board lies on the XZ plane centred on
+// the origin with its top face at y = 0. GO is the bottom-right corner (+x,+z,
+// nearest the default camera) and play runs clockwise as seen from above.
+
+export const W = 11;          // board width
+export const C = 1.5;         // corner tile size / edge tile depth
+export const T = (W - 2 * C) / 9; // edge tile width
+export const BAND = 0.3;      // colour band depth on properties
+
+export type Side = 0 | 1 | 2 | 3; // bottom, left, top, right
+
+export interface TileGeom {
+  x: number;
+  z: number;
+  side: Side;
+  corner: boolean;
+  /** Unit vector pointing from the tile towards the board edge. */
+  out: [number, number];
+  /** Unit vector along the row, in the direction of play. */
+  along: [number, number];
+  /** Canvas rotation so the tile's "bottom" faces the outer edge. */
+  rot: number;
+}
+
+const H = W / 2;
+
+export function tile(i: number): TileGeom {
+  const side = Math.floor(i / 10) as Side;
+  const k = i % 10;
+  const corner = k === 0;
+  const off = corner ? C / 2 : C + (k - 0.5) * T; // distance from the side's starting corner edge
+  switch (side) {
+    case 0: return { x: H - (corner ? C / 2 : off), z: H - C / 2, side, corner, out: [0, 1], along: [-1, 0], rot: 0 };
+    case 1: return { x: -H + C / 2, z: H - (corner ? C / 2 : off), side, corner, out: [-1, 0], along: [0, -1], rot: Math.PI / 2 };
+    case 2: return { x: -H + (corner ? C / 2 : off), z: -H + C / 2, side, corner, out: [0, -1], along: [1, 0], rot: Math.PI };
+    default: return { x: H - C / 2, z: -H + (corner ? C / 2 : off), side, corner, out: [1, 0], along: [0, 1], rot: -Math.PI / 2 };
+  }
+}
+
+/** Which space is under a point on the board, or null for the middle. */
+export function tileAt(x: number, z: number): number | null {
+  if (Math.abs(x) > H || Math.abs(z) > H) return null;
+  const inner = H - C;
+  if (Math.abs(x) < inner && Math.abs(z) < inner) return null;
+  const k = (d: number) => Math.min(9, Math.max(1, Math.floor((d - C) / T) + 1));
+  if (z > inner) { // bottom row
+    if (x > inner) return 0;
+    if (x < -inner) return 10;
+    return k(H - x);
+  }
+  if (z < -inner) {
+    if (x < -inner) return 20;
+    if (x > inner) return 30;
+    return 20 + k(x + H);
+  }
+  if (x < -inner) return 10 + k(H - z);
+  return 30 + k(z + H);
+}
+
+/** Where a token stands: spread several tokens on one tile so none overlap. */
+export function tokenSpot(i: number, slot: number, count: number, inJail: boolean): [number, number] {
+  const g = tile(i);
+  if (i === 10) {
+    if (inJail) {
+      // Inside the cell, the inner square of the corner.
+      const cx = g.x + 0.22, cz = g.z - 0.22;
+      const a = (slot / Math.max(1, count)) * Math.PI * 2;
+      return [cx + Math.cos(a) * 0.18 * (count > 1 ? 1 : 0), cz + Math.sin(a) * 0.18 * (count > 1 ? 1 : 0)];
+    }
+    // Just visiting: along the outer L of the corner.
+    const path: [number, number][] = [[-0.55, -0.1], [-0.55, 0.35], [-0.3, 0.58], [0.1, 0.58], [-0.55, -0.45], [0.45, 0.58], [-0.55, 0.1], [0.3, 0.58]];
+    const [dx, dz] = path[slot % path.length];
+    return [g.x + dx, g.z + dz];
+  }
+  // Keep off the colour band: sit toward the outer edge.
+  const depth = g.corner ? 0 : 0.2;
+  const cx = g.x + g.out[0] * depth, cz = g.z + g.out[1] * depth;
+  if (count <= 1) return [cx, cz];
+  const cols = count <= 2 ? 2 : count <= 4 ? 2 : 3;
+  const rows = Math.ceil(count / cols);
+  const col = slot % cols, row = Math.floor(slot / cols);
+  const spread = g.corner ? 0.42 : 0.26;
+  const u = (col - (cols - 1) / 2) * spread;
+  const v = (row - (rows - 1) / 2) * spread;
+  return [cx + g.along[0] * u + g.out[0] * v, cz + g.along[1] * u + g.out[1] * v];
+}
+
+/** House/hotel positions on a property's colour band. */
+export function buildingSpots(i: number, houses: number): [number, number][] {
+  const g = tile(i);
+  const inset = C / 2 - BAND / 2;
+  const cx = g.x - g.out[0] * inset, cz = g.z - g.out[1] * inset;
+  if (houses >= 5) return [[cx, cz]];
+  const out: [number, number][] = [];
+  for (let h = 0; h < houses; h++) {
+    const u = (h - 1.5) * (T / 4.4);
+    out.push([cx + g.along[0] * u, cz + g.along[1] * u]);
+  }
+  return out;
+}
