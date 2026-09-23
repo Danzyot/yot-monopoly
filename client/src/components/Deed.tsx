@@ -47,7 +47,12 @@ export default function Deed({ game, index, me, onClose }: {
         {s.kind === 'tax' && <p>Pay {cur(s.tax!)}{game.rules.freeParkingPot ? ' into the Free Parking pot' : ''}.</p>}
         {(s.kind === 'chance' || s.kind === 'chest') && <p>Draw a {theme.deckNames[s.kind]} card.</p>}
         {s.kind === 'go' && <p>Collect {cur(game.rules.goSalary)} as you pass.</p>}
-        {s.kind === 'parking' && <p>{game.rules.freeParkingPot ? `Jackpot: ${cur(game.pot)}` : 'Nothing happens. Relax.'}</p>}
+        {s.kind === 'parking' && (game.rules.freeParkingPot || !game.rules.arcadeParking) && (
+          <p>{game.rules.freeParkingPot ? `Jackpot: ${cur(game.pot)}` : 'Nothing happens. Relax.'}</p>
+        )}
+        {(s.kind === 'arcade' || (s.kind === 'parking' && game.rules.arcadeParking)) && (
+          <p>{game.rules.minigames ? '🎮 Arcade: play a random mini-game for a cash prize.' : 'The arcade is closed (mini-games are off).'}</p>
+        )}
         {s.kind === 'jail' && <p>Just visiting — unless you were sent here.</p>}
         {s.kind === 'gotojail' && <p>Go directly to jail. Do not pass GO.</p>}
 
