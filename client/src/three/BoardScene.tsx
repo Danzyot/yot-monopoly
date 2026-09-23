@@ -1,5 +1,5 @@
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
-import { ContactShadows, OrbitControls } from '@react-three/drei';
+import { ContactShadows, OrbitControls, PerformanceMonitor } from '@react-three/drei';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MeshStandardMaterial, type Group, type Mesh } from 'three';
 import { resolveTheme, type Theme } from '../../../shared/themes.ts';
@@ -221,6 +221,9 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
   const env = getMap(mapId).environment;
   const look = envLook(env, theme);
   const [hover, setHover] = useState<number | null>(null);
+  // Adaptive resolution: start sharp, drop to 1× device pixels as soon as the
+  // frame rate sags (phones, integrated GPUs), climb back when there is headroom.
+  const [dpr, setDpr] = useState(() => Math.min(1.5, window.devicePixelRatio || 1));
 
   useEffect(() => {
     document.body.style.cursor = hover !== null && onSelect ? 'pointer' : '';
@@ -228,7 +231,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
   }, [hover, onSelect]);
 
   return (
-    <Canvas shadows dpr={[1, 2]} camera={{ position: [0, 11.5, 10.5], fov: 45 }}
+    <Canvas shadows dpr={dpr} camera={{ position: [0, 11.5, 10.5], fov: 45 }}
       onPointerMissed={() => onSelect?.(null)}
       // A custom backdrop replaces the map's 3D surroundings: it is painted
       // behind a transparent canvas, keeps its aspect ratio on any screen and
@@ -260,6 +263,10 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
       </Spinner>
       <ContactShadows position={[0, 0.001, 0]} scale={W} opacity={0.35} blur={2.2} far={1} />
 
+      <PerformanceMonitor
+        onDecline={() => setDpr(1)}
+        onIncline={() => setDpr(Math.min(1.5, window.devicePixelRatio || 1))}
+        flipflops={3} onFallback={() => setDpr(1)} />
       <CameraFit hud={!!game} fogNear={look.fogNear} fogFar={look.fogFar} />
       <OrbitControls makeDefault enablePan={false} enabled={!spin}
         minDistance={6} maxDistance={60} minPolarAngle={0.05} maxPolarAngle={Math.PI / 2.4}
