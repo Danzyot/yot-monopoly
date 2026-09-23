@@ -35,6 +35,36 @@ const SNOWFLAKE = /^\d{17,20}$/;
 // the two mistakes usually arrive together.
 const SIBLING_SECRETS = ['WAWA_SECRET', 'LUCID_SECRET', 'TRADEIFY_SECRET', 'JO_SECRET'];
 
+// A variable that is plainly set in the hosting dashboard and plainly absent
+// from the process is almost never a lie on either side: it is a NAME that
+// does not match. A trailing space, a non-breaking space pasted from a web
+// page, a zero-width character, the wrong case — a dashboard renders every one
+// of those identically to the real thing, so the operator sees it set, the
+// server sees nothing, and each is certain the other is wrong.
+//
+// So when something required is missing, look for a key that is the same name
+// once the invisible characters are taken out, and print it with the invisible
+// parts made visible. One line ends an argument that otherwise runs for days.
+function nearMisses(env: NodeJS.ProcessEnv, want: string): string[] {
+  const strip = (s: string) => s.replace(/[\s\u00a0\u200b-\u200d\ufeff]/g, '').toUpperCase();
+  const target = strip(want);
+  return Object.keys(env).filter(k => k !== want && strip(k) === target);
+}
+
+// Escape so a trailing space or a zero-width character is visible in a log.
+function showName(k: string): string {
+  return JSON.stringify(k).replace(/\u00a0/g, '\\u00a0');
+}
+
+function nearMissNote(env: NodeJS.ProcessEnv, want: string): string {
+  const hits = nearMisses(env, want);
+  if (hits.length === 0) return '';
+  return ` NOTE: this process CAN see ${hits.map(showName).join(', ')}, which is `
+    + `the same name apart from case or invisible characters. The dashboard `
+    + `draws that identically to ${want}. Delete that variable and retype the `
+    + `name by hand — do not paste it.`;
+}
+
 export interface ProbeResult {
   /** Whether DATA_DIR could be created and written to. */
   writable: boolean;
@@ -121,7 +151,8 @@ export function configReport(
       'ADMIN_DISCORD_IDS is empty, so EVERY signed-in visitor is an operator: '
       + 'anyone can create, cancel or end a tournament, ban players and read the '
       + 'audit. Fix: set it to your Discord user id (comma-separated for more '
-      + 'than one).',
+      + 'than one).'
+      + nearMissNote(env, 'ADMIN_DISCORD_IDS'),
     );
   } else {
     const bad = adminIds.filter(id => !SNOWFLAKE.test(id));

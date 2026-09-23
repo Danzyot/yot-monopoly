@@ -106,3 +106,36 @@ test('demo mode in front of real players is a problem', () => {
   assert.equal(r.ok, false);
   assert.ok(says(r.problems, 'DEMO_MODE is on'));
 });
+
+test('a variable set under a name that only looks right is named in the report', () => {
+  // The failure this exists for: the dashboard shows ADMIN_DISCORD_IDS set,
+  // the process does not have it, and both parties are certain the other is
+  // wrong. Every one of these renders identically in a web UI.
+  const { ADMIN_DISCORD_IDS: _gone, ...base } = OK_ENV;
+  for (const [label, key] of [
+    ['trailing space', 'ADMIN_DISCORD_IDS '],
+    ['leading space', ' ADMIN_DISCORD_IDS'],
+    ['non-breaking space', 'ADMIN_DISCORD_IDS '],
+    ['zero-width joiner', 'ADMIN_DISCORD_IDS‍'],
+    ['wrong case', 'Admin_Discord_Ids'],
+  ] as const) {
+    const r = report({ ...base, [key]: '340404007639973888' });
+    assert.equal(r.ok, false, `${label}: must still be a problem`);
+    const p = r.problems.find(x => /ADMIN_DISCORD_IDS is empty/.test(x))!;
+    assert.ok(p, `${label}: the empty problem should be reported`);
+    assert.ok(/this process CAN see/.test(p), `${label}: the near miss should be named`);
+    assert.ok(/retype the name by hand/.test(p), `${label}: and say what to do`);
+  }
+});
+
+test('an unrelated variable is not mistaken for a near miss', () => {
+  const r = report({ ...OK_ENV, ADMIN_DISCORD_ID: '1', SOME_OTHER: 'x' });
+  const p = r.problems.find(x => /ADMIN_DISCORD_IDS is empty/.test(x));
+  assert.equal(p, undefined, 'a correctly set variable reports no problem at all');
+
+  const { ADMIN_DISCORD_IDS: _gone, ...base } = OK_ENV;
+  const r2 = report({ ...base, ADMIN_DISCORD_ID: '1' });
+  const p2 = r2.problems.find(x => /ADMIN_DISCORD_IDS is empty/.test(x))!;
+  assert.ok(!/this process CAN see/.test(p2),
+    'ADMIN_DISCORD_ID is a different name, not an invisible-character twin');
+});
