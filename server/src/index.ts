@@ -60,7 +60,9 @@ app.use('/api', (_req, res, next) => {
 // Slowloris guards: bounded header/request times, checked often.
 const http = createServer({
   headersTimeout: 10_000,
-  requestTimeout: 30_000,
+  // Long enough for a 40 MB music upload on a slow line; slow-header attacks
+  // are still cut off by headersTimeout.
+  requestTimeout: 5 * 60_000,
   keepAliveTimeout: 8_000,
   connectionsCheckingInterval: 2_000,
 }, app);
