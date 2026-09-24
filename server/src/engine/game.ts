@@ -1358,14 +1358,14 @@ export class Game {
     if (this.phase === 'over') fail('The game is over');
     if (this.paused) fail(`Already paused by ${this.paused.by}`);
     this.paused = { by, at: this.now() };
-    this.say(`⏸ Game paused by ${by}.`);
+    this.say(`⏸️ Game paused by ${by}.`);
   }
 
   resume(by: string) {
     const p = this.paused ?? fail('The game is not paused');
     this.paused = null;
     this.shiftClocks(this.now() - p.at);
-    this.say(`▶ Game resumed by ${by}.`);
+    this.say(`▶️ Game resumed by ${by}.`);
     this.settle();
   }
 

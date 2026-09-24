@@ -1,5 +1,6 @@
 // In-game moderation on a player's row: the host can remove someone from
-// the game; operators can also ban them (room or site) through the ban dialog.
+// the game or hand them to autopilot; operators can also ban them (room or
+// site) through the ban dialog.
 // Renders nothing for anyone else, so the game screen can mount it freely.
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -36,6 +37,10 @@ export default function PlayerMenu({ room, player, me }: { room: RoomView; playe
 
   const canRemove = (room.hostId === me || isAdmin) && !player.bankrupt && room.game?.phase !== 'over';
   const canBan = isAdmin && !player.isBot;
+  // Autopilot for a player who is connected but not at the screen; they take
+  // back control just by acting.
+  const canAutopilot = canRemove && !player.isBot && room.status === 'playing';
+  const onAutopilot = !!room.seats.find(s => s.id === player.id)?.autopilot || !!player.afk;
   if (player.id === me || (!canRemove && !canBan)) return null;
 
   const toggle = () => {
@@ -44,6 +49,12 @@ export default function PlayerMenu({ room, player, me }: { room: RoomView; playe
     // A portal, not an absolutely placed child: the player strip scrolls
     // sideways on phones and would clip the menu.
     setOpen({ x: Math.min(r.right, window.innerWidth - 8), y: r.bottom + 4 });
+  };
+
+  const autopilot = () => {
+    setOpen(null);
+    call('room:autopilot', { id: player.id, on: !onAutopilot })
+      .then(() => toast(onAutopilot ? `${player.name} is off autopilot` : `Autopilot is playing for ${player.name}`), toastError);
   };
 
   const remove = () => {
@@ -57,6 +68,11 @@ export default function PlayerMenu({ room, player, me }: { room: RoomView; playe
       <button ref={btn} className="btn tiny ghost pmenu-btn" aria-label={`Moderate ${player.name}`} aria-expanded={!!open} onClick={toggle}>⋯</button>
       {open && createPortal(
         <div className="pmenu" role="menu" style={{ left: open.x, top: open.y }}>
+          {canAutopilot && (
+            <button role="menuitem" onClick={autopilot} title="Autopilot never buys, builds or trades; they take over again by acting">
+              {onAutopilot ? 'Take off autopilot' : 'Hand to autopilot'}
+            </button>
+          )}
           {canRemove && <button role="menuitem" onClick={remove}>Remove from game</button>}
           {canBan && <button role="menuitem" className="danger" onClick={() => { setOpen(null); setBanning(true); }}>Ban…</button>}
         </div>,

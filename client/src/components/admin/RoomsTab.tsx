@@ -1,10 +1,11 @@
 // Every live room, refreshed every few seconds: who is in it, their cash,
-// and the levers — spectate, end, close, remove or ban a player.
+// and the levers — spectate, pause, fix the game, end, close, remove or ban a player.
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api.ts';
 import { useAuth } from '../../auth.tsx';
 import BanDialog, { type BanTarget } from './BanDialog.tsx';
+import FixGamePanel from './FixGamePanel.tsx';
 import { act, ago, del, post, usePoll, type AdminRoom } from './adminApi.ts';
 
 export default function RoomsTab() {
@@ -41,6 +42,7 @@ export default function RoomsTab() {
 function RoomCard({ room: r, reload, onBan }: { room: AdminRoom; reload: () => unknown; onBan: (t: BanTarget) => void }) {
   const me = useAuth().profile?.id;
   const [ending, setEnding] = useState(false);
+  const [fixing, setFixing] = useState(false);
   const [reason, setReason] = useState('');
   const base = `/api/admin/rooms/${r.code}`;
 
@@ -58,6 +60,7 @@ function RoomCard({ room: r, reload, onBan }: { room: AdminRoom; reload: () => u
           <b className="mono accent adm-code">{r.code}</b>
           <span className={`adm-status ${r.status}`}>{r.status}</span>
           {r.private && <em className="tag">private</em>}
+          {r.paused && <em className="tag warn" title={`Paused by ${r.paused.by}`}>paused</em>}
         </div>
         <div className="row">
           <Link className="btn tiny" to={`/r/${r.code}?watch=1`} title="Watch without taking a seat">Spectate</Link>
@@ -81,6 +84,7 @@ function RoomCard({ room: r, reload, onBan }: { room: AdminRoom; reload: () => u
               {s.id === r.hostId && <em className="tag">host</em>}
               {s.isBot && <em className="tag">bot</em>}
               {s.bankrupt && <em className="tag warn">bankrupt</em>}
+              {!s.bankrupt && s.afk && <em className="tag warn">autopilot</em>}
             </span>
             {s.cash !== null && <span className="small cash">{s.cash.toLocaleString()}</span>}
             {/* Kept together so, when the card is narrow, the buttons wrap as one group. */}
@@ -104,6 +108,8 @@ function RoomCard({ room: r, reload, onBan }: { room: AdminRoom; reload: () => u
         {r.seats.length === 0 && <li className="muted small">Nobody seated.</li>}
       </ul>
 
+      {fixing && r.status === 'playing' && <FixGamePanel code={r.code} onClose={() => setFixing(false)} onChanged={reload} />}
+
       {ending ? (
         <form className="row" onSubmit={e => { e.preventDefault(); void end(); }}>
           <input autoFocus value={reason} maxLength={200} placeholder="Reason (shown in the room log)" onChange={e => setReason(e.target.value)} />
@@ -112,6 +118,13 @@ function RoomCard({ room: r, reload, onBan }: { room: AdminRoom; reload: () => u
         </form>
       ) : (
         <div className="row wrap">
+          {r.status === 'playing' && (
+            <button className="btn small" onClick={() => act(() => post(`${base}/pause`, { paused: !r.paused }), {
+              confirm: r.paused ? `Resume the game in ${r.code}?` : `Pause the game in ${r.code}? Every clock stops until it is resumed.`,
+              ok: r.paused ? `Resumed ${r.code}` : `Paused ${r.code}`, after: reload,
+            })}>{r.paused ? '▶️ Resume' : '⏸️ Pause'}</button>
+          )}
+          {r.status === 'playing' && <button className="btn small" onClick={() => setFixing(f => !f)}>🛠 Fix game…</button>}
           {r.status !== 'finished' && <button className="btn small" onClick={() => setEnding(true)}>End…</button>}
           <button className="btn small ghost adm-danger-text"
             onClick={() => act(() => del(base), {

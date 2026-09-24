@@ -32,6 +32,8 @@ export interface AdminSeat {
   color: string;
   cash: number | null;
   bankrupt: boolean;
+  /** Autopilot is playing for them (away after timeouts, or handed over). */
+  afk?: boolean;
 }
 
 export interface AdminRoom {
@@ -46,6 +48,7 @@ export interface AdminRoom {
   startedAt: number | null;
   turn: number;
   spectators: number;
+  paused?: { by: string; at: number } | null;
   seats: AdminSeat[];
 }
 

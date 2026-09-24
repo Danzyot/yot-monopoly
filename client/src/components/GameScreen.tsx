@@ -16,6 +16,8 @@ import { useGameSounds } from '../useGameSounds.ts';
 import PlayerMenu from './PlayerMenu.tsx';
 import { TradeModal, TradeOffers } from './Trade.tsx';
 import MinigamePanel from './MinigamePanel.tsx';
+import { DebtClock, PauseButton, PausedBanner, TimeLeft, TurnClock } from './GameClock.tsx';
+import { ChooseBar, DiceRead } from './SpeedChoice.tsx';
 
 export default function GameScreen({ room, game, me, chat, skew }: {
   room: RoomView; game: GameView; me: string; chat: ChatMsg[]; skew: number;
@@ -55,6 +57,8 @@ export default function GameScreen({ room, game, me, chat, skew }: {
           {!connected && <span className="tag warn">reconnecting…</span>}
         </div>
         <div className="row">
+          <TimeLeft game={game} skew={skew} />
+          <PauseButton room={room} game={game} me={me} />
           {game.rules.freeParkingPot && <span className="pill hide-sm">🅿️ pot {theme.currency}{game.pot}</span>}
           <span className="pill hide-sm" title="Houses / hotels left in the bank">🏠 {game.housesLeft} · 🏨 {game.hotelsLeft}</span>
           <MusicPlayer />
@@ -85,7 +89,9 @@ export default function GameScreen({ room, game, me, chat, skew }: {
       <AuctionPanel game={game} me={me} skew={skew} />
       <MinigamePanel game={game} me={me} skew={skew} />
       <CardPopup game={game} />
-      <ActionBar game={game} me={me} />
+      <TurnClock game={game} me={me} skew={skew} />
+      <PausedBanner game={game} />
+      <ActionBar game={game} me={me} skew={skew} selected={selected} />
       {theme.logoUrl && <img className="corner-mark" src={theme.logoUrl} alt={theme.name} />}
 
       {tradeWith && <TradeModal game={game} me={me} withId={tradeWith} onClose={() => setTradeWith(null)} />}
@@ -113,6 +119,7 @@ function Players({ game, room, me, onTrade }: {
                 {p.name}{p.id === me && ' (you)'}
                 {p.isBot && <em className="tag">bot</em>}
                 {seat && !seat.connected && !p.isBot && <em className="tag warn">away</em>}
+                {!p.bankrupt && (p.afk || seat?.autopilot) && <em className="tag warn" title="Autopilot is playing until they act again">{p.afk ? 'afk' : 'autopilot'}</em>}
               </div>
               <div className="small muted">
                 {p.bankrupt ? 'bankrupt' : <>
@@ -134,7 +141,7 @@ function Players({ game, room, me, onTrade }: {
   );
 }
 
-function ActionBar({ game, me }: { game: GameView; me: string }) {
+function ActionBar({ game, me, skew, selected }: { game: GameView; me: string; skew: number; selected: number | null }) {
   const theme = resolveTheme(game.themeId, game.mapId);
   const cur = (n: number) => `${theme.currency}${n}`;
   const p = game.players.find(x => x.id === me);
@@ -145,11 +152,10 @@ function ActionBar({ game, me }: { game: GameView; me: string }) {
     act(a).catch(toastError).finally(() => setBusy(false));
   };
 
-  const dice = game.dice && (
-    <span className="dice-read">🎲 {game.dice[0]} + {game.dice[1]} = <b>{game.dice[0] + game.dice[1]}</b></span>
-  );
+  const dice = <DiceRead game={game} />;
 
   if (game.phase === 'over') return null;
+  if (game.paused) return <div className="actionbar"><span className="muted">⏸️ Paused — waiting to resume</span>{dice}</div>;
   if (!p || p.bankrupt) {
     return <div className="actionbar"><span className="muted">{p ? 'You are out — ' : 'Watching — '}{current.name} to play</span>{dice}</div>;
   }
@@ -159,6 +165,7 @@ function ActionBar({ game, me }: { game: GameView; me: string }) {
     return (
       <div className="actionbar danger">
         <span>You owe <b>{cur(owe)}</b>. Mortgage or sell buildings to raise cash, or give up.</span>
+        <DebtClock game={game} id={me} skew={skew} />
         <button className="btn primary" disabled={busy || p.cash < owe} onClick={() => run({ type: 'payDebt' })}>Pay {cur(owe)}</button>
         <button className="btn ghost" disabled={busy} onClick={() => confirm('Declare bankruptcy? You will be out of the game.') && run({ type: 'bankrupt' })}>Go bankrupt</button>
       </div>
@@ -166,6 +173,7 @@ function ActionBar({ game, me }: { game: GameView; me: string }) {
   }
 
   if (game.phase === 'minigame') return <div className="actionbar"><span className="muted">🎮 Mini-game in progress…</span>{dice}</div>;
+  if (game.phase === 'choose') return <ChooseBar game={game} me={me} selected={selected} />;
   if (game.current !== me) {
     if (game.phase === 'auction') return <div className="actionbar"><span className="muted">Auction running…</span>{dice}</div>;
     const what = game.phase === 'buy' ? 'is deciding whether to buy' : 'is playing';
@@ -229,14 +237,15 @@ function AuctionPanel({ game, me, skew }: { game: GameView; me: string; skew: nu
   if (!a) return null;
   const s = theme.spaces[a.space];
   const leader = game.players.find(p => p.id === a.highBidder);
-  const left = Math.max(0, Math.ceil((a.endsAt - (now + skew)) / 1000));
+  // Frozen at the pause while the game is paused.
+  const left = Math.max(0, Math.ceil((a.endsAt - (game.paused ? game.paused.at : now + skew)) / 1000));
   const inIt = a.bidders.includes(me);
   const myCash = game.players.find(p => p.id === me)?.cash ?? 0;
   const bid = (amount: number) => act({ type: 'bid', amount }).catch(toastError);
   return (
     <div className="auction">
       <div className="auction-head" style={{ background: s.group ? theme.groupColors[s.group] : '#2a3142' }}>
-        <small>AUCTION</small><b>{s.name}</b>
+        <small>{a.bank ? 'BANK AUCTION' : 'AUCTION'}</small><b>{s.name}</b>
       </div>
       <div className="auction-body">
         <div className="row between">

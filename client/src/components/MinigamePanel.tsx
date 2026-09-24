@@ -48,7 +48,8 @@ export default function MinigamePanel({ game, me, skew }: { game: GameView; me: 
   if (!mg) return null;
 
   const info = MINIGAME_INFO[mg.kind];
-  const left = mg.endsAt === null ? null : Math.max(0, Math.ceil((mg.endsAt - (now + skew)) / 1000));
+  // Frozen at the pause while the game is paused.
+  const left = mg.endsAt === null ? null : Math.max(0, Math.ceil((mg.endsAt - (game.paused ? game.paused.at : now + skew)) / 1000));
   const ctx: Ctx = {
     mg, me, left, busy,
     who: id => game.players.find(p => p.id === id),

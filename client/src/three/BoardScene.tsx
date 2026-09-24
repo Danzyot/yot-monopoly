@@ -256,7 +256,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
           <>
             <Ownership game={game} theme={theme} />
             <Pieces game={game} n={theme.spaces.length} />
-            <Dice dice={game.dice} seq={game.rollSeq} body={theme.palette.die} pip={theme.palette.pip} />
+            <Dice dice={game.dice} seq={game.rollSeq} speed={game.speed ?? null} body={theme.palette.die} pip={theme.palette.pip} />
           </>
         )}
         {!game && <Dice dice={[6, 6]} seq={0} body={theme.palette.die} pip={theme.palette.pip} />}
