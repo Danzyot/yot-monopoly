@@ -1,6 +1,6 @@
 import { io, type Socket } from 'socket.io-client';
-import { useEffect, useState, useSyncExternalStore } from 'react';
-import type { Action, RoomSummary, RoomView } from '../../shared/types.ts';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import type { Action, RequirementFailure, RoomSummary, RoomView } from '../../shared/types.ts';
 
 import { getToken } from './api.ts';
 
@@ -99,8 +99,11 @@ export function useRoom(code: string, watch = false) {
   const [spectating, setSpectating] = useState(false);
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [skew, setSkew] = useState(0);
+  /** Set when the room's Discord requirements refused us a seat (we watch instead). */
+  const [blocked, setBlocked] = useState<RequirementFailure | null>(null);
 
   useEffect(() => {
+    setBlocked(null);
     const s = getSocket();
     const onState = (v: RoomView) => {
       setRoom(v);
@@ -110,8 +113,8 @@ export function useRoom(code: string, watch = false) {
     s.on('room:state', onState);
     s.on('chat', onChat);
     const off = onEveryConnect(() => {
-      call<{ spectating: boolean }>('room:join', { code, watch })
-        .then(r => { setSpectating(r.spectating); setError(null); })
+      call<{ spectating: boolean; blocked?: RequirementFailure | null }>('room:join', { code, watch })
+        .then(r => { setSpectating(r.spectating); setBlocked(r.blocked ?? null); setError(null); })
         .catch(e => setError(e.message));
     });
     return () => {
@@ -121,7 +124,15 @@ export function useRoom(code: string, watch = false) {
     };
   }, [code, watch]);
 
-  return { room, error, spectating, chat, skew };
+  /** Ask for a seat again (after joining the Discord server, say). Resolves with the new refusal, if any. */
+  const recheck = useCallback(async (): Promise<RequirementFailure | null> => {
+    const r = await call<{ spectating: boolean; blocked?: RequirementFailure | null }>('room:join', { code, watch });
+    setSpectating(r.spectating);
+    setBlocked(r.blocked ?? null);
+    return r.blocked ?? null;
+  }, [code, watch]);
+
+  return { room, error, spectating, chat, skew, blocked, recheck };
 }
 
 export function useRoomList(): RoomSummary[] {

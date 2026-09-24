@@ -43,6 +43,20 @@ mini-games, music, and a full operator dashboard.
   trading for them). Reconnecting, or simply acting, reclaims the seat.
 - Chat, leaderboard, and phone-friendly layout throughout.
 
+**Community**
+- **Host transfer** — the host (or an operator) can make another seated player the host,
+  in the lobby or mid-game. If the host leaves or is away for over 2 minutes, the
+  longest-seated player who is still here takes over automatically.
+- **Discord requirements** — a host can require membership of the site's Discord server
+  (`DISCORD_GUILD_ID`) and optionally a role in it to take a seat; watching stays open and
+  operators are never gated. Players who don't qualify get a checklist with the invite and
+  a "Check again" button. Membership is checked by the bot; without one, only a fresh
+  "Log in with Discord" can show a player's servers (sign-ins are forgotten on restart), and
+  the checklist says so.
+- **Profiles** (`/u/:id`) — games, wins, win rate, leaderboard points, favourite map and
+  character, and recent games with linked opponents. Follow the leaderboard switch; built
+  only from results, never from the accounts audit.
+
 **Sign-in** (ported from the poker room): **Log in with Discord** (OAuth) or **Verify with
 a code** (the player pastes `MONO-XXXX` into the bot's Verify button in your Discord, or
 posts it in a verify channel). `DEMO_MODE=1` adds a name-only sign-in for development.

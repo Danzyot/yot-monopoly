@@ -11,8 +11,9 @@ import { DEFAULT_RULES, getTheme, resolveTheme, type RuleConfig } from '../../sh
 import { getMap } from '../../shared/maps.ts';
 import { DEFAULT_TABLE_STYLE, sanitizeTableStyle, type TableStyle } from '../../shared/tableStyles.ts';
 import { migrateCharacter } from '../../shared/characters.ts';
+import { sanitizeRequirements } from './requirements.ts';
 import {
-  PLAYER_COLORS, CHARACTERS, type Action, type CharacterId, type RoomSeat, type RoomSummary, type RoomView,
+  PLAYER_COLORS, CHARACTERS, type Action, type CharacterId, type JoinRequirements, type RoomSeat, type RoomSummary, type RoomView,
 } from '../../shared/types.ts';
 
 const BOT_DELAY_MS = 900;
@@ -22,6 +23,8 @@ const MINIGAME_BOT_DELAY_MS = 60;
 const MINIGAME_POLL_MS = 150;
 /** A disconnected player's turn is auto-played after this long. */
 export const AUTOPILOT_GRACE_MS = 45_000;
+/** A host away this long hands the room to someone who is here. */
+export const HOST_GRACE_MS = 2 * 60_000;
 /** Rooms with no connected humans are removed after this long. */
 const IDLE_ROOM_MS = 30 * 60_000;
 /** Finished rooms linger this long so people can read the result. */
@@ -68,6 +71,10 @@ export interface RoomSnapshot {
   game: GameSnapshot | null;
   /** Absent in snapshots written before table styles existed. */
   style?: TableStyle;
+  /** Absent in snapshots written before join requirements existed. */
+  requirements?: JoinRequirements | null;
+  /** Players who left the running game (never host again). Absent in older snapshots. */
+  departed?: string[];
 }
 
 export class Room {
@@ -80,6 +87,8 @@ export class Room {
   private = false;
   /** Table look chosen by the host; purely cosmetic, so it never touches the game. */
   style: TableStyle = { ...DEFAULT_TABLE_STYLE };
+  /** Discord gate on taking a seat; checked by the socket layer (requirements.ts). */
+  requirements: JoinRequirements | null = null;
   readonly createdAt = Date.now();
   startedAt: number | null = null;
   finishedAt: number | null = null;
@@ -92,6 +101,10 @@ export class Room {
   private autopilotTimer: NodeJS.Timeout | null = null;
   /** Turn timer, debt deadlines and the game-length limit (Game.clockDeadline). */
   private clockTimer: NodeJS.Timeout | null = null;
+  /** Separate from the game timers: host handover must not depend on schedule(). */
+  private hostTimer: NodeJS.Timeout | null = null;
+  /** Players who left a running game for good; they keep their seat but can't host. */
+  private departed = new Set<string>();
 
   constructor(readonly code: string, public hostId: string, private hooks: RoomHooks) {}
 
@@ -112,6 +125,7 @@ export class Room {
     if (existing) {
       existing.connected = true;
       existing.disconnectedAt = null;
+      this.departed.delete(m.id);
       existing.avatar = m.avatar;
       if (this.status === 'lobby') existing.name = m.name;
       return existing;
@@ -141,13 +155,96 @@ export class Room {
     const s = this.seat(id);
     if (!s) return;
     if (this.status === 'lobby') {
+      if (this.hostId === id) this.passHost(id, 'left');
       this.seats = this.seats.filter(x => x.id !== id);
-      if (this.hostId === id) this.hostId = this.seats.find(x => !x.isBot)?.id ?? '';
       this.hooks.onEvent(this, `${s.name} left`);
-    } else if (this.game && !this.game.player(id).bankrupt && this.game.phase !== 'over') {
-      this.hooks.onEvent(this, `${s.name} forfeited`);
-      this.act(id, { type: 'bankrupt' });
+    } else {
+      this.departed.add(id);
+      // Hand over first: the forfeit below can end the game.
+      if (this.hostId === id) this.passHost(id, 'left');
+      if (this.game && !this.game.player(id).bankrupt && this.game.phase !== 'over') {
+        this.hooks.onEvent(this, `${s.name} forfeited`);
+        this.act(id, { type: 'bankrupt' });
+      }
     }
+  }
+
+  // ---- host -------------------------------------------------------------------
+
+  /** The host (or an operator) makes another seated human the host — lobby or mid-game. */
+  transferHost(byId: string, target: string, isAdmin: boolean) {
+    this.requireHost(byId, isAdmin);
+    const s = this.seat(target) ?? fail('Not in this room');
+    if (s.isBot) fail('A bot cannot be the host');
+    if (target === this.hostId) fail(`${s.name} is already the host`);
+    if (!s.connected || this.departed.has(target)) fail(`${s.name} is not at the table right now`);
+    const by = byId === this.hostId ? this.hostName() : 'an operator';
+    this.hostId = target;
+    this.hooks.onEvent(this, `${s.name} is now the host (handed over by ${by})`);
+    this.watchHost();
+  }
+
+  /**
+   * Who takes over when the host goes: the longest-seated connected human
+   * (seats keep join order). Players still in the game come before bankrupt
+   * ones, who are only watching.
+   */
+  private successor(except: string): Seat | undefined {
+    const here = this.seats.filter(s => !s.isBot && s.connected && s.id !== except && !this.departed.has(s.id));
+    const stillIn = (s: Seat) => !this.game || !this.game.player(s.id).bankrupt;
+    return here.find(stillIn) ?? here[0];
+  }
+
+  /** Move the host away from `from`. Returns false (host unchanged) when nobody can take over. */
+  private passHost(from: string, why: string): boolean {
+    const next = this.successor(from);
+    if (!next) {
+      // Nobody connected. A lobby still needs a host, so it goes to whoever is
+      // seated (watchHost moves it on if they stay away); with nobody seated
+      // the next person to sit down gets it (see join()).
+      if (this.status === 'lobby') this.hostId = this.seats.find(x => !x.isBot && x.id !== from)?.id ?? '';
+      return false;
+    }
+    const was = this.seat(from)?.name;
+    this.hostId = next.id;
+    this.hooks.onEvent(this, `${next.name} is now the host (${was ?? 'the host'} ${why})`);
+    return true;
+  }
+
+  /**
+   * Hand the room on when its host is gone: left a running game, or away for
+   * HOST_GRACE_MS. Called whenever someone connects or drops, so a room whose
+   * host vanished while nobody else was around recovers the moment someone
+   * returns.
+   */
+  private watchHost() {
+    if (this.hostTimer) clearTimeout(this.hostTimer);
+    this.hostTimer = null;
+    if (this.status === 'finished') return;
+    const h = this.seat(this.hostId);
+    let gone = !h || this.departed.has(this.hostId);
+    if (h && !gone && h.disconnectedAt !== null) {
+      const due = h.disconnectedAt + HOST_GRACE_MS - Date.now();
+      if (due > 0) {
+        this.hostTimer = setTimeout(() => this.watchHost(), due + 50);
+        this.hostTimer.unref?.();
+        return;
+      }
+      gone = true;
+    }
+    if (!gone) return;
+    const why = !h || this.departed.has(this.hostId) ? 'left' : 'was away for over 2 minutes';
+    if (this.passHost(this.hostId, why)) this.hooks.onChange(this);
+  }
+
+  /** Host (or operator) sets who may take a seat. Validation happens in requirements.ts. */
+  setRequirements(id: string, isAdmin: boolean, req: JoinRequirements | null) {
+    this.requireHost(id, isAdmin);
+    this.requireLobby();
+    this.requirements = req;
+    this.hooks.onEvent(this, req
+      ? `Seats now need ${req.roleId ? `the ${req.roleName ?? 'required'} Discord role` : 'Discord server membership'}`
+      : 'Discord requirements removed');
   }
 
   setConnected(id: string, connected: boolean) {
@@ -156,6 +253,7 @@ export class Room {
     s.connected = connected;
     s.disconnectedAt = connected ? null : Date.now();
     this.schedule();
+    this.watchHost();
   }
 
   requireHost(id: string, isAdmin = false) {
@@ -238,10 +336,14 @@ export class Room {
   /** Remove a player regardless of who asks (bans, kicks). */
   remove(target: string) {
     if (this.status === 'lobby') {
+      if (this.hostId === target) this.passHost(target, 'was removed');
       this.seats = this.seats.filter(s => s.id !== target);
-      if (this.hostId === target) this.hostId = this.seats.find(x => !x.isBot)?.id ?? '';
-    } else if (this.game && this.game.phase !== 'over' && !this.game.player(target).bankrupt) {
-      this.act(target, { type: 'bankrupt' }, true); // not the player acting
+    } else {
+      if (this.seat(target)) this.departed.add(target);
+      if (this.hostId === target) this.passHost(target, 'was removed');
+      if (this.game && this.game.phase !== 'over' && !this.game.player(target).bankrupt) {
+        this.act(target, { type: 'bankrupt' }, true); // not the player acting
+      }
     }
   }
 
@@ -475,6 +577,8 @@ export class Room {
 
   dispose() {
     this.clearTimers();
+    if (this.hostTimer) clearTimeout(this.hostTimer);
+    this.hostTimer = null;
   }
 
   hasConnectedHumans(): boolean {
@@ -495,6 +599,7 @@ export class Room {
       game: this.game?.view() ?? null,
       style: this.style,
       now: Date.now(),
+      requirements: this.requirements,
     };
   }
 
@@ -507,6 +612,7 @@ export class Room {
       players: this.seats.length,
       maxPlayers: this.rules.maxPlayers,
       hostName: this.hostName(),
+      requirements: this.requirements,
     };
   }
 
@@ -518,6 +624,8 @@ export class Room {
       themeId: this.themeId, mapId: this.mapId, rules: this.rules, private: this.private,
       status: this.status, seats: structuredClone(this.seats), game: this.game?.snapshot() ?? null,
       style: { ...this.style },
+      requirements: this.requirements ? { ...this.requirements } : null,
+      departed: [...this.departed],
     };
   }
 
@@ -528,7 +636,9 @@ export class Room {
       // Rooms saved before the turn timer existed keep playing without one.
       rules: sanitizeRules({ ...s.rules, turnSeconds: (s.rules as Partial<RuleConfig>).turnSeconds ?? 0 }), private: !!s.private, status: s.status,
       style: sanitizeTableStyle(s.style),
+      requirements: sanitizeRequirements(s.requirements),
     });
+    if (Array.isArray(s.departed)) r.departed = new Set(s.departed.filter(x => typeof x === 'string'));
     // Everyone starts disconnected: they reclaim their seats on reconnect, and
     // autopilot covers anyone who never comes back.
     const now = Date.now();
@@ -548,6 +658,8 @@ export class Room {
     }
     if (r.status === 'finished') r.finishedAt = now;
     r.schedule();
+    // The host is disconnected like everyone else: start their 2-minute clock.
+    r.watchHost();
     return r;
   }
 }

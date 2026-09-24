@@ -210,6 +210,8 @@ export interface RoomView {
   style: TableStyle;
   /** Server clock, so clients can render auction countdowns without drift. */
   now: number;
+  /** Discord gate for taking a seat (null = anyone signed in). */
+  requirements: JoinRequirements | null;
 }
 
 export interface RoomSummary {
@@ -220,6 +222,8 @@ export interface RoomSummary {
   players: number;
   maxPlayers: number;
   hostName: string;
+  /** Present when the room is Discord-gated, for the badge on the room list. */
+  requirements?: JoinRequirements | null;
 }
 
 // ---- accounts ---------------------------------------------------------------
@@ -292,4 +296,71 @@ export interface SiteConfig {
   codeVerifyButton: boolean;
   inviteUrl: string | null;
   features: Features;
+}
+
+// ---- community: join requirements, profiles ---------------------------------
+
+/**
+ * Discord gate a host puts on taking a seat. Watching is never gated. The
+ * guild is always the site's own (DISCORD_GUILD_ID), stored with the room so a
+ * restored room keeps checking the server it was set up against.
+ */
+export interface JoinRequirements {
+  guildId: string;
+  /** Must be a member of the guild. Always true when a role is required. */
+  member: boolean;
+  roleId: string | null;
+  /** Display label for the role, resolved server-side from Discord. */
+  roleName: string | null;
+}
+
+/** Why a seat was refused, for the requirements modal. */
+export interface RequirementFailure {
+  /** What the player still lacks. */
+  missing: 'discord' | 'member' | 'role' | 'unverifiable';
+  /** Plain-English explanation, safe to show as-is. */
+  message: string;
+  requirements: JoinRequirements;
+  inviteUrl: string | null;
+}
+
+/** What the lobby's requirement picker can offer (GET /api/community/discord). */
+export interface DiscordGateInfo {
+  /** The site has a Discord server configured, so membership can be required. */
+  available: boolean;
+  /** Roles of that server; null when there is no bot to list or check them. */
+  roles: { id: string; name: string }[] | null;
+  /** Why roles are unavailable, when they are. */
+  rolesNote: string | null;
+  inviteUrl: string | null;
+}
+
+export interface ProfileGame {
+  code: string;
+  endedAt: number;
+  mapId: string;
+  themeId: string;
+  /** 1-based finishing place. */
+  place: number;
+  of: number;
+  turns: number;
+  character: string | null;
+  opponents: { id: string; name: string; isBot: boolean; place: number }[];
+}
+
+/** Public profile (GET /api/players/:id). Built only from finished-game results. */
+export interface PublicProfile {
+  id: string;
+  name: string;
+  avatar: string;
+  games: number;
+  wins: number;
+  /** 0..1 over all games. */
+  winRate: number;
+  /** Leaderboard points: games with 2+ people only, same formula. */
+  points: number;
+  rankedGames: number;
+  favouriteMap: { id: string; games: number } | null;
+  favouriteCharacter: { id: string; games: number } | null;
+  recent: ProfileGame[];
 }
