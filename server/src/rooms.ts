@@ -26,6 +26,8 @@ export const AUTOPILOT_GRACE_MS = 45_000;
 const IDLE_ROOM_MS = 30 * 60_000;
 /** Finished rooms linger this long so people can read the result. */
 const FINISHED_ROOM_MS = 10 * 60_000;
+/** …or longer while someone is still at the table deciding on a rematch, up to this. */
+const FINISHED_ROOM_MAX_MS = 3 * 60 * 60_000;
 export const MAX_ROOMS = 500;
 const BOT_NAMES = ['Rich Uncle', 'Tycoon', 'Landlord', 'Baron', 'Mogul', 'Magnate', 'Banker', 'Heiress'];
 
@@ -146,6 +148,9 @@ export class Room {
       this.hooks.onEvent(this, `${s.name} forfeited`);
       this.act(id, { type: 'bankrupt' });
     }
+    // Gone from the table for good: a finished room must not wait on them
+    // (see the sweep), and a rematch will not keep their seat.
+    if (this.status !== 'lobby') this.setConnected(id, false);
   }
 
   setConnected(id: string, connected: boolean) {
@@ -264,6 +269,29 @@ export class Room {
     this.status = 'playing';
     this.startedAt = Date.now();
     this.schedule();
+  }
+
+  /**
+   * Host (or operator) sends a finished table back to the lobby for another
+   * game: same map, edition, house rules, table style and seats. Bots keep
+   * their seats; humans who are no longer at the table (`present` is false —
+   * the socket layer knows who is) lose theirs. Everyone left keeps their
+   * character and colour.
+   */
+  rematch(byId: string, isAdmin: boolean, present: (id: string) => boolean) {
+    this.requireHost(byId, isAdmin);
+    if (this.status !== 'finished') fail('The game is not over yet');
+    this.clearTimers();
+    const gone = this.seats.filter(s => !s.isBot && !present(s.id));
+    this.seats = this.seats.filter(s => s.isBot || present(s.id));
+    if (!this.seat(this.hostId)) this.hostId = this.seats.find(s => !s.isBot)?.id ?? byId;
+    for (const s of this.seats) if (!s.isBot) { s.connected = true; s.disconnectedAt = null; }
+    this.game = null;
+    this.status = 'lobby';
+    this.startedAt = null;
+    this.finishedAt = null;
+    this.lastActivity = Date.now();
+    this.hooks.onEvent(this, `Rematch! Back to the lobby${gone.length ? ` (${gone.map(s => s.name).join(', ')} left)` : ''}`);
   }
 
   /** Operator stops a game outright. */
@@ -569,7 +597,11 @@ export class Registry {
     const now = Date.now();
     for (const [code, r] of this.rooms) {
       const idle = !r.hasConnectedHumans() && r.spectators === 0 && now - r.lastActivity > IDLE_ROOM_MS;
-      const done = r.status === 'finished' && now - (r.finishedAt ?? now) > FINISHED_ROOM_MS;
+      // A finished table stays while people are still at it (reading the
+      // summary, waiting on the host's rematch), within a hard cap.
+      const since = now - (r.finishedAt ?? now);
+      const occupied = r.hasConnectedHumans() || r.spectators > 0;
+      const done = r.status === 'finished' && since > FINISHED_ROOM_MS && (!occupied || since > FINISHED_ROOM_MAX_MS);
       if (idle || done) this.delete(code);
     }
   }

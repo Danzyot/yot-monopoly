@@ -12,7 +12,7 @@ import {
   type MinigameResult, type MinigameView,
 } from '../../../shared/minigames.ts';
 import type {
-  Action, Auction, CardShown, Debt, GameView, LogEntry, OwnedSpace, PlayerState, CharacterId,
+  Action, Auction, CardShown, Debt, GameView, LogEntry, OwnedSpace, PlayerState, PlayerStats, CharacterId,
   Trade, TradeSide, TurnPhase,
 } from '../../../shared/types.ts';
 import { MINIGAMES, MinigameError, hash } from './minigames/index.ts';
@@ -25,6 +25,9 @@ export const AUCTION_MS = 12_000;
 export const AUCTION_EXTEND_MS = 6_000;
 const MAX_LOG = 250;
 const MAX_OPEN_TRADES = 5;
+/** Debt/charge reasons that start with this are rent (for the summary stats). */
+const RENT_REASON = 'rent on ';
+const NO_STATS: PlayerStats = { rentCollected: 0, biggestRentPaid: 0, propertiesBought: 0, jailed: 0, minigamesWon: 0 };
 
 export type Rng = (n: number) => number; // integer in [0, n)
 
@@ -89,6 +92,10 @@ export interface GameSnapshot {
   minigameSeq?: number;
   /** Game clock when the snapshot was taken, to carry a live round's timers across a restart. */
   savedAt?: number;
+  /** Optional: snapshots written before the end-of-game summary existed lack these. */
+  stats?: Record<string, PlayerStats>;
+  startedAt?: number;
+  endedAt?: number | null;
 }
 
 interface LandingOpts {
@@ -129,6 +136,10 @@ export class Game {
   /** Bankrupt players, first out first — gives finishing places. */
   outOrder: string[] = [];
   minigame: MinigameState | null = null;
+  /** Summary counters per player (see PlayerStats); created lazily by stat(). */
+  stats: Record<string, PlayerStats> = {};
+  startedAt: number;
+  endedAt: number | null = null;
   private minigameSeq = 0;
   private minigamesEnabled: () => boolean;
   private cardSeq = 0;
@@ -149,6 +160,7 @@ export class Game {
     this.now = init.now ?? Date.now;
     this.onLog = init.onLog;
     this.minigamesEnabled = init.minigamesEnabled ?? (() => true);
+    this.startedAt = this.now();
     this.players = init.players.map(p => ({
       ...p, cash: init.rules.startingCash, position: 0, inJail: false, jailTurns: 0,
       jailCards: [], bankrupt: false,
@@ -210,6 +222,25 @@ export class Game {
     return groupIndices(this.spaces, group).some(i => (this.owned[i]?.houses ?? 0) > 0);
   }
 
+  /** A player's summary counters, created on first use. */
+  private stat(id: string): PlayerStats {
+    return this.stats[id] ??= { ...NO_STATS };
+  }
+
+  /**
+   * What a player is worth if they sold up now: cash, plus each deed's
+   * mortgage value (nothing for one already mortgaged), plus buildings at
+   * the half price the bank pays back. Bankrupt players are worth nothing.
+   */
+  netWorth(id: string): number {
+    const p = this.player(id);
+    if (p.bankrupt) return 0;
+    return p.cash + this.ownedBy(p.id).reduce((a, i) => {
+      const s = this.spaces[i], o = this.owned[i];
+      return a + (o.mortgaged ? 0 : mortgageValue(s)) + Math.floor((s.houseCost ?? 0) / 2) * o.houses;
+    }, 0);
+  }
+
   debtOf(id: string): number {
     return this.debts.filter(d => d.from === id).reduce((a, d) => a + d.amount, 0);
   }
@@ -242,6 +273,13 @@ export class Game {
     if (from.cash >= amount) {
       from.cash -= amount;
       if (to) to.cash += amount;
+      // Counted when the money moves (now, or later via payDebt with the same
+      // reason), so rent that ended in bankruptcy is not credited.
+      if (to && reason.startsWith(RENT_REASON)) {
+        this.stat(to.id).rentCollected += amount;
+        const payer = this.stat(from.id);
+        payer.biggestRentPaid = Math.max(payer.biggestRentPaid, amount);
+      }
       else if (toPot && this.rules.freeParkingPot) this.pot += amount;
       this.say(`${from.name} paid ${this.money(amount)}${to ? ` to ${to.name}` : ''} (${reason}).`, from.id);
     } else {
@@ -273,6 +311,7 @@ export class Game {
     p.inJail = true;
     p.jailTurns = 0;
     this.doublesCount = 0;
+    this.stat(p.id).jailed++;
     if (p === this.current) this.extraRoll = false;
     this.say(`${p.name} was sent to ${this.spaces[this.jailIndex].name}!`, p.id);
   }
@@ -299,7 +338,7 @@ export class Game {
         this.say(`${p.name} rolled ${a} + ${b} for the utility.`, p.id);
       }
       const rent = this.rentFor(i, opts, diceTotal);
-      this.charge(p, this.player(o.owner), rent, `rent on ${s.name}`);
+      this.charge(p, this.player(o.owner), rent, `${RENT_REASON}${s.name}`);
       return;
     }
     switch (s.kind) {
@@ -416,6 +455,7 @@ export class Game {
     if (alive.length === 1) {
       this.winner = alive[0].id;
       this.phase = 'over';
+      this.endedAt = this.now();
       this.auction = null;
       this.minigame = null;
       this.say(`${alive[0].name} wins the game!`, alive[0].id);
@@ -445,7 +485,7 @@ export class Game {
       case 'unmortgage': return this.unmortgage(p, a.space);
       case 'payDebt': return this.payDebt(p);
       case 'bankrupt': return this.goBankrupt(p);
-      case 'proposeTrade': return this.proposeTrade(p, a.to, a.give, a.get);
+      case 'proposeTrade': return this.proposeTrade(p, a.to, a.give, a.get, a.counterOf);
       case 'acceptTrade': return this.acceptTrade(p, a.id);
       case 'rejectTrade': return this.rejectTrade(p, a.id);
       case 'minigame': return this.minigameMove(p, a.move);
@@ -509,6 +549,7 @@ export class Game {
     if (p.cash < price) fail('Not enough cash — auction it or raise funds');
     p.cash -= price;
     this.owned[p.position] = { owner: p.id, houses: 0, mortgaged: false };
+    this.stat(p.id).propertiesBought++;
     this.say(`${p.name} bought ${s.name} for ${this.money(price)}.`, p.id);
     this.afterResolution();
   }
@@ -581,6 +622,7 @@ export class Game {
       const w = this.player(a.highBidder);
       w.cash -= a.highBid;
       this.owned[a.space] = { owner: w.id, houses: 0, mortgaged: false };
+      this.stat(w.id).propertiesBought++;
       this.say(`${w.name} won ${s.name} for ${this.money(a.highBid)}.`, w.id);
     } else {
       this.say(`Nobody bid on ${s.name}.`);
@@ -775,18 +817,30 @@ export class Game {
     }
   }
 
-  private proposeTrade(p: PlayerState, toId: string, give: TradeSide, get: TradeSide) {
+  /**
+   * `counterOf` names an offer made *to* p by `toId`; the new offer replaces
+   * it in one step, so the original is never left dangling (or accepted)
+   * while the counter is on its way. Everything is validated before either
+   * changes.
+   */
+  private proposeTrade(p: PlayerState, toId: string, give: TradeSide, get: TradeSide, counterOf?: string) {
     const to = this.player(toId);
     if (to === p) fail('You cannot trade with yourself');
     if (to.bankrupt) fail('That player is out');
+    let original: Trade | undefined;
+    if (counterOf !== undefined) {
+      original = this.trades.find(t => t.id === counterOf) ?? fail('That offer is gone');
+      if (original.to !== p.id || original.from !== to.id) fail('You can only counter an offer made to you');
+    }
     if (this.trades.filter(t => t.from === p.id).length >= MAX_OPEN_TRADES) fail('Too many open offers');
     const empty = (s: TradeSide) => !s.cash && !s.spaces.length && !s.jailCards;
     if (empty(give) && empty(get)) fail('Empty trade');
     this.validateSide(p, give);
     this.validateSide(to, get);
+    if (original) this.trades = this.trades.filter(t => t !== original);
     const t: Trade = { id: `t${++this.tradeSeq}`, from: p.id, to: to.id, give, get };
     this.trades.push(t);
-    this.say(`${p.name} offered ${to.name} a trade.`, p.id);
+    this.say(original ? `${p.name} countered ${to.name}'s offer.` : `${p.name} offered ${to.name} a trade.`, p.id);
   }
 
   private acceptTrade(p: PlayerState, id: string) {
@@ -913,6 +967,7 @@ export class Game {
     for (const po of out.payouts) {
       const p = this.player(po.player);
       if (p.bankrupt) continue;
+      if (po.jailCard || po.amount > 0) this.stat(p.id).minigamesWon++;
       if (po.jailCard) {
         if (this.grantJailCard(p)) {
           this.say(`${p.name} got a Get Out of Jail Free card.`, p.id);
@@ -998,6 +1053,7 @@ export class Game {
       winner: this.winner, log: this.log, turnNumber: this.turnNumber, decks: this.decks,
       cardSeq: this.cardSeq, tradeSeq: this.tradeSeq, outOrder: this.outOrder,
       minigame: this.minigame, minigameSeq: this.minigameSeq, savedAt: this.now(),
+      stats: this.stats, startedAt: this.startedAt, endedAt: this.endedAt,
     });
   }
 
@@ -1008,6 +1064,10 @@ export class Game {
     Object.assign(g, state);
     g.minigame ??= null;
     g.minigameSeq ??= 0;
+    g.stats ??= {};
+    // Older snapshots: the game began at some unknown time; "now" is the honest floor.
+    g.startedAt ??= g.now();
+    g.endedAt ??= null;
     g.onLog = init.onLog;
     // An auction's clock is wall time; give bidders a fresh window after a restart.
     if (g.auction) g.auction.endsAt = g.now() + AUCTION_MS;
@@ -1023,13 +1083,9 @@ export class Game {
 
   /** Final standings: winner (or richest survivors), then last-out to first-out. */
   standings(): { id: string; netWorth: number }[] {
-    const worth = (p: PlayerState) => p.cash + this.ownedBy(p.id).reduce((a, i) => {
-      const s = this.spaces[i], o = this.owned[i];
-      return a + (o.mortgaged ? 0 : mortgageValue(s)) + Math.floor((s.houseCost ?? 0) / 2) * o.houses;
-    }, 0);
-    const alive = this.active().sort((a, b) => worth(b) - worth(a));
+    const alive = this.active().sort((a, b) => this.netWorth(b.id) - this.netWorth(a.id));
     const out = [...this.outOrder].reverse().map(id => this.player(id));
-    return [...alive, ...out].map(p => ({ id: p.id, netWorth: p.bankrupt ? 0 : worth(p) }));
+    return [...alive, ...out].map(p => ({ id: p.id, netWorth: this.netWorth(p.id) }));
   }
 
   view(): GameView {
@@ -1056,6 +1112,11 @@ export class Game {
       log: this.log.slice(-80),
       turnNumber: this.turnNumber,
       minigame: this.minigameView(),
+      netWorth: Object.fromEntries(this.players.map(p => [p.id, this.netWorth(p.id)])),
+      // Every player gets a row, even one nothing has happened to yet.
+      stats: Object.fromEntries(this.players.map(p => [p.id, { ...NO_STATS, ...this.stats[p.id] }])),
+      startedAt: this.startedAt,
+      endedAt: this.endedAt,
     });
   }
 }
