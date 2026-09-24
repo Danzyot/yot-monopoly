@@ -25,7 +25,7 @@ test('rooms: many at once, unique codes, lobby rules', () => {
   assert.equal(a.mapId, 'speed');
   assert.equal(a.rules.startingCash, 1200, 'map brings its starting cash');
   assert.throws(() => a.pickCharacter('bob', a.seat('host-a')!.character), /taken/);
-  a.configure('host-a', false, { themeId: 'yot' });
+  a.configure('host-a', false, { themeId: 'wawa' });
   assert.equal(a.rules.freeParkingPot, true, 'edition brings its house rules');
   a.configure('host-a', false, { rules: { maxPlayers: 3 } });
   a.addBot('host-a', false);

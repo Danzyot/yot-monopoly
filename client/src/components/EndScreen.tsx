@@ -87,7 +87,7 @@ export default function EndScreen({ room, game, me, onLeave }: {
         <div className="trophy">🏆</div>
         {winner
           ? <h2 style={{ color: winner.color }}>{winner.name} wins!</h2>
-          : <h2>Game over</h2>}
+          : <h2>Game over!</h2>}
         <p className="muted small end-meta">
           {game.turnNumber} turns · {duration(ended - game.startedAt)} · {theme.name}
         </p>
@@ -119,7 +119,7 @@ export default function EndScreen({ room, game, me, onLeave }: {
 
         <div className="end-actions">
           {isHost
-            ? <button className="btn primary" disabled={busy} onClick={rematch}>🔁 Play again</button>
+            ? <button className="btn primary" disabled={busy} onClick={rematch}>🔁 Rematch!</button>
             : <span className="muted small">Waiting for {host?.name ?? 'the host'} to start a rematch…</span>}
           <div className="row">
             <button className="btn ghost small" onClick={() => setHidden(true)}>View board</button>

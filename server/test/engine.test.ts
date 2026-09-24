@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Game } from '../src/engine/game.ts';
 import { botAction } from '../src/engine/bot.ts';
-import { DEFAULT_RULES, YOT, resolveTheme } from '../../shared/themes.ts';
+import { DEFAULT_RULES, WAWA, resolveTheme } from '../../shared/themes.ts';
 import { MAPS, validateMap } from '../../shared/maps.ts';
 
 const CLASSIC = resolveTheme('classic', 'classic');
@@ -241,23 +241,23 @@ test('free parking pot house rule', () => {
   assert.equal(g.player('p1').cash, 1700);
 });
 
-test('editions only change cosmetics: YOT uses classic economics', () => {
-  const yot = resolveTheme(YOT.id, 'classic');
-  assert.equal(yot.spaces.length, 40);
-  yot.spaces.forEach((s, i) => {
+test('editions only change cosmetics: WAWA uses classic economics', () => {
+  const wawa = resolveTheme(WAWA.id, 'classic');
+  assert.equal(wawa.spaces.length, 40);
+  wawa.spaces.forEach((s, i) => {
     assert.equal(s.kind, CLASSIC.spaces[i].kind);
     assert.equal(s.price, CLASSIC.spaces[i].price);
   });
-  assert.notEqual(yot.spaces[39].name, CLASSIC.spaces[39].name);
+  assert.notEqual(wawa.spaces[39].name, CLASSIC.spaces[39].name);
   // Card text names the edition's own spaces, not the classic ones.
-  assert.ok(yot.chance.some(c => c.text.includes('Yot Tower')));
-  assert.ok(!yot.chance.some(c => c.text.includes('Boardwalk')));
+  assert.ok(wawa.chance.some(c => c.text.includes('WAWA HQ')));
+  assert.ok(!wawa.chance.some(c => c.text.includes('Boardwalk')));
 });
 
 test('every map is well-formed for every edition', () => {
   for (const m of MAPS) {
     validateMap(m);
-    for (const ed of ['classic', 'chog', 'yot']) {
+    for (const ed of ['classic', 'chog', 'wawa']) {
       const t = resolveTheme(ed, m.id);
       assert.equal(t.spaces.length, m.spaces.length);
       for (const c of [...t.chance, ...t.chest]) assert.ok(!/[{}]/.test(c.text), `unfilled card text: ${c.text}`);
@@ -294,10 +294,10 @@ test('bot games run to completion without illegal moves', () => {
     const coin = seeded(seed * 7919);
     const timers = coin(3) === 0;
     const g = new Game({
-      theme: resolveTheme(seed % 2 ? 'classic' : 'yot', map.id),
+      theme: resolveTheme(seed % 2 ? 'classic' : 'wawa', map.id),
       // Every third game also makes Free Parking an arcade, so Classic plays mini-games too.
       rules: {
-        ...DEFAULT_RULES, ...(seed % 2 ? {} : YOT.rules), startingCash: map.startingCash ?? 1500, arcadeParking: seed % 3 === 0,
+        ...DEFAULT_RULES, ...(seed % 2 ? {} : WAWA.rules), startingCash: map.startingCash ?? 1500, arcadeParking: seed % 3 === 0,
         turnSeconds: timers ? 30 : 0, speedDie: coin(2) === 0, // Bot games are quick on the game clock; a short limit makes some end on time.
         timeLimitMin: coin(4) === 0 ? 2 : 0,
       },

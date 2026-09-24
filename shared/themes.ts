@@ -88,6 +88,10 @@ export interface ThemeUi {
   muted: string;
   /** CSS font-family for the whole UI and the board lettering. */
   font?: string;
+  /** Colour of the main (GO / Buy / Start) buttons; defaults to Monopoly GO green. */
+  go?: string;
+  /** Text colour on those buttons when the colour is light. */
+  goText?: string;
 }
 
 /** A skin: names, colours, look and default house rules. Works on every map. */
@@ -153,41 +157,57 @@ function edition(
   };
 }
 
-// A worked example of a custom edition. Copy this block for each new version.
-export const YOT: Edition = edition(CLASSIC, {
-  id: 'yot',
-  name: 'Yot City',
-  tagline: 'Neon edition — night mode, free-parking jackpot on.',
-  centerTitle: 'YOT CITY',
-  currency: '¥',
-  deckNames: { chance: 'Glitch', chest: 'Stash' },
+// WAWA, from the wawa-poker room: near-black navy grounds, trading-desk gold
+// for anything you press, the green felt as the table. Spaces are named after
+// the prop-firm grind the community lives on.
+export const WAWA: Edition = edition(CLASSIC, {
+  id: 'wawa',
+  name: 'WAWA Edition',
+  tagline: 'The WAWA trading floor. Get funded, dodge the drawdown, cash the payout.',
+  centerTitle: 'WAWA',
+  currency: '$',
+  deckNames: { chance: 'Market Open', chest: 'Payout' },
   names: {
-    0: 'START', 1: 'Dockside Row', 3: 'Rust Lane', 4: 'Server Fees', 5: 'Metro Line A',
-    6: 'Pixel Park', 8: 'Arcade Alley', 9: 'Byte Street', 10: 'Lockup',
-    11: 'Synth Square', 12: 'Power Grid', 13: 'Chrome Court', 14: 'Laser Way',
-    15: 'Metro Line B', 16: 'Neon Market', 18: 'Holo Heights', 19: 'Vapor Avenue',
-    20: 'Chill Zone', 21: 'Crimson Strip', 23: 'Ember Boulevard', 24: 'Blaze Plaza',
-    25: 'Metro Line C', 26: 'Gold Terrace', 27: 'Sunset Drive', 28: 'Cloud Storage',
-    29: 'Solar Gardens', 30: 'Busted!', 31: 'Jade Tower', 32: 'Emerald Row',
-    34: 'Matrix Quarter', 35: 'Metro Line D', 37: 'Sky Deck', 38: 'Gas Fees', 39: 'Yot Tower',
+    0: 'START', 1: 'Demo Account', 3: 'Paper Lane', 4: 'Eval Fee', 5: 'NY Session',
+    6: 'Scalp Street', 8: 'Wick Way', 9: 'Candle Court', 10: 'Blown Account',
+    11: 'Breakout Blvd', 12: 'Data Feed', 13: 'Support Street', 14: 'Resistance Row',
+    15: 'London Session', 16: 'Swing Square', 18: 'Trend Terrace', 19: 'Momentum Mile',
+    20: 'Market Closed', 21: 'Futures Field', 23: 'Leverage Lane', 24: 'Margin Plaza',
+    25: 'Asia Session', 26: 'Challenge Ave', 27: 'Phase Two', 28: 'Copy Trader',
+    29: 'Funded Heights', 30: 'Drawdown!', 31: 'Profit Split', 32: 'Payout Plaza',
+    34: 'Scaling Plan', 35: 'Overnight Session', 37: 'Prop Firm Tower', 38: 'Commission', 39: 'WAWA HQ',
   },
   groupColors: {
-    brown: '#7a4cff',
-    lightblue: '#28e0ff',
-    pink: '#ff3ec8',
-    orange: '#ff8a1f',
-    red: '#ff2e55',
-    yellow: '#ffe53b',
-    green: '#35ff8f',
-    darkblue: '#3b6dff',
+    brown: '#b07a48',
+    lightblue: '#5ab4f0',
+    pink: '#e87aa8',
+    orange: '#f0913a',
+    red: '#e5544f',
+    yellow: '#ecc372',
+    green: '#35c96f',
+    darkblue: '#3f6fd8',
   },
   palette: {
-    sky: '#07040f',
-    table: '#120b24',
-    board: '#191233',
-    boardLine: '#7d5cff',
-    boardText: '#f3ecff',
-    accent: '#ff3ec8',
+    sky: '#0b0e14',
+    table: '#143f2c',
+    board: '#f4ecd6',
+    boardLine: '#1c2330',
+    boardText: '#151a24',
+    accent: '#d9a441',
+    die: '#f4ecd6',
+    pip: '#151a24',
+    house: '#35c96f',
+    hotel: '#d9a441',
+  },
+  ui: {
+    bg: '#0b0e14',
+    panel: 'rgba(21, 26, 36, 0.92)',
+    panelSolid: '#151a24',
+    line: '#3a4a66',
+    text: '#e9edf4',
+    muted: '#9aa5b8',
+    go: '#e8b64c',
+    goText: '#2a1c04',
   },
   rules: { freeParkingPot: true },
 });
@@ -244,15 +264,16 @@ export const CHOG: Edition = edition(CLASSIC, {
     bg: '#0a0518',
     panel: 'rgba(21, 12, 48, 0.9)',
     panelSolid: '#150c30',
-    line: '#2b1a5c',
+    line: '#4a2a9e',
     text: '#ffffff',
     muted: '#b3a4d6',
     font: "'Outfit', Inter, system-ui, sans-serif",
+    go: '#d53f7c',
   },
   rules: { freeParkingPot: true, doubleOnGo: true },
 });
 
-export const THEMES: Edition[] = [CLASSIC, CHOG, YOT];
+export const THEMES: Edition[] = [CLASSIC, WAWA, CHOG];
 
 export function getTheme(id: string): Edition {
   return THEMES.find(t => t.id === id) ?? CLASSIC;

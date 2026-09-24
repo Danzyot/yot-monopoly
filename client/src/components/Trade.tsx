@@ -127,9 +127,9 @@ export function TradeOffers({ game, me, onCounter }: {
             <div className="row end">
               {incoming ? (
                 <>
-                  <button className="btn small ghost" onClick={() => act({ type: 'rejectTrade', id: t.id }).catch(toastError)}>Decline</button>
+                  <button className="btn small danger" onClick={() => act({ type: 'rejectTrade', id: t.id }).catch(toastError)}>Decline</button>
                   {onCounter && <button className="btn small" onClick={() => onCounter(t)}>Counter</button>}
-                  <button className="btn small primary" onClick={() => act({ type: 'acceptTrade', id: t.id }).catch(toastError)}>Accept</button>
+                  <button className="btn small primary" onClick={() => act({ type: 'acceptTrade', id: t.id }).catch(toastError)}>Deal!</button>
                 </>
               ) : (
                 <button className="btn small ghost" onClick={() => act({ type: 'rejectTrade', id: t.id }).catch(toastError)}>Withdraw</button>

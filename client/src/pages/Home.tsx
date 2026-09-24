@@ -46,24 +46,24 @@ export default function Home() {
 
       <section className="home-hero">
         <h1>{BRAND.name}</h1>
-        <p className="home-tag">Buy it all. Bankrupt your friends. Play in your browser — no download.</p>
+        <p className="home-tag">Roll the dice. Buy it all. Bankrupt your friends!</p>
         <div className="hero-actions">
           {profile ? (
             <button className="btn primary hero-cta" disabled={busy || !connected || !canCreate} onClick={create}>
-              {canCreate ? 'Create a game' : 'Room creation is operators-only right now'}
+              {canCreate ? 'Create Game' : 'Room creation is operators-only right now'}
             </button>
           ) : (
-            <button className="btn primary hero-cta" onClick={openSignIn}>Sign in to play</button>
+            <button className="btn primary hero-cta" onClick={openSignIn}>Sign In to Play</button>
           )}
           <form className="hero-join" onSubmit={e => { e.preventDefault(); join(code); }}>
             <input className="code-input" value={code} maxLength={5} placeholder="CODE" aria-label="Room code"
               onChange={e => setCode(e.target.value.toUpperCase())} />
-            <button className="btn" type="submit">Join</button>
+            <button className="btn gold" type="submit">Join!</button>
           </form>
         </div>
         <p className="hero-status muted small">
           {!connected ? 'Connecting to server…'
-            : rooms.length === 0 ? 'No tables open right now — start one and share the link.'
+            : rooms.length === 0 ? 'No tables open yet — start one and invite your friends!'
               : `${rooms.length} open table${rooms.length === 1 ? '' : 's'}${live ? ` · ${live} playing` : ''}`}
         </p>
       </section>
@@ -71,18 +71,18 @@ export default function Home() {
       <div className="home-body">
         {rooms.length > 0 && (
           <section className="panel">
-            <h2>Open tables</h2>
+            <h2>Live Tables</h2>
             <ul className="room-list">
               {rooms.map(r => (
                 <li key={r.code}>
-                  <span className={`room-status ${r.status}`}>{r.status === 'lobby' ? 'Lobby' : 'Playing'}</span>
+                  <span className={`room-status ${r.status}`}>{r.status === 'lobby' ? 'Open' : 'Playing'}</span>
                   <div className="grow">
-                    <b className="mono">{r.code}</b> · {getMap(r.mapId).name} · {getTheme(r.themeId).name}
+                    <b className="mono">{r.code}</b> · {getMap(r.mapId).name === getTheme(r.themeId).name ? getMap(r.mapId).name : `${getMap(r.mapId).name} · ${getTheme(r.themeId).name}`}
                     {r.requirements && <em className="tag req-tag" title={requirementSentence(r.requirements)}>🔒 {requirementBadge(r.requirements)}</em>}
                     <div className="muted small">host {r.hostName} · {r.players}/{r.maxPlayers} players</div>
                   </div>
-                  <button className="btn small" onClick={() => join(r.code)}>
-                    {r.status === 'lobby' ? 'Join' : 'Watch'}
+                  <button className={`btn small ${r.status === 'lobby' ? 'primary' : ''}`} onClick={() => join(r.code)}>
+                    {r.status === 'lobby' ? 'Join!' : 'Watch'}
                   </button>
                 </li>
               ))}
@@ -91,7 +91,7 @@ export default function Home() {
         )}
 
         <section className="panel">
-          <h2>Maps</h2>
+          <h2>Boards</h2>
           <div className="card-grid">
             {MAPS.map(m => (
               <div key={m.id} className="info-card">

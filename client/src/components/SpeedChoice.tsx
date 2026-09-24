@@ -19,10 +19,11 @@ export function DiceRead({ game }: { game: GameView }) {
   const triples = s !== null && a === b && s === a;
   const total = a + b + (typeof s === 'number' ? s : 0);
   return (
-    <span className="dice-read">
-      🎲 {a} + {b}{s !== null && <> + <span className="speed-face">{speedLabel(s)}</span></>}
-      {s === 'bus' || triples ? null : <> = <b>{total}</b></>}
-      {triples && <b className="accent"> triples!</b>}
+    <span className="dice-read" aria-label={`Rolled ${a} and ${b}${s !== null ? ` and ${speedLabel(s)}` : ''}`}>
+      <i className="die-chip">{a}</i><i className="die-chip">{b}</i>
+      {s !== null && <i className="die-chip speed-face">{speedLabel(s)}</i>}
+      {s === 'bus' || triples ? null : <b className="dice-total">{total}</b>}
+      {triples && <b className="dice-total accent">Triples!</b>}
     </span>
   );
 }
@@ -60,7 +61,7 @@ export function ChooseBar({ game, me, selected }: { game: GameView; me: string; 
     return (
       <div className="actionbar mine">
         <DiceRead game={game} />
-        <span>🚌 Bus — move by one die or both:</span>
+        <span className="ab-prompt"><b className="ab-big">🚌 Bus!</b> Move by one die or both</span>
         {c.options.map(n => (
           <button key={n} className={`btn ${n === Math.max(...c.options) ? 'primary' : ''}`} disabled={busy} onClick={() => choose(n)}>{label(n)}</button>
         ))}
@@ -70,13 +71,13 @@ export function ChooseBar({ game, me, selected }: { game: GameView; me: string; 
   return (
     <div className="actionbar mine">
       <DiceRead game={game} />
-      <span>🎉 Triples! Move to any space:</span>
+      <span className="ab-prompt"><b className="ab-big">🎉 Triples!</b> Jump to any space</span>
       <select value={target} onChange={e => setTarget(Number(e.target.value))} aria-label="Destination">
         {theme.spaces.map((s, i) => (
           <option key={i} value={i}>{s.name}{isOwnable(s) ? (game.owned[i] ? ' (owned)' : ` — ${theme.currency}${s.price}`) : ''}</option>
         ))}
       </select>
-      <button className="btn primary" disabled={busy} onClick={() => choose(target)}>Go</button>
+      <button className="btn primary chunky" disabled={busy} onClick={() => choose(target)}>Jump!</button>
       <span className="small muted">or click a tile on the board</span>
     </div>
   );

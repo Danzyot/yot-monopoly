@@ -60,11 +60,11 @@ export default function Lobby({ room, me, spectating, chat }: {
         <section className="panel">
           <div className="row between">
             <h2 className="row">{theme.logoUrl && <img className="brand-mark" src={theme.logoUrl} alt="" />}Room <span className="mono accent">{room.code}</span></h2>
-            <div className="row lobby-audio"><MusicPlayer /><button className="btn small ghost" onClick={leave}>Leave</button></div>
+            <div className="row lobby-audio"><MusicPlayer /><button className="btn small danger" onClick={leave}>Leave</button></div>
           </div>
           <div className="row">
             <input readOnly value={link} onFocus={e => e.target.select()} />
-            <button className="btn small" onClick={() => { void navigator.clipboard?.writeText(link); toast('Invite link copied'); }}>Copy</button>
+            <button className="btn small" onClick={() => { void navigator.clipboard?.writeText(link); toast('Invite link copied!'); }}>Copy link</button>
           </div>
           {spectating && profile && <p className="muted small">{room.seats.length >= room.rules.maxPlayers ? 'The room is full — you are watching.' : 'You are watching.'}</p>}
 
@@ -137,15 +137,15 @@ export default function Lobby({ room, me, spectating, chat }: {
 
           {isHost ? (
             <button className="btn primary big" disabled={room.seats.length < 2} onClick={() => call('room:start').catch(toastError)}>
-              {room.seats.length < 2 ? 'Need 2+ players' : 'Start game'}
+              {room.seats.length < 2 ? 'Need 2+ players' : 'Start Game!'}
             </button>
           ) : (
-            <p className="muted">Waiting for the host to start…</p>
+            <p className="muted waiting-host">Waiting for the host to hit Start…</p>
           )}
         </section>
 
         <section className="panel">
-          <h3>Map</h3>
+          <h3>Board</h3>
           <div className="edition-pick">
             {MAPS.map(m => (
               <button key={m.id} disabled={!isHost} className={`edition small map-card ${m.id === room.mapId ? 'on' : ''}`}

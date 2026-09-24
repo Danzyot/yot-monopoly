@@ -103,7 +103,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
             {game.rules.freeParkingPot && <><span className="tb-sep">·</span><span title="Free Parking jackpot">🅿️ {theme.currency}{game.pot.toLocaleString()}</span></>}
           </span>
           <MusicPlayer />
-          <button className="btn tiny ghost" onClick={leave}>Leave</button>
+          <button className="btn tiny danger" onClick={leave}>Leave</button>
         </div>
       </header>
 
@@ -187,6 +187,7 @@ function Players({ game, room, me, onTrade, reactions, onPortfolio }: {
         return (
           <div key={p.id} className={`player ${p.id === game.current ? 'turn' : ''} ${p.bankrupt ? 'out' : ''}`} style={{ borderColor: p.color }}
             title={!p.bankrupt && worth !== undefined ? `Net worth ${theme.currency}${worth.toLocaleString()}` : undefined}>
+            {p.id === game.current && !p.bankrupt && game.phase !== 'over' && <span className="turn-ribbon">{p.id === me ? 'Your turn' : 'Playing'}</span>}
             <span className="token-badge" style={{ background: p.color }}>
               {characterEmoji(p.character)}
               {reaction && <span key={reaction.seq} className="row-react" aria-label={`${p.name} reacted ${reaction.emoji}`}>{reaction.emoji}</span>}
@@ -201,7 +202,7 @@ function Players({ game, room, me, onTrade, reactions, onPortfolio }: {
               </div>
               <div className="pmoney">
                 {p.bankrupt ? <span className="muted">bankrupt</span> : <>
-                  <b className="cash">{theme.currency}{p.cash.toLocaleString()}</b>
+                  <b className="cash"><i className="coin" aria-hidden>{theme.currency}</i>{p.cash.toLocaleString()}</b>
                   <span className="muted pdeeds">{props} {props === 1 ? 'deed' : 'deeds'}</span>
                   {p.inJail && <span className="pchip" title="In jail">🔒</span>}
                   {p.jailCards.length > 0 && <span className="pchip" title="Get Out of Jail Free cards">🎫{p.jailCards.length > 1 ? `×${p.jailCards.length}` : ''}</span>}
@@ -234,29 +235,29 @@ function ActionBar({ game, me, skew, selected }: { game: GameView; me: string; s
   const dice = <DiceRead game={game} />;
 
   if (game.phase === 'over') return null;
-  if (game.paused) return <div className="actionbar"><span className="muted">⏸️ Paused — waiting to resume</span>{dice}</div>;
+  if (game.paused) return <div className="actionbar"><span className="ab-status">⏸️ Game paused</span>{dice}</div>;
   if (!p || p.bankrupt) {
-    return <div className="actionbar"><span className="muted">{p ? 'You are out — ' : 'Watching — '}{current.name} to play</span>{dice}</div>;
+    return <div className="actionbar"><span className="ab-status">{p ? 'You’re out! ' : '👀 Watching · '}<b style={{ color: current.color }}>{current.name}</b>’s turn</span>{dice}</div>;
   }
 
   const owe = game.debts.filter(d => d.from === me).reduce((a, d) => a + d.amount, 0);
   if (owe > 0) {
     return (
       <div className="actionbar danger">
-        <span>You owe <b>{cur(owe)}</b>. Mortgage or sell buildings to raise cash, or give up.</span>
+        <span className="ab-prompt"><b className="ab-big">Short on cash!</b> You owe <b>{cur(owe)}</b> — mortgage or sell buildings to raise it.</span>
         <DebtClock game={game} id={me} skew={skew} />
         <button className="btn primary" disabled={busy || p.cash < owe} onClick={() => run({ type: 'payDebt' })}>Pay {cur(owe)}</button>
-        <button className="btn ghost" disabled={busy} onClick={() => confirm('Declare bankruptcy? You will be out of the game.') && run({ type: 'bankrupt' })}>Go bankrupt</button>
+        <button className="btn ghost" disabled={busy} onClick={() => confirm('Declare bankruptcy? You will be out of the game.') && run({ type: 'bankrupt' })}>Give up</button>
       </div>
     );
   }
 
-  if (game.phase === 'minigame') return <div className="actionbar"><span className="muted">🎮 Mini-game in progress…</span>{dice}</div>;
+  if (game.phase === 'minigame') return <div className="actionbar"><span className="ab-status">🎮 Mini-game time!</span>{dice}</div>;
   if (game.phase === 'choose') return <ChooseBar game={game} me={me} selected={selected} />;
   if (game.current !== me) {
-    if (game.phase === 'auction') return <div className="actionbar"><span className="muted">Auction running…</span>{dice}</div>;
-    const what = game.phase === 'buy' ? 'is deciding whether to buy' : 'is playing';
-    return <div className="actionbar"><span className="muted"><b style={{ color: current.color }}>{current.name}</b> {what}…</span>{dice}</div>;
+    if (game.phase === 'auction') return <div className="actionbar"><span className="ab-status">🔨 Auction on!</span>{dice}</div>;
+    const what = game.phase === 'buy' ? 'is eyeing a property' : game.phase === 'done' ? 'is wheeling and dealing' : 'is rolling';
+    return <div className="actionbar"><span className="ab-status"><b style={{ color: current.color }}>{current.name}</b> {what}…</span>{dice}</div>;
   }
 
   if (game.phase === 'roll') {
@@ -264,15 +265,21 @@ function ActionBar({ game, me, skew, selected }: { game: GameView; me: string; s
       <div className="actionbar mine">
         {p.inJail ? (
           <>
-            <span>You're in jail{p.jailTurns ? ` (try ${p.jailTurns + 1}/3)` : ''}.</span>
-            <button className="btn primary" disabled={busy} onClick={() => run({ type: 'roll' })}>Roll for doubles</button>
-            <button className="btn" disabled={busy || p.cash < game.rules.jailFine} onClick={() => run({ type: 'payJail' })}>Pay {cur(game.rules.jailFine)}</button>
-            {p.jailCards.length > 0 && <button className="btn" disabled={busy} onClick={() => run({ type: 'useJailCard' })}>Use card</button>}
+            <span className="ab-prompt"><b className="ab-big">Busted! 🔒</b>{p.jailTurns ? ` Try ${p.jailTurns + 1} of 3` : ' Roll doubles to escape'}</span>
+            <button className="btn primary go-btn" disabled={busy} onClick={() => run({ type: 'roll' })} aria-label="Roll for doubles">
+              <span className="go-word">GO</span><span className="go-sub">Roll doubles</span>
+            </button>
+            <button className="btn" disabled={busy || p.cash < game.rules.jailFine} onClick={() => run({ type: 'payJail' })}>Pay {cur(game.rules.jailFine)} bail</button>
+            {p.jailCards.length > 0 && <button className="btn gold" disabled={busy} onClick={() => run({ type: 'useJailCard' })}>Use Get Out card</button>}
           </>
         ) : (
-          <button className="btn primary big" disabled={busy} onClick={() => run({ type: 'roll' })}>
-            {game.doublesCount > 0 ? 'Doubles! Roll again' : 'Roll dice'}
-          </button>
+          <>
+            <span className="ab-prompt"><b className="ab-big">{game.doublesCount > 0 ? 'Doubles!' : 'Your turn!'}</b>{game.doublesCount > 0 ? ' Roll again' : ''}</span>
+            <button className="btn primary go-btn" disabled={busy} onClick={() => run({ type: 'roll' })}
+              aria-label={game.doublesCount > 0 ? 'Roll again' : 'Roll dice'}>
+              <span className="go-word">GO</span><span className="go-sub">{game.doublesCount > 0 ? 'Roll again' : 'Roll dice'}</span>
+            </button>
+          </>
         )}
         {dice}
       </div>
@@ -284,9 +291,9 @@ function ActionBar({ game, me, skew, selected }: { game: GameView; me: string; s
     return (
       <div className="actionbar mine">
         {dice}
-        <span>Buy <b>{s.name}</b>?</span>
-        <button className="btn primary" disabled={busy || p.cash < (s.price ?? 0)} onClick={() => run({ type: 'buy' })}>Buy for {cur(s.price!)}</button>
-        <button className="btn" disabled={busy} onClick={() => run({ type: 'decline' })}>{game.rules.auctions ? 'Auction it' : 'Pass'}</button>
+        <span className="ab-prompt"><b className="ab-big">For sale!</b> <b>{s.name}</b></span>
+        <button className="btn primary chunky" disabled={busy || p.cash < (s.price ?? 0)} onClick={() => run({ type: 'buy' })}>Buy it · {cur(s.price!)}</button>
+        <button className="btn" disabled={busy} onClick={() => run({ type: 'decline' })}>{game.rules.auctions ? 'Auction it' : 'Skip'}</button>
       </div>
     );
   }
@@ -295,8 +302,8 @@ function ActionBar({ game, me, skew, selected }: { game: GameView; me: string; s
     return (
       <div className="actionbar mine">
         {dice}
-        <span className="muted small">Build, trade or mortgage now — or</span>
-        <button className="btn primary" disabled={busy} onClick={() => run({ type: 'endTurn' })}>End turn</button>
+        <span className="ab-prompt small">Build, trade or mortgage — then</span>
+        <button className="btn primary chunky" disabled={busy} onClick={() => run({ type: 'endTurn' })}>End turn ✓</button>
       </div>
     );
   }
@@ -324,11 +331,11 @@ function AuctionPanel({ game, me, skew }: { game: GameView; me: string; skew: nu
   return (
     <div className="auction">
       <div className="auction-head" style={{ background: s.group ? theme.groupColors[s.group] : '#2a3142' }}>
-        <small>{a.bank ? 'BANK AUCTION' : 'AUCTION'}</small><b>{s.name}</b>
+        <small>{a.bank ? 'Bank auction!' : 'Auction!'}</small><b>{s.name}</b>
       </div>
       <div className="auction-body">
         <div className="row between">
-          <span>High bid</span>
+          <span>Top bid</span>
           <b className="big-num">{theme.currency}{a.highBid}</b>
         </div>
         <div className="row between small">
@@ -346,11 +353,11 @@ function AuctionPanel({ game, me, skew }: { game: GameView; me: string; skew: nu
             <form className="row" onSubmit={e => { e.preventDefault(); bid(Number(custom)); setCustom(''); }}>
               <input type="number" placeholder="Custom" value={custom} onChange={e => setCustom(e.target.value)} />
               <button className="btn small primary" type="submit">Bid</button>
-              <button className="btn small ghost" type="button" onClick={() => act({ type: 'pass' }).catch(toastError)}>Drop out</button>
+              <button className="btn small danger" type="button" onClick={() => act({ type: 'pass' }).catch(toastError)}>Drop out</button>
             </form>
           </>
         )}
-        {a.highBidder === me && <div className="small accent">You're winning — hold tight.</div>}
+        {a.highBidder === me && <div className="small win-note">🏆 You're winning — hold tight!</div>}
       </div>
     </div>
   );
@@ -396,7 +403,7 @@ function Log({ game }: { game: GameView }) {
 function MyDeeds({ game, me, onPick }: { game: GameView; me: string; onPick: (i: number) => void }) {
   const theme = resolveTheme(game.themeId, game.mapId);
   const mine = Object.entries(game.owned).filter(([, o]) => o.owner === me).map(([k]) => Number(k)).sort((a, b) => a - b);
-  if (!mine.length) return <p className="muted small">You don't own anything yet.</p>;
+  if (!mine.length) return <p className="muted small">No deeds yet — land on something and buy it!</p>;
   return (
     <div className="mydeeds">
       {mine.map(i => {

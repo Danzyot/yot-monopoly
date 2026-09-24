@@ -15,7 +15,7 @@ mini-games, music, and a full operator dashboard.
   - **Metropolis** — 48 spaces, ten colour sets, two arcades; built for 5–8 players, on a night rooftop.
 - **Editions** (skins that work on any map): Classic, **Chog** (built from the Chog
   Poker design system: purple room, Chog pink, Outfit font, the Chog character on the
-  board) and **Yot City** (neon). Card text always names the board's own spaces.
+  board) and **WAWA** (the wawa-poker trading-floor look: navy, gold, green felt). Card text always names the board's own spaces.
 - **3D characters** instead of tokens — ten chibi figures (Spiky, Robo, Whiskers,
   Sir Deed, Merlot, Cosmo, Captain Cash, Shade, Chef Gusto, Zorp), tinted in each
   player's colour. They hop tile by tile, cheer when they buy or earn, slump in jail,
@@ -111,7 +111,7 @@ Deploying (Railway + Discord setup, every environment variable): **[DEPLOY.md](D
 ## Adding an edition
 
 Everything an edition changes lives in [`shared/themes.ts`](shared/themes.ts) — copy the
-`CHOG` or `YOT` block: name, centre title, currency, deck names, set colours, palette
+`CHOG` or `WAWA` block: name, centre title, currency, deck names, set colours, palette
 (board, table, sky, dice, houses), optional UI skin and font, optional logo
 (`client/public/editions/<id>/`), default house rules, and `names` to rename spaces
 (per map via `mapNames`). The engine never branches on the edition.

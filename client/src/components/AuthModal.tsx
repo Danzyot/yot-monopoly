@@ -102,7 +102,7 @@ function AuthModal({ onClose }: { onClose: () => void }) {
           {config.discordEnabled && <div className="or">or</div>}
           <p className="tag warn">Demo mode — pick a name, nothing is verified.</p>
           <input autoFocus value={demoName} maxLength={20} placeholder="Your name" onChange={e => setDemoName(e.target.value)} />
-          <button className="btn primary big" disabled={busy || demoName.trim().length < 2}>{busy ? 'Joining…' : 'Play'}</button>
+          <button className="btn primary big" disabled={busy || demoName.trim().length < 2}>{busy ? 'Joining…' : 'Play!'}</button>
         </form>
       )}
       {!config.discordEnabled && !config.demoMode && (
