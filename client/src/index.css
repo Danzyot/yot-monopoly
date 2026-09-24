@@ -1308,3 +1308,5 @@ button.edition:hover:not(:disabled) { transform: translateY(-2px); }
   .brand { font-size: 19px; white-space: nowrap; }
   .navlink { font-size: 14px; padding: 4px 5px; }
 }
+/* Outfit (Chog) runs heavier than Nunito: long text steps down a weight. */
+.branded .log, .branded .chat-line, .branded .muted { font-weight: 500; }
