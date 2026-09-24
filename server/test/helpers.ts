@@ -18,6 +18,9 @@ export function scripted(n = 2, rules: Partial<RuleConfig> = {}, mapId = 'classi
     g,
     /** Queue the next two dice faces. */
     dice(a: number, b: number) { queue.push(a - 1, b - 1); },
+    /** Queue raw rng results (e.g. a Speed Die face index into SPEED_FACES). */
+    raw(...n: number[]) { queue.push(...n); },
+    now() { return clock; },
     tick(ms: number) { clock += ms; },
     act(id: string, a: Parameters<Game['apply']>[1]) { g.apply(id, a); },
   };

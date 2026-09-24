@@ -25,7 +25,19 @@ export interface RuleConfig {
   minigames: boolean;
   /** House rule: Free Parking is an arcade as well (gives Classic mini-games). */
   arcadeParking: boolean;
+  /** Seconds a (human) player has for each step of their turn; 0 = no timer. */
+  turnSeconds: number;
+  /** Game length in minutes; when it runs out the richest player wins. 0 = no limit. */
+  timeLimitMin: number;
+  /** House rule: owners sitting in jail collect no rent. */
+  noRentInJail: boolean;
+  /** Official variant: a third Speed Die once a player has passed GO. */
+  speedDie: boolean;
 }
+
+/** Choices the lobby offers; the server accepts any value in range (see sanitizeRules). */
+export const TURN_SECONDS_CHOICES = [0, 30, 60, 90, 120];
+export const TIME_LIMIT_CHOICES = [0, 30, 45, 60, 90];
 
 export const DEFAULT_RULES: RuleConfig = {
   startingCash: 1500,
@@ -39,6 +51,10 @@ export const DEFAULT_RULES: RuleConfig = {
   maxPlayers: 6,
   minigames: true,
   arcadeParking: false,
+  turnSeconds: 90,
+  timeLimitMin: 0,
+  noRentInJail: false,
+  speedDie: false,
 };
 
 export interface ThemePalette {

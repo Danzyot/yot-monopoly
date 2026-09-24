@@ -278,19 +278,30 @@ test('non-classic maps: jail, GO and wrap-around use the board size', () => {
 });
 
 // Bots play complete games across many seeds; every step must be legal and
-// money/buildings must stay consistent.
+// money/buildings must stay consistent. Some games also run the turn timer
+// (with one dozy "human" seat the timeouts must cover for), the Speed Die and
+// a game-length limit.
 test('bot games run to completion without illegal moves', () => {
   let finished = 0;
   let arcadeRounds = 0;
+  let timeouts = 0;
+  let speedRolls = 0;
+  let timeEndings = 0;
   for (let seed = 1; seed <= 60; seed++) {
     let clock = 0;
     const n = 2 + (seed % 7);
     const map = MAPS[seed % MAPS.length];
+    const coin = seeded(seed * 7919);
+    const timers = coin(3) === 0;
     const g = new Game({
       theme: resolveTheme(seed % 2 ? 'classic' : 'yot', map.id),
       // Every third game also makes Free Parking an arcade, so Classic plays mini-games too.
-      rules: { ...DEFAULT_RULES, ...(seed % 2 ? {} : YOT.rules), startingCash: map.startingCash ?? 1500, arcadeParking: seed % 3 === 0 },
-      players: Array.from({ length: n }, (_, i) => ({ id: `b${i}`, name: `Bot${i}`, character: 'spiky' as const, color: '#fff', isBot: true })),
+      rules: {
+        ...DEFAULT_RULES, ...(seed % 2 ? {} : YOT.rules), startingCash: map.startingCash ?? 1500, arcadeParking: seed % 3 === 0,
+        turnSeconds: timers ? 30 : 0, speedDie: coin(2) === 0, // Bot games are quick on the game clock; a short limit makes some end on time.
+        timeLimitMin: coin(4) === 0 ? 2 : 0,
+      },
+      players: Array.from({ length: n }, (_, i) => ({ id: `b${i}`, name: `Bot${i}`, character: 'spiky' as const, color: '#fff', isBot: !(timers && i === 0) })),
       rng: seeded(seed),
       now: () => clock,
     });
@@ -300,24 +311,37 @@ test('bot games run to completion without illegal moves', () => {
     for (let step = 0, idle = 0; step < 20_000 && g.phase !== 'over';) {
       clock += 100;
       let acted = false;
+      const rolls = g.rollSeq;
       for (const p of g.players) {
+        // The human often dozes off; once marked away, autopilot (the bot) plays for them.
+        if (!p.isBot && !p.afk && coin(3) > 0) continue;
         const a = botAction(g, p.id);
         if (!a) continue;
-        g.apply(p.id, a);
+        g.apply(p.id, a, { auto: !p.isBot && p.afk });
         acted = true;
         break;
       }
+      if (g.rollSeq !== rolls && g.speed !== null) speedRolls++;
       if (g.minigame && g.minigame.seq !== lastRound) { lastRound = g.minigame.seq; arcadeRounds++; }
       if (acted) { step++; idle = 0; } else if (g.phase === 'minigame') {
         // Like the room's timer: fire the round's deadline once it has passed.
         assert.ok(++idle < 600, `mini-game stalled (seed ${seed})`);
         g.minigameTimeout();
-      } else {
-        assert.equal(g.phase, 'auction', `stuck in ${g.phase} (seed ${seed})`);
+      } else if (g.phase === 'auction') {
         clock += 60_000;
         g.auctionTimeout();
         step++;
+      } else {
+        // Nobody moves: only the turn/debt clock (or the time limit) can.
+        const due = g.clockDeadline();
+        assert.ok(due !== null, `stuck in ${g.phase} (seed ${seed})`);
+        clock = Math.max(clock, due);
+        timeouts++;
+        step++;
       }
+      // Like the room's clock timer: fire whatever deadline has passed.
+      if ((g.clockDeadline() ?? Infinity) <= clock) g.clockTimeout();
+      if (g.timeUp && g.winner) timeEndings++;
       for (const p of g.players) assert.ok(p.cash >= 0, `negative cash seed ${seed}`);
       const houses = Object.values(g.owned).reduce((s, o) => s + (o.houses < 5 ? o.houses : 0), 0);
       const hotels = Object.values(g.owned).filter(o => o.houses === 5).length;
@@ -328,4 +352,7 @@ test('bot games run to completion without illegal moves', () => {
   }
   assert.ok(finished >= 50, `only ${finished}/60 bot games finished`);
   assert.ok(arcadeRounds >= 60, `only ${arcadeRounds} mini-games were played`);
+  assert.ok(timeouts >= 20, `only ${timeouts} turn/debt timeouts`);
+  assert.ok(speedRolls >= 100, `only ${speedRolls} Speed Die rolls`);
+  assert.ok(timeEndings >= 1, 'no game ended on the time limit');
 });

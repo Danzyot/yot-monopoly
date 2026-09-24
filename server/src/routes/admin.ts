@@ -10,6 +10,7 @@ import { eventsForGame, loggedGames } from '../eventlog.ts';
 import { getFeatures, setFeatures } from '../features.ts';
 import { listGraphics } from '../graphics.ts';
 import { adminLog, fail, requireAdmin } from '../http.ts';
+import { adminGameRoutes } from './adminGame.ts';
 import { lastSnapshotAge } from '../persist.ts';
 import type { SocketLayer } from '../sockets.ts';
 import { recentResults } from '../stats.ts';
@@ -70,10 +71,12 @@ export function adminRoutes(sockets: SocketLayer, loopLag: () => number): expres
       startedAt: x.startedAt,
       turn: x.game?.turnNumber ?? 0,
       spectators: x.spectators,
+      paused: x.game?.paused ?? null,
       seats: x.seats.map(s => ({
         id: s.id, name: s.name, isBot: s.isBot, connected: s.connected, color: s.color,
         cash: x.game?.players.find(p => p.id === s.id)?.cash ?? null,
         bankrupt: x.game?.players.find(p => p.id === s.id)?.bankrupt ?? false,
+        afk: !!x.game?.players.find(p => p.id === s.id)?.afk || !!s.autopilot,
       })),
     })).sort((a, b) => b.createdAt - a.createdAt));
   });
@@ -111,6 +114,9 @@ export function adminRoutes(sockets: SocketLayer, loopLag: () => number): expres
       res.json({ ok: true });
     } catch (e) { fail(res, e); }
   });
+
+  // Pause/resume and the "Fix game" corrections.
+  adminGameRoutes(r, sockets);
 
   r.get('/online', (_req, res) => res.json(sockets.online()));
 

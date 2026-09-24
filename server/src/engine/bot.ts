@@ -69,6 +69,9 @@ export function botAction(g: Game, id: string): Action | null {
       if (me.cash >= price && (me.cash - price >= RESERVE || completes)) return { type: 'buy' };
       return { type: 'decline' };
     }
+    case 'choose':
+      // Speed Die: the Bus takes the full sum, triples jump to the best free deed.
+      return { type: 'choose', value: g.defaultChoice(id) };
     case 'done':
       return develop(g, id) ?? proposeSetTrade(g, id) ?? { type: 'endTurn' };
     default:
