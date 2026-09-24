@@ -69,12 +69,13 @@ Discord Developer Portal → **New Application**.
 | `DISCORD_BOT_TOKEN` | for code sign-in, DMs, announcements | bot token (same app) |
 | `DISCORD_PUBLIC_KEY` | for the Verify button | Public Key (same app) |
 | `DISCORD_VERIFY_CHANNEL_ID` | for code sign-in | channel where the Verify panel lives |
-| `DISCORD_GUILD_ID` | optional | your server id |
+| `DISCORD_GUILD_ID` | optional | your server id — lets hosts require membership to take a seat (a required *role* also needs `DISCORD_BOT_TOKEN`, with the bot in that server) |
 | `DISCORD_INVITE_URL` | optional | shows a Discord link in the header |
 | `DISCORD_ANNOUNCE_CHANNEL_ID` | optional | the bot posts winners here (switch on "announceResults" in the dashboard) |
 | `APP_SECRET` | optional | signs login tokens; if unset a random one is created on the volume |
 | `TRUSTED_PROXY_HOPS` | if behind Cloudflare | `1` for Railway alone, `2` with Cloudflare in front |
 | `DEMO_MODE` | never in production | `1` lets anyone sign in with just a name (for local dev and demos) |
+| `DEV_FAKE_DISCORD` | local dev only | `1` (only with `DEMO_MODE=1`, ignored when `NODE_ENV=production`) fakes a Discord server for trying seat requirements: demo names starting "member" are members, "vip" have the VIP role, "unknown" can't be verified |
 | `MAX_SOCKETS_PER_IP` | optional | default 24 |
 
 The two sign-in options players see:

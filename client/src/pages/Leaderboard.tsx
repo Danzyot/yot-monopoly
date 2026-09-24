@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.ts';
+import { ProfileLink } from '../community.tsx';
 
 interface Row { id: string; name: string; games: number; wins: number; points: number }
 
@@ -18,7 +19,7 @@ export default function Leaderboard() {
           <thead><tr><th>#</th><th>Player</th><th>Points</th><th>Wins</th><th>Games</th></tr></thead>
           <tbody>
             {rows.map((r, i) => (
-              <tr key={r.id}><td>{i + 1}</td><td>{r.name}</td><td><b>{r.points}</b></td><td>{r.wins}</td><td>{r.games}</td></tr>
+              <tr key={r.id}><td>{i + 1}</td><td><ProfileLink id={r.id}>{r.name}</ProfileLink></td><td><b>{r.points}</b></td><td>{r.wins}</td><td>{r.games}</td></tr>
             ))}
           </tbody>
         </table>

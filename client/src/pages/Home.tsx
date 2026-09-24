@@ -6,6 +6,7 @@ import { MAPS, getMap } from '../../../shared/maps.ts';
 import { BRAND } from '../../../shared/brand.ts';
 import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
+import { requirementBadge, requirementSentence } from '../community.tsx';
 
 export default function Home() {
   const nav = useNavigate();
@@ -70,6 +71,7 @@ export default function Home() {
               <li key={r.code}>
                 <div>
                   <b className="mono">{r.code}</b> · {getMap(r.mapId).name} · {getTheme(r.themeId).name}
+                  {r.requirements && <em className="tag req-tag" title={requirementSentence(r.requirements)}>🔒 {requirementBadge(r.requirements)}</em>}
                   <div className="muted small">host {r.hostName} · {r.players}/{r.maxPlayers} players</div>
                 </div>
                 <button className="btn small" onClick={() => join(r.code)}>

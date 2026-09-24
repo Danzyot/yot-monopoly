@@ -2,6 +2,7 @@ import { Route, Routes, useLocation } from 'react-router-dom';
 import Home from './pages/Home.tsx';
 import RoomPage from './pages/RoomPage.tsx';
 import Leaderboard from './pages/Leaderboard.tsx';
+import Profile from './pages/Profile.tsx';
 import AdminPage from './pages/AdminPage.tsx';
 import Header from './components/Header.tsx';
 import BanScreen from './components/BanScreen.tsx';
@@ -19,6 +20,7 @@ function Shell() {
         <Route path="/" element={<Home />} />
         <Route path="/r/:code" element={<RoomPage />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
+        <Route path="/u/:id" element={<Profile />} />
         <Route path="/admin/*" element={<AdminPage />} />
         <Route path="*" element={<Home />} />
       </Routes>

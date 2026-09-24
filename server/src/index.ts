@@ -122,9 +122,10 @@ app.get('/api/leaderboard', (_req, res) => {
 // Public profiles ride on the leaderboard switch: both publish players' results.
 app.get('/api/players/:id', (req, res) => {
   if (!isOn('leaderboard')) { res.status(404).json({ error: 'Player profiles are switched off' }); return; }
-  const profile = buildProfile(String(req.params.id), allResults());
-  if (!profile) { res.status(404).json({ error: 'No finished games for that player yet' }); return; }
-  res.json(profile);
+  // An unknown player is an ordinary answer ({ profile: null }), not an error:
+  // a shared link to someone with no finished games is expected, and the page
+  // explains it rather than the console logging a failed request.
+  res.json({ profile: buildProfile(String(req.params.id), allResults()) });
 });
 
 // What the lobby's Discord requirement picker can offer. Any signed-in player

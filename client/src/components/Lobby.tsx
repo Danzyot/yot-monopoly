@@ -14,6 +14,8 @@ import BoardScene from '../three/BoardScene.tsx';
 import TableStylePicker from './TableStylePicker.tsx';
 import CharacterPreview from '../three/characters/CharacterPreview.tsx';
 import { themeStyle } from '../themeStyle.ts';
+import RequirementsPicker from './RequirementsPicker.tsx';
+import { ProfileLink } from '../community.tsx';
 
 const TOGGLES: [keyof RuleConfig, string, string][] = [
   ['auctions', 'Auctions', 'Unbought property goes to auction'],
@@ -39,6 +41,12 @@ export default function Lobby({ room, me, spectating, chat }: {
   const configure = (p: { themeId?: string; mapId?: string; rules?: Partial<RuleConfig>; private?: boolean }) =>
     call('room:configure', p).catch(toastError);
   const leave = async () => { await call('room:leave').catch(() => {}); nav('/'); };
+  const makeHost = (id: string, name: string) => {
+    const mine = room.hostId === me;
+    if (mine && !confirm(`Make ${name} the host? You will no longer control the room.`)) return;
+    // RoomPage's host notice announces the change to everyone, us included.
+    call('room:host', { id }).catch(toastError);
+  };
 
   return (
     <div className={`lobby ${theme.ui ? 'branded' : ''}`} style={themeStyle(theme)}>
@@ -62,9 +70,12 @@ export default function Lobby({ room, me, spectating, chat }: {
                 <span className="token-badge" style={{ background: s.color }}>{characterEmoji(s.character)}</span>
                 <Avatar src={s.avatar} size={24} />
                 <span className="grow">
-                  {s.name} {s.id === room.hostId && <em className="tag">host</em>} {s.isBot && <em className="tag">bot</em>}
+                  <ProfileLink id={s.id} isBot={s.isBot} newTab>{s.name}</ProfileLink> {s.id === room.hostId && <em className="tag">host</em>} {s.isBot && <em className="tag">bot</em>}
                   {!s.connected && <em className="tag warn">away</em>}
                 </span>
+                {isHost && !s.isBot && s.connected && s.id !== room.hostId && (
+                  <button className="btn tiny ghost" title={`Make ${s.name} the host`} onClick={() => makeHost(s.id, s.name)}>Make host</button>
+                )}
                 {isHost && s.id !== me && (
                   <button className="btn tiny ghost" title="Remove" onClick={() => call('room:kick', { id: s.id }).catch(toastError)}>✕</button>
                 )}
@@ -74,6 +85,7 @@ export default function Lobby({ room, me, spectating, chat }: {
           {isHost && room.seats.length < room.rules.maxPlayers && (config.features.bots || profile?.isAdmin) && (
             <button className="btn small" onClick={() => call('room:addBot').catch(toastError)}>+ Add bot</button>
           )}
+          <RequirementsPicker room={room} canEdit={isHost} />
 
           {mySeat && (
             <>
