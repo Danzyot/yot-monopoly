@@ -904,3 +904,124 @@ kbd { font: 600 11px ui-monospace, Menlo, monospace; background: rgba(255,255,25
   .pf-name { max-width: 100px; }
   .pworth .show-sm { display: inline; }
 }
+
+/* ==========================================================================
+   HUD v2 — game screen layout pass. Last in the file so it wins; replaces the
+   ad-hoc top bar, player rows and phone layout that grew feature by feature.
+   ========================================================================== */
+.topbar { gap: 10px; padding: 10px 14px; }
+.tb-left, .tb-right { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.tb-left { flex: 1 1 auto; }
+.tb-right { flex: none; }
+.tb-code { font-size: 15px; letter-spacing: 0.1em; }
+.tb-meta { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-turn { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text);
+  background: rgba(255,255,255,0.08); border: 1px solid var(--line); padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
+.tb-bank { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tb-sep { opacity: 0.4; margin: 0 2px; }
+
+/* Player rows: name line, money line; everything else lives in the portfolio. */
+.players { width: 252px; gap: 6px; }
+.players:has(.pmenu-btn) { width: 272px; }
+.player { padding: 7px 8px 7px 10px; gap: 9px; }
+.player.turn { transform: translateX(6px); }
+.pname { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 14px; }
+.pname-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.pname .tag { flex: none; margin-left: 0; }
+.tag.you { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+.pmoney { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: 12px; margin-top: 1px; }
+.pmoney .cash { font-size: 14px; font-variant-numeric: tabular-nums; }
+.pdeeds { font-size: 11.5px; }
+.pchip { font-size: 11px; line-height: 1.5; padding: 0 5px; border-radius: 6px; background: rgba(255,255,255,0.08); }
+.pchip.warn { background: rgba(255,176,32,0.18); }
+.pworth { display: none; }
+
+/* Side panel: grows with its content instead of a tall empty column. */
+.sidepanel { bottom: auto; max-height: calc(100% - 150px); }
+.sidepanel .tab-body { flex: 0 1 auto; min-height: 120px; }
+.tabs button { position: relative; padding: 7px 6px; white-space: nowrap; }
+.tab-badge { display: inline-block; min-width: 16px; margin-left: 5px; padding: 0 4px; border-radius: 99px; background: var(--accent);
+  color: #fff; font-size: 10px; line-height: 16px; font-weight: 700; }
+.log { gap: 2px; }
+.log-line { padding: 2px 0 2px 8px; color: color-mix(in srgb, var(--text) 88%, transparent); }
+.log-line:last-child { color: var(--text); }
+
+/* Desktop: the bottom wrapper is transparent to layout. */
+.hud-bottom { display: contents; }
+
+@media (max-width: 760px) {
+  /* Phones: a compact top bar, a swipeable strip of players, and a bottom
+     stack of [panel][action bar] so nothing overlaps the board. */
+  .topbar { padding: 6px 8px; gap: 6px; background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.25)); }
+  .tb-meta, .tb-bank { display: none; }
+  .tb-turn { font-size: 10px; padding: 1px 6px; }
+  .tb-right { gap: 4px; }
+
+  .players, .players:has(.pmenu-btn) {
+    top: 44px; left: 0; right: 0; width: auto; padding: 0 8px 2px; flex-direction: row; gap: 6px;
+    overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .players::-webkit-scrollbar { display: none; }
+  .player { flex: none; min-width: 0; padding: 5px 6px 5px 8px; gap: 6px; border-left-width: 3px; }
+  .player.turn { transform: none; }
+  .player .token-badge { width: 26px; height: 26px; font-size: 14px; }
+  .pname { font-size: 12px; }
+  .pname-text { max-width: 84px; }
+  .pmoney { flex-wrap: nowrap; gap: 4px; }
+  .pmoney .cash { font-size: 12.5px; }
+  .pdeeds, .ptrade { display: none; }
+
+  .turn-clock { top: 96px; }
+  .social-dock { top: 140px; }
+
+  .hud-bottom {
+    position: absolute; left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    display: flex; flex-direction: column; gap: 6px; z-index: 5; pointer-events: none;
+  }
+  .hud-bottom > * { pointer-events: auto; }
+  .hud-bottom .sidepanel { position: static; width: auto; height: auto; max-height: none; top: auto; bottom: auto; left: auto; right: auto; }
+  .hud-bottom .sidepanel .tab-body { height: 38vh; min-height: 0; flex: none; }
+  .hud-bottom .sidepanel.closed .tab-body { display: none; }
+  .hud-bottom .actionbar { position: static; transform: none; left: auto; bottom: auto; width: 100%; max-width: none; padding: 8px 10px; gap: 8px; }
+  .hud-bottom .actionbar .btn.big { flex: 1 1 auto; }
+  .spec-reacts { bottom: 170px; }
+}
+@media (min-width: 761px) { .players, .players:has(.pmenu-btn) { width: 268px; } }
+.ptrade { width: 28px; height: 26px; padding: 0; font-size: 15px; flex: none; }
+.player .pmenu-btn { margin-left: -4px; }
+
+/* Lobby seats: one identity cluster per player. */
+.seat-ids { position: relative; flex: none; display: inline-flex; }
+.seat-avatar { position: absolute; right: -4px; bottom: -4px; border-radius: 50%; box-shadow: 0 0 0 2px var(--panel-solid); display: inline-flex; }
+
+/* ---- home page v2 ---- */
+.home { position: relative; max-width: none; padding: 0 0 40px; }
+.home-bg { position: fixed; inset: 0; z-index: 0; opacity: 0.55; }
+.home-bg::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(15,20,32,0.35) 0%, rgba(15,20,32,0.75) 55%, var(--bg) 100%); pointer-events: none; }
+.home-hero, .home-body { position: relative; z-index: 1; }
+.home-hero { text-align: center; padding: 11vh 16px 7vh; margin: 0; }
+.home-hero h1 { font-size: clamp(40px, 7vw, 76px); line-height: 1; margin: 0 0 12px; text-shadow: 0 6px 30px rgba(0,0,0,0.6); }
+.home-tag { font-size: clamp(15px, 2vw, 19px); color: color-mix(in srgb, var(--text) 80%, transparent); margin: 0 0 26px; }
+.hero-actions { display: flex; gap: 10px; justify-content: center; align-items: stretch; flex-wrap: wrap; }
+.hero-cta { padding: 14px 30px; font-size: 17px; border-radius: 12px; box-shadow: 0 10px 30px color-mix(in srgb, var(--accent) 35%, transparent); }
+.hero-join { display: flex; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 5px; backdrop-filter: blur(8px); }
+.hero-join .code-input { width: 120px; border: none; background: transparent; font-size: 16px; }
+.hero-status { margin: 16px 0 0; }
+.home-body { max-width: 1000px; margin: 0 auto; padding: 0 16px; display: flex; flex-direction: column; gap: 16px; }
+.home-body .panel { background: color-mix(in srgb, var(--panel-solid) 88%, transparent); }
+.room-list li { gap: 12px; }
+.room-status { flex: none; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 8px; border-radius: 99px; }
+.room-status.lobby { background: rgba(61,220,132,0.16); color: var(--good); }
+.room-status.playing { background: color-mix(in srgb, var(--accent) 20%, transparent); color: color-mix(in srgb, var(--accent) 60%, #fff); }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.info-card { display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0,0,0,0.28); }
+.info-card b { font-size: 15px; }
+.info-meta { font-size: 12px; font-weight: 600; margin-top: auto; }
+.edition-card { border-width: 2px; }
+.edition-card .edition-logo { width: 34px; height: 34px; }
+.mt { margin-top: 20px; }
+@media (max-width: 760px) {
+  .home-hero { padding: 8vh 16px 5vh; }
+  .hero-actions { flex-direction: column; align-items: stretch; max-width: 340px; margin: 0 auto; }
+  .hero-join .code-input { flex: 1; width: auto; }
+}

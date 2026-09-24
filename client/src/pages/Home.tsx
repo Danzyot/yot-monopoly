@@ -7,6 +7,7 @@ import { BRAND } from '../../../shared/brand.ts';
 import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { requirementBadge, requirementSentence } from '../community.tsx';
+import BoardScene from '../three/BoardScene.tsx';
 
 export default function Home() {
   const nav = useNavigate();
@@ -36,72 +37,81 @@ export default function Home() {
     nav(`/r/${clean}`);
   };
 
+  const live = rooms.filter(r => r.status !== 'lobby').length;
+
   return (
     <div className="home">
-      <div className="home-hero">
-        <div className="logo">🎩</div>
-        <h1>{BRAND.name}</h1>
-        <p className="muted">Buy it all. Bankrupt your friends. Several maps and editions, many tables at once.</p>
-      </div>
+      {/* A live board slowly turning behind the hero: shows what the game is before a word is read. */}
+      <div className="home-bg" aria-hidden><BoardScene themeId="classic" mapId="classic" game={null} spin /></div>
 
-      <div className="home-grid">
-        <section className="panel">
-          <h2>Play</h2>
+      <section className="home-hero">
+        <h1>{BRAND.name}</h1>
+        <p className="home-tag">Buy it all. Bankrupt your friends. Play in your browser — no download.</p>
+        <div className="hero-actions">
           {profile ? (
-            <button className="btn primary big" disabled={busy || !connected || !canCreate} onClick={create}>
+            <button className="btn primary hero-cta" disabled={busy || !connected || !canCreate} onClick={create}>
               {canCreate ? 'Create a game' : 'Room creation is operators-only right now'}
             </button>
           ) : (
-            <button className="btn primary big" onClick={openSignIn}>Sign in to play</button>
+            <button className="btn primary hero-cta" onClick={openSignIn}>Sign in to play</button>
           )}
-          <div className="or">or join with a code</div>
-          <form className="row" onSubmit={e => { e.preventDefault(); join(code); }}>
-            <input className="code-input" value={code} maxLength={5} placeholder="ABCDE"
+          <form className="hero-join" onSubmit={e => { e.preventDefault(); join(code); }}>
+            <input className="code-input" value={code} maxLength={5} placeholder="CODE" aria-label="Room code"
               onChange={e => setCode(e.target.value.toUpperCase())} />
             <button className="btn" type="submit">Join</button>
           </form>
-          {!connected && <p className="muted small">Connecting to server…</p>}
-        </section>
+        </div>
+        <p className="hero-status muted small">
+          {!connected ? 'Connecting to server…'
+            : rooms.length === 0 ? 'No tables open right now — start one and share the link.'
+              : `${rooms.length} open table${rooms.length === 1 ? '' : 's'}${live ? ` · ${live} playing` : ''}`}
+        </p>
+      </section>
+
+      <div className="home-body">
+        {rooms.length > 0 && (
+          <section className="panel">
+            <h2>Open tables</h2>
+            <ul className="room-list">
+              {rooms.map(r => (
+                <li key={r.code}>
+                  <span className={`room-status ${r.status}`}>{r.status === 'lobby' ? 'Lobby' : 'Playing'}</span>
+                  <div className="grow">
+                    <b className="mono">{r.code}</b> · {getMap(r.mapId).name} · {getTheme(r.themeId).name}
+                    {r.requirements && <em className="tag req-tag" title={requirementSentence(r.requirements)}>🔒 {requirementBadge(r.requirements)}</em>}
+                    <div className="muted small">host {r.hostName} · {r.players}/{r.maxPlayers} players</div>
+                  </div>
+                  <button className="btn small" onClick={() => join(r.code)}>
+                    {r.status === 'lobby' ? 'Join' : 'Watch'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <section className="panel">
-          <h2>Open tables</h2>
-          {rooms.length === 0 && <p className="muted">No games right now — start one.</p>}
-          <ul className="room-list">
-            {rooms.map(r => (
-              <li key={r.code}>
-                <div>
-                  <b className="mono">{r.code}</b> · {getMap(r.mapId).name} · {getTheme(r.themeId).name}
-                  {r.requirements && <em className="tag req-tag" title={requirementSentence(r.requirements)}>🔒 {requirementBadge(r.requirements)}</em>}
-                  <div className="muted small">host {r.hostName} · {r.players}/{r.maxPlayers} players</div>
-                </div>
-                <button className="btn small" onClick={() => join(r.code)}>
-                  {r.status === 'lobby' ? 'Join' : 'Watch'}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="panel wide">
           <h2>Maps</h2>
-          <div className="editions">
+          <div className="card-grid">
             {MAPS.map(m => (
-              <div key={m.id} className="edition map-card">
+              <div key={m.id} className="info-card">
                 <b>{m.name}</b>
                 <span className="small muted">{m.description}</span>
-                <span className="small">{m.spaces.length} spaces · {m.players[0]}–{m.players[1]} players</span>
+                <span className="info-meta">{m.spaces.length} spaces · {m.players[0]}–{m.players[1]} players</span>
               </div>
             ))}
           </div>
-          <h2 style={{ marginTop: 18 }}>Editions</h2>
-          <div className="editions">
+          <h2 className="mt">Editions</h2>
+          <div className="card-grid">
             {THEMES.map(t => (
-              <div key={t.id} className="edition" style={{ background: t.palette.board, color: t.palette.boardText, borderColor: t.palette.boardLine }}>
-                {t.logoUrl && <img className="edition-logo" src={t.logoUrl} alt="" />}
+              <div key={t.id} className="info-card edition-card" style={{ background: t.palette.board, color: t.palette.boardText, borderColor: t.palette.boardLine }}>
+                <div className="row">
+                  {t.logoUrl && <img className="edition-logo" src={t.logoUrl} alt="" />}
+                  <b>{t.name}</b>
+                </div>
                 <div className="swatches">
                   {Object.values(t.groupColors).slice(0, 8).map(c => <i key={c} style={{ background: c }} />)}
                 </div>
-                <b>{t.name}</b>
                 <span className="small">{t.tagline}</span>
               </div>
             ))}

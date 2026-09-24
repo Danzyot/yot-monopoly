@@ -72,8 +72,11 @@ export default function Lobby({ room, me, spectating, chat }: {
           <ul className="seats">
             {room.seats.map(s => (
               <li key={s.id} style={{ borderColor: s.color }}>
-                <span className="token-badge" style={{ background: s.color }}>{characterEmoji(s.character)}</span>
-                <Avatar src={s.avatar} size={24} />
+                {/* Character first (it is what they play as); their own avatar rides on its corner. */}
+                <span className="seat-ids">
+                  <span className="token-badge" style={{ background: s.color }}>{characterEmoji(s.character)}</span>
+                  {!s.isBot && <span className="seat-avatar"><Avatar src={s.avatar} size={16} /></span>}
+                </span>
                 <span className="grow">
                   <ProfileLink id={s.id} isBot={s.isBot} newTab>{s.name}</ProfileLink> {s.id === room.hostId && <em className="tag">host</em>} {s.isBot && <em className="tag">bot</em>}
                   {!s.connected && <em className="tag warn">away</em>}

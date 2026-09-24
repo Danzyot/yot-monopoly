@@ -43,6 +43,11 @@ export default function GameScreen({ room, game, me, chat, skew }: {
     setPanelOpen(open => !(open && t === tab));
     setTab(t);
   };
+  // Chat messages that arrived while the chat tab was not showing.
+  const [seenChat, setSeenChat] = useState(chat.length);
+  const chatVisible = panelOpen && tab === 'chat';
+  useEffect(() => { if (chatVisible) setSeenChat(chat.length); }, [chatVisible, chat.length]);
+  const unread = chatVisible ? 0 : Math.max(0, chat.filter((m, i) => i >= seenChat && m.id !== me).length);
   const connected = useConnected();
   const { config } = useAuth();
   const nav = useNavigate();
@@ -82,17 +87,21 @@ export default function GameScreen({ room, game, me, chat, skew }: {
       <div className="scene"><BoardScene themeId={game.themeId} mapId={game.mapId} game={game} selected={selected} onSelect={setSelected} tableStyle={room.style} reactions={pieceReactions} /></div>
 
       <header className="topbar">
-        <div className="row">
+        <div className="tb-left">
           {theme.logoUrl && <img className="brand-mark" src={theme.logoUrl} alt="" />}
-          <b className="mono accent">{room.code}</b>
-          <span className="muted small">{getMap(game.mapId).name} · {theme.name} · turn {game.turnNumber}</span>
+          <b className="mono accent tb-code">{room.code}</b>
+          <span className="tb-meta">{getMap(game.mapId).name === theme.name ? theme.name : `${getMap(game.mapId).name} · ${theme.name}`}</span>
+          <span className="tb-turn">Turn {game.turnNumber}</span>
           {!connected && <span className="tag warn">reconnecting…</span>}
         </div>
-        <div className="row">
+        <div className="tb-right">
           <TimeLeft game={game} skew={skew} />
           <PauseButton room={room} game={game} me={me} />
-          {game.rules.freeParkingPot && <span className="pill hide-sm">🅿️ pot {theme.currency}{game.pot}</span>}
-          <span className="pill hide-sm" title="Houses / hotels left in the bank">🏠 {game.housesLeft} · 🏨 {game.hotelsLeft}</span>
+          {/* The bank's stock in one place: buildings left and the jackpot. */}
+          <span className="pill tb-bank" title="Houses and hotels left in the bank">
+            🏠 {game.housesLeft}<span className="tb-sep">·</span>🏨 {game.hotelsLeft}
+            {game.rules.freeParkingPot && <><span className="tb-sep">·</span><span title="Free Parking jackpot">🅿️ {theme.currency}{game.pot.toLocaleString()}</span></>}
+          </span>
           <MusicPlayer />
           <button className="btn tiny ghost" onClick={leave}>Leave</button>
         </div>
@@ -100,13 +109,20 @@ export default function GameScreen({ room, game, me, chat, skew }: {
 
       <Players game={game} room={room} me={me} onTrade={setTradeWith} reactions={social.reactions} onPortfolio={setPortfolio} />
 
+      {/* Desktop: the side panel is a right-hand column and the action bar floats
+          at the bottom. Phones stack both at the bottom (see the HUD CSS). */}
+      <div className="hud-bottom">
       <aside className={`sidepanel ${panelOpen ? '' : 'closed'}`}>
         <TradeOffers game={game} me={me} onCounter={t => setCounter(counterDraft(t))} />
-        <div className="tabs">
-          <button className={tab === 'log' && panelOpen ? 'on' : ''} onClick={() => pickTab('log')}>Log</button>
-          {config.features.chat && <button className={tab === 'chat' && panelOpen ? 'on' : ''} onClick={() => pickTab('chat')}>Chat</button>}
-          {myPlayer && <button className={tab === 'mine' && panelOpen ? 'on' : ''} onClick={() => pickTab('mine')}>My deeds</button>}
-          <button className={tab === 'table' && panelOpen ? 'on' : ''} onClick={() => pickTab('table')}>Portfolios</button>
+        <div className="tabs" role="tablist">
+          <button role="tab" aria-selected={tab === 'log' && panelOpen} className={tab === 'log' && panelOpen ? 'on' : ''} onClick={() => pickTab('log')}>Log</button>
+          {config.features.chat && (
+            <button role="tab" aria-selected={tab === 'chat' && panelOpen} className={tab === 'chat' && panelOpen ? 'on' : ''} onClick={() => pickTab('chat')}>
+              Chat{unread > 0 && <span className="tab-badge" aria-label={`${unread} unread`}>{unread > 9 ? '9+' : unread}</span>}
+            </button>
+          )}
+          {myPlayer && <button role="tab" aria-selected={tab === 'mine' && panelOpen} className={tab === 'mine' && panelOpen ? 'on' : ''} onClick={() => pickTab('mine')}>Deeds</button>}
+          <button role="tab" aria-selected={tab === 'table' && panelOpen} className={tab === 'table' && panelOpen ? 'on' : ''} onClick={() => pickTab('table')}>Players</button>
         </div>
         <div className="tab-body">
           {tab === 'log' && <Log game={game} />}
@@ -120,12 +136,14 @@ export default function GameScreen({ room, game, me, chat, skew }: {
         <div className="deed-float"><Deed game={game} index={selected} me={me} onClose={() => setSelected(null)} /></div>
       )}
 
+      <ActionBar game={game} me={me} skew={skew} selected={selected} />
+      </div>
+
       <AuctionPanel game={game} me={me} skew={skew} />
       <MinigamePanel game={game} me={me} skew={skew} />
       <CardPopup game={game} />
       <TurnClock game={game} me={me} skew={skew} />
       <PausedBanner game={game} />
-      <ActionBar game={game} me={me} skew={skew} selected={selected} />
       {theme.logoUrl && <img className="corner-mark" src={theme.logoUrl} alt={theme.name} />}
 
       <div className="social-dock">
@@ -167,7 +185,8 @@ function Players({ game, room, me, onTrade, reactions, onPortfolio }: {
         const reaction = latestReaction(reactions, p.id);
         const worth = game.netWorth?.[p.id];
         return (
-          <div key={p.id} className={`player ${p.id === game.current ? 'turn' : ''} ${p.bankrupt ? 'out' : ''}`} style={{ borderColor: p.color }}>
+          <div key={p.id} className={`player ${p.id === game.current ? 'turn' : ''} ${p.bankrupt ? 'out' : ''}`} style={{ borderColor: p.color }}
+            title={!p.bankrupt && worth !== undefined ? `Net worth ${theme.currency}${worth.toLocaleString()}` : undefined}>
             <span className="token-badge" style={{ background: p.color }}>
               {characterEmoji(p.character)}
               {reaction && <span key={reaction.seq} className="row-react" aria-label={`${p.name} reacted ${reaction.emoji}`}>{reaction.emoji}</span>}
@@ -175,27 +194,23 @@ function Players({ game, room, me, onTrade, reactions, onPortfolio }: {
             <div className="grow pf-open" role="button" tabIndex={0} title={`${p.name}'s portfolio`}
               onClick={() => onPortfolio(p.id)} onKeyDown={e => { if (e.key === 'Enter') onPortfolio(p.id); }}>
               <div className="pname">
-                {p.name}{p.id === me && ' (you)'}
+                <span className="pname-text">{p.name}</span>{p.id === me && <em className="tag you">you</em>}
                 {p.isBot && <em className="tag">bot</em>}
                 {seat && !seat.connected && !p.isBot && <em className="tag warn">away</em>}
                 {!p.bankrupt && (p.afk || seat?.autopilot) && <em className="tag warn" title="Autopilot is playing until they act again">{p.afk ? 'afk' : 'autopilot'}</em>}
               </div>
-              <div className="small muted">
-                {p.bankrupt ? 'bankrupt' : <>
-                  <b className="cash">{theme.currency}{p.cash.toLocaleString()}</b> · {props} deeds
-                  {p.inJail && ' · 🔒 jail'}
-                  {p.jailCards.length > 0 && ` · 🎫×${p.jailCards.length}`}
-                  {owes > 0 && <span className="warn"> · owes {theme.currency}{owes}</span>}
+              <div className="pmoney">
+                {p.bankrupt ? <span className="muted">bankrupt</span> : <>
+                  <b className="cash">{theme.currency}{p.cash.toLocaleString()}</b>
+                  <span className="muted pdeeds">{props} {props === 1 ? 'deed' : 'deeds'}</span>
+                  {p.inJail && <span className="pchip" title="In jail">🔒</span>}
+                  {p.jailCards.length > 0 && <span className="pchip" title="Get Out of Jail Free cards">🎫{p.jailCards.length > 1 ? `×${p.jailCards.length}` : ''}</span>}
+                  {owes > 0 && <span className="pchip warn" title="Owes money">owes {theme.currency}{owes.toLocaleString()}</span>}
                 </>}
               </div>
-              {!p.bankrupt && worth !== undefined && (
-                <div className="small muted pworth" title="Net worth: cash plus what deeds and buildings would raise">
-                  <span className="hide-sm">Net w</span><span className="show-sm">W</span>orth <b>{theme.currency}{worth.toLocaleString()}</b>
-                </div>
-              )}
             </div>
             {amIn && p.id !== me && !p.bankrupt && game.phase !== 'over' && (
-              <button className="btn tiny" onClick={() => onTrade(p.id)}>Trade</button>
+              <button className="btn tiny ptrade" onClick={() => onTrade(p.id)} title={`Trade with ${p.name}`} aria-label={`Trade with ${p.name}`}>⇄</button>
             )}
             <PlayerMenu room={room} player={p} me={me} />
           </div>
