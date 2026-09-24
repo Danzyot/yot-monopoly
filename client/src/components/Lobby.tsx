@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { call, type ChatMsg } from '../net.ts';
-import { THEMES, getTheme, type RuleConfig } from '../../../shared/themes.ts';
+import { THEMES, TIME_LIMIT_CHOICES, TURN_SECONDS_CHOICES, getTheme, type RuleConfig } from '../../../shared/themes.ts';
 import { MAPS, getMap } from '../../../shared/maps.ts';
 import { PLAYER_COLORS, type RoomView } from '../../../shared/types.ts';
 import { CHARACTER_DEFS, getCharacter } from '../../../shared/characters.ts';
@@ -23,7 +23,12 @@ const TOGGLES: [keyof RuleConfig, string, string][] = [
   ['doubleOnGo', 'Double on GO', 'Landing exactly on GO pays double'],
   ['minigames', 'Mini-games', 'Arcade spaces start a quick mini-game for cash prizes'],
   ['arcadeParking', 'Free Parking arcade', 'Free Parking is an arcade too (mini-games on Classic)'],
+  ['speedDie', 'Speed Die', 'Official variant: a third die once you have passed GO (Mr. Monopoly, Bus, triples)'],
+  ['noRentInJail', 'No rent in jail', 'Owners sitting in jail collect no rent'],
 ];
+
+/** A select's options, keeping a value set some other way (e.g. an edition) visible. */
+const withCurrent = (choices: number[], v: number) => (choices.includes(v) ? choices : [...choices, v].sort((a, b) => a - b));
 
 export default function Lobby({ room, me, spectating, chat }: {
   room: RoomView; me: string; spectating: boolean; chat: ChatMsg[];
@@ -166,6 +171,20 @@ export default function Lobby({ room, me, spectating, chat }: {
               <select disabled={!isHost} value={room.rules.maxPlayers}
                 onChange={e => configure({ rules: { maxPlayers: Number(e.target.value) } })}>
                 {[2, 3, 4, 5, 6, 7, 8].map(n => <option key={n}>{n}</option>)}
+              </select>
+            </label>
+            <label className="rule" title="Time for each step of a turn; on timeout the safe move is made (never buying). Twice in a row and autopilot takes over.">
+              <span>Turn timer</span>
+              <select disabled={!isHost} value={room.rules.turnSeconds}
+                onChange={e => configure({ rules: { turnSeconds: Number(e.target.value) } })}>
+                {withCurrent(TURN_SECONDS_CHOICES, room.rules.turnSeconds).map(n => <option key={n} value={n}>{n ? `${n} s` : 'Off'}</option>)}
+              </select>
+            </label>
+            <label className="rule" title="When time runs out the current turn finishes and the richest player wins">
+              <span>Game length</span>
+              <select disabled={!isHost} value={room.rules.timeLimitMin}
+                onChange={e => configure({ rules: { timeLimitMin: Number(e.target.value) } })}>
+                {withCurrent(TIME_LIMIT_CHOICES, room.rules.timeLimitMin).map(n => <option key={n} value={n}>{n ? `${n} min` : 'No limit'}</option>)}
               </select>
             </label>
             {TOGGLES.filter(([k]) => config.features.minigames || (k !== 'minigames' && k !== 'arcadeParking')).map(([k, label, hint]) => (

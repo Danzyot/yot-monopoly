@@ -11,9 +11,11 @@ import {
   MINIGAME_INFO, MINIGAME_KINDS, type MinigameKind, type MinigameMove, type MinigamePayout,
   type MinigameResult, type MinigameView,
 } from '../../../shared/minigames.ts';
-import type {
-  Action, Auction, CardShown, Debt, GameView, LogEntry, OwnedSpace, PlayerState, CharacterId,
-  Trade, TradeSide, TurnPhase,
+import {
+  SPEED_FACES,
+  type Action, type Auction, type CardShown, type Debt, type GameView, type LogEntry, type MoveChoice,
+  type OwnedSpace, type PauseState, type PlayerState, type CharacterId, type SpeedFace,
+  type Trade, type TradeSide, type TurnPhase,
 } from '../../../shared/types.ts';
 import { MINIGAMES, MinigameError, hash } from './minigames/index.ts';
 import type { Ctx as MinigameCtx, Names } from './minigames/types.ts';
@@ -23,6 +25,12 @@ export class EngineError extends Error {}
 export const AUCTION_MS = 12_000;
 /** Each bid guarantees at least this long for someone to respond. */
 export const AUCTION_EXTEND_MS = 6_000;
+/** A debtor gets this many turn-lengths to pay before the engine settles for them. */
+export const DEBT_TURNS = 2;
+/** Consecutive turn timeouts before a player is marked away (autopilot takes over). */
+export const AFK_AFTER = 2;
+/** Turn phases that belong to the current player (the turn timer runs in these). */
+const STEP_PHASES: TurnPhase[] = ['roll', 'buy', 'done', 'choose'];
 const MAX_LOG = 250;
 const MAX_OPEN_TRADES = 5;
 
@@ -89,6 +97,19 @@ export interface GameSnapshot {
   minigameSeq?: number;
   /** Game clock when the snapshot was taken, to carry a live round's timers across a restart. */
   savedAt?: number;
+  /** Optional: snapshots written before timers, pause and the Speed Die lack these. */
+  turnEndsAt?: number | null;
+  turnKey?: string;
+  debtEndsAt?: Record<string, number>;
+  timeoutStreak?: Record<string, number>;
+  paused?: PauseState | null;
+  endsAt?: number | null;
+  timeUp?: boolean;
+  speed?: SpeedFace | null;
+  choice?: MoveChoice | null;
+  speedPending?: 'mr' | null;
+  estateQueue?: number[];
+  resumePhase?: TurnPhase | null;
 }
 
 interface LandingOpts {
@@ -98,6 +119,10 @@ interface LandingOpts {
 
 function fail(msg: string): never {
   throw new EngineError(msg);
+}
+
+function speedName(f: SpeedFace): string {
+  return f === 'mr' ? 'Mr. Monopoly' : f === 'bus' ? 'Bus' : String(f);
 }
 
 export class Game {
@@ -129,6 +154,24 @@ export class Game {
   /** Bankrupt players, first out first — gives finishing places. */
   outOrder: string[] = [];
   minigame: MinigameState | null = null;
+  /** Turn timer: deadline for the current player's step, and the step it belongs to. */
+  turnEndsAt: number | null = null;
+  private turnKey = '';
+  /** Per debtor: when the engine settles the debt for them. */
+  debtEndsAt: Record<string, number> = {};
+  /** Consecutive turn timeouts per player (any own action resets it). */
+  private timeoutStreak: Record<string, number> = {};
+  paused: PauseState | null = null;
+  /** Game-length limit (null = none) and whether it has run out. */
+  endsAt: number | null = null;
+  timeUp = false;
+  /** Speed Die: last face, the pending choice, and a Mr. Monopoly move still to make. */
+  speed: SpeedFace | null = null;
+  choice: MoveChoice | null = null;
+  private speedPending: 'mr' | null = null;
+  /** A bankrupt player's estate waiting to be auctioned by the bank, and the phase to return to. */
+  private estateQueue: number[] = [];
+  private resumePhase: TurnPhase | null = null;
   private minigameSeq = 0;
   private minigamesEnabled: () => boolean;
   private cardSeq = 0;
@@ -158,6 +201,9 @@ export class Game {
       chest: this.shuffled(init.theme.chest.length),
     };
     this.say(`Game started — ${this.current.name} goes first.`);
+    const limit = init.rules.timeLimitMin ?? 0;
+    if (limit > 0) this.endsAt = this.now() + limit * 60_000;
+    this.settle();
   }
 
   // ---- helpers --------------------------------------------------------------
@@ -258,6 +304,7 @@ export class Game {
       const landedOnGo = target % this.size === 0;
       const pay = this.rules.goSalary * (landedOnGo && this.rules.doubleOnGo ? 2 : 1);
       p.cash += pay;
+      p.passedGo = true;
       this.say(`${p.name} ${landedOnGo ? 'landed on' : 'passed'} ${this.spaces[0].name} and collected ${this.money(pay)}.`, p.id);
     }
     p.position = target % this.size;
@@ -290,6 +337,11 @@ export class Game {
       if (o.owner === p.id) return;
       if (o.mortgaged) {
         this.say(`${s.name} is mortgaged — no rent.`);
+        return;
+      }
+      const owner = this.player(o.owner);
+      if (this.rules.noRentInJail && owner.inJail) {
+        this.say(`${owner.name} is in jail — no rent on ${s.name}.`);
         return;
       }
       let diceTotal = this.dice ? this.dice[0] + this.dice[1] : 0;
@@ -395,8 +447,17 @@ export class Game {
   private afterResolution() {
     if (this.phase === 'over') return;
     if (this.current.bankrupt) {
+      this.speedPending = null;
       this.nextTurn();
       return;
+    }
+    // Speed Die: Mr. Monopoly moves on once the first landing is fully dealt with.
+    if (this.speedPending === 'mr') {
+      this.speedPending = null;
+      if (!this.current.inJail) {
+        this.mrMonopoly(this.current);
+        if (this.phase !== 'done') return; // buying, auctioning or playing: comes back here
+      }
     }
     this.phase = this.extraRoll && !this.current.inJail ? 'roll' : 'done';
   }
@@ -405,6 +466,8 @@ export class Game {
     if (this.checkWinner()) return;
     this.doublesCount = 0;
     this.extraRoll = false;
+    this.speedPending = null;
+    this.choice = null;
     do this.currentIdx = (this.currentIdx + 1) % this.players.length;
     while (this.current.bankrupt);
     this.phase = 'roll';
@@ -426,10 +489,28 @@ export class Game {
 
   // ---- actions --------------------------------------------------------------
 
-  apply(playerId: string, a: Action): void {
+  /**
+   * Run a player's action. `auto` marks moves the computer makes for a human
+   * (autopilot): those must not count as the player being back.
+   */
+  apply(playerId: string, a: Action, opts: { auto?: boolean } = {}): void {
     if (this.phase === 'over') fail('The game is over');
     const p = this.player(playerId);
     if (p.bankrupt) fail('You are out of the game');
+    // Resigning stays possible so a player can still leave a paused table.
+    if (this.paused && a.type !== 'bankrupt') fail(`The game is paused by ${this.paused.by}`);
+    this.dispatch(p, a);
+    if (!opts.auto) {
+      this.timeoutStreak[p.id] = 0;
+      if (p.afk) {
+        p.afk = false;
+        this.say(`${p.name} is back.`, p.id);
+      }
+    }
+    this.settle();
+  }
+
+  private dispatch(p: PlayerState, a: Action): void {
     switch (a.type) {
       case 'roll': return this.roll(p);
       case 'buy': return this.buy(p);
@@ -449,6 +530,7 @@ export class Game {
       case 'acceptTrade': return this.acceptTrade(p, a.id);
       case 'rejectTrade': return this.rejectTrade(p, a.id);
       case 'minigame': return this.minigameMove(p, a.move);
+      case 'choose': return this.choose(p, a.value);
       default: fail('Unknown action');
     }
   }
@@ -462,12 +544,26 @@ export class Game {
     this.requireTurn(p, 'roll');
     if (this.debtOf(p.id) > 0) fail('Settle your debts first');
     const d: [number, number] = [this.die(), this.die()];
+    // The Speed Die joins once you have been round the board, never for a jail escape.
+    const speed = this.rules.speedDie && p.passedGo && !p.inJail ? SPEED_FACES[this.rng(SPEED_FACES.length)] : null;
     this.dice = d;
+    this.speed = speed;
+    this.speedPending = null;
     this.rollSeq++;
     const total = d[0] + d[1];
     const doubles = d[0] === d[1];
-    this.say(`${p.name} rolled ${d[0]} + ${d[1]}${doubles ? ' (doubles)' : ''}.`, p.id);
+    const triples = doubles && speed === d[0];
+    const face = speed === null ? '' : ` + ${speedName(speed)}`;
+    this.say(`${p.name} rolled ${d[0]} + ${d[1]}${face}${triples ? ' (triples!)' : doubles ? ' (doubles)' : ''}.`, p.id);
     this.extraRoll = false;
+
+    if (triples) {
+      // Official Speed Die rule: triples go anywhere, and that ends the turn's rolling.
+      this.doublesCount = 0;
+      this.choice = { kind: 'triples' };
+      this.phase = 'choose';
+      return;
+    }
 
     if (p.inJail) {
       if (doubles) {
@@ -497,9 +593,82 @@ export class Game {
     }
 
     this.phase = 'done';
-    this.moveBy(p, total);
+    if (speed === 'bus') {
+      // Bus: move by either white die or their sum — the player picks.
+      this.choice = { kind: 'bus', options: [...new Set([d[0], d[1], total])].sort((a, b) => a - b) };
+      this.phase = 'choose';
+      return;
+    }
+    if (speed === 'mr') this.speedPending = 'mr';
+    this.moveBy(p, total + (typeof speed === 'number' ? speed : 0));
     this.resolveLanding(p);
     if (this.phase === 'done') this.afterResolution();
+  }
+
+  /** Phase 'choose': the Bus move (steps) or the triples jump (a space). */
+  private choose(p: PlayerState, value: number) {
+    this.requireTurn(p, 'choose');
+    const c = this.choice ?? fail('Nothing to choose');
+    if (!Number.isInteger(value)) fail('Bad choice');
+    if (c.kind === 'bus') {
+      if (!c.options.includes(value)) fail('Pick one of the dice or their sum');
+      this.choice = null;
+      this.phase = 'done';
+      this.say(`${p.name} took the bus ${value} space${value === 1 ? '' : 's'}.`, p.id);
+      this.moveBy(p, value);
+    } else {
+      if (value < 0 || value >= this.size) fail('No such space');
+      this.choice = null;
+      this.phase = 'done';
+      this.say(`${p.name} jumped to ${this.spaces[value].name}.`, p.id);
+      // Moving forward: passing GO on the way still pays.
+      if (value !== p.position) this.advanceTo(p, value);
+    }
+    this.resolveLanding(p);
+    if (this.phase === 'done') this.afterResolution();
+  }
+
+  /** The default choice (timeouts, bots, autopilot): the dice sum, or the best free deed. */
+  defaultChoice(id: string): number {
+    const c = this.choice;
+    if (c?.kind === 'bus') return Math.max(...c.options);
+    return this.bestTriplesTarget(id);
+  }
+
+  /** Where a triples jump helps most: an unowned deed, preferring ones toward a set; else GO. */
+  bestTriplesTarget(id: string): number {
+    let best = 0;
+    let bestScore = -1;
+    this.spaces.forEach((s, i) => {
+      if (!isOwnable(s) || this.owned[i]) return;
+      const grp = s.group ? groupIndices(this.spaces, s.group) : [];
+      const mine = grp.filter(j => this.owned[j]?.owner === id).length;
+      const score = (s.price ?? 0) * (1 + mine);
+      if (score > bestScore) { best = i; bestScore = score; }
+    });
+    return best;
+  }
+
+  /** Speed Die Mr. Monopoly: on to the next unowned deed, else the next one you owe rent on. */
+  private mrMonopoly(p: PlayerState) {
+    const ahead = Array.from({ length: this.size - 1 }, (_, k) => (p.position + k + 1) % this.size)
+      .filter(i => isOwnable(this.spaces[i]));
+    const target = ahead.find(i => !this.owned[i]) ?? ahead.find(i => this.rentDue(i, p));
+    if (target === undefined) {
+      this.say(`Mr. Monopoly has nowhere to send ${p.name}.`, p.id);
+      return;
+    }
+    this.say(`🎩 Mr. Monopoly sends ${p.name} on to ${this.spaces[target].name}.`, p.id);
+    this.phase = 'done';
+    this.advanceTo(p, target);
+    this.resolveLanding(p);
+  }
+
+  /** Would `p` owe rent landing on `i` right now? */
+  private rentDue(i: number, p: PlayerState): boolean {
+    const o = this.owned[i];
+    if (!o || o.owner === p.id || o.mortgaged) return false;
+    return !(this.rules.noRentInJail && this.player(o.owner).inJail);
   }
 
   private buy(p: PlayerState) {
@@ -568,8 +737,9 @@ export class Game {
 
   /** Called by the room when the auction clock runs out. */
   auctionTimeout(): boolean {
-    if (!this.auction || this.now() < this.auction.endsAt) return false;
+    if (this.paused || !this.auction || this.now() < this.auction.endsAt) return false;
     this.finishAuction();
+    this.settle();
     return true;
   }
 
@@ -583,9 +753,38 @@ export class Game {
       this.owned[a.space] = { owner: w.id, houses: 0, mortgaged: false };
       this.say(`${w.name} won ${s.name} for ${this.money(a.highBid)}.`, w.id);
     } else {
-      this.say(`Nobody bid on ${s.name}.`);
+      this.say(`Nobody bid on ${s.name}${a.bank ? ' — it stays with the bank' : ''}.`);
     }
-    this.afterResolution();
+    if (!a.bank) {
+      this.afterResolution();
+      return;
+    }
+    // A bank sale interrupted someone's turn: put it back exactly where it was
+    // (settle() starts the next lot, if any, straight after).
+    this.phase = this.resumePhase ?? 'done';
+    this.resumePhase = null;
+    if (this.current.bankrupt) this.nextTurn();
+  }
+
+  /** Start the next bank sale of a bankrupt estate once the table is between steps. */
+  private pumpEstate() {
+    if (this.phase === 'over') {
+      this.estateQueue = [];
+      return;
+    }
+    if (this.paused || this.auction || this.minigame || !STEP_PHASES.includes(this.phase)) return;
+    while (this.estateQueue.length) {
+      const space = this.estateQueue.shift()!;
+      if (this.owned[space]) continue; // someone got it meanwhile (operator fix)
+      this.resumePhase = this.phase;
+      this.auction = {
+        space, highBid: 0, highBidder: null, bidders: this.active().map(x => x.id),
+        endsAt: this.now() + AUCTION_MS, bank: true,
+      };
+      this.phase = 'auction';
+      this.say(`The bank is auctioning ${this.spaces[space].name}.`);
+      return;
+    }
   }
 
   private endTurn(p: PlayerState) {
@@ -611,9 +810,7 @@ export class Game {
     this.requireTurn(p, 'roll');
     if (!p.inJail) fail('You are not in jail');
     const deck = p.jailCards.pop() ?? fail('You have no Get Out of Jail Free card');
-    const cards = deck === 'chance' ? this.theme.chance : this.theme.chest;
-    const idx = cards.findIndex(c => c.effect.type === 'jailFree');
-    this.decks[deck].push(idx);
+    this.returnJailCard(deck);
     this.leaveJail(p);
     this.say(`${p.name} used a Get Out of Jail Free card.`, p.id);
   }
@@ -664,6 +861,11 @@ export class Game {
     if (o.houses === 0) fail('Nothing to sell');
     const grp = groupIndices(this.spaces, s.group!);
     if (this.rules.evenBuild && o.houses < Math.max(...grp.map(i => this.owned[i].houses))) fail('Sell evenly across the group');
+    this.sellOne(p, s, o);
+  }
+
+  /** Sell one building back to the bank (checks done by the caller). */
+  private sellOne(p: PlayerState, s: SpaceDef, o: OwnedSpace) {
     let newLevel = o.houses - 1;
     if (o.houses === 5) {
       this.hotelsLeft++;
@@ -685,6 +887,10 @@ export class Game {
     const { s, o } = this.requireOwn(p, space);
     if (o.mortgaged) fail('Already mortgaged');
     if (this.groupHasBuildings(s.group)) fail('Sell the buildings in this group first');
+    this.mortgageOne(p, s, o);
+  }
+
+  private mortgageOne(p: PlayerState, s: SpaceDef, o: OwnedSpace) {
     o.mortgaged = true;
     p.cash += mortgageValue(s);
     this.say(`${p.name} mortgaged ${s.name} for ${this.money(mortgageValue(s))}.`, p.id);
@@ -738,13 +944,14 @@ export class Game {
       creditor.jailCards.push(...p.jailCards);
       this.say(`${p.name} went bankrupt — everything goes to ${creditor.name}.`, p.id);
     } else {
-      for (const i of this.ownedBy(p.id)) delete this.owned[i];
-      for (const deck of p.jailCards) {
-        const cards = deck === 'chance' ? this.theme.chance : this.theme.chest;
-        this.decks[deck].push(cards.findIndex(c => c.effect.type === 'jailFree'));
-      }
-      this.say(`${p.name} went bankrupt — their property returns to the bank.`, p.id);
+      const estate = this.ownedBy(p.id).sort((a, b) => a - b);
+      // Official rule: the bank auctions the estate, each deed unmortgaged.
+      for (const i of estate) delete this.owned[i];
+      if (this.rules.auctions) this.estateQueue.push(...estate);
+      for (const deck of p.jailCards) this.returnJailCard(deck);
+      this.say(`${p.name} went bankrupt — their property returns to the bank${estate.length && this.rules.auctions ? ' to be auctioned' : ''}.`, p.id);
     }
+    delete this.debtEndsAt[p.id];
     p.cash = 0;
     p.jailCards = [];
     p.bankrupt = true;
@@ -801,6 +1008,9 @@ export class Game {
     this.transfer(from, p, t.give);
     this.transfer(p, from, t.get);
     this.say(`${p.name} accepted ${from.name}'s trade.`, p.id);
+    // Official rule: taking over a mortgaged deed costs 10% of its mortgage value at once.
+    this.mortgageInterest(p, t.give.spaces);
+    this.mortgageInterest(from, t.get.spaces);
     // Any other offer touching these properties may now be invalid; drop them.
     const moved = new Set([...t.give.spaces, ...t.get.spaces]);
     this.trades = this.trades.filter(x => ![...x.give.spaces, ...x.get.spaces].some(i => moved.has(i)));
@@ -811,6 +1021,14 @@ export class Game {
     b.cash += side.cash;
     for (const i of side.spaces) this.owned[i].owner = b.id;
     for (let k = 0; k < side.jailCards; k++) b.jailCards.push(a.jailCards.pop()!);
+  }
+
+  private mortgageInterest(p: PlayerState, spaces: number[]) {
+    for (const i of spaces) {
+      if (!this.owned[i]?.mortgaged) continue;
+      const fee = Math.ceil(mortgageValue(this.spaces[i]) / 10);
+      this.charge(p, null, fee, `10% interest on mortgaged ${this.spaces[i].name}`);
+    }
   }
 
   private rejectTrade(p: PlayerState, id: string) {
@@ -874,7 +1092,7 @@ export class Game {
   /** When the room must call minigameTimeout() next (internal: may be a secret GO time). */
   minigameDeadline(): number | null {
     const mg = this.minigame;
-    if (!mg || this.phase !== 'minigame') return null;
+    if (!mg || this.phase !== 'minigame' || this.paused) return null;
     return mg.stage === 'result' ? mg.resultEndsAt : MINIGAMES[mg.kind].deadline(mg.data);
   }
 
@@ -885,11 +1103,12 @@ export class Game {
     if (!mg || due === null || this.now() < due) return false;
     if (mg.stage === 'result') {
       this.finishMinigame();
-      return true;
+    } else {
+      const def = MINIGAMES[mg.kind];
+      def.tick(mg.data, this.minigameCtx());
+      if (def.done(mg.data)) this.settleMinigame();
     }
-    const def = MINIGAMES[mg.kind];
-    def.tick(mg.data, this.minigameCtx());
-    if (def.done(mg.data)) this.settleMinigame();
+    this.settle();
     return true;
   }
 
@@ -987,6 +1206,294 @@ export class Game {
     };
   }
 
+  // ---- clocks: turn timer, debts, pause, game length -------------------------
+  // Like auctions, the engine only stores deadlines: the room arms one timer at
+  // clockDeadline() and calls clockTimeout(). Every public entry point ends in
+  // settle(), which keeps the deadlines in step with whatever just happened.
+
+  /** The clock deadlines are measured from: frozen while paused. */
+  private clockNow(): number {
+    return this.paused ? this.paused.at : this.now();
+  }
+
+  private turnMs(): number {
+    return Math.max(0, this.rules.turnSeconds ?? 0) * 1000;
+  }
+
+  /** Waiting on a debt they cannot pay from cash? */
+  private blockedByDebt(p: PlayerState): boolean {
+    const owe = this.debtOf(p.id);
+    return owe > 0 && p.cash < owe;
+  }
+
+  /** Bookkeeping after every change: the time-limit ending, estate sales, deadlines. */
+  private settle() {
+    // Out of time and between turn steps: that was the last one.
+    if (this.timeUp && this.phase === 'roll' && !this.paused) this.finishByTime();
+    this.pumpEstate();
+    this.syncClocks();
+  }
+
+  private syncClocks() {
+    const ms = this.turnMs();
+    const base = this.clockNow();
+    if (this.phase === 'over' || ms === 0) {
+      this.turnEndsAt = null;
+      this.turnKey = '';
+      this.debtEndsAt = {};
+      return;
+    }
+    const cur = this.current;
+    if (!STEP_PHASES.includes(this.phase) || cur.isBot) {
+      // Auctions and mini-games run their own clocks; bots never need one.
+      this.turnEndsAt = null;
+      this.turnKey = '';
+    } else {
+      // Each new step (new phase, new roll, new player) gets a full window.
+      const key = `${this.turnNumber}|${this.currentIdx}|${this.phase}|${this.rollSeq}`;
+      if (key !== this.turnKey) {
+        this.turnKey = key;
+        this.turnEndsAt = base + ms;
+      } else if (this.turnEndsAt === null && !this.blockedByDebt(cur)) {
+        // The step stalled on a debt (see turnTimeout); now it is sorted, time to finish.
+        this.turnEndsAt = base + ms;
+      }
+    }
+    for (const p of this.players) {
+      if (p.isBot || p.bankrupt || this.debtOf(p.id) === 0) delete this.debtEndsAt[p.id];
+      else this.debtEndsAt[p.id] ??= base + ms * DEBT_TURNS;
+    }
+  }
+
+  /** When the room must call clockTimeout() next (turn step, a debt, or the game-length limit). */
+  clockDeadline(): number | null {
+    if (this.paused || this.phase === 'over') return null;
+    const due = Object.values(this.debtEndsAt);
+    if (this.turnEndsAt !== null) due.push(this.turnEndsAt);
+    if (this.endsAt !== null && !this.timeUp) due.push(this.endsAt);
+    return due.length ? Math.min(...due) : null;
+  }
+
+  /** Called by the room when clockDeadline() passes. True if anything changed. */
+  clockTimeout(): boolean {
+    const due = this.clockDeadline();
+    const now = this.now();
+    if (due === null || now < due) return false;
+    if (this.endsAt !== null && !this.timeUp && now >= this.endsAt) {
+      this.timeUp = true;
+      this.say(this.phase === 'roll' ? '⏰ Time is up!' : `⏰ Time is up — the game ends when ${this.current.name}'s turn is over.`);
+    }
+    for (const [id, at] of Object.entries(this.debtEndsAt)) {
+      if (this.phase === 'over') break;
+      if (now >= at) this.debtTimeout(this.player(id));
+    }
+    if (this.phase !== 'over' && this.turnEndsAt !== null && now >= this.turnEndsAt) this.turnTimeout();
+    this.settle();
+    return true;
+  }
+
+  /** The current player let their step run out: take the safe default for them. */
+  private turnTimeout() {
+    const p = this.current;
+    this.turnEndsAt = null;
+    const owe = this.debtOf(p.id);
+    if (owe > 0) {
+      // Nothing can move until the debt is settled; its own clock decides that.
+      if (p.cash < owe) return;
+      this.payDebt(p);
+    }
+    this.say(`⏱ ${p.name} ran out of time.`, p.id);
+    switch (this.phase) {
+      case 'roll': this.roll(p); break; // in jail this is a roll for doubles
+      case 'buy': this.decline(p); break; // never spends their money: it goes to auction
+      case 'choose': this.choose(p, this.defaultChoice(p.id)); break;
+      case 'done': this.endTurn(p); break;
+    }
+    const n = (this.timeoutStreak[p.id] ?? 0) + 1;
+    this.timeoutStreak[p.id] = n;
+    if (n >= AFK_AFTER && !p.afk && !p.bankrupt) {
+      p.afk = true;
+      this.say(`${p.name} seems to be away — autopilot plays for them until they are back.`, p.id);
+    }
+  }
+
+  /** A debtor's time is up: raise the cash from their holdings if that covers it, else bankruptcy. */
+  private debtTimeout(p: PlayerState) {
+    delete this.debtEndsAt[p.id];
+    const owe = this.debtOf(p.id);
+    if (owe === 0 || p.bankrupt) return;
+    this.say(`⏱ ${p.name} ran out of time to pay ${this.money(owe)}.`, p.id);
+    if (this.raiseCash(p, owe)) this.payDebt(p);
+    else this.goBankrupt(p);
+  }
+
+  /**
+   * Mortgage bare deeds (cheapest first), then sell buildings, until `p` has
+   * `need`. Touches nothing when even everything would not be enough.
+   */
+  private raiseCash(p: PlayerState, need: number): boolean {
+    if (p.cash >= need) return true;
+    const mine = this.ownedBy(p.id).sort((a, b) => (this.spaces[a].price ?? 0) - (this.spaces[b].price ?? 0));
+    const potential = p.cash + mine.reduce((a, i) => {
+      const s = this.spaces[i], o = this.owned[i];
+      return a + (o.mortgaged ? 0 : mortgageValue(s)) + Math.floor((s.houseCost ?? 0) / 2) * o.houses;
+    }, 0);
+    if (potential < need) return false;
+    while (p.cash < need) {
+      const bare = mine.find(i => !this.owned[i].mortgaged && !this.groupHasBuildings(this.spaces[i].group));
+      if (bare !== undefined) {
+        this.mortgageOne(p, this.spaces[bare], this.owned[bare]);
+        continue;
+      }
+      // Always the most built-up deed, which keeps the group even.
+      const built = mine.filter(i => this.owned[i].houses > 0).sort((a, b) => this.owned[b].houses - this.owned[a].houses)[0];
+      if (built === undefined) break;
+      this.sellOne(p, this.spaces[built], this.owned[built]);
+    }
+    return p.cash >= need;
+  }
+
+  /** Host or operator freezes the table: every clock stops, only resigning still works. */
+  pause(by: string) {
+    if (this.phase === 'over') fail('The game is over');
+    if (this.paused) fail(`Already paused by ${this.paused.by}`);
+    this.paused = { by, at: this.now() };
+    this.say(`⏸️ Game paused by ${by}.`);
+  }
+
+  resume(by: string) {
+    const p = this.paused ?? fail('The game is not paused');
+    this.paused = null;
+    this.shiftClocks(this.now() - p.at);
+    this.say(`▶️ Game resumed by ${by}.`);
+    this.settle();
+  }
+
+  /** Move every running deadline on by `ms` (a pause, or a server restart). */
+  private shiftClocks(ms: number) {
+    if (ms <= 0) return;
+    if (this.turnEndsAt !== null) this.turnEndsAt += ms;
+    for (const id of Object.keys(this.debtEndsAt)) this.debtEndsAt[id] += ms;
+    if (this.endsAt !== null && !this.timeUp) this.endsAt += ms;
+    if (this.auction) this.auction.endsAt += ms;
+    const mg = this.minigame;
+    if (mg) {
+      if (mg.stage === 'result') mg.resultEndsAt += ms;
+      else MINIGAMES[mg.kind].shift(mg.data, ms);
+    }
+  }
+
+  /** Game-length limit reached: richest player wins, everyone ranked by net worth. */
+  private finishByTime() {
+    const st = this.standings();
+    this.winner = st[0].id;
+    this.phase = 'over';
+    this.auction = null;
+    this.minigame = null;
+    this.choice = null;
+    this.estateQueue = [];
+    this.resumePhase = null;
+    const w = this.player(this.winner);
+    this.say(`🏁 ${w.name} wins with the highest net worth (${this.money(st[0].netWorth)})!`, w.id);
+    this.say(`Final ranking: ${st.map((x, i) => `${i + 1}. ${this.player(x.id).name} ${this.money(x.netWorth)}`).join(' · ')}`);
+  }
+
+  // ---- operator fixes -------------------------------------------------------
+  // Direct corrections for when something went wrong at a table. They bypass
+  // turn order and work while paused (operators fix paused games), are written
+  // to the game log for everyone to see, and keep money and buildings consistent.
+
+  private livePlayer(id: string): PlayerState {
+    if (this.phase === 'over') fail('The game is over');
+    const p = this.player(id);
+    if (p.bankrupt) fail(`${p.name} is out of the game`);
+    return p;
+  }
+
+  adminSetCash(id: string, cash: number) {
+    const p = this.livePlayer(id);
+    if (!Number.isInteger(cash) || cash < 0 || cash > 1_000_000) fail('Cash must be a whole number from 0 to 1,000,000');
+    const was = p.cash;
+    p.cash = cash;
+    this.say(`🛠 An operator set ${p.name}'s cash to ${this.money(cash)} (was ${this.money(was)}).`, p.id);
+    this.settle();
+  }
+
+  /** Give a deed to a player, or back to the bank (`to` null). */
+  adminMoveProperty(space: number, to: string | null) {
+    if (this.phase === 'over') fail('The game is over');
+    const s = this.spaces[space];
+    if (!s || !isOwnable(s)) fail('That space cannot be owned');
+    if (this.auction?.space === space) fail('That deed is being auctioned');
+    if (this.phase === 'buy' && this.current.position === space) fail(`${this.current.name} is deciding whether to buy it`);
+    const target = to === null ? null : this.livePlayer(to);
+    const o = this.owned[space];
+    if (!o && !target) fail('The bank already has it');
+    if (o && target && o.owner === target.id) fail(`${target.name} already owns it`);
+    // The group stops being one owner's set: the bank buys its buildings back at half price.
+    const group = s.group ? groupIndices(this.spaces, s.group) : [space];
+    for (const i of group) if (this.owned[i]?.houses) this.clearBuildings(i);
+    if (target) this.owned[space] = { owner: target.id, houses: 0, mortgaged: o?.mortgaged ?? false };
+    else delete this.owned[space];
+    this.estateQueue = this.estateQueue.filter(i => i !== space);
+    this.trades = this.trades.filter(t => ![...t.give.spaces, ...t.get.spaces].includes(space));
+    const from = o ? this.player(o.owner).name : 'the bank';
+    this.say(`🛠 An operator moved ${s.name} from ${from} to ${target ? target.name : 'the bank'}.`, target?.id);
+    this.settle();
+  }
+
+  /** Sell every building on a deed back to the bank at half price. */
+  private clearBuildings(i: number) {
+    const o = this.owned[i];
+    const refund = Math.floor(this.spaces[i].houseCost! / 2) * o.houses;
+    if (o.houses === 5) this.hotelsLeft++;
+    else this.housesLeft += o.houses;
+    o.houses = 0;
+    this.player(o.owner).cash += refund;
+  }
+
+  adminJailCard(id: string, give: boolean) {
+    const p = this.livePlayer(id);
+    if (give) {
+      if (!this.grantJailCard(p)) fail('Both Get Out of Jail Free cards are already held');
+    } else {
+      const deck = p.jailCards.pop() ?? fail(`${p.name} has no Get Out of Jail Free card`);
+      this.returnJailCard(deck);
+    }
+    this.say(`🛠 An operator ${give ? 'gave' : 'took'} a Get Out of Jail Free card ${give ? 'to' : 'from'} ${p.name}.`, p.id);
+    this.settle();
+  }
+
+  private returnJailCard(deck: DeckId) {
+    const cards = deck === 'chance' ? this.theme.chance : this.theme.chest;
+    this.decks[deck].push(cards.findIndex(c => c.effect.type === 'jailFree'));
+  }
+
+  adminClearDebt(id: string) {
+    const p = this.livePlayer(id);
+    const owe = this.debtOf(p.id);
+    if (!owe) fail(`${p.name} owes nothing`);
+    this.debts = this.debts.filter(d => d.from !== p.id);
+    this.say(`🛠 An operator cleared ${p.name}'s debt of ${this.money(owe)}.`, p.id);
+    this.settle();
+  }
+
+  adminJail(id: string, jail: boolean) {
+    const p = this.livePlayer(id);
+    if (p === this.current && (this.phase === 'buy' || this.phase === 'choose')) fail(`Wait until ${p.name}'s move is settled`);
+    if (jail) {
+      if (p.inJail) fail(`${p.name} is already in jail`);
+      this.sendToJail(p);
+      // Going to jail ends the turn's rolling, as it does in play.
+      if (p === this.current && this.phase === 'roll') this.phase = 'done';
+    } else {
+      if (!p.inJail) fail(`${p.name} is not in jail`);
+      this.leaveJail(p);
+    }
+    this.say(`🛠 An operator ${jail ? 'sent' : 'released'} ${p.name} ${jail ? 'to' : 'from'} jail.`, p.id);
+    this.settle();
+  }
+
   // ---- views ----------------------------------------------------------------
 
   snapshot(): GameSnapshot {
@@ -998,6 +1505,10 @@ export class Game {
       winner: this.winner, log: this.log, turnNumber: this.turnNumber, decks: this.decks,
       cardSeq: this.cardSeq, tradeSeq: this.tradeSeq, outOrder: this.outOrder,
       minigame: this.minigame, minigameSeq: this.minigameSeq, savedAt: this.now(),
+      turnEndsAt: this.turnEndsAt, turnKey: this.turnKey, debtEndsAt: this.debtEndsAt,
+      timeoutStreak: this.timeoutStreak, paused: this.paused, endsAt: this.endsAt, timeUp: this.timeUp,
+      speed: this.speed, choice: this.choice, speedPending: this.speedPending,
+      estateQueue: this.estateQueue, resumePhase: this.resumePhase,
     });
   }
 
@@ -1008,28 +1519,57 @@ export class Game {
     Object.assign(g, state);
     g.minigame ??= null;
     g.minigameSeq ??= 0;
+    // Older snapshots: no timers, no pause, no Speed Die state. syncClocks()
+    // below gives a running turn a fresh window if the rules ask for one.
+    g.turnEndsAt = snap.turnEndsAt ?? null;
+    g.turnKey = snap.turnKey ?? '';
+    g.debtEndsAt = snap.debtEndsAt ?? {};
+    g.timeoutStreak = snap.timeoutStreak ?? {};
+    g.paused = snap.paused ?? null;
+    g.endsAt = snap.endsAt ?? null;
+    g.timeUp = snap.timeUp ?? false;
+    g.speed = snap.speed ?? null;
+    g.choice = snap.choice ?? null;
+    g.speedPending = snap.speedPending ?? null;
+    g.estateQueue = snap.estateQueue ?? [];
+    g.resumePhase = snap.resumePhase ?? null;
     g.onLog = init.onLog;
-    // An auction's clock is wall time; give bidders a fresh window after a restart.
-    if (g.auction) g.auction.endsAt = g.now() + AUCTION_MS;
-    // A mini-game resumes where it stood: every timer moves on by the downtime.
-    const mg = g.minigame;
+    // Every clock resumes where it stood: deadlines move on by the downtime
+    // (a pause stays a pause, its start moving with them).
     const down = savedAt === undefined ? 0 : g.now() - savedAt;
-    if (mg && down > 0) {
-      if (mg.stage === 'result') mg.resultEndsAt += down;
-      else MINIGAMES[mg.kind].shift(mg.data, down);
+    if (down > 0) {
+      g.shiftClocks(down);
+      if (g.paused) g.paused.at += down;
     }
+    // An auction's clock is wall time; give bidders a fresh window after a restart.
+    if (g.auction) g.auction.endsAt = g.clockNow() + AUCTION_MS;
+    g.syncClocks();
     return g;
   }
 
-  /** Final standings: winner (or richest survivors), then last-out to first-out. */
-  standings(): { id: string; netWorth: number }[] {
-    const worth = (p: PlayerState) => p.cash + this.ownedBy(p.id).reduce((a, i) => {
+  /**
+   * Net worth as the official short-game rules count it: cash, deeds at their
+   * printed price (mortgaged ones at the mortgage value), buildings at cost,
+   * less what the player owes and plus what is owed to them.
+   */
+  netWorth(id: string): number {
+    const p = this.player(id);
+    if (p.bankrupt) return 0;
+    const deeds = this.ownedBy(id).reduce((a, i) => {
       const s = this.spaces[i], o = this.owned[i];
-      return a + (o.mortgaged ? 0 : mortgageValue(s)) + Math.floor((s.houseCost ?? 0) / 2) * o.houses;
+      return a + (o.mortgaged ? mortgageValue(s) : s.price ?? 0) + (s.houseCost ?? 0) * o.houses;
     }, 0);
-    const alive = this.active().sort((a, b) => worth(b) - worth(a));
+    const owedToMe = this.debts.filter(d => d.to === id).reduce((a, d) => a + d.amount, 0);
+    return p.cash + deeds - this.debtOf(id) + owedToMe;
+  }
+
+  /** Final standings: winner, then the richest survivors, then last-out to first-out. */
+  standings(): { id: string; netWorth: number }[] {
+    const worth = new Map(this.players.map(p => [p.id, this.netWorth(p.id)]));
+    const alive = this.active().sort((a, b) =>
+      Number(b.id === this.winner) - Number(a.id === this.winner) || worth.get(b.id)! - worth.get(a.id)!);
     const out = [...this.outOrder].reverse().map(id => this.player(id));
-    return [...alive, ...out].map(p => ({ id: p.id, netWorth: p.bankrupt ? 0 : worth(p) }));
+    return [...alive, ...out].map(p => ({ id: p.id, netWorth: worth.get(p.id)! }));
   }
 
   view(): GameView {
@@ -1056,6 +1596,13 @@ export class Game {
       log: this.log.slice(-80),
       turnNumber: this.turnNumber,
       minigame: this.minigameView(),
+      turnEndsAt: this.turnEndsAt,
+      debtEndsAt: this.debtEndsAt,
+      paused: this.paused,
+      endsAt: this.endsAt,
+      timeUp: this.timeUp,
+      speed: this.speed,
+      choice: this.choice,
     });
   }
 }

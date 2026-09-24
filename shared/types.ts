@@ -26,6 +26,10 @@ export interface PlayerState {
   jailCards: DeckId[];
   bankrupt: boolean;
   isBot: boolean;
+  /** Timed out twice in a row: autopilot plays for them until they act again. */
+  afk?: boolean;
+  /** Has passed GO at least once (the Speed Die joins in from then on). */
+  passedGo?: boolean;
 }
 
 export interface OwnedSpace {
@@ -41,7 +45,24 @@ export type TurnPhase =
   | 'auction'
   | 'minigame'  // an arcade round is running; turn actions wait for it
   | 'done'      // rolled; may manage properties and end the turn
+  | 'choose'    // Speed Die: pick the Bus move or the triples destination
   | 'over';
+
+/** Speed Die faces: numbers add to the move; 'mr' = Mr. Monopoly; 'bus' = pick a die. */
+export type SpeedFace = 1 | 2 | 3 | 'mr' | 'bus';
+export const SPEED_FACES: SpeedFace[] = [1, 2, 3, 'mr', 'mr', 'bus'];
+
+/** A move the current player must pick (phase 'choose'). */
+export type MoveChoice =
+  | { kind: 'bus'; options: number[] }
+  | { kind: 'triples' };
+
+export interface PauseState {
+  /** Name of whoever paused (host or operator). */
+  by: string;
+  /** Server clock when the pause began; frozen countdowns read from here. */
+  at: number;
+}
 
 export interface Debt {
   from: string;
@@ -61,6 +82,8 @@ export interface Auction {
   bidders: string[];
   /** Server clock deadline; each bid extends it. */
   endsAt: number;
+  /** Selling a bankrupt player's estate for the bank (not the current player's landing). */
+  bank?: boolean;
 }
 
 export interface TradeSide {
@@ -117,6 +140,20 @@ export interface GameView {
   turnNumber: number;
   /** The arcade round in progress (phase 'minigame'), result screen included. */
   minigame: MinigameView | null;
+  /** Deadline for the current player's turn step (turn timer rule), null = none. */
+  turnEndsAt: number | null;
+  /** Players who owe money, and when they must have paid. */
+  debtEndsAt: Record<string, number>;
+  /** Frozen by the host or an operator; every clock stands still. */
+  paused: PauseState | null;
+  /** When the game-length limit runs out (null = no limit). */
+  endsAt: number | null;
+  /** The limit ran out: the game ends when the current turn step finishes. */
+  timeUp: boolean;
+  /** The Speed Die from the last roll (null when it was not rolled). */
+  speed: SpeedFace | null;
+  /** Phase 'choose': what the current player is choosing. */
+  choice: MoveChoice | null;
 }
 
 /** Everything a player can ask the engine to do. */
@@ -138,7 +175,9 @@ export type Action =
   | { type: 'proposeTrade'; to: string; give: TradeSide; get: TradeSide }
   | { type: 'acceptTrade'; id: string }
   | { type: 'rejectTrade'; id: string }
-  | { type: 'minigame'; move: MinigameMove };
+  | { type: 'minigame'; move: MinigameMove }
+  /** Phase 'choose': Bus = steps to move; triples = the space to jump to. */
+  | { type: 'choose'; value: number };
 
 // ---- rooms -----------------------------------------------------------------
 
@@ -151,6 +190,8 @@ export interface RoomSeat {
   color: string;
   isBot: boolean;
   connected: boolean;
+  /** The host (or an operator) handed this player to autopilot. */
+  autopilot?: boolean;
 }
 
 export interface RoomView {

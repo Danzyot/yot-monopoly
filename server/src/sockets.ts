@@ -255,6 +255,22 @@ export function attachSockets(io: Server): SocketLayer {
       lobbyChanged();
     });
 
+    // Host (or operator) game controls: freeze every clock, or let autopilot
+    // play for someone who is connected but not at the screen.
+    on<{ paused?: boolean }>('room:pause', (p, room) => {
+      const r = inRoom(room);
+      const name = data.profile?.name ?? 'the host';
+      if (p.paused === false) r.resume(me(), isAdmin(), name);
+      else r.pause(me(), isAdmin(), name);
+      broadcast(r);
+    });
+
+    on<{ id: string; on: boolean }>('room:autopilot', (p, room) => {
+      const r = inRoom(room);
+      r.setAutopilot(me(), String(p.id), p.on === true, isAdmin());
+      broadcast(r);
+    });
+
     on('room:start', (_p, room) => {
       const r = inRoom(room);
       r.start(me(), isAdmin());

@@ -90,6 +90,8 @@ export class Room {
   private auctionTimer: NodeJS.Timeout | null = null;
   private minigameTimer: NodeJS.Timeout | null = null;
   private autopilotTimer: NodeJS.Timeout | null = null;
+  /** Turn timer, debt deadlines and the game-length limit (Game.clockDeadline). */
+  private clockTimer: NodeJS.Timeout | null = null;
 
   constructor(readonly code: string, public hostId: string, private hooks: RoomHooks) {}
 
@@ -239,7 +241,7 @@ export class Room {
       this.seats = this.seats.filter(s => s.id !== target);
       if (this.hostId === target) this.hostId = this.seats.find(x => !x.isBot)?.id ?? '';
     } else if (this.game && this.game.phase !== 'over' && !this.game.player(target).bankrupt) {
-      this.act(target, { type: 'bankrupt' });
+      this.act(target, { type: 'bankrupt' }, true); // not the player acting
     }
   }
 
@@ -276,11 +278,64 @@ export class Room {
 
   // ---- play -----------------------------------------------------------------
 
-  act(id: string, a: Action) {
+  /** `auto`: the computer is moving for this seat (bot or autopilot), not the player. */
+  act(id: string, a: Action, auto = false) {
     if (!this.game) fail('The game has not started');
     if (this.status === 'finished') fail('The game is over');
     this.lastActivity = Date.now();
-    this.game.apply(id, a);
+    this.game.apply(id, a, { auto });
+    const s = this.seat(id);
+    if (!auto && s?.autopilot) {
+      // Acting yourself takes the seat back from autopilot.
+      s.autopilot = false;
+      this.hooks.onEvent(this, `${s.name} took back control from autopilot`);
+    }
+    this.afterChange();
+  }
+
+  /** Host or operator freezes every clock in the game (chat keeps working). */
+  pause(id: string, isAdmin: boolean, byName: string) {
+    this.requireHost(id, isAdmin);
+    const g = this.runningGame();
+    g.pause(byName);
+    this.hooks.onEvent(this, `Game paused by ${byName}`);
+    this.schedule();
+  }
+
+  resume(id: string, isAdmin: boolean, byName: string) {
+    this.requireHost(id, isAdmin);
+    const g = this.runningGame();
+    g.resume(byName);
+    this.hooks.onEvent(this, `Game resumed by ${byName}`);
+    this.afterChange();
+  }
+
+  /** Host or operator hands a (connected but absent) player to autopilot, or takes them off it. */
+  setAutopilot(byId: string, target: string, on: boolean, isAdmin: boolean) {
+    this.requireHost(byId, isAdmin);
+    const g = this.runningGame();
+    const s = this.seat(target) ?? fail('Not in this room');
+    if (s.isBot) fail('Bots already play themselves');
+    if (g.player(target).bankrupt) fail(`${s.name} is out of the game`);
+    s.autopilot = on;
+    // Taking someone off autopilot also clears the away flag it may be covering for.
+    if (!on) g.player(target).afk = false;
+    this.hooks.onEvent(this, on
+      ? `${s.name} was handed to autopilot by ${this.seat(byId)?.name ?? 'an operator'}`
+      : `${s.name} was taken off autopilot by ${this.seat(byId)?.name ?? 'an operator'}`);
+    this.schedule();
+  }
+
+  private runningGame(): Game {
+    if (!this.game || this.status !== 'playing' || this.game.phase === 'over') fail('No game is running');
+    return this.game;
+  }
+
+  /** Operator corrections (routes/adminGame.ts); each is logged by the engine and here. */
+  adminFix(fix: (g: Game) => void, what: string, by: string) {
+    const g = this.runningGame();
+    fix(g);
+    this.hooks.onEvent(this, `Operator ${by}: ${what}`);
     this.afterChange();
   }
 
@@ -297,6 +352,8 @@ export class Room {
   private automated(s: Seat, now: number): 'bot' | 'autopilot' | null {
     if (s.isBot) return 'bot';
     if (s.disconnectedAt !== null && now - s.disconnectedAt >= AUTOPILOT_GRACE_MS) return 'autopilot';
+    // Handed over by the host, or marked away after timing out: until they act again.
+    if (s.autopilot || this.game?.players.find(p => p.id === s.id)?.afk) return 'autopilot';
     return null;
   }
 
@@ -305,6 +362,20 @@ export class Room {
     const g = this.game;
     this.clearTimers();
     if (!g || g.phase === 'over' || this.status === 'finished') return;
+    // Paused: nothing moves, not even bots, until resume() re-arms everything.
+    if (g.paused) return;
+
+    const clockDue = g.clockDeadline();
+    if (clockDue !== null) {
+      this.clockTimer = setTimeout(() => {
+        if (this.game?.clockTimeout()) {
+          this.afterChange();
+          this.hooks.onChange(this);
+        } else {
+          this.schedule();
+        }
+      }, Math.max(0, clockDue - Date.now()) + 50);
+    }
 
     if (g.auction) {
       const wait = Math.max(0, g.auction.endsAt - Date.now()) + 50;
@@ -342,7 +413,7 @@ export class Room {
         const next = this.nextAutomatedAction(Date.now());
         if (!next) return;
         try {
-          this.act(next.id, next.action);
+          this.act(next.id, next.action, true);
         } catch (e) {
           // A bot choosing an illegal move is a bug, but it must never wedge
           // the room: log it and fall back to something always legal.
@@ -393,13 +464,13 @@ export class Room {
 
   private fallback(id: string) {
     for (const a of [{ type: 'pass' }, { type: 'endTurn' }, { type: 'bankrupt' }] as Action[]) {
-      try { this.act(id, a); return; } catch (e) { if (!(e instanceof EngineError)) throw e; }
+      try { this.act(id, a, true); return; } catch (e) { if (!(e instanceof EngineError)) throw e; }
     }
   }
 
   private clearTimers() {
-    for (const t of [this.botTimer, this.auctionTimer, this.minigameTimer, this.autopilotTimer]) if (t) clearTimeout(t);
-    this.botTimer = this.auctionTimer = this.minigameTimer = this.autopilotTimer = null;
+    for (const t of [this.botTimer, this.auctionTimer, this.minigameTimer, this.autopilotTimer, this.clockTimer]) if (t) clearTimeout(t);
+    this.botTimer = this.auctionTimer = this.minigameTimer = this.autopilotTimer = this.clockTimer = null;
   }
 
   dispose() {
@@ -454,7 +525,8 @@ export class Room {
     const r = new Room(s.code, s.hostId, hooks);
     Object.assign(r, {
       createdAt: s.createdAt, startedAt: s.startedAt, themeId: s.themeId, mapId: s.mapId,
-      rules: sanitizeRules(s.rules), private: !!s.private, status: s.status,
+      // Rooms saved before the turn timer existed keep playing without one.
+      rules: sanitizeRules({ ...s.rules, turnSeconds: (s.rules as Partial<RuleConfig>).turnSeconds ?? 0 }), private: !!s.private, status: s.status,
       style: sanitizeTableStyle(s.style),
     });
     // Everyone starts disconnected: they reclaim their seats on reconnect, and
@@ -500,7 +572,17 @@ export function sanitizeRules(r: Partial<RuleConfig>): RuleConfig {
     maxPlayers: clampInt(r.maxPlayers, 2, 8, d.maxPlayers),
     minigames: bool(r.minigames, d.minigames),
     arcadeParking: bool(r.arcadeParking, d.arcadeParking),
+    // 0 = off; otherwise at least 15 s so nobody can set an unplayable clock.
+    turnSeconds: offOrClamp(r.turnSeconds, 15, 600, d.turnSeconds),
+    timeLimitMin: offOrClamp(r.timeLimitMin, 5, 600, d.timeLimitMin),
+    noRentInJail: bool(r.noRentInJail, d.noRentInJail),
+    speedDie: bool(r.speedDie, d.speedDie),
   };
+}
+
+function offOrClamp(v: unknown, lo: number, hi: number, dflt: number): number {
+  const n = clampInt(v, 0, hi, dflt);
+  return n === 0 ? 0 : Math.max(lo, n);
 }
 
 // Unambiguous characters only — codes get read out loud and typed on phones.

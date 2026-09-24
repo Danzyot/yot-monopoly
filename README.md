@@ -22,19 +22,25 @@ mini-games, music, and a full operator dashboard.
   fall over when bankrupt and dance when they win.
 - **Full rules**: rent (sets, houses, railroads, utilities), doubles and jail, all
   Chance/Community Chest cards, auctions, even building, the 32/12 building supply,
-  mortgages, debts, bankruptcy to a player or to the bank, and trading.
+  mortgages, debts, bankruptcy to a player or to the bank (the bank auctions the estate),
+  trading (10% interest on mortgaged deeds received), and the official **Speed Die**
+  variant (Mr. Monopoly, Bus, triples).
 - **Mini-games** on arcade spaces (and optionally Free Parking on Classic): Dice Duel,
   High or Low, Reaction Race, Quick Math and Wheel Spin. Server-authoritative; bots play
   them too.
 - **House rules** per room: starting cash, Free Parking jackpot, double on GO, auctions,
-  even building, limited buildings, mini-games, Free Parking arcade.
+  even building, limited buildings, mini-games, Free Parking arcade, no rent in jail.
+- **Timing**: a turn timer (off/30–120 s; the safe move is made on timeout, and after two
+  in a row autopilot takes over until the player acts), a deadline for debts, an optional
+  game length (richest player wins when it runs out), and pause/resume for the host.
 - **Table styles** like the poker tables: seven table presets, a custom board logo and a
   backdrop image from the operator's graphics library.
 - **Music & sound**: operator-uploaded music library with playlists, a built-in
   generative lounge soundtrack that works with nothing uploaded, and synthesised sound
   effects for dice, buying, rent, cards, jail, auctions and winning.
-- **Bots** fill seats, and **autopilot** plays for anyone disconnected more than 45 s
-  (never spending their money or trading for them). Reconnecting reclaims the seat.
+- **Bots** fill seats, and **autopilot** plays for anyone disconnected more than 45 s,
+  away after timeouts, or handed to it by the host (never spending their money or
+  trading for them). Reconnecting, or simply acting, reclaims the seat.
 - Chat, leaderboard, and phone-friendly layout throughout.
 
 **Sign-in** (ported from the poker room): **Log in with Discord** (OAuth) or **Verify with
@@ -43,7 +49,8 @@ posts it in a verify channel). `DEMO_MODE=1` adds a name-only sign-in for develo
 
 **Operator dashboard** (`/admin`, for the Discord ids in `ADMIN_DISCORD_IDS`):
 - Overview — health, memory, loop lag, sockets, persistent-disk and snapshot status.
-- Rooms — live rooms, spectate, end/close, remove or ban players.
+- Rooms — live rooms, spectate, pause/resume, end/close, remove or ban players, and
+  "Fix game" (cash, deeds, jail cards, debts, jail), all logged.
 - Players — search by name/id/Discord/IP, IP history with countries, linked accounts,
   bans, mutes, Discord DM, erase history; who is online now.
 - Alts — accounts sharing an IP address.
