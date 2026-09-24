@@ -12,7 +12,7 @@ import { defaultInviteUrl, discordEnabled } from './discord.ts';
 import { loadEvents } from './eventlog.ts';
 import { getFeatures, isOn, loadFeatures } from './features.ts';
 import { loadGraphics } from './graphics.ts';
-import { rateLimit } from './http.ts';
+import { authed, rateLimit } from './http.ts';
 import { trustedProxyHops } from './ip.ts';
 import { armPersistence, restoreLive } from './persist.ts';
 import { adminRoutes } from './routes/admin.ts';
@@ -20,7 +20,9 @@ import { authRoutes, mountInteractions } from './routes/auth.ts';
 import { mountMusic } from './routes/music.ts';
 import { mountGraphics } from './routes/graphics.ts';
 import { attachSockets } from './sockets.ts';
-import { leaderboard, loadResults } from './stats.ts';
+import { allResults, leaderboard, loadResults } from './stats.ts';
+import { buildProfile } from './profiles.ts';
+import { devFakeDiscord, gateInfo } from './requirements.ts';
 import { buttonFlowAvailable, codeVerifyAvailable, primeVerifyChannel, verifyChannelName } from './verifycode.ts';
 import type { SiteConfig } from '../../shared/types.ts';
 
@@ -117,6 +119,21 @@ app.get('/api/leaderboard', (_req, res) => {
   res.json(leaderboard(100));
 });
 
+// Public profiles ride on the leaderboard switch: both publish players' results.
+app.get('/api/players/:id', (req, res) => {
+  if (!isOn('leaderboard')) { res.status(404).json({ error: 'Player profiles are switched off' }); return; }
+  const profile = buildProfile(String(req.params.id), allResults());
+  if (!profile) { res.status(404).json({ error: 'No finished games for that player yet' }); return; }
+  res.json(profile);
+});
+
+// What the lobby's Discord requirement picker can offer. Any signed-in player
+// may host, so any signed-in player may ask; roles are cached (requirements.ts).
+app.get('/api/community/discord', async (req, res) => {
+  if (!authed(req)) { res.status(401).json({ error: 'Sign in first' }); return; }
+  res.json(await gateInfo());
+});
+
 app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,
@@ -140,6 +157,7 @@ if (existsSync(dist)) {
 http.listen(PORT, () => {
   console.log(`Yot Monopoly server on :${PORT}`);
   if (demoMode()) console.warn('⚠️  DEMO_MODE=1 — anyone can sign in with just a name. Turn it off for real events.');
+  if (devFakeDiscord()) console.warn('⚠️  DEV_FAKE_DISCORD=1 — Discord requirements use a fake server (demo names decide membership).');
   if (!discordEnabled() && !demoMode()) console.warn('⚠️  No Discord app configured and DEMO_MODE is off — nobody can sign in.');
   if (!adminModeConfigured()) console.warn('⚠️  ADMIN_DISCORD_IDS is unset — every signed-in account is an operator.');
   if (!process.env.DATA_DIR) console.warn('⚠️  DATA_DIR is unset — bans, results and live games are stored in server/data (lost on redeploy without a volume).');

@@ -16,10 +16,12 @@ import { isLibraryFile } from './graphics.ts';
 import { clientIp } from './ip.ts';
 import { Registry, Room, RoomError, type Member } from './rooms.ts';
 import { recordResult } from './stats.ts';
+import { resolveRequirements } from './requirements.ts';
+import { takeSeat } from './seating.ts';
 import { getMap } from '../../shared/maps.ts';
 import { getTheme } from '../../shared/themes.ts';
 import { DEFAULT_TABLE_STYLE, libraryFileOf, sanitizeTableStyle } from '../../shared/tableStyles.ts';
-import type { Action, CharacterId, PlayerProfile } from '../../shared/types.ts';
+import type { Action, CharacterId, PlayerProfile, RequirementFailure } from '../../shared/types.ts';
 import type { RuleConfig } from '../../shared/themes.ts';
 
 type Ack = (res: { ok: true; [k: string]: unknown } | { ok: false; error: string }) => void;
@@ -36,6 +38,8 @@ interface SocketData {
 const MAX_SOCKETS_PER_IP = Number(process.env.MAX_SOCKETS_PER_IP ?? 24);
 const ACTIONS_PER_SEC = 12;
 const ACTION_BURST = 30;
+/** A player's Discord requirement check is repeated at most this often. */
+const GATE_CHECK_GAP_MS = 2_500;
 
 export interface SocketLayer {
   registry: Registry;
@@ -67,7 +71,9 @@ export function attachSockets(io: Server): SocketLayer {
       startedAt: room.startedAt ?? Date.now(), endedAt: Date.now(), turns: g.turnNumber,
       places: standings.map(s => {
         const p = g.player(s.id);
-        return { id: p.id, name: p.name, isBot: p.isBot, netWorth: s.netWorth };
+        // Character and avatar feed public profiles (older records lack them).
+        const avatar = p.isBot ? undefined : room.seat(p.id)?.avatar;
+        return { id: p.id, name: p.name, isBot: p.isBot, netWorth: s.netWorth, character: p.character, ...(avatar ? { avatar } : {}) };
       }),
     });
     lobbyChanged();
@@ -83,6 +89,8 @@ export function attachSockets(io: Server): SocketLayer {
   }
 
   const perIp = new Map<string, number>();
+  /** Last requirement refusal per player (see room:join). */
+  const recentRefusals = new Map<string, { code: string; at: number; blocked: RequirementFailure }>();
 
   io.use((socket, next) => {
     const data = socket.data as SocketData;
@@ -122,6 +130,28 @@ export function attachSockets(io: Server): SocketLayer {
         try {
           const room = data.room ? registry.get(data.room) ?? null : null;
           const extra = fn((payload ?? {}) as T, room) ?? {};
+          reply({ ok: true, ...extra });
+        } catch (e) {
+          if (e instanceof EngineError || e instanceof RoomError) reply({ ok: false, error: e.message });
+          else {
+            console.error(`[socket] ${event} failed`, e);
+            reply({ ok: false, error: 'Server error' });
+          }
+        }
+      });
+    };
+
+    /**
+     * `on` for handlers that must wait on something (Discord lookups). Same
+     * contract: errors become acks, never crashes.
+     */
+    const onAsync = <T>(event: string, fn: (payload: T, room: Room | null) => Promise<Record<string, unknown> | void>) => {
+      socket.on(event, async (payload: T, ack?: Ack) => {
+        const reply: Ack = typeof ack === 'function' ? ack : () => {};
+        if (!take(data)) return reply({ ok: false, error: 'Slow down' });
+        try {
+          const room = data.room ? registry.get(data.room) ?? null : null;
+          const extra = (await fn((payload ?? {}) as T, room)) ?? {};
           reply({ ok: true, ...extra });
         } catch (e) {
           if (e instanceof EngineError || e instanceof RoomError) reply({ ok: false, error: e.message });
@@ -185,22 +215,57 @@ export function attachSockets(io: Server): SocketLayer {
 
     // `watch` lets someone (typically an operator opening a room from the
     // dashboard) look in without taking a free lobby seat.
-    on<{ code: string; watch?: boolean }>('room:join', p => {
+    // Async because a Discord-gated room asks Discord before seating anyone
+    // new (seating.ts). Someone refused a seat watches instead and gets
+    // `blocked` back, which the client shows as the requirements modal.
+    onAsync<{ code: string; watch?: boolean }>('room:join', async p => {
       const room = registry.get(String(p.code ?? '').slice(0, 8)) ?? (() => { throw new RoomError('No room with that code'); })();
       const prof = data.profile;
       const ban = findBan({ id: prof?.id, discordId: prof?.discord?.id, ip: data.ip }, room.code);
       if (ban) throw new RoomError(banMessage(ban));
-      let seated = false;
-      if (prof && (p.watch !== true || room.seat(prof.id))) {
-        try {
-          room.join(member());
-          seated = true;
-        } catch (e) {
-          if (!(e instanceof RoomError)) throw e; // started or full: watch instead
-        }
+      // "Check again" and reconnects ask Discord; a refusal from moments ago is
+      // reused rather than asking again, so nobody can hammer the Discord API.
+      const recent = prof ? recentRefusals.get(prof.id) : undefined;
+      if (prof && recent && recent.code === room.code && Date.now() - recent.at < GATE_CHECK_GAP_MS
+        && room.requirements && !room.seat(prof.id) && p.watch !== true) {
+        enter(room, false);
+        return { spectating: true, blocked: recent.blocked };
       }
+      const watchingHere = data.room === room.code && !!prof && !room.seat(prof.id);
+      const { seated, blocked } = await takeSeat(room, prof, p.watch === true);
+      if (prof && blocked) {
+        if (recentRefusals.size > 5_000) recentRefusals.clear();
+        recentRefusals.set(prof.id, { code: room.code, at: Date.now(), blocked });
+      }
+      // The room can close while Discord is being asked.
+      if (registry.get(room.code) !== room) throw new RoomError('That room has closed');
+      // A spectator who has now sat down stops counting as one.
+      if (seated && watchingHere) room.spectators = Math.max(0, room.spectators - 1);
       enter(room, seated);
-      return { spectating: !seated };
+      return { spectating: !seated, blocked };
+    });
+
+    on<{ id: string }>('room:host', (p, room) => {
+      const r = inRoom(room);
+      r.transferHost(me(), String(p.id), isAdmin());
+      broadcast(r);
+      lobbyChanged();
+    });
+
+    onAsync<{ member?: boolean; roleId?: string | null }>('room:requirements', async (p, room) => {
+      const r = inRoom(room);
+      // Check rights before asking Discord anything.
+      r.requireHost(me(), isAdmin());
+      r.requireLobby();
+      let req;
+      try {
+        req = await resolveRequirements(p);
+      } catch (e) {
+        throw new RoomError(e instanceof Error ? e.message : 'Could not set that requirement');
+      }
+      r.setRequirements(me(), isAdmin(), req);
+      broadcast(r);
+      lobbyChanged();
     });
 
     on('room:leave', () => { leaveCurrent(true); });
