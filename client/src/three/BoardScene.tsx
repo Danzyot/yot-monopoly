@@ -22,8 +22,18 @@ function Board({ theme, customLogo, onPick, onHover }: {
   onHover?: (i: number | null) => void;
 }) {
   // Redraw once web fonts are ready so the board text uses them.
-  const [fontsReady, setFontsReady] = useState(false);
-  useEffect(() => { document.fonts?.ready.then(() => setFontsReady(true)); }, []);
+  const [fontsReady, setFontsReady] = useState(0);
+  useEffect(() => { document.fonts?.ready.then(() => setFontsReady(n => n + 1)); }, []);
+  // The board's own face may not be used anywhere in the page yet: ask for it
+  // outright, then repaint once it is in.
+  const boardFace = theme.ui?.boardFont ?? theme.ui?.font;
+  useEffect(() => {
+    if (!boardFace || !document.fonts) return;
+    let cancelled = false;
+    Promise.all([document.fonts.load(`700 40px ${boardFace}`), document.fonts.load(`600 40px ${boardFace}`)])
+      .then(() => { if (!cancelled) setFontsReady(n => n + 1); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [boardFace]);
   // Editions with artwork: load it, then redraw the board with it in place.
   // A room's custom logo takes the edition artwork's place. It is painted into
   // a WebGL texture, so it must load with CORS: an https image whose host does

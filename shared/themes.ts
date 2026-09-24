@@ -88,6 +88,10 @@ export interface ThemeUi {
   muted: string;
   /** CSS font-family for the whole UI and the board lettering. */
   font?: string;
+  /** CSS font-family for titles, cash and buttons (defaults to Lilita One). */
+  display?: string;
+  /** CSS font-family for the board lettering (defaults to `font`). */
+  boardFont?: string;
   /** Colour of the main (GO / Buy / Start) buttons; defaults to Monopoly GO green. */
   go?: string;
   /** Text colour on those buttons when the colour is light. */
@@ -157,59 +161,67 @@ function edition(
   };
 }
 
-// WAWA, from the wawa-poker room: near-black navy grounds, trading-desk gold
-// for anything you press, the green felt as the table. Spaces are named after
-// the prop-firm grind the community lives on.
-export const WAWA: Edition = edition(CLASSIC, {
-  id: 'wawa',
-  name: 'WAWA Edition',
-  tagline: 'The WAWA trading floor. Get funded, dodge the drawdown, cash the payout.',
-  centerTitle: 'WAWA',
+// Takeprofit TV, from the takeprofit-tv site's design system: ink-black
+// grounds, bone type, amber for anything you press, and the SMPTE colour bars
+// as the set colours. Set in Big Shoulders against Space Mono, like the site.
+// The railroads are its channels; the board is a broadcast.
+export const TPTV: Edition = edition(CLASSIC, {
+  id: 'tptv',
+  name: 'Takeprofit TV',
+  tagline: 'Takeprofit TV, on air. Futures, funded accounts and code TP — now as a board.',
+  centerTitle: 'TPTV',
   currency: '$',
-  deckNames: { chance: 'Market Open', chest: 'Payout' },
+  logoUrl: '/editions/tptv/logo.png',
+  deckNames: { chance: 'Breaking News', chest: 'Payout' },
   names: {
-    0: 'START', 1: 'Demo Account', 3: 'Paper Lane', 4: 'Eval Fee', 5: 'NY Session',
-    6: 'Scalp Street', 8: 'Wick Way', 9: 'Candle Court', 10: 'Blown Account',
+    0: 'GO LIVE', 1: 'Pre-Market', 3: 'Paper Lane', 4: 'Eval Fee', 5: 'CH 01 Discord',
+    6: 'Scalp Street', 8: 'Wick Way', 9: 'Candle Court', 10: 'Off Air',
     11: 'Breakout Blvd', 12: 'Data Feed', 13: 'Support Street', 14: 'Resistance Row',
-    15: 'London Session', 16: 'Swing Square', 18: 'Trend Terrace', 19: 'Momentum Mile',
-    20: 'Market Closed', 21: 'Futures Field', 23: 'Leverage Lane', 24: 'Margin Plaza',
-    25: 'Asia Session', 26: 'Challenge Ave', 27: 'Phase Two', 28: 'Copy Trader',
-    29: 'Funded Heights', 30: 'Drawdown!', 31: 'Profit Split', 32: 'Payout Plaza',
-    34: 'Scaling Plan', 35: 'Overnight Session', 37: 'Prop Firm Tower', 38: 'Commission', 39: 'WAWA HQ',
+    15: 'CH 02 YouTube', 16: 'Opening Bell', 18: 'Trend Terrace', 19: 'Momentum Mile',
+    20: 'Ad Break', 21: 'ES Futures', 23: 'NQ Futures', 24: 'Gold Futures',
+    25: 'CH 03 Code TP', 26: 'Lower Third', 27: 'Prime Time', 28: 'Livestream',
+    29: 'Funded Heights', 30: 'Stopped Out!', 31: 'Profit Split', 32: 'Payout Plaza',
+    34: 'The Studio', 35: 'CH 04 Live', 37: 'Take Profit Tower', 38: 'Commission', 39: 'TPTV HQ',
   },
+  // The test-card bars (75%), nudged brighter where they sit on the dark board.
   groupColors: {
-    brown: '#b07a48',
-    lightblue: '#5ab4f0',
-    pink: '#e87aa8',
-    orange: '#f0913a',
-    red: '#e5544f',
-    yellow: '#ecc372',
-    green: '#35c96f',
-    darkblue: '#3f6fd8',
+    brown: '#c0c0c0',
+    lightblue: '#00c0c0',
+    pink: '#c000c0',
+    orange: '#ff9e2c',
+    red: '#ff3b30',
+    yellow: '#c0c000',
+    green: '#00c000',
+    darkblue: '#3446ff',
+    teal: '#5865f2',
+    purple: '#8a5cff',
   },
   palette: {
-    sky: '#0b0e14',
-    table: '#143f2c',
-    board: '#f4ecd6',
-    boardLine: '#1c2330',
-    boardText: '#151a24',
-    accent: '#d9a441',
-    die: '#f4ecd6',
-    pip: '#151a24',
-    house: '#35c96f',
-    hotel: '#d9a441',
+    sky: '#0b0b0d',
+    table: '#1a1a20',
+    board: '#131317',
+    boardLine: '#2e2e36',
+    boardText: '#f2f0ea',
+    accent: '#ff9e2c',
+    die: '#f2f0ea',
+    pip: '#0b0b0d',
+    house: '#00c000',
+    hotel: '#ff3b30',
   },
   ui: {
-    bg: '#0b0e14',
-    panel: 'rgba(21, 26, 36, 0.92)',
-    panelSolid: '#151a24',
-    line: '#3a4a66',
-    text: '#e9edf4',
-    muted: '#9aa5b8',
-    go: '#e8b64c',
-    goText: '#2a1c04',
+    bg: '#0b0b0d',
+    panel: 'rgba(19, 19, 23, 0.92)',
+    panelSolid: '#131317',
+    line: '#3a3a44',
+    text: '#f2f0ea',
+    muted: '#8e8b84',
+    font: "'Space Mono', ui-monospace, monospace",
+    display: "'Big Shoulders', Impact, sans-serif",
+    boardFont: "'Big Shoulders', Impact, sans-serif",
+    go: '#ff9e2c',
+    goText: '#1a0f00',
   },
-  rules: { freeParkingPot: true },
+  rules: {},
 });
 
 // Chog, built from the chog-poker room's design system: purple grounds, Chog
@@ -273,7 +285,7 @@ export const CHOG: Edition = edition(CLASSIC, {
   rules: { freeParkingPot: true, doubleOnGo: true },
 });
 
-export const THEMES: Edition[] = [CLASSIC, WAWA, CHOG];
+export const THEMES: Edition[] = [CLASSIC, TPTV, CHOG];
 
 export function getTheme(id: string): Edition {
   return THEMES.find(t => t.id === id) ?? CLASSIC;

@@ -480,6 +480,9 @@ export class Game {
     if (this.speedPending === 'mr') {
       this.speedPending = null;
       if (!this.current.inJail) {
+        // Leave the phase that just ended (a mini-game or an auction) first:
+        // when Mr. Monopoly has nowhere to go, nothing else would.
+        this.phase = 'done';
         this.mrMonopoly(this.current);
         if (this.phase !== 'done') return; // buying, auctioning or playing: comes back here
       }

@@ -36,7 +36,7 @@ function fitFont(ctx: CanvasRenderingContext2D, text: string, max: number, size:
 }
 
 export function drawBoard(theme: Theme, logo?: HTMLImageElement | null): HTMLCanvasElement {
-  FACE = theme.ui?.font ?? 'Oswald, Impact, sans-serif';
+  FACE = theme.ui?.boardFont ?? theme.ui?.font ?? 'Oswald, Impact, sans-serif';
   const cv = document.createElement('canvas');
   cv.width = cv.height = PX;
   const ctx = cv.getContext('2d')!;

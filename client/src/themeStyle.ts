@@ -13,6 +13,7 @@ export function themeStyle(theme: Edition): CSSProperties {
     vars['--text'] = ui.text;
     vars['--muted'] = ui.muted;
     if (ui.font) vars['--font'] = ui.font;
+    if (ui.display) vars['--display'] = ui.display;
     if (ui.go) vars['--go'] = ui.go;
     if (ui.goText) vars['--go-text'] = ui.goText;
   }

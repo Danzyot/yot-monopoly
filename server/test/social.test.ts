@@ -170,7 +170,7 @@ function finishedRoom(h = hooks()) {
   const r = reg.create('a');
   r.join(m('a')); r.join(m('b')); r.join(m('c'));
   r.addBot('a', false);
-  r.configure('a', false, { mapId: 'speed', themeId: 'wawa', rules: { startingCash: 777 } });
+  r.configure('a', false, { mapId: 'speed', themeId: 'tptv', rules: { startingCash: 777 } });
   const style = { ...r.style };
   r.start('a', false);
   r.dispose(); // no bot timers: finish it by hand
@@ -198,7 +198,7 @@ test('rematch: host only, after the game; keeps settings, bots and present human
   assert.equal(r.seat('b')!.character, before.character, 'seats keep their character and colour');
   assert.equal(r.seat('b')!.color, before.color);
   assert.equal(r.mapId, 'speed');
-  assert.equal(r.themeId, 'wawa');
+  assert.equal(r.themeId, 'tptv');
   assert.equal(r.rules.startingCash, 777);
   assert.deepEqual(r.style, style);
   assert.throws(() => r.rematch('a', false, () => true), /not over/);
