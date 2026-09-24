@@ -50,19 +50,34 @@ function SidePicker({ game, who, side, onChange, title }: {
   );
 }
 
-export function TradeModal({ game, me, withId, onClose }: {
+/** A counter-offer being drafted: the original's sides, swapped to our point of view. */
+export interface CounterDraft { counterOf: string; withId: string; give: TradeSide; get: TradeSide }
+
+/** Open the trade dialog prefilled from an incoming offer, sides swapped. */
+export function counterDraft(t: Trade): CounterDraft {
+  return { counterOf: t.id, withId: t.from, give: { ...t.get, spaces: [...t.get.spaces] }, get: { ...t.give, spaces: [...t.give.spaces] } };
+}
+
+export function TradeModal({ game, me, withId, onClose, counter }: {
   game: GameView; me: string; withId: string; onClose: () => void;
+  /** Counter an offer: starts from its terms, and sending replaces it. */
+  counter?: CounterDraft;
 }) {
   const mine = game.players.find(p => p.id === me)!;
   const them = game.players.find(p => p.id === withId)!;
-  const [give, setGive] = useState<TradeSide>(EMPTY);
-  const [get, setGet] = useState<TradeSide>(EMPTY);
+  const [give, setGive] = useState<TradeSide>(counter?.give ?? EMPTY);
+  const [get, setGet] = useState<TradeSide>(counter?.get ?? EMPTY);
   const send = () =>
-    act({ type: 'proposeTrade', to: withId, give, get }).then(onClose).catch(toastError);
+    act({ type: 'proposeTrade', to: withId, give, get, ...(counter ? { counterOf: counter.counterOf } : {}) })
+      .then(onClose).catch(toastError);
   return (
     <div className="modal-back" onClick={onClose}>
       <div className="modal wide" onClick={e => e.stopPropagation()}>
-        <div className="row between"><h3>Trade with <span style={{ color: them.color }}>{them.name}</span></h3><button className="btn tiny ghost" onClick={onClose}>✕</button></div>
+        <div className="row between">
+          <h3>{counter ? 'Counter' : 'Trade with'} <span style={{ color: them.color }}>{them.name}</span>{counter ? '’s offer' : ''}</h3>
+          <button className="btn tiny ghost" onClick={onClose}>✕</button>
+        </div>
+        {counter && <p className="small muted" style={{ marginTop: 0 }}>Change the terms and send: your counter-offer replaces theirs.</p>}
         <div className="trade-cols">
           <SidePicker game={game} who={mine} side={give} onChange={setGive} title="You give" />
           <div className="trade-arrow">⇄</div>
@@ -70,7 +85,7 @@ export function TradeModal({ game, me, withId, onClose }: {
         </div>
         <div className="row end">
           <button className="btn ghost" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={send}>Send offer</button>
+          <button className="btn primary" onClick={send}>{counter ? 'Send counter-offer' : 'Send offer'}</button>
         </div>
       </div>
     </div>
@@ -87,7 +102,11 @@ function describe(game: GameView, s: TradeSide): string {
   return parts.length ? parts.join(', ') : 'nothing';
 }
 
-export function TradeOffers({ game, me }: { game: GameView; me: string }) {
+export function TradeOffers({ game, me, onCounter }: {
+  game: GameView; me: string;
+  /** Start a counter-offer to this incoming trade (absent: no Counter button). */
+  onCounter?: (t: Trade) => void;
+}) {
   const name = (id: string) => game.players.find(p => p.id === id);
   const relevant = game.trades.filter(t => t.to === me || t.from === me);
   if (!relevant.length) return null;
@@ -109,6 +128,7 @@ export function TradeOffers({ game, me }: { game: GameView; me: string }) {
               {incoming ? (
                 <>
                   <button className="btn small ghost" onClick={() => act({ type: 'rejectTrade', id: t.id }).catch(toastError)}>Decline</button>
+                  {onCounter && <button className="btn small" onClick={() => onCounter(t)}>Counter</button>}
                   <button className="btn small primary" onClick={() => act({ type: 'acceptTrade', id: t.id }).catch(toastError)}>Accept</button>
                 </>
               ) : (

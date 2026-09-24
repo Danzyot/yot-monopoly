@@ -15,6 +15,7 @@ const EXPLAIN: Record<keyof Features, [string, string]> = {
   bots: ['Bots', 'Hosts may fill seats with computer players (operators always can).'],
   leaderboard: ['Leaderboard', 'The public all-time leaderboard page and its link in the header.'],
   announceResults: ['Announce results on Discord', 'Post every finished game to DISCORD_ANNOUNCE_CHANNEL_ID.'],
+  reactions: ['Reactions & pokes', 'Emoji reactions at the table and poking a slow player. Also off while chat is off.'],
 };
 
 export default function FeaturesTab() {

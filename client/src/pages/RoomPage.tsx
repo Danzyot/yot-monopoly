@@ -17,9 +17,10 @@ export default function RoomPage() {
   const [reqHidden, setReqHidden] = useState(false);
   useHostNotice(room, me);
 
+  // Keyed on the code, not every state: turn alerts flash the title in between.
   useEffect(() => {
     document.title = room ? `${room.code} · Yot Monopoly` : 'Yot Monopoly';
-  }, [room]);
+  }, [room?.code]);
 
   if (!ready) return <div className="center-msg"><p className="muted">Loading…</p></div>;
   if (error && !room) {

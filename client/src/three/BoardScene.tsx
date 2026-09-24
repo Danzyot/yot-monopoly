@@ -8,7 +8,7 @@ import type { GameView } from '../../../shared/types.ts';
 import { cleanAssetUrl, getTablePreset, type TableStyle } from '../../../shared/tableStyles.ts';
 import { boardTexture } from './boardTexture.ts';
 import { C, W, buildingSpots, tile, tileAt, tileWidth } from './layout.ts';
-import { Pieces } from './characters/Pieces.tsx';
+import { Pieces, type PieceReaction } from './characters/Pieces.tsx';
 import { Environment, FLOOR, TABLE_R, envLook } from './environments/index.tsx';
 import { Dice } from './Dice.tsx';
 
@@ -204,7 +204,7 @@ function Spinner({ children, spin }: { children: React.ReactNode; spin?: boolean
   return <group ref={ref}>{children}</group>;
 }
 
-export default function BoardScene({ themeId, mapId, game, selected, onSelect, spin, tableStyle }: {
+export default function BoardScene({ themeId, mapId, game, selected, onSelect, spin, tableStyle, reactions }: {
   themeId: string;
   mapId: string;
   game: GameView | null;
@@ -213,6 +213,8 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
   spin?: boolean;
   /** The room's table look (preset, centre logo, backdrop); absent = the edition's. */
   tableStyle?: TableStyle | null;
+  /** Emoji reactions to pop over the characters, by player id. */
+  reactions?: Record<string, PieceReaction>;
 }) {
   const theme = resolveTheme(themeId, mapId);
   // Re-checked here as well as on the server: this string ends up in CSS.
@@ -255,7 +257,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
         {game && (
           <>
             <Ownership game={game} theme={theme} />
-            <Pieces game={game} n={theme.spaces.length} />
+            <Pieces game={game} n={theme.spaces.length} reactions={reactions} />
             <Dice dice={game.dice} seq={game.rollSeq} speed={game.speed ?? null} body={theme.palette.die} pip={theme.palette.pip} />
           </>
         )}

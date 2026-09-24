@@ -14,17 +14,20 @@ export function isBlocked(text: string): boolean {
   return BLOCKED.some(re => re.test(text.toLowerCase()));
 }
 
+/** A refusal the sender should read (muted, too fast, blocked), not a server fault. */
+export class ChatError extends Error {}
+
 const lastSent = new Map<string, number>();
 
 /** Throws with a human-readable reason when the message may not be sent. */
 export function checkChat(playerId: string, raw: unknown): string {
-  if (isMuted(playerId)) throw new Error('You are muted');
+  if (isMuted(playerId)) throw new ChatError('You are muted');
   const text = String(raw ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 300);
-  if (!text) throw new Error('Empty message');
-  if (isBlocked(text)) throw new Error('That message was blocked');
+  if (!text) throw new ChatError('Empty message');
+  if (isBlocked(text)) throw new ChatError('That message was blocked');
   const now = Date.now();
   const last = lastSent.get(playerId) ?? 0;
-  if (now - last < CHAT_COOLDOWN_MS) throw new Error('Slow down');
+  if (now - last < CHAT_COOLDOWN_MS) throw new ChatError('Slow down');
   lastSent.set(playerId, now);
   if (lastSent.size > 50_000) lastSent.clear();
   return text;

@@ -154,6 +154,29 @@ export interface GameView {
   speed: SpeedFace | null;
   /** Phase 'choose': what the current player is choosing. */
   choice: MoveChoice | null;
+  /** Net worth per player as the official short-game rules count it (see Game.netWorth). */
+  netWorth: Record<string, number>;
+  /** Per-player counters kept during play, for the end-of-game summary. */
+  stats: Record<string, PlayerStats>;
+  /** Game clock when play began and (once over) ended, for the summary's duration. */
+  startedAt: number;
+  endedAt: number | null;
+  /** Bankrupt players, first out first: gives finishing places. */
+  outOrder: string[];
+}
+
+/** Fun numbers the engine tallies as the game goes. */
+export interface PlayerStats {
+  /** Total rent received from other players. */
+  rentCollected: number;
+  /** The largest single rent this player paid. */
+  biggestRentPaid: number;
+  /** Deeds bought outright or won at auction. */
+  propertiesBought: number;
+  /** Times sent to jail. */
+  jailed: number;
+  /** Mini-game rounds that paid this player out. */
+  minigamesWon: number;
 }
 
 /** Everything a player can ask the engine to do. */
@@ -172,7 +195,8 @@ export type Action =
   | { type: 'unmortgage'; space: number }
   | { type: 'payDebt' }
   | { type: 'bankrupt' }
-  | { type: 'proposeTrade'; to: string; give: TradeSide; get: TradeSide }
+  /** `counterOf`: an offer made to us that this one replaces, in one step. */
+  | { type: 'proposeTrade'; to: string; give: TradeSide; get: TradeSide; counterOf?: string }
   | { type: 'acceptTrade'; id: string }
   | { type: 'rejectTrade'; id: string }
   | { type: 'minigame'; move: MinigameMove }
@@ -212,6 +236,8 @@ export interface RoomView {
   now: number;
   /** Discord gate for taking a seat (null = anyone signed in). */
   requirements: JoinRequirements | null;
+  /** Poke bookkeeping for the current turn (added by the socket layer while a game runs). */
+  poke?: PokeView | null;
 }
 
 export interface RoomSummary {
@@ -274,6 +300,8 @@ export interface Features {
   leaderboard: boolean;
   /** Announce finished games to DISCORD_ANNOUNCE_CHANNEL_ID. */
   announceResults: boolean;
+  /** Emoji reactions and pokes at the table. */
+  reactions: boolean;
 }
 
 export const DEFAULT_FEATURES: Features = {
@@ -284,6 +312,7 @@ export const DEFAULT_FEATURES: Features = {
   bots: true,
   leaderboard: true,
   announceResults: false,
+  reactions: true,
 };
 
 /** Public config the client reads at boot. */
@@ -364,3 +393,37 @@ export interface PublicProfile {
   favouriteCharacter: { id: string; games: number } | null;
   recent: ProfileGame[];
 }
+// ---- table social: reactions and pokes -------------------------------------
+
+/** The reaction bar. The server only relays these, so a client cannot send arbitrary text. */
+export const REACTION_EMOJI = ['👍', '😂', '😮', '😭', '😡', '🔥', '💸', '🎉', '🤝', '👀'] as const;
+export type ReactionEmoji = typeof REACTION_EMOJI[number];
+
+/** One reaction, broadcast to the room as 'reaction'. */
+export interface ReactionMsg {
+  /** Unique per server, so repeated emoji from one player animate separately. */
+  seq: number;
+  id: string;
+  name: string;
+  emoji: ReactionEmoji;
+  /** Not seated in this game: shown at the side rather than over a character. */
+  spectator: boolean;
+}
+
+/** Someone nudged the current player, broadcast to the room as 'poke'. */
+export interface PokeMsg {
+  seq: number;
+  from: string;
+  fromName: string;
+  to: string;
+}
+
+/** When the current turn began and who has poked in it: drives the poke button. */
+export interface PokeView {
+  /** Server clock when the current turn began (as far as the server saw). */
+  since: number;
+  pokedBy: string[];
+}
+
+/** A turn must run this long before anyone may poke the player. */
+export const POKE_AFTER_MS = 15_000;

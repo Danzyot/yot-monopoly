@@ -6,7 +6,7 @@
 import type { Server, Socket } from 'socket.io';
 import { verifyToken } from './auth.ts';
 import { banMatches, banMessage, findBan, type Ban } from './bans.ts';
-import { checkChat } from './chat.ts';
+import { ChatError, checkChat, isMuted } from './chat.ts';
 import { recordConnection } from './connections.ts';
 import { announceChannelId, postToChannel } from './discord.ts';
 import { EngineError } from './engine/game.ts';
@@ -21,7 +21,8 @@ import { takeSeat } from './seating.ts';
 import { getMap } from '../../shared/maps.ts';
 import { getTheme } from '../../shared/themes.ts';
 import { DEFAULT_TABLE_STYLE, libraryFileOf, sanitizeTableStyle } from '../../shared/tableStyles.ts';
-import type { Action, CharacterId, PlayerProfile, RequirementFailure } from '../../shared/types.ts';
+import type { Action, CharacterId, PlayerProfile, PokeMsg, ReactionMsg, RequirementFailure } from '../../shared/types.ts';
+import { PokeTracker, ReactionLimiter, isReactionEmoji } from './social.ts';
 import type { RuleConfig } from '../../shared/themes.ts';
 
 type Ack = (res: { ok: true; [k: string]: unknown } | { ok: false; error: string }) => void;
@@ -53,7 +54,12 @@ export interface SocketLayer {
 }
 
 export function attachSockets(io: Server): SocketLayer {
-  const broadcast = (room: Room) => io.to(`room:${room.code}`).emit('room:state', room.view());
+  const pokes = new PokeTracker();
+  const reactionLimit = new ReactionLimiter();
+  let socialSeq = 0;
+  // Every state goes out through here, which is also how the poke tracker
+  // learns when a turn began.
+  const broadcast = (room: Room) => io.to(`room:${room.code}`).emit('room:state', { ...room.view(), poke: pokes.view(room) });
   const lobbyChanged = () => io.to('lobby').emit('rooms', registry.list());
 
   const registry: Registry = new Registry({
@@ -132,7 +138,7 @@ export function attachSockets(io: Server): SocketLayer {
           const extra = fn((payload ?? {}) as T, room) ?? {};
           reply({ ok: true, ...extra });
         } catch (e) {
-          if (e instanceof EngineError || e instanceof RoomError) reply({ ok: false, error: e.message });
+          if (e instanceof EngineError || e instanceof RoomError || e instanceof ChatError) reply({ ok: false, error: e.message });
           else {
             console.error(`[socket] ${event} failed`, e);
             reply({ ok: false, error: 'Server error' });
@@ -154,7 +160,7 @@ export function attachSockets(io: Server): SocketLayer {
           const extra = (await fn((payload ?? {}) as T, room)) ?? {};
           reply({ ok: true, ...extra });
         } catch (e) {
-          if (e instanceof EngineError || e instanceof RoomError) reply({ ok: false, error: e.message });
+          if (e instanceof EngineError || e instanceof RoomError || e instanceof ChatError) reply({ ok: false, error: e.message });
           else {
             console.error(`[socket] ${event} failed`, e);
             reply({ ok: false, error: 'Server error' });
@@ -187,6 +193,8 @@ export function attachSockets(io: Server): SocketLayer {
       broadcast(room);
       lobbyChanged();
     };
+
+    const socketInRoom = (code: string, id: string) => otherSocketInRoom(code, id, '');
 
     const otherSocketInRoom = (code: string, id: string, except: string) => {
       for (const s of io.sockets.sockets.values()) {
@@ -364,6 +372,44 @@ export function attachSockets(io: Server): SocketLayer {
       };
       io.to(`room:${r.code}`).emit('chat', msg);
       logGameEvent(r.code, getMap(r.mapId).name, `💬 ${prof.name}: ${text}`);
+    });
+
+    // ---- table social: reactions, pokes, rematch ----
+
+    /** Reactions and pokes share the chat's gates: a muted player or a closed chat means quiet. */
+    const socialAllowed = () => {
+      const prof = data.profile ?? (() => { throw new RoomError('Sign in to react'); })();
+      if (!isOn('reactions') || !isOn('chat')) throw new RoomError('Reactions are switched off');
+      if (isMuted(prof.id)) throw new RoomError('You are muted');
+      return prof;
+    };
+
+    on<{ emoji: string }>('room:react', (p, room) => {
+      const r = inRoom(room);
+      const prof = socialAllowed();
+      if (!isReactionEmoji(p.emoji)) throw new RoomError('Unknown reaction');
+      if (!reactionLimit.take(prof.id)) throw new RoomError('Slow down');
+      const msg: ReactionMsg = {
+        seq: ++socialSeq, id: prof.id, name: prof.name, emoji: p.emoji,
+        spectator: !r.game?.players.some(x => x.id === prof.id),
+      };
+      io.to(`room:${r.code}`).emit('reaction', msg);
+    });
+
+    on('room:poke', (_p, room) => {
+      const r = inRoom(room);
+      const prof = socialAllowed();
+      const to = pokes.poke(r, prof.id);
+      const msg: PokeMsg = { seq: ++socialSeq, from: prof.id, fromName: prof.name, to };
+      io.to(`room:${r.code}`).emit('poke', msg);
+      broadcast(r); // everyone's poke button reflects it
+    });
+
+    on('room:rematch', (_p, room) => {
+      const r = inRoom(room);
+      r.rematch(me(), isAdmin(), id => socketInRoom(r.code, id));
+      broadcast(r);
+      lobbyChanged();
     });
 
     socket.on('disconnect', () => {

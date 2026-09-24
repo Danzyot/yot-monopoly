@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { resolveTheme } from '../../../shared/themes.ts';
 import { getMap } from '../../../shared/maps.ts';
@@ -14,10 +14,17 @@ import Deed from './Deed.tsx';
 import MusicPlayer from './MusicPlayer.tsx';
 import { useGameSounds } from '../useGameSounds.ts';
 import PlayerMenu from './PlayerMenu.tsx';
-import { TradeModal, TradeOffers } from './Trade.tsx';
+import { TradeModal, TradeOffers, counterDraft, type CounterDraft } from './Trade.tsx';
 import MinigamePanel from './MinigamePanel.tsx';
 import { DebtClock, PauseButton, PausedBanner, TimeLeft, TurnClock } from './GameClock.tsx';
 import { ChooseBar, DiceRead } from './SpeedChoice.tsx';
+import EndScreen from './EndScreen.tsx';
+import Portfolio, { PortfolioModal } from './Portfolio.tsx';
+import { PokeButton, PokeNotice, ReactionPicker, SpectatorReactions, latestReaction } from './Reactions.tsx';
+import { ShortcutHelp, useShortcuts } from './Shortcuts.tsx';
+import { useSocial } from '../social.ts';
+import { useNotifyPref, useTurnAlerts } from '../turnAlerts.ts';
+import type { ReactionMsg } from '../../../shared/types.ts';
 
 export default function GameScreen({ room, game, me, chat, skew }: {
   room: RoomView; game: GameView; me: string; chat: ChatMsg[]; skew: number;
@@ -25,7 +32,11 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   const theme = resolveTheme(game.themeId, game.mapId);
   const [selected, setSelected] = useState<number | null>(null);
   const [tradeWith, setTradeWith] = useState<string | null>(null);
-  const [tab, setTab] = useState<'log' | 'chat' | 'mine'>('log');
+  const [tab, setTab] = useState<'log' | 'chat' | 'mine' | 'table'>('log');
+  const [counter, setCounter] = useState<CounterDraft | null>(null);
+  /** Portfolio dialog, focused on this player (undefined = closed). */
+  const [portfolio, setPortfolio] = useState<string | undefined>(undefined);
+  const [helpOpen, setHelpOpen] = useState(false);
   // Phones start with the side panel folded so the board stays visible.
   const [panelOpen, setPanelOpen] = useState(() => window.innerWidth > 760);
   const pickTab = (t: typeof tab) => {
@@ -37,17 +48,38 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   const nav = useNavigate();
   const myPlayer = game.players.find(p => p.id === me);
   useGameSounds(game, me);
+  const social = useSocial(me);
+  const reactionsOn = config.features.reactions !== false && config.features.chat;
+  const [notify, toggleNotify] = useNotifyPref();
+  useTurnAlerts(game, me, notify, `${room.code} · Yot Monopoly`);
+  const over = !!game.winner || room.status === 'finished';
+  const closeDialogs = () => {
+    setTradeWith(null); setCounter(null); setPortfolio(undefined); setHelpOpen(false); setSelected(null);
+  };
+  useShortcuts(game, me, {
+    dialogOpen: !!tradeWith || !!counter || portfolio !== undefined || over,
+    onEscape: closeDialogs,
+    onTrade: () => setPortfolio(game.players.find(p => p.id !== me && !p.bankrupt)?.id ?? me),
+    onHelp: () => setHelpOpen(o => !o),
+  });
+  // The poked player's screen gives a little shake.
+  const pokedMe = social.poke?.to === me;
+  // Memoised: a new object every render would re-render every character in the scene.
+  const pieceReactions = useMemo(() => Object.fromEntries(game.players
+    .map(p => [p.id, latestReaction(social.reactions, p.id)] as const)
+    .filter((e): e is readonly [string, ReactionMsg] => !!e[1])
+    .map(([id, r]) => [id, { emoji: r.emoji, seq: r.seq }])), [social.reactions, game.players]);
 
   const leave = async () => {
-    if (myPlayer && !myPlayer.bankrupt && game.phase !== 'over'
+    if (myPlayer && !myPlayer.bankrupt && game.phase !== 'over' && room.status !== 'finished'
       && !confirm('Leaving forfeits the game — your property goes back to the bank. Leave?')) return;
     await call('room:leave').catch(() => {});
     nav('/');
   };
 
   return (
-    <div className={`game ${theme.ui ? 'branded' : ''}`} style={themeStyle(theme)}>
-      <div className="scene"><BoardScene themeId={game.themeId} mapId={game.mapId} game={game} selected={selected} onSelect={setSelected} tableStyle={room.style} /></div>
+    <div className={`game ${theme.ui ? 'branded' : ''} ${pokedMe ? 'poked' : ''}`} style={themeStyle(theme)}>
+      <div className="scene"><BoardScene themeId={game.themeId} mapId={game.mapId} game={game} selected={selected} onSelect={setSelected} tableStyle={room.style} reactions={pieceReactions} /></div>
 
       <header className="topbar">
         <div className="row">
@@ -66,19 +98,21 @@ export default function GameScreen({ room, game, me, chat, skew }: {
         </div>
       </header>
 
-      <Players game={game} room={room} me={me} onTrade={setTradeWith} />
+      <Players game={game} room={room} me={me} onTrade={setTradeWith} reactions={social.reactions} onPortfolio={setPortfolio} />
 
       <aside className={`sidepanel ${panelOpen ? '' : 'closed'}`}>
-        <TradeOffers game={game} me={me} />
+        <TradeOffers game={game} me={me} onCounter={t => setCounter(counterDraft(t))} />
         <div className="tabs">
           <button className={tab === 'log' && panelOpen ? 'on' : ''} onClick={() => pickTab('log')}>Log</button>
           {config.features.chat && <button className={tab === 'chat' && panelOpen ? 'on' : ''} onClick={() => pickTab('chat')}>Chat</button>}
           {myPlayer && <button className={tab === 'mine' && panelOpen ? 'on' : ''} onClick={() => pickTab('mine')}>My deeds</button>}
+          <button className={tab === 'table' && panelOpen ? 'on' : ''} onClick={() => pickTab('table')}>Portfolios</button>
         </div>
         <div className="tab-body">
           {tab === 'log' && <Log game={game} />}
           {tab === 'chat' && <Chat chat={chat} />}
           {tab === 'mine' && <MyDeeds game={game} me={me} onPick={setSelected} />}
+          {tab === 'table' && <Portfolio game={game} me={me} onPick={setSelected} onTrade={setTradeWith} compact />}
         </div>
       </aside>
 
@@ -94,14 +128,33 @@ export default function GameScreen({ room, game, me, chat, skew }: {
       <ActionBar game={game} me={me} skew={skew} selected={selected} />
       {theme.logoUrl && <img className="corner-mark" src={theme.logoUrl} alt={theme.name} />}
 
+      <div className="social-dock">
+        {me && reactionsOn && <ReactionPicker />}
+        {reactionsOn && !over && <PokeButton room={room} game={game} me={me} skew={skew} />}
+        {myPlayer && !over && (
+          <button className={`dock-btn ${notify ? 'on' : ''}`} onClick={toggleNotify}
+            title={notify ? 'Turn alerts on — click to turn off' : 'Notify me when it\'s my turn (while this tab is hidden)'}
+            aria-pressed={notify}>{notify ? '🔔' : '🔕'}</button>
+        )}
+        {myPlayer && !over && <ShortcutHelp open={helpOpen} onToggle={() => setHelpOpen(o => !o)} />}
+      </div>
+      <SpectatorReactions reactions={social.reactions} />
+      <PokeNotice poke={social.poke} game={game} me={me} />
+
       {tradeWith && <TradeModal game={game} me={me} withId={tradeWith} onClose={() => setTradeWith(null)} />}
-      {game.winner && <Winner game={game} onHome={() => nav('/')} />}
+      {counter && <TradeModal key={counter.counterOf} game={game} me={me} withId={counter.withId} counter={counter} onClose={() => setCounter(null)} />}
+      {portfolio !== undefined && (
+        <PortfolioModal game={game} me={me} focus={portfolio} onPick={setSelected}
+          onTrade={id => { setPortfolio(undefined); setTradeWith(id); }} onClose={() => setPortfolio(undefined)} />
+      )}
+      {over && <EndScreen room={room} game={game} me={me} onLeave={leave} />}
     </div>
   );
 }
 
-function Players({ game, room, me, onTrade }: {
+function Players({ game, room, me, onTrade, reactions, onPortfolio }: {
   game: GameView; room: RoomView; me: string; onTrade: (id: string) => void;
+  reactions: ReactionMsg[]; onPortfolio: (id: string) => void;
 }) {
   const theme = resolveTheme(game.themeId, game.mapId);
   const amIn = game.players.some(p => p.id === me && !p.bankrupt);
@@ -111,10 +164,16 @@ function Players({ game, room, me, onTrade }: {
         const seat = room.seats.find(s => s.id === p.id);
         const props = Object.values(game.owned).filter(o => o.owner === p.id).length;
         const owes = game.debts.filter(d => d.from === p.id).reduce((a, d) => a + d.amount, 0);
+        const reaction = latestReaction(reactions, p.id);
+        const worth = game.netWorth?.[p.id];
         return (
           <div key={p.id} className={`player ${p.id === game.current ? 'turn' : ''} ${p.bankrupt ? 'out' : ''}`} style={{ borderColor: p.color }}>
-            <span className="token-badge" style={{ background: p.color }}>{characterEmoji(p.character)}</span>
-            <div className="grow">
+            <span className="token-badge" style={{ background: p.color }}>
+              {characterEmoji(p.character)}
+              {reaction && <span key={reaction.seq} className="row-react" aria-label={`${p.name} reacted ${reaction.emoji}`}>{reaction.emoji}</span>}
+            </span>
+            <div className="grow pf-open" role="button" tabIndex={0} title={`${p.name}'s portfolio`}
+              onClick={() => onPortfolio(p.id)} onKeyDown={e => { if (e.key === 'Enter') onPortfolio(p.id); }}>
               <div className="pname">
                 {p.name}{p.id === me && ' (you)'}
                 {p.isBot && <em className="tag">bot</em>}
@@ -129,6 +188,11 @@ function Players({ game, room, me, onTrade }: {
                   {owes > 0 && <span className="warn"> · owes {theme.currency}{owes}</span>}
                 </>}
               </div>
+              {!p.bankrupt && worth !== undefined && (
+                <div className="small muted pworth" title="Net worth: cash plus what deeds and buildings would raise">
+                  <span className="hide-sm">Net w</span><span className="show-sm">W</span>orth <b>{theme.currency}{worth.toLocaleString()}</b>
+                </div>
+              )}
             </div>
             {amIn && p.id !== me && !p.bankrupt && game.phase !== 'over' && (
               <button className="btn tiny" onClick={() => onTrade(p.id)}>Trade</button>
@@ -331,20 +395,6 @@ function MyDeeds({ game, me, onPick }: { game: GameView; me: string; onPick: (i:
           </button>
         );
       })}
-    </div>
-  );
-}
-
-function Winner({ game, onHome }: { game: GameView; onHome: () => void }) {
-  const w = game.players.find(p => p.id === game.winner)!;
-  return (
-    <div className="modal-back">
-      <div className="modal winner">
-        <div className="trophy">🏆</div>
-        <h2 style={{ color: w.color }}>{w.name} wins!</h2>
-        <p className="muted">after {game.turnNumber} turns</p>
-        <button className="btn primary" onClick={onHome}>Back to lobby</button>
-      </div>
     </div>
   );
 }
