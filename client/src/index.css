@@ -4358,3 +4358,40 @@ input[type='time']:hover::-webkit-calendar-picker-indicator {
   border: 1px solid rgba(255, 176, 46, 0.35);
   border-radius: 999px; padding: 1px 8px; cursor: help;
 }
+
+/* A wide audit table scrolls sideways rather than clipping its last column.
+   The Players table carries ten columns; at anything under a wide desktop the
+   panel simply cut the final button off — it was on screen, just unreachable. */
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-scroll .standings-table.wide { min-width: 1000px; }
+.ip-more {
+  display: inline-block; margin-left: 6px; padding: 0 6px;
+  font: inherit; font-size: 0.72rem; font-weight: 700;
+  color: var(--gold); background: color-mix(in srgb, var(--gold) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gold) 30%, transparent);
+  border-radius: 999px; cursor: pointer; white-space: nowrap;
+}
+.ip-more:hover { background: color-mix(in srgb, var(--gold) 18%, transparent); }
+
+/* The two checkbox rows in the ban dialog are sentences, not field captions.
+   They sit inside .field, which uppercases its label and drops it to the
+   faintest text colour — fine for "REASON (OPTIONAL)", unreadable for two
+   lines of consequences the operator is being asked to agree to. */
+.ban-discord, .ban-discord span {
+  text-transform: none; letter-spacing: normal;
+  font-size: 0.85rem; font-weight: 600; color: var(--text);
+}
+.ban-discord .field-hint {
+  font-size: 0.76rem; font-weight: 400; color: var(--text-dim); line-height: 1.45;
+}
+.ban-discord input { accent-color: var(--gold); }
+
+/* The accounts an address ban would take with it, named before it is agreed
+   to rather than reported afterwards. */
+.ban-accounts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.ban-accounts .ban-account {
+  font-size: 0.72rem; font-weight: 700; letter-spacing: normal; text-transform: none;
+  color: var(--text-dim);
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 999px; padding: 1px 8px;
+}

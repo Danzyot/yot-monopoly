@@ -17,6 +17,10 @@ export interface BanTarget {
   // the caller actually knows — an address has nobody behind it, and a guest
   // has no account to ban.
   discordLinked?: boolean;
+  // For an address ban: who has been seen from it. Supplied so the operator
+  // is told how many people "and the accounts behind it" actually means
+  // BEFORE they agree to it, rather than finding out from the result.
+  accounts?: { id: string; name: string }[];
 }
 
 // Re-exported so callers preview the message without needing to know it
@@ -25,7 +29,7 @@ export const banMessagePreview = banMessageFor;
 
 export default function BanDialog({ target, onConfirm, onCancel }: {
   target: BanTarget;
-  onConfirm: (reason: string, discordBan: boolean) => void;
+  onConfirm: (reason: string, discordBan: boolean, banPlayers: boolean) => void;
   onCancel: () => void;
 }) {
   const [reason, setReason] = useState('');
@@ -33,6 +37,17 @@ export default function BanDialog({ target, onConfirm, onCancel }: {
   // reaches beyond the card room, and is not what every poker ban deserves.
   const [discordBan, setDiscordBan] = useState(false);
   const canDiscordBan = target.kind === 'player' && target.discordLinked === true;
+
+  // Banning an address without banning the accounts on it is a door, not a
+  // verdict — the same people return on a phone under the same names. So when
+  // we know who is behind the address, this starts ON.
+  const accounts = target.kind === 'ip' ? (target.accounts ?? []) : [];
+  const canBanPlayers = accounts.length > 0;
+  const [banPlayers, setBanPlayers] = useState(true);
+  // Past this many, an address is a mobile carrier or a VPN exit holding
+  // strangers rather than a household, and banning everyone behind it would
+  // suspend people who have done nothing.
+  const crowded = accounts.length > 8;
 
   const what = target.kind === 'ip'
     ? `${target.name}'s address — and everyone else on it`
@@ -70,7 +85,9 @@ export default function BanDialog({ target, onConfirm, onCancel }: {
             id="ban-reason" value={reason} maxLength={200}
             placeholder="…or type your own"
             onChange={e => setReason(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') onConfirm(reason.trim(), discordBan && canDiscordBan); }}
+            onKeyDown={e => {
+              if (e.key === 'Enter') onConfirm(reason.trim(), discordBan && canDiscordBan, banPlayers && canBanPlayers);
+            }}
           />
         </div>
 
@@ -78,6 +95,28 @@ export default function BanDialog({ target, onConfirm, onCancel }: {
           <label>What they will see</label>
           <div className="ban-preview">{banMessagePreview(target.scope, reason)}</div>
         </div>
+
+        {canBanPlayers && (
+          <div className="field">
+            <label className="ban-discord">
+              <input
+                type="checkbox" checked={banPlayers}
+                onChange={e => setBanPlayers(e.target.checked)}
+              />
+              <span>
+                Ban the {accounts.length} account{accounts.length === 1 ? '' : 's'} seen from this address too
+                <span className="field-hint">
+                  {crowded
+                    ? `${accounts.length} accounts behind one address is typical of a mobile network or a VPN, not a household — this would suspend strangers. Check the names first.`
+                    : 'Otherwise only the address is shut out, and they come back on a phone or a VPN under the same names.'}
+                </span>
+                <span className="ban-accounts">
+                  {accounts.map(a => <span key={a.id} className="ban-account">{a.name}</span>)}
+                </span>
+              </span>
+            </label>
+          </div>
+        )}
 
         {canDiscordBan && (
           <div className="field">
@@ -101,7 +140,7 @@ export default function BanDialog({ target, onConfirm, onCancel }: {
 
         <div className="modal-actions">
           <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
-          <button className="btn btn-danger" onClick={() => onConfirm(reason.trim(), discordBan && canDiscordBan)}>
+          <button className="btn btn-danger" onClick={() => onConfirm(reason.trim(), discordBan && canDiscordBan, banPlayers && canBanPlayers)}>
             {target.scope === 'lifetime' ? 'Suspend for life' : 'Suspend from this game'}
           </button>
         </div>

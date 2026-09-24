@@ -10,6 +10,7 @@ import { reportFlaggedHands } from './discord.ts';
 import { CAT, categoryOf, evaluate7 } from './engine/evaluator.ts';
 import type { Table } from './engine/table.ts';
 import { countryOf } from './geo.ts';
+import { normaliseIp } from './bans.ts';
 import { isInfraPeer } from './net.ts';
 import { DATA_DIR } from './paths.ts';
 
@@ -338,7 +339,10 @@ export interface AltGroup {
   // is keyed on this rather than on a single address, because a group is a set
   // of people, not a set of routers.
   key: string;
-  addresses: { ip: string; country: string | null }[];
+  // Each address carries the accounts seen from it, so the panel can offer
+  // "ban this address AND the accounts behind it" without a second round trip
+  // and without the operator having to guess how many people that is.
+  addresses: { ip: string; country: string | null; accounts: { id: string; name: string }[] }[];
   score: number;      // 0-100, higher = more worth a look
   reasons: string[];
   playedTogether: number; // pairs in this group who shared at least one game
@@ -543,6 +547,26 @@ function pairsSharingAGame(list: PlayerRecord[]): number {
   return n;
 }
 
+// Everyone on one address.
+//
+// Lives here rather than being written out at the one call site because two
+// separate decisions depend on it — who gets thrown out of a live game, and
+// whose account goes with the address when an operator asks for that — and
+// they must not be allowed to disagree about who "on this address" means.
+// Addresses are compared after normalisation, so an account recorded as
+// ::ffff:1.2.3.4 is the same person as one recorded as 1.2.3.4.
+export function accountsOnAddress(ip: string): { id: string; name: string }[] {
+  const want = normaliseIp(ip);
+  if (!want) return [];
+  const out: { id: string; name: string }[] = [];
+  for (const p of players.values()) {
+    for (const held of p.ips.keys()) {
+      if (normaliseIp(held) === want) { out.push({ id: p.id, name: p.name }); break; }
+    }
+  }
+  return out;
+}
+
 export function altGroups(): AltGroup[] {
   const byIp = new Map<string, PlayerRecord[]>();
   for (const p of players.values()) {
@@ -630,7 +654,14 @@ export function altGroups(): AltGroup[] {
 
     return {
       key: ips.join(','),
-      addresses: ips.map(ip => ({ ip, country: countryOf(ip) })),
+      addresses: ips.map(ip => ({
+        ip,
+        country: countryOf(ip),
+        // From byIp rather than the group's roster: the group may span four
+        // addresses, and banning one of them must only reach the people
+        // actually behind THAT one.
+        accounts: (byIp.get(ip) ?? []).map(p => ({ id: p.id, name: p.name })),
+      })),
       score,
       reasons,
       playedTogether: together,

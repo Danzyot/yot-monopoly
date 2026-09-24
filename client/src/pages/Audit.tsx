@@ -15,6 +15,37 @@ const RANK: Record<number, string> = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
 const SUIT = ['\u2660', '\u2665', '\u2666', '\u2663'];
 const cardText = (c: { r: number; s: number }) => `${RANK[c.r] ?? c.r}${SUIT[c.s] ?? ''}`;
 
+// A long-lived account collects dozens of addresses, and printing all of them
+// turned one row into a 375px wall of digits that squeezed every other column
+// — the last one straight off the edge of the panel. Show the few that matter
+// and keep the rest a click away.
+const IPS_SHOWN = 6;
+
+function IpList({ ips }: { ips: string[] }) {
+  const [all, setAll] = useState(false);
+  if (ips.length === 0) return <>—</>;
+  // Most recent first: audit.ts appends, so the tail is where "where are they
+  // now" lives, and that is the question this column is usually asked.
+  const ordered = [...ips].reverse();
+  const shown = all ? ordered : ordered.slice(0, IPS_SHOWN);
+  const rest = ordered.length - shown.length;
+  return (
+    <>
+      {shown.join(', ')}
+      {rest > 0 && (
+        <button type="button" className="ip-more" onClick={() => setAll(true)}>
+          +{rest} more
+        </button>
+      )}
+      {all && ordered.length > IPS_SHOWN && (
+        <button type="button" className="ip-more" onClick={() => setAll(false)}>
+          show fewer
+        </button>
+      )}
+    </>
+  );
+}
+
 export default function Audit() {
   const { profile } = useAuth();
   const [tab, setTab] = useState<Tab>('flags');
@@ -98,16 +129,19 @@ export default function Audit() {
   // gets identified, so the action belongs on the row that proves it. These
   // are the lifetime ones — a single event is barred from that event's own
   // screen, where the game is unambiguous.
-  const confirmBan = async (reason: string, discordBan: boolean) => {
+  const confirmBan = async (reason: string, discordBan: boolean, banPlayers: boolean) => {
     if (!pendingBan) return;
     const { value, name, kind } = pendingBan;
     setPendingBan(null);
     try {
-      const r = await api.ban({ kind, scope: 'lifetime', value, name, reason, discordBan });
+      const r = await api.ban({ kind, scope: 'lifetime', value, name, reason, discordBan, banPlayers });
       const gone = r.ejected.tournaments + r.ejected.tables;
-      const base = gone
+      const also = r.alsoBanned?.length
+        ? ` — and ${r.alsoBanned.length} account${r.alsoBanned.length === 1 ? '' : 's'}: ${r.alsoBanned.join(', ')}`
+        : '';
+      const base = (gone
         ? `${name} suspended, and removed from ${gone} live game${gone === 1 ? '' : 's'}`
-        : `${name} suspended`;
+        : `${name} suspended`) + also;
       // A Discord ban that quietly did not happen is worse than one never
       // attempted — the operator would believe they were gone.
       const failed = !!r.discordNote && /NOT on Discord/.test(r.discordNote);
@@ -143,22 +177,27 @@ export default function Audit() {
   // Banning one router of four achieves nothing, so the panel offers the whole
   // group at once. It is still a lifetime address ban with everything that
   // implies, so it asks first and names the count.
-  const banEveryAddress = async (ips: string[]) => {
+  const banEveryAddress = async (ips: string[], names: string[]) => {
     const ok = window.confirm(
       `Lifetime ban on ${ips.length} addresses?\n\n${ips.join('\n')}\n\n`
-      + 'This removes every account ever seen from any of them, including anyone '
-      + 'who merely shares a carrier or a household with the group.');
+      + `This also suspends the ${names.length} account${names.length === 1 ? '' : 's'} `
+      + `behind them:\n${names.join(', ')}\n\n`
+      + 'Anyone who merely shares a carrier or a household with the group is '
+      + 'caught as well.');
     if (!ok) return;
     let done = 0;
     for (const ip of ips) {
       try {
-        await api.ban({ kind: 'ip', scope: 'lifetime', value: ip, name: ip, reason: 'shared-address group' });
+        await api.ban({
+          kind: 'ip', scope: 'lifetime', value: ip, name: ip,
+          reason: 'shared-address group', banPlayers: true,
+        });
         done += 1;
       } catch (e) {
         toast('error', `${ip}: ${e instanceof Error ? e.message : 'ban failed'}`);
       }
     }
-    if (done > 0) toast('success', `${done} of ${ips.length} addresses banned`);
+    if (done > 0) toast('success', `${done} of ${ips.length} addresses banned, with the accounts behind them`);
     void load();
   };
 
@@ -228,7 +267,7 @@ export default function Audit() {
       {pendingBan && (
         <BanDialog
           target={pendingBan}
-          onConfirm={(r, d) => void confirmBan(r, d)}
+          onConfirm={(r, d, bp) => void confirmBan(r, d, bp)}
           onCancel={() => setPendingBan(null)}
         />
       )}
@@ -536,7 +575,8 @@ export default function Audit() {
           )}
 
           {tab === 'players' && (
-            <table className="standings-table">
+            <div className="table-scroll">
+            <table className="standings-table wide">
               <thead>
                 <tr><th>Player</th><th>Discord</th><th>IPs</th><th>Country</th><th>Hands</th><th>Games</th><th>Last seen</th><th /><th /><th /></tr>
               </thead>
@@ -545,7 +585,7 @@ export default function Audit() {
                   <tr key={p.id}>
                     <td><Avatar value={p.avatar} size={16} /> {p.name}</td>
                     <td>{p.discordTag ? <span className="discord-badge verified">@{p.discordTag}</span> : '—'}</td>
-                    <td className="mono">{p.ips.join(', ') || '—'}</td>
+                    <td className="mono"><IpList ips={p.ips} /></td>
                     <td>{[...new Set(p.countries.filter(Boolean))].join(', ') || '—'}</td>
                     <td>{p.handsPlayed}</td>
                     <td>{p.games}</td>
@@ -583,6 +623,7 @@ export default function Audit() {
                 )}
               </tbody>
             </table>
+            </div>
           )}
 
           {tab === 'alts' && (
@@ -627,6 +668,19 @@ export default function Audit() {
                         >
                           look up
                         </button>
+                        {/* The account itself, not the router it sits behind.
+                            This panel is where an alt is identified, so the
+                            action that follows belongs on the person. */}
+                        <button
+                          className="alt-ban"
+                          title={`Lifetime ban on ${p.name}'s account`}
+                          onClick={() => setPendingBan({
+                            value: p.id, name: p.name, kind: 'player', scope: 'lifetime',
+                            discordLinked: !!discordIdOf(p.id),
+                          })}
+                        >
+                          ban
+                        </button>
                       </span>
                     ))}
                   </div>
@@ -645,6 +699,7 @@ export default function Audit() {
                           title={`Lifetime ban on ${a.ip} — removes every account ever seen from it`}
                           onClick={() => setPendingBan({
                             value: a.ip, name: a.ip, kind: 'ip', scope: 'lifetime',
+                            accounts: a.accounts,
                           })}
                         >
                           ban
@@ -655,7 +710,10 @@ export default function Audit() {
                       <button
                         className="btn btn-sm btn-danger"
                         title={`Lifetime ban on all ${g.addresses.length} addresses — reaches every account behind any of them`}
-                        onClick={() => void banEveryAddress(g.addresses.map(a => a.ip))}
+                        onClick={() => void banEveryAddress(
+                          g.addresses.map(a => a.ip),
+                          [...new Set(g.addresses.flatMap(a => a.accounts.map(x => x.name)))],
+                        )}
                       >
                         Ban all {g.addresses.length}
                       </button>

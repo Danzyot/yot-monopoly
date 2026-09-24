@@ -19,7 +19,8 @@ import {
   primeVerifyChannel, startCode, verifyChannelId, verifyChannelName,
 } from './verifycode.ts';
 import {
-  altGroups, auditCounts, connectionsFor, flaggedHands, forgetPlayer, loadAudit, playerRows, recentActions,
+  accountsOnAddress, altGroups, auditCounts, connectionsFor, flaggedHands, forgetPlayer, loadAudit,
+  playerRows, recentActions,
   saveAudit, suspiciousPairs, standingIdentities,
 } from './audit.ts';
 import { BRAND } from '../../shared/brand.ts';
@@ -1105,11 +1106,38 @@ app.post('/api/admin/bans', (req, res) => {
     });
 
     // Who to remove: a player ban names them, an IP ban has to look them up.
-    const targets = kind === 'player'
-      ? [ban.value]
-      : playerRows()
-        .filter(p => p.ips.some(ip => normaliseIp(ip) === normaliseIp(ban.value)))
-        .map(p => p.id);
+    const onAddress = kind === 'player' ? [] : accountsOnAddress(ban.value);
+    const targets = kind === 'player' ? [ban.value] : onAddress.map(p => p.id);
+
+    // Ban the accounts behind the address, not just the address.
+    //
+    // An address ban alone is a door, not a verdict: the accounts it shuts out
+    // are untouched, so the same people come back on a phone, a hotspot or a
+    // VPN under the same names, and the operator believes they are gone. When
+    // an address is banned because of who is behind it, the accounts have to
+    // go too.
+    //
+    // Off unless asked, because the other kind of address ban exists as well —
+    // one aimed at a place rather than at people — and a carrier or a VPN exit
+    // holds hundreds of strangers. The caller decides, with the count in front
+    // of them.
+    const alsoBanned: string[] = [];
+    if (kind === 'ip' && b.banPlayers === true) {
+      for (const p of onAddress) {
+        // Lifetime regardless of the address ban's own scope: a game-scoped
+        // address ban still means these accounts are barred from that game,
+        // and addBan already carries the scope through.
+        addBan({
+          kind: 'player', scope, gameId, gameName: liveName,
+          value: p.id,
+          name: p.name,
+          reason: String(b.reason ?? '') || `Account behind banned address ${ban.value}`,
+          by: me.name,
+          discordBanned: false,
+        });
+        alsoBanned.push(p.name);
+      }
+    }
 
     let ejected = { tournaments: 0, tables: 0 };
     for (const pid of targets) {
@@ -1123,7 +1151,7 @@ app.post('/api/admin/bans', (req, res) => {
     // A lifetime ban also cuts live connections; a game ban must not, or it
     // would knock someone off the whole site over one event.
     const disconnected = ban.scope === 'lifetime' ? disconnectBanned() : 0;
-    res.json({ ban, ejected, disconnected, discordNote });
+    res.json({ ban, ejected, disconnected, discordNote, alsoBanned });
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : 'Could not ban' });
   }

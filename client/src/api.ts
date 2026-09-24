@@ -102,7 +102,9 @@ export const api = {
     }[];
     alts: {
       key: string;
-      addresses: { ip: string; country: string | null }[];
+      // Each address carries who is behind it, so a ban started from here can
+      // offer to take the accounts with it and name them first.
+      addresses: { ip: string; country: string | null; accounts: { id: string; name: string }[] }[];
       // Reading order, not a probability of guilt — see altGroups() for how it
       // is arrived at and why a big group scores low rather than high.
       score: number; reasons: string[]; playedTogether: number;
@@ -255,10 +257,14 @@ export const api = {
     // Also ban them from the Discord server. The site ban goes through either
     // way; a Discord failure comes back as discordNote rather than as an error.
     discordBan?: boolean;
+    // For an IP ban: also suspend the accounts seen from that address, so the
+    // same people cannot simply come back from a phone.
+    banPlayers?: boolean;
   }) =>
     request<{
       ban: BanRow; ejected: { tournaments: number; tables: number };
       discordNote?: string | null;
+      alsoBanned?: string[];
     }>('/api/admin/bans', {
       method: 'POST', body: JSON.stringify(b),
     }),
