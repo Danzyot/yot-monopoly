@@ -36,6 +36,16 @@ mini-games, music, and a full operator dashboard.
 - **Bots** fill seats, and **autopilot** plays for anyone disconnected more than 45 s
   (never spending their money or trading for them). Reconnecting reclaims the seat.
 - Chat, leaderboard, and phone-friendly layout throughout.
+- **Table social**: emoji reactions that pop over the sender's character (spectators'
+  float up the side), and **pokes** for a player whose turn has dragged past 15 s.
+- **Trading**: counter-offers (edit an incoming offer and send it back in one step) and
+  a **portfolio** view of every player's deeds by colour set, cash, net worth and jail cards.
+- **End of game**: final standings with net worth, turns, duration and awards (most rent
+  collected, biggest rent paid, most properties bought, jailbird, arcade champ), and a
+  host **rematch** that returns the table to the lobby with the same seats and settings.
+- **Turn alerts**: the tab title flashes when the game is waiting on you, plus optional
+  browser notifications (the 🔔 button). **Keyboard shortcuts**: Space/R roll, B buy,
+  A auction, E end turn, P pay debt, T trade/portfolios, Esc close, ? help.
 
 **Sign-in** (ported from the poker room): **Log in with Discord** (OAuth) or **Verify with
 a code** (the player pastes `MONO-XXXX` into the bot's Verify button in your Discord, or
@@ -51,7 +61,7 @@ posts it in a verify channel). `DEMO_MODE=1` adds a name-only sign-in for develo
   preview of what the player sees. Enforced on connect, on join, and instantly when added.
 - Logs — durable per-room event logs (moves, chat, joins, kicks) and a log of every
   operator action; recent results.
-- Features — switch chat, music, mini-games, bots, public room creation, the leaderboard
+- Features — switch chat, reactions & pokes, music, mini-games, bots, public room creation, the leaderboard
   and Discord result announcements on or off (enforced server-side).
 - Discord — post the Verify panel, DM players, sign-in/interactions diagnostics.
 - Graphics and Music libraries.

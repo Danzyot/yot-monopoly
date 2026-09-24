@@ -616,3 +616,173 @@ button.edition:disabled { cursor: default; }
 .char-emoji { font-size: 20px; line-height: 1.1; }
 .char-name { font-size: 10px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .char-taken { position: absolute; top: 3px; right: 3px; width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,0.5); }
+
+/* ---- table social: reactions, pokes, portfolios, end screen, alerts, shortcuts ----
+   Everything here is prefixed (react- / poke- / pf- / end- / kb- / dock-) so it
+   cannot collide with the rest of the HUD. */
+.social-dock { position: absolute; left: 12px; bottom: 16px; display: flex; align-items: center; gap: 6px; z-index: 6; }
+.dock-btn {
+  height: 38px; min-width: 38px; padding: 0 9px; border-radius: 99px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--text); font: 600 17px Inter, sans-serif; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; backdrop-filter: blur(8px);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.35); transition: background 0.15s, transform 0.05s;
+}
+.dock-btn:hover:not(:disabled) { background: var(--panel-solid); }
+.dock-btn:active:not(:disabled) { transform: translateY(1px); }
+.dock-btn.on { border-color: var(--accent); }
+.dock-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.poke-btn { font-size: 14px; border-color: var(--warn); animation: pokeGlow 1.6s ease-in-out infinite; }
+.poke-label { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@keyframes pokeGlow { 50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 45%, transparent), 0 6px 18px rgba(0,0,0,0.35); } }
+/* The deed card shares the bottom-left corner: sit it above the dock. */
+.deed-float { bottom: 64px; }
+
+.react-picker { position: relative; }
+.react-bar {
+  position: absolute; bottom: calc(100% + 8px); left: 0; display: grid; grid-template-columns: repeat(5, 40px); gap: 4px;
+  background: var(--panel-solid); border: 1px solid var(--line); border-radius: 14px; padding: 6px;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.5); animation: reactBarIn 0.14s ease-out;
+}
+@keyframes reactBarIn { from { opacity: 0; transform: translateY(6px) scale(0.96); } }
+.react-opt { width: 40px; height: 40px; border: 0; border-radius: 10px; background: transparent; font-size: 24px; line-height: 1; cursor: pointer; padding: 0; transition: transform 0.1s, background 0.1s; }
+.react-opt:hover { background: rgba(255,255,255,0.1); transform: scale(1.15); }
+.react-opt:active { transform: scale(0.95); }
+
+/* Over the character (drei <Html>, so this is a DOM node pinned to the figure). */
+.react-3d {
+  font-size: 40px; line-height: 1; pointer-events: none; user-select: none;
+  filter: drop-shadow(0 4px 6px rgba(0,0,0,0.45)); animation: react3d 3.2s ease-out forwards;
+}
+@keyframes react3d {
+  0% { transform: translateY(12px) scale(0.2); opacity: 0; }
+  12% { transform: translateY(0) scale(1.25); opacity: 1; }
+  22% { transform: translateY(0) scale(1); }
+  80% { transform: translateY(-26px) scale(1); opacity: 1; }
+  100% { transform: translateY(-40px) scale(0.9); opacity: 0; }
+}
+/* In the player row: pops out of the character badge. */
+.token-badge { position: relative; }
+.row-react {
+  position: absolute; right: -10px; top: -12px; font-size: 20px; line-height: 1; pointer-events: none;
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5)); animation: rowReact 3.2s ease-out forwards;
+}
+@keyframes rowReact {
+  0% { transform: scale(0.2); opacity: 0; }
+  10% { transform: scale(1.35); opacity: 1; }
+  20% { transform: scale(1); }
+  85% { opacity: 1; }
+  100% { transform: translateY(-8px); opacity: 0; }
+}
+/* Spectators: float up beside the side panel, with a name. */
+.spec-reacts { position: absolute; right: 326px; bottom: 110px; width: 100px; height: 0; pointer-events: none; z-index: 5; }
+.spec-react { position: absolute; bottom: 0; display: flex; flex-direction: column; align-items: center; animation: specReact 3.2s ease-out forwards; }
+.spec-react-emoji { font-size: 34px; line-height: 1; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.5)); }
+.spec-react-name { font-size: 11px; font-weight: 600; background: rgba(0,0,0,0.55); padding: 1px 6px; border-radius: 99px; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@keyframes specReact {
+  0% { transform: translateY(0) scale(0.3); opacity: 0; }
+  10% { transform: translateY(-10px) scale(1.1); opacity: 1; }
+  80% { opacity: 1; }
+  100% { transform: translateY(-150px) scale(0.9); opacity: 0; }
+}
+
+/* Pokes: the target gets a banner and a shake; everyone else a quiet line. */
+.poke-nudge {
+  position: absolute; top: 64px; left: 50%; transform: translateX(-50%); z-index: 15; display: flex; align-items: center; gap: 12px;
+  background: var(--panel-solid); border: 2px solid var(--warn); border-radius: 14px; padding: 10px 16px;
+  box-shadow: 0 14px 40px rgba(0,0,0,0.55); animation: pokeIn 0.5s cubic-bezier(.2,1.5,.4,1);
+}
+.poke-hand { font-size: 34px; display: inline-block; animation: pokeHand 0.45s ease-in-out 4; }
+@keyframes pokeIn { from { transform: translate(-50%, -30px) scale(0.7); opacity: 0; } }
+@keyframes pokeHand { 50% { transform: translateX(10px) rotate(-8deg); } }
+.poke-note { position: absolute; top: 58px; left: 50%; transform: translateX(-50%); z-index: 15; background: var(--panel); border: 1px solid var(--line); border-radius: 99px; padding: 5px 12px; font-size: 13px; pointer-events: none; animation: reactBarIn 0.2s ease-out; }
+.game.poked .scene { animation: pokeShake 0.5s ease-in-out 2; }
+@keyframes pokeShake { 20% { transform: translateX(-7px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
+@media (prefers-reduced-motion: reduce) {
+  .game.poked .scene, .poke-hand, .poke-btn { animation: none; }
+}
+
+/* Portfolios: player rows open them; also a side-panel tab. */
+.pworth { font-size: 11px; line-height: 1.25; white-space: nowrap; }
+.pworth .show-sm { display: none; }
+.pworth b { color: var(--text); font-weight: 600; }
+.pf-open { cursor: pointer; border-radius: 6px; }
+.pf-open:hover .pname { text-decoration: underline; text-decoration-color: var(--muted); }
+.pf-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.portfolio { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.pf-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pf-table th { text-align: left; font-size: 11px; color: var(--muted); font-weight: 600; padding: 2px 6px 4px; }
+.pf-table td { padding: 5px 6px; border-top: 1px solid var(--line); }
+.pf-table .num { text-align: right; white-space: nowrap; }
+.pf-table th:not(:first-child) { text-align: right; }
+.pf-table tbody tr { cursor: pointer; }
+.pf-table tbody tr:hover { background: rgba(255,255,255,0.05); }
+.pf-table tbody tr.on { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.pf-table tbody tr.out { opacity: 0.5; }
+.pf-who { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pf-dot { width: 22px; height: 22px; border-radius: 50%; font-style: normal; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.pf-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+.pf-detail { display: flex; flex-direction: column; gap: 6px; }
+.pf-sub { margin-bottom: 2px; }
+.pf-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.pf-group { background: rgba(0,0,0,0.25); border: 1px solid var(--line); border-radius: 9px; padding: 6px; display: flex; flex-direction: column; gap: 3px; }
+.pf-group-head { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 0 2px 2px; }
+.pf-group-head i { width: 12px; height: 12px; border-radius: 3px; flex: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2); }
+.pf-deed { display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.04); border: 1px solid transparent; color: var(--text); border-radius: 6px; padding: 4px 6px; font: 12.5px Inter, sans-serif; cursor: pointer; text-align: left; }
+.pf-deed:hover { border-color: var(--accent); }
+.pf-deed.mortgaged .grow { text-decoration: line-through; color: var(--muted); }
+.portfolio.compact .pf-groups { grid-template-columns: 1fr; }
+.portfolio.compact .hide-compact { display: none; }
+.portfolio.compact .pf-name { max-width: 110px; }
+.pf-modal { max-width: 720px; }
+
+/* End of game summary. */
+.modal.end-screen { text-align: center; max-width: 460px; display: flex; flex-direction: column; gap: 10px; }
+.end-screen h2 { margin: 0; font-size: 28px; }
+.end-screen .trophy { font-size: 60px; line-height: 1; }
+.end-meta { margin: -4px 0 0; }
+.end-standings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; text-align: left; }
+.end-standings li { display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.25); border: 1px solid var(--line); border-radius: 9px; padding: 5px 10px; }
+.end-standings li.me { border-color: var(--accent); }
+.end-standings li:first-child { background: color-mix(in srgb, #f4c542 14%, rgba(0,0,0,0.25)); }
+.end-place { width: 26px; text-align: center; font-size: 18px; flex: none; }
+.end-standings .token-badge { width: 26px; height: 26px; font-size: 14px; }
+.end-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.end-worth { font-weight: 700; white-space: nowrap; }
+.end-awards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px; text-align: left; }
+.end-award { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); border-radius: 9px; padding: 6px 10px; min-width: 0; }
+.end-award-icon { font-size: 22px; flex: none; }
+.end-actions { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 4px; }
+.end-actions > .btn.primary { padding: 10px 28px; font-size: 16px; }
+.end-reopen { position: absolute; top: 58px; left: 50%; transform: translateX(-50%); z-index: 12; box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
+
+/* Keyboard shortcuts popover. */
+.kb-help { position: relative; }
+.kb-pop {
+  position: absolute; bottom: calc(100% + 8px); left: 0; width: 250px; background: var(--panel-solid); border: 1px solid var(--line);
+  border-radius: 12px; padding: 10px 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.5); font-size: 13px; animation: reactBarIn 0.14s ease-out;
+}
+.kb-pop table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+.kb-pop td { padding: 3px 0; vertical-align: top; }
+.kb-pop td:first-child { width: 86px; }
+kbd { font: 600 11px ui-monospace, Menlo, monospace; background: rgba(255,255,255,0.1); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px; white-space: nowrap; }
+/* Touch-only devices have no keyboard to use shortcuts with. */
+@media (hover: none) and (pointer: coarse) { .hide-touch { display: none; } }
+
+@media (max-width: 760px) {
+  /* Phones: the bottom belongs to the action bar and side panel, so the dock
+     stands in a column at the right edge of the board. */
+  .social-dock { left: auto; right: 8px; bottom: auto; top: 128px; flex-direction: column; align-items: flex-end; }
+  .dock-btn { height: 36px; min-width: 36px; font-size: 16px; }
+  .poke-label { display: none; }
+  .react-bar { bottom: auto; top: 0; left: auto; right: calc(100% + 8px); grid-template-columns: repeat(5, 36px); }
+  .react-opt { width: 36px; height: 36px; font-size: 22px; }
+  .kb-pop { bottom: auto; top: 0; left: auto; right: calc(100% + 8px); }
+  .deed-float { bottom: auto; }
+  .spec-reacts { right: 56px; bottom: calc(86px + 34vh + 20px); }
+  .react-3d { font-size: 30px; }
+  .poke-nudge { top: 108px; width: max-content; max-width: calc(100vw - 24px); }
+  .poke-note { top: 108px; }
+  .end-reopen { top: 110px; }
+  .pf-name { max-width: 100px; }
+  .pworth .show-sm { display: inline; }
+}

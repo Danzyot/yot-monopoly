@@ -1117,6 +1117,7 @@ export class Game {
       stats: Object.fromEntries(this.players.map(p => [p.id, { ...NO_STATS, ...this.stats[p.id] }])),
       startedAt: this.startedAt,
       endedAt: this.endedAt,
+      outOrder: this.outOrder,
     });
   }
 }

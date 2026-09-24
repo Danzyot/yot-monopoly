@@ -275,3 +275,20 @@ export function playBankrupt(at = 0) {
   tone(140, at, 0.5, 0.2, 'sine', 40);
   burst(at, 0.25, 0.22, 'lowpass', 300, 1);
 }
+
+// ---- table social ----
+
+/** Someone poked you: an insistent double knock and a rising "hey!". */
+export function playPoke(at = 0) {
+  for (const d of [0, 0.16]) {
+    burst(at + d, 0.07, 0.3, 'lowpass', 700, 2);
+    tone(180, at + d, 0.09, 0.12, 'sine', 120);
+  }
+  tone(700, at + 0.36, 0.14, 0.1, 'square', 1050);
+  tone(1050, at + 0.5, 0.22, 0.09, 'triangle');
+}
+
+/** A reaction popped up: a soft bubble blip, quiet enough to ignore. */
+export function playReaction(at = 0) {
+  tone(520, at, 0.09, 0.035, 'sine', 900);
+}

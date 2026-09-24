@@ -124,6 +124,8 @@ export interface GameView {
   /** Game clock when play began and (once over) ended, for the summary's duration. */
   startedAt: number;
   endedAt: number | null;
+  /** Bankrupt players, first out first: gives finishing places. */
+  outOrder: string[];
 }
 
 /** Fun numbers the engine tallies as the game goes. */

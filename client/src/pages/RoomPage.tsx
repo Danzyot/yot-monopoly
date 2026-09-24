@@ -12,9 +12,10 @@ export default function RoomPage() {
   const me = useMyId();
   const { profile, ready, openSignIn } = useAuth();
 
+  // Keyed on the code, not every state: turn alerts flash the title in between.
   useEffect(() => {
     document.title = room ? `${room.code} · Yot Monopoly` : 'Yot Monopoly';
-  }, [room]);
+  }, [room?.code]);
 
   if (!ready) return <div className="center-msg"><p className="muted">Loading…</p></div>;
   if (error && !room) {

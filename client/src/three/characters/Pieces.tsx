@@ -11,6 +11,10 @@ import { DoubleSide, type Group, type Mesh, type MeshBasicMaterial } from 'three
 import type { GameView, PlayerState } from '../../../../shared/types.ts';
 import { tileWidth, tokenSpot } from '../layout.ts';
 import { CharacterFigure, Tinter, newRig, poseRig, useCharacterMaterials } from './Figure.tsx';
+import { ReactionBubble } from './ReactionBubble.tsx';
+
+/** An emoji reaction currently showing over a player's character. */
+export interface PieceReaction { emoji: string; seq: number }
 
 const HOP_MS = 190;
 const LAND_MS = 150;
@@ -61,8 +65,9 @@ function turnToward(from: number, to: number, rate: number, dt: number): number 
   return from + d * (1 - Math.exp(-rate * dt));
 }
 
-function Piece({ p, slot, count, turn, winner, cheer, n }: {
+function Piece({ p, slot, count, turn, winner, cheer, n, reaction }: {
   p: PlayerState; slot: number; count: number; turn: boolean; winner: boolean; cheer: number; n: number;
+  reaction?: PieceReaction;
 }) {
   const ref = useRef<Group>(null);
   const yawRef = useRef<Group>(null);
@@ -231,6 +236,7 @@ function Piece({ p, slot, count, turn, winner, cheer, n }: {
           <meshBasicMaterial color={p.color} transparent opacity={0} depthWrite={false} />
         </mesh>
       </group>
+      {reaction && !p.bankrupt && <ReactionBubble emoji={reaction.emoji} seq={reaction.seq} />}
     </group>
   );
 }
@@ -260,7 +266,11 @@ function Crown() {
   );
 }
 
-export function Pieces({ game, n }: { game: GameView; n: number }) {
+export function Pieces({ game, n, reactions }: {
+  game: GameView; n: number;
+  /** Reactions to pop over characters, by player id. */
+  reactions?: Record<string, PieceReaction>;
+}) {
   const { players, owned, current, winner } = game;
 
   // Slot assignment per tile so pieces sharing a space don't overlap.
@@ -305,7 +315,8 @@ export function Pieces({ game, n }: { game: GameView; n: number }) {
         const s = slots.get(p.id) ?? { slot: 0, count: 1 };
         return (
           <Piece key={p.id} p={p} slot={s.slot} count={s.count} n={n}
-            turn={p.id === current && !winner} winner={p.id === winner} cheer={cheers[p.id] ?? 0} />
+            turn={p.id === current && !winner} winner={p.id === winner} cheer={cheers[p.id] ?? 0}
+            reaction={reactions?.[p.id]} />
         );
       })}
     </>
