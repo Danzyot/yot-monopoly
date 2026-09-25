@@ -17,14 +17,17 @@ import type express from 'express';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { isInfraPeer } from './net.ts';
 import { classify, type VpnKind } from './vpn.ts';
+import { vpnBlockOn } from './vpnsetting.ts';
 
 const COOKIE = 'wawa_vpn_bypass';
 // Long enough that an operator is not re-doing it every session, short enough
 // that a leaked link stops working.
 const BYPASS_DAYS = 30;
 
+// The stored switch, with the environment able to force it off. See
+// vpnsetting.ts for why the override only goes one way.
 export function blockEnabled(): boolean {
-  return process.env.VPN_BLOCK === '1';
+  return vpnBlockOn();
 }
 
 // Addresses that are never turned away, whatever the lists say. The operator's

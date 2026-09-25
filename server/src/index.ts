@@ -29,6 +29,7 @@ import { DEFAULT_BET_CAP_MINUTES } from './tournament/tournament.ts';
 import { attachSockets, clientIp, disconnectBanned, trustedProxyHops } from './sockets.ts';
 import { loadVpnLists } from './vpn.ts';
 import { blockEnabled as vpnBlockEnabled, vpnGate } from './vpngate.ts';
+import { envOverride as vpnEnvOverride, loadVpnSetting, setVpnBlock, vpnBlockStored } from './vpnsetting.ts';
 import {
   allCashRecords, allRecords, archivedNames, findRecord, leaderboard, loadCashRecords, repairTournamentPlaces,
   loadResults, recentRecords, recordCount, removeCashRecord, removeRecord, repairKnownRecords, saveResults,
@@ -86,6 +87,7 @@ loadGraphics();
 loadPromo();
 loadCashRecords();
 loadBans();
+loadVpnSetting();
 const vpnRanges = loadVpnLists();
 loadFeatures();
 
@@ -972,6 +974,47 @@ app.post('/api/tables', (req, res) => {
 });
 
 // ---------- feature switches ----------
+// The VPN door's state, and everything the panel needs to talk the operator
+// through turning it on: how many of the accounts on record it would refuse,
+// who they are, and whether there is a way back in if it misfires.
+app.get('/api/admin/vpn', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const rows = playerRows();
+  const wouldBlock = rows.filter(p => p.vpn);
+  res.json({
+    enabled: vpnBlockEnabled(),
+    stored: vpnBlockStored(),
+    envForcedOff: vpnEnvOverride() === 'forced-off',
+    bypassKeySet: !!process.env.VPN_BYPASS_KEY?.trim(),
+    allowList: (process.env.VPN_ALLOW_IPS ?? '').split(',').map(x => x.trim()).filter(Boolean),
+    ranges: vpnRanges,
+    apiKeySet: !!process.env.PROXYCHECK_API_KEY?.trim(),
+    players: rows.length,
+    wouldBlock: wouldBlock.map(p => ({ id: p.id, name: p.name, kind: p.vpn })),
+  });
+});
+
+app.put('/api/admin/vpn', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const want = (req.body ?? {}).enabled === true;
+    // Say plainly that nothing happened rather than reporting a save. The
+    // environment override exists so a locked-out operator can force the door
+    // open from Railway; a dashboard that could quietly undo it would defeat
+    // the one recovery path that does not need the site to be reachable.
+    if (vpnEnvOverride() === 'forced-off' && want) {
+      res.status(409).json({
+        error: 'VPN_BLOCK=0 is set in this deployment, which forces the block off. '
+          + 'Remove it and restart before turning the block on here.',
+      });
+      return;
+    }
+    res.json({ enabled: setVpnBlock(want) });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : 'Could not save' });
+  }
+});
+
 app.get('/api/admin/features', (req, res) => {
   if (!requireAdmin(req, res)) return;
   res.json({ features: getFeatures() });

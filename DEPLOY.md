@@ -226,12 +226,15 @@ setting that can lock you out of your own dashboard.
 
 | Variable | Value |
 |---|---|
-| `VPN_BLOCK` | `1` turns the block on. Anything else, or unset, is off. |
+| *(the switch itself)* | **Dashboard → Access → Block VPN and datacenter connections.** Off everywhere until someone turns it on, and it takes effect immediately — no restart. |
+| `VPN_BLOCK` | Not normally needed. `0` forces the block OFF and the dashboard cannot override it — this is how you get back in if the block locks you out. `1` only sets the starting value before anyone has used the switch. |
 | `VPN_BYPASS_KEY` | A long random string. **Set this first.** Visiting `https://<your site>/?vpnbypass=<the key>` lets that browser through for 30 days, even from a VPN. It is how you get back in when the block misfires. |
 | `VPN_ALLOW_IPS` | Comma-separated addresses that are never blocked. |
 | `PROXYCHECK_API_KEY` | Optional. A [proxycheck.io](https://proxycheck.io/) key adds a second opinion on addresses the offline lists clear. The free tier is 1,000 lookups a day. Without it the offline lists work on their own. |
 
-**Before you set `VPN_BLOCK=1`:** open the dashboard → Audit → Players. Any
+**Before you turn it on:** the switch itself names the accounts it would
+refuse and says whether a bypass key is set, and asks you to confirm. For the
+fuller picture, open the dashboard → Audit → Players. Any
 account on a VPN or datacenter address is marked, and a line above the table
 counts them and names them. Those are the people the block will refuse. Deal
 with them first — allowlist them, or tell them — rather than finding out from

@@ -238,6 +238,18 @@ export const api = {
   chatGet: () => request<{ enabled: boolean }>('/api/admin/chat'),
   chatSet: (enabled: boolean) =>
     request<{ enabled: boolean }>('/api/admin/chat', { method: 'PUT', body: JSON.stringify({ enabled }) }),
+  // The VPN door: its state, and what turning it on would cost.
+  vpnGet: () => request<{
+    enabled: boolean; stored: boolean; envForcedOff: boolean;
+    bypassKeySet: boolean; allowList: string[];
+    ranges: { vpn: number; datacenter: number }; apiKeySet: boolean;
+    players: number;
+    wouldBlock: { id: string; name: string; kind: 'vpn' | 'datacenter' }[];
+  }>('/api/admin/vpn'),
+  vpnSet: (enabled: boolean) =>
+    request<{ enabled: boolean }>('/api/admin/vpn', {
+      method: 'PUT', body: JSON.stringify({ enabled }),
+    }),
   featuresGet: () =>
     request<{ features: import('./features').Features }>('/api/admin/features').then(r => r.features),
   featuresSave: (f: import('./features').Features) =>

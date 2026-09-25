@@ -12,6 +12,7 @@ import { LiveGames, PastGames } from '../components/GameManager';
 import BanManager from '../components/BanManager';
 import ChatSwitch from '../components/ChatSwitch';
 import FeatureManager from '../components/FeatureManager';
+import VpnBlock from '../components/VpnBlock';
 import { useFeatures } from '../features';
 import { chips } from '../format';
 import { getSocket, withResub } from '../socket';
@@ -212,6 +213,9 @@ export default function Lobby() {
 
       <div className="section-title">Features</div>
       <FeatureManager />
+
+      <div className="section-title">Access</div>
+      <VpnBlock />
 
       <div className="section-title">Manage games</div>
       <LiveGames />
