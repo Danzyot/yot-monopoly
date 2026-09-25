@@ -12,6 +12,7 @@ import type { Table } from './engine/table.ts';
 import { countryOf } from './geo.ts';
 import { normaliseIp } from './bans.ts';
 import { isInfraPeer } from './net.ts';
+import { classify } from './vpn.ts';
 import { DATA_DIR } from './paths.ts';
 
 export interface PlayerRecord {
@@ -317,6 +318,11 @@ export interface PlayerRow {
   countries: (string | null)[];
   handsPlayed: number;
   games: number;
+  // What the VPN door would make of their MOST RECENT address — the one they
+  // would arrive on next. Reported whether or not the block is switched on,
+  // so the operator can see who it would turn away before turning it on,
+  // rather than finding out from the people who cannot get in.
+  vpn: 'vpn' | 'datacenter' | null;
 }
 
 export function playerRows(): PlayerRow[] {
@@ -330,6 +336,7 @@ export function playerRows(): PlayerRow[] {
       countries: [...p.ips.keys()].map(countryOf),
       handsPlayed: p.handsPlayed,
       games: p.gamesJoined.size,
+      vpn: classify([...p.ips.keys()].at(-1) ?? null).kind,
     }));
 }
 
@@ -529,6 +536,7 @@ function rowFor(p: PlayerRecord): PlayerRow {
     firstSeen: p.firstSeen, lastSeen: p.lastSeen,
     ips: [...p.ips.keys()],
     countries: [...p.ips.keys()].map(countryOf),
+    vpn: classify([...p.ips.keys()].at(-1) ?? null).kind,
     handsPlayed: p.handsPlayed,
     games: p.gamesJoined.size,
   };

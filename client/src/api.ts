@@ -99,6 +99,9 @@ export const api = {
       id: string; name: string; avatar: string; discordTag: string | null;
       discordVerifiedId: string | null; firstSeen: number; lastSeen: number;
       ips: string[]; countries: (string | null)[]; handsPlayed: number; games: number;
+      // What the VPN door makes of their most recent address, reported
+      // whether or not the block is on.
+      vpn: 'vpn' | 'datacenter' | null;
     }[];
     alts: {
       key: string;

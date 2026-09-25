@@ -26,7 +26,9 @@ import {
 import { BRAND } from '../../shared/brand.ts';
 import { registry } from './registry.ts';
 import { DEFAULT_BET_CAP_MINUTES } from './tournament/tournament.ts';
-import { attachSockets, disconnectBanned, trustedProxyHops } from './sockets.ts';
+import { attachSockets, clientIp, disconnectBanned, trustedProxyHops } from './sockets.ts';
+import { loadVpnLists } from './vpn.ts';
+import { blockEnabled as vpnBlockEnabled, vpnGate } from './vpngate.ts';
 import {
   allCashRecords, allRecords, archivedNames, findRecord, leaderboard, loadCashRecords, repairTournamentPlaces,
   loadResults, recentRecords, recordCount, removeCashRecord, removeRecord, repairKnownRecords, saveResults,
@@ -84,6 +86,7 @@ loadGraphics();
 loadPromo();
 loadCashRecords();
 loadBans();
+const vpnRanges = loadVpnLists();
 loadFeatures();
 
 const app = express();
@@ -179,6 +182,16 @@ app.get('/api/discord/interactions', (req, res) => {
 
 // Explicit, and small. Every JSON body this server accepts is a handful of
 // settings; the default 100kb is an invitation to send 100kb.
+// The VPN door, mounted here on purpose.
+//
+// After the Discord interactions routes above, because that request arrives
+// from Discord's own servers — a datacenter by definition, which its own rule
+// would turn away, breaking slash commands the moment the block went on.
+//
+// Before everything else, because a blocked visitor should get the refusal
+// instead of the app, not after loading it.
+app.use(vpnGate(req => clientIp(req.headers['x-forwarded-for'], req.socket.remoteAddress ?? null, req.headers)));
+
 app.use(express.json({ limit: '64kb' }));
 
 // The origin the user is actually browsing on (works for every attached domain).
@@ -1481,6 +1494,22 @@ if (existsSync(clientDist)) {
 
 httpServer.listen(PORT, () => {
   console.log(`${BRAND.name} server listening on http://localhost:${PORT}`);
+  // Say what the door is set to. A block that is on when nobody meant it to
+  // be, or off when everybody assumed it was on, is the kind of thing that is
+  // only ever discovered at the worst moment.
+  console.log(
+    `VPN block: ${vpnBlockEnabled() ? 'ON' : 'off'} `
+    + `(${vpnRanges.vpn} VPN ranges, ${vpnRanges.datacenter} datacenter ranges`
+    + `${process.env.PROXYCHECK_API_KEY?.trim() ? ', proxycheck key set' : ''})`
+    + `${vpnBlockEnabled() && !process.env.VPN_BYPASS_KEY?.trim()
+      ? ' — WARNING: no VPN_BYPASS_KEY, you cannot let yourself back in if this misfires' : ''}`,
+  );
+  // Empty lists block nobody, which looks exactly like a working block until
+  // somebody checks. Say so loudly rather than letting the line above read as
+  // reassurance.
+  if (vpnBlockEnabled() && vpnRanges.vpn + vpnRanges.datacenter === 0) {
+    console.error('VPN block is ON but NO ranges loaded — it is refusing nobody. server/vpn-ranges/ is missing from this build.');
+  }
   // After the address, before anyone can reach it: what this deployment is
   // actually configured as. See startupcheck.ts for why it is printed rather
   // than merely available.

@@ -575,6 +575,24 @@ export default function Audit() {
           )}
 
           {tab === 'players' && (
+            <>
+            {/* Said before the table rather than left to be counted by eye:
+                switching the block on is not reversible from inside a blocked
+                browser, so the number of people it would turn away is the one
+                thing worth knowing first. */}
+            {(() => {
+              const hit = data.players.filter(p => p.vpn);
+              if (hit.length === 0) return null;
+              return (
+                <p className="audit-note vpn-note">
+                  <strong>{hit.length}</strong> of {data.players.length} accounts are on a VPN or
+                  datacenter address right now: {hit.map(p => p.name).join(', ')}. With the VPN
+                  block switched on, they would be refused at the front page. Add their addresses
+                  to <code>VPN_ALLOW_IPS</code>, or give yourself a <code>VPN_BYPASS_KEY</code>,
+                  before turning it on.
+                </p>
+              );
+            })()}
             <div className="table-scroll">
             <table className="standings-table wide">
               <thead>
@@ -585,7 +603,16 @@ export default function Audit() {
                   <tr key={p.id}>
                     <td><Avatar value={p.avatar} size={16} /> {p.name}</td>
                     <td>{p.discordTag ? <span className="discord-badge verified">@{p.discordTag}</span> : '—'}</td>
-                    <td className="mono"><IpList ips={p.ips} /></td>
+                    <td className="mono">
+                      {p.vpn && (
+                        <span className={`vpn-flag ${p.vpn}`} title={
+                          p.vpn === 'vpn'
+                            ? 'Their most recent address belongs to a commercial VPN. With the VPN block on, they would be turned away.'
+                            : 'Their most recent address is a hosting or datacenter network, not a home connection. With the VPN block on, they would be turned away.'
+                        }>{p.vpn === 'vpn' ? 'VPN' : 'DC'}</span>
+                      )}
+                      <IpList ips={p.ips} />
+                    </td>
                     <td>{[...new Set(p.countries.filter(Boolean))].join(', ') || '—'}</td>
                     <td>{p.handsPlayed}</td>
                     <td>{p.games}</td>
@@ -624,6 +651,7 @@ export default function Audit() {
               </tbody>
             </table>
             </div>
+            </>
           )}
 
           {tab === 'alts' && (

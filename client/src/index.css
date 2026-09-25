@@ -4395,3 +4395,19 @@ input[type='time']:hover::-webkit-calendar-picker-indicator {
   background: var(--panel-2); border: 1px solid var(--line);
   border-radius: 999px; padding: 1px 8px;
 }
+
+/* The VPN door's verdict on an address, shown whether or not the door is
+   shut — an operator has to be able to see who a block would turn away
+   before they turn it on. */
+.vpn-flag {
+  display: inline-block; margin-right: 6px; padding: 0 6px;
+  font-size: 0.66rem; font-weight: 800; letter-spacing: 0.06em;
+  border-radius: 999px; vertical-align: 1px;
+}
+.vpn-flag.vpn { color: #ffb02e; background: rgba(255, 176, 46, 0.14); border: 1px solid rgba(255, 176, 46, 0.4); }
+.vpn-flag.datacenter { color: var(--text-dim); background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); }
+.vpn-note { border-left: 2px solid #ffb02e; padding-left: 10px; }
+.vpn-note code {
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 4px; padding: 0 5px; font-size: 0.92em;
+}

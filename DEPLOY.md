@@ -217,3 +217,36 @@ with the server — that number is at least partly the test harness queueing,
 not the server, which the 20ms loop lag argues for. And memory is the real
 planning constraint: **budget roughly 2.5 MB per concurrent player**, so size
 the Railway container from the field you expect (1,000 players ≈ 4 GB).
+
+## 2a. Blocking VPNs (optional, off unless you set it)
+
+Turn a VPN or datacenter connection away at the front page, before anything
+loads. Read the whole of this section before switching it on — it is the only
+setting that can lock you out of your own dashboard.
+
+| Variable | Value |
+|---|---|
+| `VPN_BLOCK` | `1` turns the block on. Anything else, or unset, is off. |
+| `VPN_BYPASS_KEY` | A long random string. **Set this first.** Visiting `https://<your site>/?vpnbypass=<the key>` lets that browser through for 30 days, even from a VPN. It is how you get back in when the block misfires. |
+| `VPN_ALLOW_IPS` | Comma-separated addresses that are never blocked. |
+| `PROXYCHECK_API_KEY` | Optional. A [proxycheck.io](https://proxycheck.io/) key adds a second opinion on addresses the offline lists clear. The free tier is 1,000 lookups a day. Without it the offline lists work on their own. |
+
+**Before you set `VPN_BLOCK=1`:** open the dashboard → Audit → Players. Any
+account on a VPN or datacenter address is marked, and a line above the table
+counts them and names them. Those are the people the block will refuse. Deal
+with them first — allowlist them, or tell them — rather than finding out from
+the ones who cannot reach you.
+
+What it catches and what it does not: commercial VPNs and hosting networks,
+reliably. Residential proxies, not at all — they come through real home
+connections and cannot be told apart by address. Someone determined can still
+get round it for a few dollars, so treat a flag as a prompt, never as proof.
+
+The ranges are checked into the repo at `server/vpn-ranges/`, so nothing is
+fetched at boot or at build time. Run `scripts/refresh-vpn-lists.sh` every
+month or two and commit the result.
+
+Never blocked, whatever the lists say: `/api/health` (so you can still tell a
+blocked site from a dead one), the Discord interactions webhook (it arrives
+from Discord's own servers, which are a datacenter by definition), and
+anything on the allowlist or holding a valid bypass cookie.
