@@ -663,7 +663,7 @@ export default function TournamentPage() {
                                   ['player' | 'ip', 'game' | 'lifetime'];
                                 setPendingBan({
                                   playerId: s.id, name: s.name, kind, scope,
-                                  discordLinked: !!discordIdOf(s.id),
+                                  discordLinked: !!identities.get(s.id)?.discordId || !!discordIdOf(s.id) || undefined,
                                 });
                               }}
                             >

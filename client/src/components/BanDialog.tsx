@@ -13,9 +13,12 @@ export interface BanTarget {
   name: string;
   kind: 'player' | 'ip';
   scope: 'game' | 'lifetime';
-  // Whether this person has a Discord account behind them. Only offered when
-  // the caller actually knows — an address has nobody behind it, and a guest
-  // has no account to ban.
+  // Whether this person has a Discord account behind them. true: offer the
+  // Discord ban. false: the caller KNOWS they are a guest, so hide it. Left
+  // out: the caller cannot tell (a seat at a table carries no Discord
+  // field), so offer it and let the server report a guest as not banned
+  // there — hiding it on a guess is how the option went missing for
+  // everyone whose id did not happen to start with dc_.
   discordLinked?: boolean;
   // For an address ban: who has been seen from it. Supplied so the operator
   // is told how many people "and the accounts behind it" actually means
@@ -36,7 +39,7 @@ export default function BanDialog({ target, onConfirm, onCancel }: {
   // Off by default and always a deliberate choice. A Discord ban is public,
   // reaches beyond the card room, and is not what every poker ban deserves.
   const [discordBan, setDiscordBan] = useState(false);
-  const canDiscordBan = target.kind === 'player' && target.discordLinked === true;
+  const canDiscordBan = target.kind === 'player' && target.discordLinked !== false;
 
   // Banning an address without banning the accounts on it is a door, not a
   // verdict — the same people return on a phone under the same names. So when
@@ -131,7 +134,9 @@ export default function BanDialog({ target, onConfirm, onCancel }: {
                   They are removed and cannot rejoin. Lifting this ban here lifts
                   that one as well — a ban you placed on Discord by hand is never
                   touched. Needs the bot to have Ban Members, with its role above
-                  theirs.
+                  theirs.{target.discordLinked === undefined
+                    ? ' If they signed in as a guest there is no Discord account to ban, and this says so.'
+                    : ''}
                 </span>
               </span>
             </label>

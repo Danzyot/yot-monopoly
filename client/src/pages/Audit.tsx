@@ -19,7 +19,38 @@ const cardText = (c: { r: number; s: number }) => `${RANK[c.r] ?? c.r}${SUIT[c.s
 // turned one row into a 375px wall of digits that squeezed every other column
 // — the last one straight off the edge of the panel. Show the few that matter
 // and keep the rest a click away.
-const IPS_SHOWN = 6;
+const IPS_SHOWN = 3;
+
+// The VPN warning above the Players table. A component rather than inline,
+// because the names collapse behind a toggle and a toggle is state: forty-
+// four names in one paragraph was a wall nobody could read the number off.
+const NAMES_SHOWN = 6;
+
+function VpnNote({ players }: { players: { name: string; vpn: 'vpn' | 'datacenter' | null }[] }) {
+  const [all, setAll] = useState(false);
+  const hit = players.filter(p => p.vpn);
+  if (hit.length === 0) return null;
+  const vpn = hit.filter(p => p.vpn === 'vpn').length;
+  const shown = all ? hit : hit.slice(0, NAMES_SHOWN);
+  const rest = hit.length - shown.length;
+  return (
+    <p className="audit-note vpn-note">
+      <strong>{hit.length}</strong> of {players.length} accounts last connected from a VPN or
+      datacenter address ({vpn} VPN, {hit.length - vpn} datacenter). With the block on they are
+      refused until they connect without it; the datacenter ones are the ones to check here first.
+      {' '}
+      <span className="vpn-names">
+        {shown.map(p => p.name).join(', ')}
+        {rest > 0 && (
+          <button type="button" className="ip-more" onClick={() => setAll(true)}>+{rest} more</button>
+        )}
+        {all && hit.length > NAMES_SHOWN && (
+          <button type="button" className="ip-more" onClick={() => setAll(false)}>fewer</button>
+        )}
+      </span>
+    </p>
+  );
+}
 
 function IpList({ ips }: { ips: string[] }) {
   const [all, setAll] = useState(false);
@@ -581,19 +612,7 @@ export default function Audit() {
                 switching the block on is not reversible from inside a blocked
                 browser, so the number of people it would turn away is the one
                 thing worth knowing first. */}
-            {(() => {
-              const hit = data.players.filter(p => p.vpn);
-              if (hit.length === 0) return null;
-              return (
-                <p className="audit-note vpn-note">
-                  <strong>{hit.length}</strong> of {data.players.length} accounts are on a VPN or
-                  datacenter address right now: {hit.map(p => p.name).join(', ')}. With the VPN
-                  block switched on, they would be refused at the front page. Add their addresses
-                  to <code>VPN_ALLOW_IPS</code>, or give yourself a <code>VPN_BYPASS_KEY</code>,
-                  before turning it on.
-                </p>
-              );
-            })()}
+            <VpnNote players={data.players} />
             <div className="table-scroll">
             <table className="standings-table wide">
               <thead>
@@ -614,23 +633,27 @@ export default function Audit() {
                       )}
                       <IpList ips={p.ips} />
                     </td>
-                    <td>{[...new Set(p.countries.filter(Boolean))].join(', ') || '—'}</td>
+                    <td className="country-cell">{(() => {
+                      const c = [...new Set(p.countries.filter(Boolean))];
+                      if (c.length === 0) return '—';
+                      return c.length <= 2 ? c.join(', ') : `${c.slice(0, 2).join(', ')} +${c.length - 2}`;
+                    })()}</td>
                     <td>{p.handsPlayed}</td>
                     <td>{p.games}</td>
                     <td>{timeAgo(p.lastSeen)}</td>
-                    <td>
+                    <td className="actions-cell">
                       <button
                         className="btn btn-sm btn-danger"
-                        title="Lifetime ban for this account (covers their Discord too)"
+                        title="Lifetime ban for this account — the dialog offers the Discord ban too"
                         onClick={() => setPendingBan({
                           value: p.id, name: p.name, kind: 'player', scope: 'lifetime',
-                          discordLinked: !!discordIdOf(p.id),
+                          // The real link, not the id prefix: a guest who linked
+                          // Discord later keeps a g_ id and was losing the option.
+                          discordLinked: !!p.discordVerifiedId || !!discordIdOf(p.id),
                         })}
                       >
                         Lifetime ban
                       </button>
-                    </td>
-                    <td>
                       <button className="btn btn-sm" onClick={() => { setFocus(p.id); setTab('actions'); }}>
                         Moves
                       </button>
@@ -647,7 +670,7 @@ export default function Audit() {
                   </tr>
                 ))}
                 {data.players.length === 0 && (
-                  <tr><td colSpan={10} style={{ color: 'var(--text-faint)' }}>Nobody has connected yet.</td></tr>
+                  <tr><td colSpan={9} style={{ color: 'var(--text-faint)' }}>Nobody has connected yet.</td></tr>
                 )}
               </tbody>
             </table>
@@ -705,7 +728,7 @@ export default function Audit() {
                           title={`Lifetime ban on ${p.name}'s account`}
                           onClick={() => setPendingBan({
                             value: p.id, name: p.name, kind: 'player', scope: 'lifetime',
-                            discordLinked: !!discordIdOf(p.id),
+                            discordLinked: !!p.discordTag || !!discordIdOf(p.id),
                           })}
                         >
                           ban
@@ -805,7 +828,7 @@ export default function Audit() {
                           title={`Lifetime ban on ${p.name}'s account`}
                           onClick={() => setPendingBan({
                             value: p.id, name: p.name, kind: 'player', scope: 'lifetime',
-                            discordLinked: !!discordIdOf(p.id),
+                            discordLinked: !!p.discordTag || !!discordIdOf(p.id),
                           })}
                         >
                           ban

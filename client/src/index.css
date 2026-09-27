@@ -4390,7 +4390,21 @@ input[type='time']:hover::-webkit-calendar-picker-indicator {
    The Players table carries ten columns; at anything under a wide desktop the
    panel simply cut the final button off — it was on screen, just unreachable. */
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-.table-scroll .standings-table.wide { min-width: 1000px; }
+.table-scroll .standings-table.wide { min-width: 860px; }
+/* The Players table, made to FIT rather than to scroll: one id chip, three
+   addresses, two countries, and the two buttons stacked in a single cell.
+   Scrolling was the fallback; ten columns of which four were padding was the
+   problem. */
+/* A table cell, not a flex box: .id-cell is flex for the lookup card, and
+   flex on a <td> drops it out of the table so its bottom border draws under
+   the chip rather than at the row's edge — a stray line under every id. */
+.standings-table td.id-cell { display: table-cell; white-space: nowrap; vertical-align: middle; }
+.standings-table td.mono { max-width: 22ch; overflow-wrap: anywhere; }
+.standings-table .country-cell { max-width: 14ch; }
+.standings-table .actions-cell { white-space: nowrap; }
+.standings-table .actions-cell .btn { display: block; width: 100%; margin-bottom: 4px; }
+.standings-table .actions-cell .btn:last-child { margin-bottom: 0; }
+.vpn-names { color: var(--text-faint); }
 .ip-more {
   display: inline-block; margin-left: 6px; padding: 0 6px;
   font: inherit; font-size: 0.72rem; font-weight: 700;

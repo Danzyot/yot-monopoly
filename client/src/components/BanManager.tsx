@@ -26,6 +26,9 @@ export default function BanManager() {
   const [value, setValue] = useState('');
   const [name, setName] = useState('');
   const [reason, setReason] = useState('');
+  // Off by default and a deliberate choice: a Discord ban is public and
+  // reaches beyond the card room. Only a player ban can carry it.
+  const [discordBan, setDiscordBan] = useState(false);
   const [busy, setBusy] = useState(false);
   const toast = useToast();
 
@@ -55,11 +58,16 @@ export default function BanManager() {
       const r = await api.ban({
         kind, scope, gameId: scope === 'game' ? gameId : null,
         value: value.trim(), name: name.trim(), reason: reason.trim(),
+        discordBan: kind === 'player' && discordBan,
       });
       const gone = r.ejected.tournaments + r.ejected.tables;
-      toast('success', gone
+      const base = gone
         ? `Banned — and removed from ${gone} live game${gone === 1 ? '' : 's'}`
-        : 'Banned');
+        : 'Banned';
+      // A Discord ban that quietly did not happen is worse than one never
+      // attempted — say so where the operator is looking.
+      const failed = !!r.discordNote && /NOT on Discord/.test(r.discordNote);
+      toast(failed ? 'error' : 'success', r.discordNote ? `${base}. ${r.discordNote}` : base);
       setValue(''); setName(''); setReason('');
       refresh();
     } catch (e) {
@@ -124,6 +132,21 @@ export default function BanManager() {
               onChange={e => setValue(e.target.value)}
             />
           </div>
+          {kind === 'player' && (
+            <div className="field ban-grid-wide">
+              <label className="ban-discord">
+                <input type="checkbox" checked={discordBan} onChange={e => setDiscordBan(e.target.checked)} />
+                <span>
+                  Ban from the Discord server too
+                  <span className="field-hint">
+                    Works for an account that signed in with Discord, or a bare Discord id. A guest
+                    is banned here and reported as not banned there. Needs the bot to have Ban
+                    Members, with its role above theirs.
+                  </span>
+                </span>
+              </label>
+            </div>
+          )}
           <div className="field">
             <label htmlFor="ban-name">Name</label>
             <input id="ban-name" className="input" value={name} maxLength={60}

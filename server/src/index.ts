@@ -1142,8 +1142,12 @@ app.post('/api/admin/bans', (req, res) => {
         if (kind !== 'player') {
           throw new Error('an address has no Discord account behind it');
         }
-        const row = playerRows().find(p => p.id === value);
-        const snowflake = row?.discordVerifiedId ?? null;
+        // The dashboard's form takes "a player or Discord id", so the value
+        // may be a site id (dc_…, g_…) or the bare snowflake. Look the row up
+        // either way; a bare snowflake nobody has signed in with is still
+        // bannable on Discord — the operator gave us exactly what Discord wants.
+        const row = playerRows().find(p => p.id === value || p.discordVerifiedId === value);
+        const snowflake = row?.discordVerifiedId ?? (/^\d{15,22}$/.test(value) ? value : null);
         if (!snowflake) throw new Error(`${row?.name ?? 'they'} signed in as a guest — no Discord account to ban`);
         await banFromGuild(snowflake, String(b.reason ?? ''));
         discordBanned = true;

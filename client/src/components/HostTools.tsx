@@ -142,14 +142,14 @@ export default function HostTools({ view, onClose }: { view: TableView; onClose:
                   <button className="btn btn-sm" disabled={banning === s.player!.id}
                     onClick={() => setPending({
                       playerId: s.player!.id, name: s.player!.name, kind: 'player', scope: 'game',
-                      discordLinked: !!discordIdOf(s.player!.id),
+                      discordLinked: discordIdOf(s.player!.id) ? true : undefined,
                     })}>Ban</button>
                   <button className="btn btn-sm" disabled={banning === s.player!.id}
                     onClick={() => setPending({ playerId: s.player!.id, name: s.player!.name, kind: 'ip', scope: 'game' })}>Ban IP</button>
                   <button className="btn btn-sm btn-danger" disabled={banning === s.player!.id}
                     onClick={() => setPending({
                       playerId: s.player!.id, name: s.player!.name, kind: 'player', scope: 'lifetime',
-                      discordLinked: !!discordIdOf(s.player!.id),
+                      discordLinked: discordIdOf(s.player!.id) ? true : undefined,
                     })}>Lifetime</button>
                   <button className="btn btn-sm btn-danger" disabled={banning === s.player!.id}
                     onClick={() => setPending({ playerId: s.player!.id, name: s.player!.name, kind: 'ip', scope: 'lifetime' })}>Lifetime IP</button>
