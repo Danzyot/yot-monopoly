@@ -93,6 +93,40 @@ export default function TournamentPage() {
     return () => clearTimeout(timer);
   }, [id, view]);
 
+  // The operator's extra standings columns. Fetched separately and only for
+  // them: the standings broadcast reaches every player, and both the ids and
+  // the shared-address flags are things the room must not see about itself.
+  //
+  // Up here with the other hooks, NOT beside the code that uses it. Below the
+  // `if (!view)` return this is a hook that only runs on some renders, and
+  // React counts hooks: the first render bails out at the loading state, the
+  // next one reaches this line, the count changes and the whole page dies
+  // with "rendered more hooks than during the previous render" — a blank
+  // screen on every tournament, which is exactly what happened.
+  //
+  // It cannot ask `isHost` for the same reason: that is derived from `view`,
+  // which is null on the first render. It compares the ids itself instead.
+  const [identities, setIdentities] = useState<Map<string, { discordId: string | null; sharesWith: string[] }>>(new Map());
+  const viewerHosts = !!profile?.id && !!view?.hostId && profile.id === view.hostId;
+  useEffect(() => {
+    if (!viewerHosts || !id) { setIdentities(new Map()); return; }
+    let stale = false;
+    const pull = () => {
+      api.standingIdentities(id)
+        .then(r => {
+          if (stale) return;
+          setIdentities(new Map(r.identities.map(x => [x.id, { discordId: x.discordId, sharesWith: x.sharesWith }])));
+        })
+        .catch(() => {});
+    };
+    pull();
+    // Late registrations and address changes arrive during an event, but this
+    // walks every address on the site — a minute is often enough, and it stays
+    // off the several-times-a-second broadcast path.
+    const iv = setInterval(pull, 60_000);
+    return () => { stale = true; clearInterval(iv); };
+  }, [viewerHosts, id]);
+
   if (!view) {
     if (archived) return <ArchivedResults record={archived} />;
     if (lookedUp) {
@@ -151,29 +185,6 @@ export default function TournamentPage() {
 
   // Four ways to bar someone, from the screen that lists everyone in the
   // event — a player who is not at your table has to be reachable too.
-  // The operator's extra standings columns. Fetched separately and only for
-  // them: the standings broadcast reaches every player, and both the ids and
-  // the shared-address flags are things the room must not see about itself.
-  const [identities, setIdentities] = useState<Map<string, { discordId: string | null; sharesWith: string[] }>>(new Map());
-  useEffect(() => {
-    if (!isHost || !id) { setIdentities(new Map()); return; }
-    let stale = false;
-    const pull = () => {
-      api.standingIdentities(id)
-        .then(r => {
-          if (stale) return;
-          setIdentities(new Map(r.identities.map(x => [x.id, { discordId: x.discordId, sharesWith: x.sharesWith }])));
-        })
-        .catch(() => {});
-    };
-    pull();
-    // Late registrations and address changes arrive during an event, but this
-    // walks every address on the site — a minute is often enough, and it stays
-    // off the several-times-a-second broadcast path.
-    const iv = setInterval(pull, 60_000);
-    return () => { stale = true; clearInterval(iv); };
-  }, [isHost, id]);
-
   const confirmBan = async (reason: string, discordBan = false) => {
     if (!pendingBan) return;
     const { playerId, name, kind, scope } = pendingBan;
