@@ -19,7 +19,7 @@ import {
   primeVerifyChannel, startCode, verifyChannelId, verifyChannelName,
 } from './verifycode.ts';
 import {
-  accountsOnAddress, altGroups, auditCounts, connectionsFor, flaggedHands, forgetPlayer, loadAudit,
+  accountsOnAddress, altGroups, auditCounts, sharedDevices, connectionsFor, flaggedHands, forgetPlayer, loadAudit,
   playerRows, recentActions,
   saveAudit, suspiciousPairs, standingIdentities,
 } from './audit.ts';
@@ -611,6 +611,7 @@ app.get('/api/admin/audit', (req, res) => {
     counts: auditCounts(),
     players: playerRows(),
     alts: altGroups(),
+    devices: sharedDevices(),
     pairs: suspiciousPairs(Number(req.query.minHands ?? 5)),
     flagged: flaggedHands(120),
   });

@@ -1,12 +1,16 @@
 import { io, type Socket } from 'socket.io-client';
 import { getToken } from './api';
+import { deviceId, devicePrint } from './device';
 
 let socket: Socket | null = null;
 
 export function getSocket(): Socket {
   if (!socket) {
     socket = io({
-      auth: cb => cb({ token: getToken() }),
+      // Who is signing in, and which browser they are signing in from. The
+      // second is how the audit sees one phone behind two accounts, which no
+      // address ever shows it.
+      auth: cb => cb({ token: getToken(), device: deviceId(), print: devicePrint() }),
       transports: ['websocket', 'polling'],
       // Aggressive, unlimited reconnection — the server keeps seats through
       // disconnects, so a returning socket resumes exactly where it was.

@@ -106,7 +106,7 @@ export default function TournamentPage() {
   //
   // It cannot ask `isHost` for the same reason: that is derived from `view`,
   // which is null on the first render. It compares the ids itself instead.
-  const [identities, setIdentities] = useState<Map<string, { discordId: string | null; sharesWith: string[] }>>(new Map());
+  const [identities, setIdentities] = useState<Map<string, { discordId: string | null; sharesWith: string[]; sharesDeviceWith: string[] }>>(new Map());
   const viewerHosts = !!profile?.id && !!view?.hostId && profile.id === view.hostId;
   useEffect(() => {
     if (!viewerHosts || !id) { setIdentities(new Map()); return; }
@@ -115,7 +115,9 @@ export default function TournamentPage() {
       api.standingIdentities(id)
         .then(r => {
           if (stale) return;
-          setIdentities(new Map(r.identities.map(x => [x.id, { discordId: x.discordId, sharesWith: x.sharesWith }])));
+          setIdentities(new Map(r.identities.map(x => [x.id, {
+            discordId: x.discordId, sharesWith: x.sharesWith, sharesDeviceWith: x.sharesDeviceWith ?? [],
+          }])));
         })
         .catch(() => {});
     };
@@ -570,14 +572,28 @@ export default function TournamentPage() {
                       )}
                       {isHost && (
                         <td className="ident-cell">
-                          {(identities.get(s.id)?.sharesWith.length ?? 0) > 0 ? (
+                          {/* Same browser first, in red: that is one phone holding two
+                              accounts, where a shared address may only be a household. */}
+                          {(identities.get(s.id)?.sharesDeviceWith.length ?? 0) > 0 && (
+                            <span
+                              className="device-flag"
+                              title={`Signed in from the same browser as ${identities.get(s.id)!.sharesDeviceWith.join(', ')}`}
+                            >
+                              📱 {identities.get(s.id)!.sharesDeviceWith.length}
+                            </span>
+                          )}
+                          {(identities.get(s.id)?.sharesWith.length ?? 0) > 0 && (
                             <span
                               className="shared-flag"
+                              style={(identities.get(s.id)?.sharesDeviceWith.length ?? 0) > 0 ? { marginLeft: 4 } : undefined}
                               title={`Shares an address with ${identities.get(s.id)!.sharesWith.join(', ')}`}
                             >
                               ⚠ {identities.get(s.id)!.sharesWith.length}
                             </span>
-                          ) : <span className="ident-none">—</span>}
+                          )}
+                          {(identities.get(s.id)?.sharesWith.length ?? 0) === 0
+                            && (identities.get(s.id)?.sharesDeviceWith.length ?? 0) === 0
+                            && <span className="ident-none">—</span>}
                         </td>
                       )}
                       <td>

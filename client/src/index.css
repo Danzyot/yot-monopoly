@@ -4464,3 +4464,15 @@ input[type='time']:hover::-webkit-calendar-picker-indicator {
 .vpn-confirm p { margin: 0 0 8px; font-size: 0.82rem; line-height: 1.5; }
 .vpn-confirm .vpn-danger { color: var(--red); font-weight: 600; }
 .vpn-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Two accounts from one browser. Red where the shared-address flag is amber:
+   an address is a household or a carrier, a device is a device. */
+.device-flag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.74rem; font-weight: 800;
+  color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
+  border-radius: 999px; padding: 1px 8px; cursor: help;
+}
+.device-group .alt-title { color: var(--red); }
+.device-id { font-family: ui-monospace, monospace; font-size: 0.72rem; color: var(--text-faint); }

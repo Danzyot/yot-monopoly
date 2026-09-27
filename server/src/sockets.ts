@@ -335,8 +335,15 @@ export function attachSockets(io: IO) {
     if (pid) {
       playerConnected(pid);
       broadcastPlayerTables(pid);
-      // Audit trail: remember who connected and from which address.
-      noteSeen(profile()!, ip);
+      // Audit trail: who connected, from which address, and from which
+      // browser. The browser is the part an alt cannot change by moving to a
+      // hotspot. Both values are client-supplied and treated as opaque
+      // tokens: validated to a fixed shape, never trusted to mean anything
+      // beyond "these two connections said the same thing".
+      const auth = (socket.handshake.auth ?? {}) as { device?: unknown; print?: unknown };
+      const device = typeof auth.device === 'string' && /^[0-9a-f]{32}$/.test(auth.device) ? auth.device : null;
+      const print = typeof auth.print === 'string' && /^[0-9a-f]{8}$/.test(auth.print) ? auth.print : null;
+      noteSeen(profile()!, ip, { device, print });
     }
     // A banned account — or any account from a banned address — is turned
     // away at the door rather than later, at whichever action it tries.

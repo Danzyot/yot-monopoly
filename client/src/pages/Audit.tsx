@@ -9,7 +9,7 @@ import CopyId, { discordIdOf } from '../components/CopyId';
 import { IconArrowLeft, IconRefresh, IconShield } from '../components/icons';
 import { chips, timeAgo } from '../format';
 
-type Tab = 'flags' | 'lookup' | 'players' | 'alts' | 'pairs' | 'actions' | 'events' | 'ipcheck';
+type Tab = 'flags' | 'lookup' | 'players' | 'alts' | 'devices' | 'pairs' | 'actions' | 'events' | 'ipcheck';
 
 const RANK: Record<number, string> = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
 const SUIT = ['\u2660', '\u2665', '\u2666', '\u2663'];
@@ -256,6 +256,7 @@ export default function Audit() {
     { key: 'flags', label: `Flagged hands${data ? ` (${data.flagged.length})` : ''}` },
     { key: 'players', label: `Players${data ? ` (${data.players.length})` : ''}` },
     { key: 'alts', label: `Shared IPs${data ? ` (${data.alts.length})` : ''}` },
+    { key: 'devices', label: `Shared devices${data ? ` (${data.devices.length})` : ''}` },
     { key: 'pairs', label: `Chip flow${data ? ` (${data.pairs.length})` : ''}` },
     { key: 'actions', label: 'Move log' },
     { key: 'events', label: 'Event logs' },
@@ -750,6 +751,81 @@ export default function Audit() {
                 </div>
               ))}
               {data.alts.length === 0 && <div className="empty-note">No shared addresses.</div>}
+            </>
+          )}
+
+          {tab === 'devices' && (
+            <>
+              <p className="audit-note">
+                Accounts that have signed in from the <strong>same browser</strong>. This is the
+                signal an address cannot give: an alt on a hotspot, a second SIM or a friend's
+                wifi has a different address every time and the same phone every time. A{' '}
+                <strong>same browser</strong> group is one browser that has held several
+                accounts — a fact about that browser. A <strong>same traits</strong> group is
+                browsers that report identical hardware and settings — a hint, because two of the
+                same phone on the same OS version look alike; one that also shares an address is
+                a much stronger hint.
+              </p>
+              {data.devices.map(g => (
+                <div key={g.key} className={`alt-group${g.strength === 'device' ? ' device-group' : ''}`}>
+                  <div className="alt-head">
+                    <span className="alt-title">
+                      {g.strength === 'device' ? 'Same browser' : 'Same traits'} · {g.players.length} accounts
+                    </span>
+                    <div className="alt-reasons">
+                      <span className="alt-reason">
+                        {g.strength === 'device' ? 'stored browser id matches' : 'hardware and settings match'}
+                      </span>
+                      {g.sharedIps.length > 0 && (
+                        <span className="alt-reason">also share {g.sharedIps.length} address{g.sharedIps.length === 1 ? '' : 'es'}</span>
+                      )}
+                      <span className="alt-reason">last seen {timeAgo(g.lastSeen)}</span>
+                    </div>
+                  </div>
+                  <div className="alt-players">
+                    {g.players.map(p => (
+                      <span key={p.id} className="alt-chip">
+                        <span className="alt-chip-name">
+                          {p.name}{p.discordTag && p.discordTag !== p.name ? ` · @${p.discordTag}` : ''}
+                        </span>
+                        <CopyId
+                          value={discordIdOf(p.id) ?? p.id}
+                          label={discordIdOf(p.id) ?? p.id}
+                          title={`Click to copy ${discordIdOf(p.id) ?? p.id}`}
+                        />
+                        <button
+                          className="alt-follow"
+                          title="Look this account up on its own"
+                          onClick={() => { setLookupQ(p.id); setTab('lookup'); void runLookup(p.id); }}
+                        >
+                          look up
+                        </button>
+                        <button
+                          className="alt-ban"
+                          title={`Lifetime ban on ${p.name}'s account`}
+                          onClick={() => setPendingBan({
+                            value: p.id, name: p.name, kind: 'player', scope: 'lifetime',
+                            discordLinked: !!discordIdOf(p.id),
+                          })}
+                        >
+                          ban
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  {g.sharedIps.length > 0 && (
+                    <div className="alt-addrs">
+                      {g.sharedIps.map(ip => <span key={ip} className="alt-addr mono">{ip}</span>)}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {data.devices.length === 0 && (
+                <div className="empty-note">
+                  No two accounts have signed in from the same browser yet. Browsers are only
+                  recorded from now on, so this fills in as people connect.
+                </div>
+              )}
             </>
           )}
 

@@ -24,6 +24,13 @@ export interface PlayerRecord {
   firstSeen: number;
   lastSeen: number;
   ips: Map<string, number>; // ip -> last seen
+  // Which browsers, not just which addresses. A device id is minted once and
+  // kept in the browser's storage, so it follows a sign-out and a sign-in as
+  // somebody else — the move an address never shows. A print is a hash of the
+  // browser's own traits: survives a cleared browser, but identical phones
+  // collide, so it is a hint where the id is a fact.
+  devices: Map<string, number>; // device id -> last seen
+  prints: Map<string, number>;  // fingerprint hash -> last seen
   handsPlayed: number;
   gamesJoined: Set<string>;
 }
@@ -33,6 +40,7 @@ const players = new Map<string, PlayerRecord>();
 export function noteSeen(
   p: { id: string; name: string; avatar: string; discord?: { id: string; username: string } | null },
   ip: string | null,
+  browser?: { device: string | null; print: string | null },
 ) {
   const now = Date.now();
   let rec = players.get(p.id);
@@ -42,7 +50,8 @@ export function noteSeen(
       discordId: p.discord?.id ?? null,
       discordTag: p.discord?.username ?? null,
       firstSeen: now, lastSeen: now,
-      ips: new Map(), handsPlayed: 0, gamesJoined: new Set(),
+      ips: new Map(), devices: new Map(), prints: new Map(),
+      handsPlayed: 0, gamesJoined: new Set(),
     };
     players.set(p.id, rec);
   }
@@ -51,6 +60,8 @@ export function noteSeen(
   if (p.discord) { rec.discordId = p.discord.id; rec.discordTag = p.discord.username; }
   rec.lastSeen = now;
   if (ip) rec.ips.set(ip, now);
+  if (browser?.device) rec.devices.set(browser.device, now);
+  if (browser?.print) rec.prints.set(browser.print, now);
 }
 
 export function noteGame(playerId: string, gameId: string) {
@@ -780,6 +791,8 @@ export function saveAudit(): void {
       players: [...players.values()].map(p => ({
         ...p,
         ips: [...p.ips.entries()],
+        devices: [...p.devices.entries()],
+        prints: [...p.prints.entries()],
         gamesJoined: [...p.gamesJoined],
       })),
       actions: actions.slice(-PERSIST_ACTIONS),
@@ -804,6 +817,9 @@ export function loadAudit(): void {
       players.set(p.id, {
         ...p,
         ips: new Map(p.ips ?? []),
+        // Absent in files written before browsers were recorded.
+        devices: new Map(p.devices ?? []),
+        prints: new Map(p.prints ?? []),
         gamesJoined: new Set(p.gamesJoined ?? []),
       });
     }
@@ -834,6 +850,8 @@ export interface StandingIdentity {
   discordId: string | null;
   /** Other players sharing an address with them, by name. */
   sharesWith: string[];
+  /** Other players who have signed in from the SAME BROWSER, by name. */
+  sharesDeviceWith: string[];
 }
 
 export function standingIdentities(ids: string[]): StandingIdentity[] {
@@ -865,12 +883,112 @@ export function standingIdentities(ids: string[]): StandingIdentity[] {
     }
   }
 
+  // Same browser. No crowd limit here: a device id is minted per browser, so
+  // many accounts on one id is not a carrier, it is one person with many
+  // accounts — the more the worse.
+  const byDevice = new Map<string, PlayerRecord[]>();
+  for (const p of players.values()) {
+    for (const d of p.devices.keys()) {
+      const list = byDevice.get(d) ?? [];
+      list.push(p);
+      byDevice.set(d, list);
+    }
+  }
+  const deviceSharers = new Map<string, Set<string>>();
+  for (const [, list] of byDevice) {
+    if (list.length < 2) continue;
+    for (const p of list) {
+      if (!want.has(p.id)) continue;
+      const mine = deviceSharers.get(p.id) ?? new Set<string>();
+      for (const other of list) if (other.id !== p.id) mine.add(other.name);
+      deviceSharers.set(p.id, mine);
+    }
+  }
+
   return ids.map(id => {
     const rec = players.get(id);
     return {
       id,
       discordId: rec?.discordId ?? (id.startsWith('dc_') ? id.slice(3) : null),
       sharesWith: [...(sharers.get(id) ?? [])].sort(),
+      sharesDeviceWith: [...(deviceSharers.get(id) ?? [])].sort(),
     };
   });
+}
+
+// ---- shared devices ----
+//
+// Accounts that have signed in from the same browser. This is the signal an
+// address cannot give: an alt on a hotspot, a second SIM or a friend's wifi
+// has a different address every time and the same phone every time.
+export interface DeviceGroup {
+  key: string;
+  // 'device': the same stored browser id — one browser, several accounts.
+  // 'print': the same browser traits — could be one browser with its storage
+  // cleared, could be two identical phones. Listed, but as a hint.
+  strength: 'device' | 'print';
+  players: { id: string; name: string; discordTag: string | null; lastSeen: number }[];
+  // Addresses the group's accounts have in common, if any — a print match
+  // that also shares an address is a much stronger hint than one that does
+  // not.
+  sharedIps: string[];
+  lastSeen: number;
+}
+
+// Identical phones on one OS version collide on the print. Past this many
+// accounts, a print is describing a popular handset, not a person.
+const PRINT_CROWD = 5;
+
+export function sharedDevices(): DeviceGroup[] {
+  const groups: DeviceGroup[] = [];
+  const seenPair = new Set<string>(); // player-id sets already reported by device id
+
+  const collect = (pick: (p: PlayerRecord) => Iterable<string>, strength: 'device' | 'print', crowd: number) => {
+    const by = new Map<string, PlayerRecord[]>();
+    for (const p of players.values()) {
+      for (const k of pick(p)) {
+        const list = by.get(k) ?? [];
+        list.push(p);
+        by.set(k, list);
+      }
+    }
+    for (const [key, list] of by) {
+      // The same account seen from one browser many times is one account.
+      const uniq = [...new Map(list.map(p => [p.id, p] as [string, PlayerRecord])).values()];
+      if (uniq.length < 2 || uniq.length > crowd) continue;
+      const ids = uniq.map(p => p.id).sort().join('|');
+      // A print group that says nothing a device group has not already said
+      // is noise; a device group is always reported.
+      if (strength === 'print' && seenPair.has(ids)) continue;
+      if (strength === 'device') seenPair.add(ids);
+      // Addresses every account in the group has used. Written as a plain
+      // loop with a typed intermediate: the ternary form of this made the
+      // checker narrow `common` to null across the loop and reject the spread.
+      let common: Set<string> | null = null;
+      for (const p of uniq) {
+        const mine = new Set<string>([...p.ips.keys()].filter(ip => !isInfraPeer(ip)));
+        if (common === null) { common = mine; continue; }
+        const prev: Set<string> = common;
+        common = new Set<string>([...prev].filter(ip => mine.has(ip)));
+      }
+      groups.push({
+        key: `${strength}:${key}`,
+        strength,
+        players: uniq
+          .map(p => ({ id: p.id, name: p.name, discordTag: p.discordTag, lastSeen: p.lastSeen }))
+          .sort((a, b) => b.lastSeen - a.lastSeen),
+        sharedIps: [...(common ?? [])].sort(),
+        lastSeen: Math.max(...uniq.map(p => p.lastSeen)),
+      });
+    }
+  };
+
+  collect(p => p.devices.keys(), 'device', Number.POSITIVE_INFINITY);
+  collect(p => p.prints.keys(), 'print', PRINT_CROWD);
+
+  // Facts before hints, biggest groups first, then most recent.
+  return groups.sort((a, b) =>
+    (a.strength === b.strength ? 0 : a.strength === 'device' ? -1 : 1)
+    || b.players.length - a.players.length
+    || b.lastSeen - a.lastSeen);
 }

@@ -113,6 +113,14 @@ export const api = {
       score: number; reasons: string[]; playedTogether: number;
       players: { id: string; name: string; discordTag: string | null; lastSeen: number }[];
     }[];
+    // Accounts that have signed in from the same browser. 'device' is the
+    // same stored browser id — a fact. 'print' is the same browser traits —
+    // a hint, since identical phones collide.
+    devices: {
+      key: string; strength: 'device' | 'print';
+      players: { id: string; name: string; discordTag: string | null; lastSeen: number }[];
+      sharedIps: string[]; lastSeen: number;
+    }[];
     pairs: {
       a: string; aName: string; b: string; bName: string;
       handsTogether: number; headsUpPots: number; netAtoB: number;
@@ -261,7 +269,7 @@ export const api = {
   // broadcast — that goes to every player, and a player id is a Discord
   // snowflake with a prefix.
   standingIdentities: (tournamentId: string) =>
-    request<{ identities: { id: string; discordId: string | null; sharesWith: string[] }[] }>(
+    request<{ identities: { id: string; discordId: string | null; sharesWith: string[]; sharesDeviceWith: string[] }[] }>(
       `/api/admin/tournaments/${encodeURIComponent(tournamentId)}/identities`),
   bans: () => request<{ bans: BanRow[] }>('/api/admin/bans'),
   ban: (b: {
