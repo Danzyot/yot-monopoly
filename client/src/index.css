@@ -642,12 +642,16 @@ button.seat-empty:hover { border-color: var(--gold); color: var(--gold); backgro
      gets pressed. */
   .side-hide { display: none; }
 
-  /* A phone has no room for a stack of three chat pop-ups. Two at a time, one
-     line each: the stack drops from 115px to about 46px, which is what lets it
-     sit in the gap between the hero's seat and the pot instead of covering the
-     pot and the board — the two things a player is reading while they decide.
-     The full conversation is one tap away in the sheet; these are a nudge that
-     something was said, not the chat itself. */
+  /* On a phone the pop-ups hang from the top, under the table's bar, not up
+     from the action dock. Rising from the dock, they had to clear the dock
+     and then the hero's seat, which put them exactly on the seats either
+     side of the hero — the toast hid that player's stack and cards, and
+     "no overlap with the hero" measured as a pass while a villain's seat
+     was covered. The strip under the bar holds the promo banner and nothing
+     a player reads mid-hand, so that is where they go.
+
+     Two at a time, one line each: a nudge that something was said, not the
+     chat itself, which is one tap away in the sheet. */
   .chat-toasts .chat-toast:nth-last-child(n + 3) { display: none; }
   .chat-toast {
     max-width: 100%;
@@ -1954,7 +1958,19 @@ h1, h2, h3 { letter-spacing: -0.015em; }
      the subtraction is the header, the table topbar and the dock. */
   .felt {
     width: 100%; aspect-ratio: auto;
-    height: calc(100dvh - var(--header-h, 56px) - 232px);
+    /* Cut from measurements, not a guess. The old line subtracted a flat
+       232px for "topbar and dock"; the dock alone is 109px waiting and 193px
+       with the raise panel open, so the felt ran 84px too tall at the one
+       moment the player was choosing a bet, and their own seat slid under
+       the buttons. --felt-top is the wrap's top edge, --dock-h the dock's
+       height, both published live by the table page; the 6px is the wrap's
+       own padding. The fallbacks reproduce the old 232. */
+    height: calc(
+      100dvh
+      - var(--felt-top, calc(var(--header-h, 56px) + 123px))
+      - var(--dock-h, 109px)
+      - 6px
+    );
     align-self: center;
     max-height: none; min-height: 0;
   }
@@ -4037,6 +4053,17 @@ input[type='time']:hover::-webkit-calendar-picker-indicator {
   bottom: calc(max(var(--dock-gap, 84px), var(--hero-gap, 0px)) + 10px);
   display: flex; flex-direction: column; gap: 6px;
   max-width: min(360px, 74vw); pointer-events: none;
+}
+/* Phones: hang from the top bar instead. Declared after the base rule on
+   purpose — same selector, so the later one wins; put earlier in the file it
+   only worked because both `top` and `bottom` ended up set, which stretched
+   the container over the whole screen and happened to look right. */
+@media (max-width: 900px) {
+  .chat-toasts {
+    top: calc(var(--topbar-gap, var(--header-h, 56px)) + 8px);
+    bottom: auto;
+    left: 10px; right: 10px; max-width: none;
+  }
 }
 .chat-toast {
   display: flex; align-items: baseline; gap: 6px;

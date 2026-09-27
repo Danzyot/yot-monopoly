@@ -138,11 +138,15 @@ export default function SidePanel({
   const away = hidden || (!open && typeof window !== 'undefined' && window.innerWidth <= 900);
   useEffect(() => {
     const newest = humanChat[humanChat.length - 1];
+    // Prime on the first run, whether or not there is a backlog. Returning
+    // early on an EMPTY backlog left this unprimed, so the first message ever
+    // said at a fresh table arrived looking like a backlog and never popped
+    // up — the one message a player at a new table most needed to notice.
+    if (lastSeenId.current === null) { lastSeenId.current = newest?.id ?? ''; return; }
     if (!newest) return;
-    const first = lastSeenId.current === null;
     const already = lastSeenId.current === newest.id;
     lastSeenId.current = newest.id;
-    if (first || already || !away) return;
+    if (already || !away) return;
     setToasts(t => [...t, newest].slice(-3));
     const drop = setTimeout(() => {
       setToasts(t => t.filter(x => x.id !== newest.id));

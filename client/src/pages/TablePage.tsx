@@ -293,13 +293,16 @@ export default function TablePage() {
     const el = document.querySelector('.action-dock') as HTMLElement | null;
     const apply = () => {
       const live = document.querySelector('.action-dock') as HTMLElement | null;
-      if (!live) { root.style.setProperty('--dock-gap', '0px'); return; }
       // How far the dock's TOP edge sits above the bottom of the screen —
       // not the dock's height. The dock is not flush with the viewport
       // bottom, so positioning against its height left the toasts still
       // sitting on the buttons: right size, wrong origin.
-      const r = live.getBoundingClientRect();
-      root.style.setProperty('--dock-gap', `${Math.max(0, Math.round(window.innerHeight - r.top))}px`);
+      //
+      // No early return when there is no dock (spectating): the other two
+      // measurements below still have to be published, or they go stale.
+      const r = live?.getBoundingClientRect();
+      root.style.setProperty('--dock-gap',
+        r ? `${Math.max(0, Math.round(window.innerHeight - r.top))}px` : '0px');
       // The hero's own seat is off limits too. Clearing the dock alone moved
       // the chat pop-ups off the buttons and straight onto the player's own
       // cards, stack and hand strength — which is the one part of the felt
@@ -308,23 +311,69 @@ export default function TablePage() {
       const mr = me?.getBoundingClientRect();
       root.style.setProperty('--hero-gap',
         mr ? `${Math.max(0, Math.round(window.innerHeight - mr.top))}px` : '0px');
+      // And the bottom edge of the table's own bar, measured from the top of
+      // the screen. On a phone the pop-ups hang from here rather than rising
+      // from the dock: clearing the dock and the hero moved them straight
+      // onto the seats on either side of the hero, hiding those players'
+      // stacks and cards. The strip under the bar holds the promo banner
+      // and nothing a player is reading mid-hand.
+      const bar = document.querySelector('.table-topbar') as HTMLElement | null;
+      const br = bar?.getBoundingClientRect();
+      root.style.setProperty('--topbar-gap', br ? `${Math.max(0, Math.round(br.bottom))}px` : '');
+      // The two numbers the felt's own height is cut from on a phone. The
+      // stylesheet used to subtract a fixed 232px for "topbar and dock", but
+      // the dock is 109px waiting and 193px with the raise panel open — so
+      // the felt was 84px too tall exactly when the player was deciding how
+      // much to bet, and their own seat slid under the buttons. Each is
+      // measured from something the felt's height cannot influence: the
+      // dock's height depends only on what is in it, and the wrap's top edge
+      // only on what sits above it.
+      const row = (document.querySelector('.dock-row') ?? live) as HTMLElement | null;
+      root.style.setProperty('--dock-h', row ? `${Math.round(row.offsetHeight)}px` : '0px');
+      const wrap = document.querySelector('.felt-wrap') as HTMLElement | null;
+      const wr = wrap?.getBoundingClientRect();
+      root.style.setProperty('--felt-top', wr ? `${Math.max(0, Math.round(wr.top))}px` : '');
     };
-    apply();
+    // Measure now, and again on the next frame. The first pass can land
+    // mid-layout — the raise panel opening grows the dock before the felt has
+    // shrunk to make room, and a measurement taken in that instant published
+    // the topbar 7px higher than it ever actually sits, which put the pop-ups
+    // back onto it. The second pass sees the settled layout.
+    let raf = 0;
+    const settle = () => {
+      apply();
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => { raf = requestAnimationFrame(apply); });
+    };
+    settle();
     if (el === dockRef.current) return;
     dockRef.current = el;
     if (!el) return;
-    const ro = new ResizeObserver(apply);
+    const ro = new ResizeObserver(settle);
     ro.observe(el);
+    // The topbar and the wrap are inputs to the felt's own height, so they
+    // are watched too: a pill appearing in the bar, or a font arriving and
+    // rewrapping it, changes where the felt starts without anything else
+    // moving.
+    for (const sel of ['.table-topbar', '.felt-wrap']) {
+      const other = document.querySelector(sel);
+      if (other) ro.observe(other);
+    }
     // The dock can move without resizing — the felt above it growing is
     // enough — so the viewport is watched too.
-    window.addEventListener('resize', apply);
-    return () => { ro.disconnect(); window.removeEventListener('resize', apply); };
+    window.addEventListener('resize', settle);
+    return () => {
+      ro.disconnect(); window.removeEventListener('resize', settle); cancelAnimationFrame(raf);
+    };
   });
   // Leaving the table must not leave the rest of the app offset by a dock
   // that is no longer on screen.
   useEffect(() => () => {
     document.documentElement.style.removeProperty('--dock-gap');
     document.documentElement.style.removeProperty('--hero-gap');
+    document.documentElement.style.removeProperty('--topbar-gap');
+    document.documentElement.style.removeProperty('--dock-h');
+    document.documentElement.style.removeProperty('--felt-top');
   }, []);
 
 
