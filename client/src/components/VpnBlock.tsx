@@ -53,6 +53,11 @@ export default function VpnBlock() {
   if (!s) return <p className="tag">Loading…</p>;
 
   const noWayBack = !s.bypassKeySet;
+  // The two kinds are not the same risk. A player on a VPN can turn it off; a
+  // player whose ISP is misread as a datacenter cannot, and a list that
+  // catches a whole carrier catches every one of its customers at once.
+  const vpnCount = s.wouldBlock.filter(p => p.kind === 'vpn').length;
+  const dcCount = s.wouldBlock.length - vpnCount;
 
   return (
     <div className="panel feature-admin">
@@ -83,12 +88,20 @@ export default function VpnBlock() {
         <p className="vpn-panel-note">
           {s.wouldBlock.length > 0 ? (
             <>
-              <strong>{s.wouldBlock.length}</strong> of {s.players} accounts on record are on a
-              VPN or datacenter address: {s.wouldBlock.map(p => p.name).join(', ')}.
-              {s.enabled ? ' They are being refused right now.' : ' They would be refused.'}
+              <strong>{s.wouldBlock.length}</strong> of {s.players} accounts on record last
+              connected from a VPN or datacenter address
+              ({vpnCount} VPN, {dcCount} datacenter): {s.wouldBlock.map(p => p.name).join(', ')}.
+              {s.enabled
+                ? ' They are refused while on those addresses; off the VPN, they get in.'
+                : ' They would be refused while on those addresses — anyone who turns the VPN off gets in as normal.'}
+              {dcCount > 0 && (
+                <> The <strong>datacenter</strong> ones are the ones to check in the audit first: a
+                real ISP misread as hosting flags every one of its customers, and those players
+                have no VPN to turn off.</>
+              )}
             </>
           ) : (
-            <>None of the {s.players} accounts on record are on a VPN or datacenter address.</>
+            <>None of the {s.players} accounts on record last connected from a VPN or datacenter address.</>
           )}
           {' '}
           {s.bypassKeySet
@@ -103,8 +116,10 @@ export default function VpnBlock() {
             <strong>Turn the block on?</strong>{' '}
             {s.wouldBlock.length > 0
               ? `${s.wouldBlock.length} account${s.wouldBlock.length === 1 ? '' : 's'} on record `
-                + `(${s.wouldBlock.map(p => p.name).join(', ')}) would stop being able to reach the site.`
-              : 'Nobody on record is affected right now, but anyone who connects over a VPN will be.'}
+                + `(${vpnCount} on a VPN, ${dcCount} on a datacenter address) would be refused until they `
+                + 'connect without it. Players on a VPN just switch it off. Players flagged as '
+                + '"datacenter" who are not on a VPN cannot — check those in the audit first.'
+              : 'Nobody on record is affected right now. Anyone who connects over a VPN from now on is refused until they switch it off.'}
           </p>
           {noWayBack && (
             <p className="vpn-danger">
