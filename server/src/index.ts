@@ -10,6 +10,7 @@ import {
 } from './auth.ts';
 import {
   announceChannelId, authorizeUrl, banFromGuild, botEnabled, checkBanSetup, completeOAuth, defaultGuildId,
+  explainBanRefusal,
   defaultInviteUrl, discordEnabled, fetchGuildRoles, postVerifyMessage,
   redirectUriFor, registerIdentity, sendDirectMessage, unbanFromGuild,
 } from './discord.ts';
@@ -1161,6 +1162,7 @@ app.post('/api/admin/bans', (req, res) => {
       // no linked account — must not throw away the ban the operator actually
       // came here to make. It is reported instead, so they know to finish the
       // job by hand rather than believing it is done.
+      let snowflake: string | null = null;
       try {
         if (kind !== 'player') {
           throw new Error('an address has no Discord account behind it');
@@ -1170,13 +1172,24 @@ app.post('/api/admin/bans', (req, res) => {
         // either way; a bare snowflake nobody has signed in with is still
         // bannable on Discord — the operator gave us exactly what Discord wants.
         const row = playerRows().find(p => p.id === value || p.discordVerifiedId === value);
-        const snowflake = row?.discordVerifiedId ?? (/^\d{15,22}$/.test(value) ? value : null);
+        snowflake = row?.discordVerifiedId ?? (/^\d{15,22}$/.test(value) ? value : null);
         if (!snowflake) throw new Error(`${row?.name ?? 'they'} signed in as a guest — no Discord account to ban`);
         await banFromGuild(snowflake, String(b.reason ?? ''));
         discordBanned = true;
         discordNote = 'Banned from Discord too.';
       } catch (e) {
-        discordNote = `Banned here, but NOT on Discord: ${e instanceof Error ? e.message : 'unknown error'}`;
+        let why = e instanceof Error ? e.message : 'unknown error';
+        // A 403 is Discord saying "Missing Permissions" for any of half a
+        // dozen reasons it will not tell apart. Ask it: the check signs in
+        // with the same token against the same server and this same player,
+        // and names the first thing that is not so — the bot's name, the
+        // server's name, both role lists.
+        if ((e as { status?: number }).status === 403 && snowflake) {
+          const cause = await explainBanRefusal(snowflake);
+          if (cause) why = `${cause} (Discord ${(e as { status: number }).status}`
+            + `${(e as { code?: number | null }).code ? `/${(e as { code: number }).code}` : ''})`;
+        }
+        discordNote = `Banned here, but NOT on Discord: ${why}`;
       }
     }
 

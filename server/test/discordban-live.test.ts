@@ -16,10 +16,12 @@ const OWNER = '900000000000000003';
 const LOW = '900000000000000004';   // plain member
 const HIGH = '900000000000000005';  // holds a role above the bot's
 const GONE = '900000000000000006';  // not in the server
+const OTHER_BOT = '900000000000000007'; // a different app's bot, also in the server
 
 type Reply = { status: number; body?: unknown };
 let banReply: Reply = { status: 204 };
 let mfa = 0;
+let botTimedOutUntil: string | null = null;
 let lastBan: { path: string; auth: string | undefined; reason: string | undefined; body: string } | null = null;
 
 const roles = [
@@ -27,8 +29,11 @@ const roles = [
   { id: 'r-mod', name: 'Poker Bot', permissions: String(1n << 2n), position: 5 },
   { id: 'r-vip', name: 'VIP', permissions: '0', position: 9 },
   { id: 'r-verified', name: 'Verified', permissions: '0', position: 2 },
+  { id: 'r-giveaway', name: 'Giveaways', permissions: '0', position: 12 },
 ];
-const members: Record<string, string[]> = { [BOT]: ['r-mod'], [OWNER]: [], [LOW]: ['r-verified'], [HIGH]: ['r-vip'] };
+const members: Record<string, string[]> = {
+  [BOT]: ['r-mod'], [OWNER]: [], [LOW]: ['r-verified'], [HIGH]: ['r-vip'], [OTHER_BOT]: ['r-giveaway'],
+};
 
 function send(res: ServerResponse, r: Reply) {
   res.statusCode = r.status;
@@ -41,13 +46,17 @@ const srv = createServer((req: IncomingMessage, res: ServerResponse) => {
   req.on('data', c => { body += c; });
   req.on('end', () => {
     const url = req.url ?? '';
-    if (req.headers.authorization !== 'Bot test-token') return send(res, { status: 401, body: { message: '401: Unauthorized', code: 0 } });
-    if (url === '/users/@me') return send(res, { status: 200, body: { id: BOT, username: 'PokerBot' } });
+    const auth = req.headers.authorization;
+    if (auth !== 'Bot test-token' && auth !== 'Bot other-token') return send(res, { status: 401, body: { message: '401: Unauthorized', code: 0 } });
+    // Which bot the token belongs to decides everything below it.
+    const self = auth === 'Bot other-token' ? { id: OTHER_BOT, username: 'WAWA Giveaways' } : { id: BOT, username: 'PokerBot' };
+    if (url === '/users/@me') return send(res, { status: 200, body: self });
     if (url === `/guilds/${GUILD}`) return send(res, { status: 200, body: { id: GUILD, name: 'WAWA', owner_id: OWNER, roles, mfa_level: mfa } });
     const m = url.match(new RegExp(`^/guilds/${GUILD}/members/(\\d+)$`));
     if (m) {
       const r = members[m[1]];
-      return r ? send(res, { status: 200, body: { roles: r } }) : send(res, { status: 404, body: { message: 'Unknown Member', code: 10007 } });
+      const extra = m[1] === BOT && botTimedOutUntil ? { communication_disabled_until: botTimedOutUntil } : {};
+      return r ? send(res, { status: 200, body: { roles: r, ...extra } }) : send(res, { status: 404, body: { message: 'Unknown Member', code: 10007 } });
     }
     if (url.startsWith(`/guilds/${GUILD}/bans/`) && req.method === 'PUT') {
       lastBan = {
@@ -66,7 +75,7 @@ const port = (srv.address() as { port: number }).port;
 process.env.DISCORD_API_BASE = `http://127.0.0.1:${port}`;
 process.env.DISCORD_BOT_TOKEN = 'test-token';
 process.env.DISCORD_GUILD_ID = GUILD;
-const { auditReasonHeader, banAbility, banFromGuild, checkBanSetup, discordErrorText } = await import('../src/discord.ts');
+const { auditReasonHeader, banAbility, banFromGuild, checkBanSetup, discordErrorText, explainBanRefusal } = await import('../src/discord.ts');
 
 test.after(() => srv.close());
 
@@ -169,4 +178,55 @@ test('a wrong server id or token is reported as that, not as permissions', async
   const t = await checkBanSetup(null);
   assert.match(t.find(l => !l.ok)!.detail, /token was rejected/);
   process.env.DISCORD_BOT_TOKEN = 'test-token';
+});
+
+test('a token for a DIFFERENT bot is named, with its roles, not blamed on role order', async () => {
+  // The operator gave Ban Members to PokerBot and dragged its role up. The
+  // token in the deployment is WAWA Giveaways' — a different application,
+  // in the same server, holding a role with no permissions. Every settings
+  // page they check looks right; Discord says "Missing Permissions".
+  process.env.DISCORD_BOT_TOKEN = 'other-token';
+  try {
+    const lines = await checkBanSetup(LOW);
+    const who = lines.find(l => l.label === 'Bot this site uses')!;
+    assert.match(who.detail, /WAWA Giveaways/, 'the bot the token actually signs in as is named');
+    const bad = lines.find(l => !l.ok)!;
+    assert.equal(bad.label, 'Ban Members permission');
+    assert.match(bad.detail, /WAWA Giveaways holds Giveaways \(#12\)/);
+    assert.match(bad.detail, /not on THIS bot in THIS server/);
+    const why = await explainBanRefusal(LOW);
+    assert.match(why!, /^Ban Members permission — WAWA Giveaways/, 'the toast leads with the actual cause');
+  } finally {
+    process.env.DISCORD_BOT_TOKEN = 'test-token';
+  }
+});
+
+test('a timed-out bot is caught — Discord calls that "Missing Permissions" too', async () => {
+  botTimedOutUntil = new Date(Date.now() + 3_600_000).toISOString();
+  try {
+    const bad = (await checkBanSetup(LOW)).find(l => !l.ok)!;
+    assert.equal(bad.label, 'Bot is not timed out');
+    assert.match(bad.detail, /timed out until/);
+  } finally {
+    botTimedOutUntil = null;
+  }
+  const past = new Date(Date.now() - 60_000).toISOString();
+  botTimedOutUntil = past;
+  try {
+    assert.ok((await checkBanSetup(LOW)).every(l => l.ok), 'an expired timeout is no timeout');
+  } finally {
+    botTimedOutUntil = null;
+  }
+});
+
+test('the refusal names both role lists in order, so the operator can see the one above', async () => {
+  const why = await explainBanRefusal(HIGH);
+  assert.match(why!, /Can ban this player/);
+  assert.match(why!, /"VIP" is above the bot's highest role "Poker Bot"/);
+  assert.match(why!, /Bot PokerBot: Poker Bot \(#5\)\. Player: VIP \(#9\)\./);
+});
+
+test('when every check passes the explanation says so rather than inventing a cause', async () => {
+  const why = await explainBanRefusal(LOW);
+  assert.match(why!, /every check passes for PokerBot/);
 });

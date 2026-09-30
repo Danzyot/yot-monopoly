@@ -533,8 +533,14 @@ export function discordErrorText(status: number, body: unknown, verb: string): s
   const tag = `Discord ${status}${code !== null ? `/${code}` : ''}${said ? ` "${said}"` : ''}`;
   const hint = (() => {
     switch (code) {
-      case 50013: return 'the bot lacks Ban Members, or their highest role is at or above the bot\'s highest role, '
-        + 'or they own the server. Drag the bot\'s role above theirs in Server Settings → Roles. '
+      // Discord gives this one code for every cause below, so the hint lists
+      // them all — including the two that look fine from the server settings
+      // page: a token belonging to a different bot, and a server id pointing
+      // at a different server. The ban route runs the live check on a 403 and
+      // replaces this with the actual cause; this text is the fallback.
+      case 50013: return 'Discord says the same thing for all of these: the bot this site\'s token signs in as '
+        + 'is not the bot you set up, DISCORD_GUILD_ID is a different server, that bot lacks Ban Members there, '
+        + 'the player\'s highest role is at or above the bot\'s, they own the server, or the bot is timed out. '
         + '"Check Discord ban setup" on the dashboard says which.';
       case 50001: return 'the bot cannot see the server DISCORD_GUILD_ID points at — it is not in that server, '
         + 'or the id is a different server.';
@@ -553,10 +559,16 @@ export function discordErrorText(status: number, body: unknown, verb: string): s
   return `Discord refused to ${verb} them (${tag})${hint ? `: ${hint}` : ''}`;
 }
 
-async function discordError(res: Response, verb: string): Promise<Error> {
+export type DiscordError = Error & { status: number; code: number | null };
+
+async function discordError(res: Response, verb: string): Promise<DiscordError> {
   let body: unknown = null;
   try { body = await res.json(); } catch { /* not JSON — the status is all there is */ }
-  return new Error(discordErrorText(res.status, body, verb));
+  const e = new Error(discordErrorText(res.status, body, verb)) as DiscordError;
+  e.status = res.status;
+  const c = (body as { code?: unknown } | null)?.code;
+  e.code = typeof c === 'number' ? c : null;
+  return e;
 }
 
 export async function banFromGuild(discordUserId: string, reason: string): Promise<void> {
@@ -662,27 +674,51 @@ export async function checkBanSetup(targetId?: string | null): Promise<BanCheckL
     return { res, body };
   };
 
+  // WHICH bot. Every site here has its own Discord application, and WAWA's
+  // token is shared with the giveaway site — so the bot whose role was
+  // dragged up and given Ban Members is not necessarily the bot this token
+  // signs in as. That mismatch is invisible from the server settings and
+  // produces exactly "Missing Permissions", so the name is always shown.
   let me: { id: string; username: string };
   try {
     const r = await get('/users/@me');
-    if (!add(r.res.ok, 'Token accepted', r.res.ok
-      ? `signed in as ${(r.body as { username: string }).username}`
+    if (!add(r.res.ok, 'Bot this site uses', r.res.ok
+      ? `${(r.body as { username: string }).username} (id ${(r.body as { id: string }).id}) — this must be the bot you gave Ban Members to`
       : discordErrorText(r.res.status, r.body, 'sign in as'))) return lines;
     me = r.body as { id: string; username: string };
   } catch (e) {
-    add(false, 'Token accepted', `could not reach Discord: ${e instanceof Error ? e.message : 'network error'}`);
+    add(false, 'Bot this site uses', `could not reach Discord: ${e instanceof Error ? e.message : 'network error'}`);
     return lines;
   }
 
+  // WHICH server. DISCORD_GUILD_ID names the server the ban lands in; a bot
+  // in two servers can hold Ban Members in one and not the other.
   const g = await get(`/guilds/${guildId}`);
-  if (!add(g.res.ok, 'Bot is in the server', g.res.ok
-    ? `"${(g.body as { name: string }).name}"`
+  if (!add(g.res.ok, 'Server the ban goes to', g.res.ok
+    ? `"${(g.body as { name: string }).name}" (id ${guildId}) — this must be the server you set the bot up in`
     : discordErrorText(g.res.status, g.body, 'read the server for'))) return lines;
   const guild = g.body as { id: string; name: string; owner_id: string; roles: DiscordRole[]; mfa_level?: number };
+  const roleById = new Map(guild.roles.map(r => [r.id, r]));
+  const listRoles = (ids: string[]) => {
+    const rs = ids.map(id => roleById.get(id)).filter((r): r is DiscordRole => !!r)
+      .sort((x, y) => y.position - x.position);
+    return rs.length ? rs.map(r => `${r.name} (#${r.position})`).join(', ') : 'no roles';
+  };
 
   const bm = await get(`/guilds/${guildId}/members/${me.id}`);
-  if (!add(bm.res.ok, 'Bot membership readable', bm.res.ok ? 'yes' : discordErrorText(bm.res.status, bm.body, 'read the bot in'))) return lines;
-  const botRoles = (bm.body as { roles: string[] }).roles ?? [];
+  if (!add(bm.res.ok, 'Bot is a member there', bm.res.ok
+    ? 'yes'
+    : discordErrorText(bm.res.status, bm.body, 'read the bot in'))) return lines;
+  const botMember = bm.body as { roles?: string[]; communication_disabled_until?: string | null };
+  const botRoles = botMember.roles ?? [];
+
+  // A timed-out member cannot moderate, and Discord reports it as the same
+  // "Missing Permissions" as everything else.
+  const until = botMember.communication_disabled_until ? Date.parse(botMember.communication_disabled_until) : NaN;
+  const timedOut = Number.isFinite(until) && until > Date.now();
+  add(!timedOut, 'Bot is not timed out', timedOut
+    ? `the bot is timed out until ${new Date(until).toISOString()} — a timed-out member cannot ban anyone`
+    : 'not timed out');
 
   let target: { id: string; roleIds: string[] | null } | null = null;
   const tid = targetId?.replace(/^dc_/, '').trim() || null;
@@ -690,29 +726,57 @@ export async function checkBanSetup(targetId?: string | null): Promise<BanCheckL
     const tm = await get(`/guilds/${guildId}/members/${tid}`);
     if (tm.res.ok) target = { id: tid, roleIds: (tm.body as { roles: string[] }).roles ?? [] };
     else if (tm.res.status === 404) target = { id: tid, roleIds: null };
-    else {
-      add(false, 'Test player', discordErrorText(tm.res.status, tm.body, 'look up'));
-    }
+    else add(false, 'Player', discordErrorText(tm.res.status, tm.body, 'look up'));
   }
 
   const a = banAbility({ guildId: guildId!, ownerId: guild.owner_id, roles: guild.roles, bot: { id: me.id, roleIds: botRoles }, target });
+  const granting = botRoles.map(id => roleById.get(id)).filter((r): r is DiscordRole => {
+    if (!r) return false;
+    const pm = BigInt(r.permissions);
+    return (pm & ADMINISTRATOR) !== 0n || (pm & BAN_MEMBERS) !== 0n;
+  }).map(r => r.name);
   add(a.hasBanMembers, 'Ban Members permission', a.hasBanMembers
-    ? `yes — bot's highest role is "${a.botTop.name}"`
-    : 'no role the bot holds grants Ban Members or Administrator');
+    ? `yes, from ${granting.length ? granting.join(', ') : (BigInt(roleById.get(guildId!)?.permissions ?? '0') & (ADMINISTRATOR | BAN_MEMBERS)) ? '@everyone' : 'ownership'}`
+    : `${me.username} holds ${listRoles(botRoles)} in "${guild.name}", and none of them grants Ban Members or Administrator. `
+      + 'The role you gave Ban Members is not on THIS bot in THIS server.');
   add(guild.mfa_level !== 1, '2FA for moderation', guild.mfa_level === 1
     ? 'this server requires it — the Discord account that OWNS the bot application must have 2FA on, '
       + 'or every ban is refused with error 60003'
     : 'not required');
-  if (tid) {
-    if (target?.roleIds === null) {
-      add(a.canBanTarget !== false, `Can ban ${tid}`, a.canBanTarget
-        ? 'not in the server — a ban by id still works and stops them joining'
-        : a.reason ?? '');
-    } else if (target) {
-      add(a.canBanTarget === true, `Can ban ${tid}`, a.canBanTarget
-        ? `yes — their highest role "${a.targetTop?.name}" is below the bot's "${a.botTop.name}"`
-        : a.reason ?? '');
+  if (tid && target) {
+    const theirs = target.roleIds === null ? 'not in the server' : listRoles(target.roleIds);
+    const both = `Bot ${me.username}: ${listRoles(botRoles)}. Player: ${theirs}.`;
+    if (target.roleIds === null) {
+      add(a.canBanTarget !== false, 'Can ban this player', a.canBanTarget
+        ? `yes — they are not in "${guild.name}", so a ban by id works and stops them joining`
+        : `${a.reason ?? ''} ${both}`);
+    } else {
+      add(a.canBanTarget === true, 'Can ban this player', a.canBanTarget
+        ? `yes — ${both}`
+        : `${a.reason ?? ''}. ${both}`);
     }
   }
   return lines;
+}
+
+// Why a ban Discord just refused was refused, in one line, by asking.
+//
+// Discord answers every one of these refusals with the same "Missing
+// Permissions", so the ban's own error cannot say which it was. The check can:
+// it signs in with the same token, looks at the same server and the same
+// player, and reports the first thing that is not true. Run automatically when
+// a ban comes back 403, so the operator is told the cause instead of a list of
+// candidates.
+export async function explainBanRefusal(targetId: string): Promise<string | null> {
+  try {
+    const lines = await checkBanSetup(targetId);
+    const bad = lines.find(l => !l.ok);
+    if (bad) return `${bad.label} — ${bad.detail}`;
+    const who = lines.find(l => l.label === 'Bot this site uses')?.detail.split(' — ')[0] ?? 'the bot';
+    const where = lines.find(l => l.label === 'Server the ban goes to')?.detail.split(' — ')[0] ?? 'the server';
+    return `every check passes for ${who} in ${where}, yet Discord refused. Try the ban once more; if it `
+      + 'fails again, remove and re-add the bot\'s role — Discord has been known to hold stale permissions.';
+  } catch {
+    return null;
+  }
 }
