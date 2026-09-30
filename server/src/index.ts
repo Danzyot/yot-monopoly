@@ -9,7 +9,7 @@ import {
   signState, signToken, verifyState, verifyToken, withAdminFlag, withDiscord,
 } from './auth.ts';
 import {
-  announceChannelId, authorizeUrl, banFromGuild, botEnabled, completeOAuth, defaultGuildId,
+  announceChannelId, authorizeUrl, banFromGuild, botEnabled, checkBanSetup, completeOAuth, defaultGuildId,
   defaultInviteUrl, discordEnabled, fetchGuildRoles, postVerifyMessage,
   redirectUriFor, registerIdentity, sendDirectMessage, unbanFromGuild,
 } from './discord.ts';
@@ -1100,6 +1100,29 @@ app.get('/api/admin/bannable-games', (req, res) => {
         .map(t => ({ id: t.id, name: t.name, kind: 'cash' as const })),
     ],
   });
+});
+
+// Everything that decides whether a Discord ban can go through, checked live
+// from this server — the one place that can reach Discord with the bot's own
+// token. Optionally against one player, since the usual failure is not the
+// permission but where the bot's role sits relative to theirs.
+app.get('/api/admin/discord/ban-check', (req, res) => {
+  void (async () => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const raw = typeof req.query.target === 'string' ? req.query.target.trim() : '';
+      // Accept a site id or a snowflake, like the ban form does.
+      const row = raw ? playerRows().find(p => p.id === raw || p.discordVerifiedId === raw) : null;
+      const target = row?.discordVerifiedId ?? (/^(dc_)?\d{15,22}$/.test(raw) ? raw.replace(/^dc_/, '') : null);
+      if (raw && !target) {
+        res.json({ lines: [{ ok: false, label: 'Test player', detail: `${row?.name ?? raw} has no Discord account on record` }] });
+        return;
+      }
+      res.json({ lines: await checkBanSetup(target), target: row?.name ?? target });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : 'Check failed' });
+    }
+  })();
 });
 
 app.post('/api/admin/bans', (req, res) => {

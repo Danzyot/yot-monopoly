@@ -291,6 +291,11 @@ export const api = {
     }>('/api/admin/bans', {
       method: 'POST', body: JSON.stringify(b),
     }),
+  // Live check of everything a Discord ban depends on, optionally against one
+  // player. Run by the server, which holds the bot token.
+  discordBanCheck: (target?: string) =>
+    request<{ lines: { ok: boolean; label: string; detail: string }[]; target?: string | null }>(
+      `/api/admin/discord/ban-check${target ? `?target=${encodeURIComponent(target)}` : ''}`),
   unban: (b: BanRow) => {
     const q = b.scope === 'game' ? `?scope=game&gameId=${encodeURIComponent(b.gameId ?? '')}` : '';
     return request<{ ok: true }>(

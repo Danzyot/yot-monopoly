@@ -4490,3 +4490,23 @@ input[type='time']:hover::-webkit-calendar-picker-indicator {
 }
 .device-group .alt-title { color: var(--red); }
 .device-id { font-family: ui-monospace, monospace; font-size: 0.72rem; color: var(--text-faint); }
+
+/* "Check Discord ban setup": one line per condition, pass or fail and why. */
+.dban-check { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.dban-err { color: var(--red); font-size: 0.8rem; margin: 0; }
+.dban-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; width: 100%; }
+.dban-lines li {
+  display: grid; grid-template-columns: 16px minmax(120px, max-content) 1fr; gap: 8px;
+  font-size: 0.8rem; line-height: 1.45; align-items: baseline;
+}
+.dban-mark { font-weight: 800; }
+.dban-lines li.ok .dban-mark { color: var(--green); }
+.dban-lines li.bad .dban-mark { color: var(--red); }
+.dban-label { font-weight: 700; }
+.dban-detail { color: var(--text-dim); overflow-wrap: anywhere; }
+.dban-lines li.bad .dban-detail { color: var(--text); }
+.dban-lines .dban-verdict {
+  display: block; margin-top: 4px; padding: 6px 10px; border-radius: 8px; font-weight: 600;
+}
+.dban-verdict.ok { background: color-mix(in srgb, var(--green) 12%, transparent); }
+.dban-verdict.bad { background: color-mix(in srgb, var(--red) 12%, transparent); }

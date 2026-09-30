@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BAN_REASONS } from '../../../shared/types';
 import { api, type BanRow } from '../api';
+import DiscordBanCheck from './DiscordBanCheck';
 import { banMessagePreview } from './BanDialog';
 import { useToast } from '../toast';
 
@@ -145,6 +146,11 @@ export default function BanManager() {
                   </span>
                 </span>
               </label>
+            </div>
+          )}
+          {kind === 'player' && (
+            <div className="field ban-grid-wide">
+              <DiscordBanCheck target={value} />
             </div>
           )}
           <div className="field">

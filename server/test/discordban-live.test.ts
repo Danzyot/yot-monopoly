@@ -1,0 +1,172 @@
+// The Discord ban, end to end, against a stand-in Discord on loopback.
+//
+// Discord cannot be reached from the test machine, so the stand-in speaks its
+// dialect: the same paths, the same error bodies ({ code, message }) and the
+// same shapes for guilds, roles and members. The two failures reported from
+// the live site are what these pin: a reason with an em dash or an emoji
+// never left the machine, and every refusal was reported as "needs Ban
+// Members" whatever Discord had actually said.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+
+const GUILD = '900000000000000001';
+const BOT = '900000000000000002';
+const OWNER = '900000000000000003';
+const LOW = '900000000000000004';   // plain member
+const HIGH = '900000000000000005';  // holds a role above the bot's
+const GONE = '900000000000000006';  // not in the server
+
+type Reply = { status: number; body?: unknown };
+let banReply: Reply = { status: 204 };
+let mfa = 0;
+let lastBan: { path: string; auth: string | undefined; reason: string | undefined; body: string } | null = null;
+
+const roles = [
+  { id: GUILD, name: '@everyone', permissions: '0', position: 0 },
+  { id: 'r-mod', name: 'Poker Bot', permissions: String(1n << 2n), position: 5 },
+  { id: 'r-vip', name: 'VIP', permissions: '0', position: 9 },
+  { id: 'r-verified', name: 'Verified', permissions: '0', position: 2 },
+];
+const members: Record<string, string[]> = { [BOT]: ['r-mod'], [OWNER]: [], [LOW]: ['r-verified'], [HIGH]: ['r-vip'] };
+
+function send(res: ServerResponse, r: Reply) {
+  res.statusCode = r.status;
+  if (r.body !== undefined) { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(r.body)); }
+  else res.end();
+}
+
+const srv = createServer((req: IncomingMessage, res: ServerResponse) => {
+  let body = '';
+  req.on('data', c => { body += c; });
+  req.on('end', () => {
+    const url = req.url ?? '';
+    if (req.headers.authorization !== 'Bot test-token') return send(res, { status: 401, body: { message: '401: Unauthorized', code: 0 } });
+    if (url === '/users/@me') return send(res, { status: 200, body: { id: BOT, username: 'PokerBot' } });
+    if (url === `/guilds/${GUILD}`) return send(res, { status: 200, body: { id: GUILD, name: 'WAWA', owner_id: OWNER, roles, mfa_level: mfa } });
+    const m = url.match(new RegExp(`^/guilds/${GUILD}/members/(\\d+)$`));
+    if (m) {
+      const r = members[m[1]];
+      return r ? send(res, { status: 200, body: { roles: r } }) : send(res, { status: 404, body: { message: 'Unknown Member', code: 10007 } });
+    }
+    if (url.startsWith(`/guilds/${GUILD}/bans/`) && req.method === 'PUT') {
+      lastBan = {
+        path: url, auth: req.headers.authorization,
+        reason: req.headers['x-audit-log-reason'] as string | undefined, body,
+      };
+      return send(res, banReply);
+    }
+    if (url.startsWith('/guilds/')) return send(res, { status: 404, body: { message: 'Unknown Guild', code: 10004 } });
+    send(res, { status: 404, body: { message: 'Not Found', code: 0 } });
+  });
+});
+await new Promise<void>(r => srv.listen(0, '127.0.0.1', r));
+const port = (srv.address() as { port: number }).port;
+
+process.env.DISCORD_API_BASE = `http://127.0.0.1:${port}`;
+process.env.DISCORD_BOT_TOKEN = 'test-token';
+process.env.DISCORD_GUILD_ID = GUILD;
+const { auditReasonHeader, banAbility, banFromGuild, checkBanSetup, discordErrorText } = await import('../src/discord.ts');
+
+test.after(() => srv.close());
+
+test('a reason with an em dash or an emoji now reaches Discord, encoded', async () => {
+  banReply = { status: 204 };
+  // Both of these threw "Cannot convert argument to a ByteString" inside
+  // fetch, before any request was made.
+  // Read through a function: the request handler assigns lastBan, which the
+  // checker cannot see from here and would otherwise narrow to null.
+  const seen = () => lastBan as NonNullable<typeof lastBan> | null;
+  for (const reason of ['multi-accounting — 3 alts', 'alt of Nimbu 🎲']) {
+    lastBan = null;
+    await banFromGuild(LOW, reason);
+    const got = seen();
+    assert.ok(got, `the request for "${reason}" was actually sent`);
+    assert.equal(decodeURIComponent(got.reason!), `Poker ban: ${reason}`, 'Discord decodes it back to exactly what was typed');
+    assert.match(got.reason!, /^[\x20-\x7e]+$/, 'and on the wire it is plain ASCII');
+    assert.equal(got.path, `/guilds/${GUILD}/bans/${LOW}`);
+    assert.equal(got.auth, 'Bot test-token');
+    assert.deepEqual(JSON.parse(got.body), { delete_message_seconds: 0 }, 'bans, deletes nothing');
+  }
+});
+
+test('the audit reason fits Discord\'s 512 and is never cut mid-escape', () => {
+  for (const long of ['🎲'.repeat(400), 'é'.repeat(400), 'x'.repeat(900), 'a🎲'.repeat(300)]) {
+    const h = auditReasonHeader(long);
+    assert.ok(h.length <= 512, `${h.length} > 512`);
+    assert.doesNotThrow(() => decodeURIComponent(h), 'a cut through %F0%9F… would not decode');
+    assert.ok(long.startsWith(decodeURIComponent(h)), 'what survives is a prefix of what was typed');
+  }
+  // Newlines would let a reason inject a second header line.
+  assert.ok(!decodeURIComponent(auditReasonHeader('a\r\nX-Evil: 1')).includes('\n'));
+});
+
+test('a refusal carries Discord\'s own code and words, and the right fix', async () => {
+  banReply = { status: 403, body: { message: 'Missing Permissions', code: 50013 } };
+  await assert.rejects(banFromGuild(HIGH, 'Alt accounts'), (e: Error) => {
+    assert.match(e.message, /403\/50013/);
+    assert.match(e.message, /Missing Permissions/);
+    assert.match(e.message, /highest role/, 'names the role order, not just the permission');
+    return true;
+  });
+  banReply = { status: 403, body: { message: 'Two factor is required for this operation', code: 60003 } };
+  await assert.rejects(banFromGuild(LOW, 'Alt accounts'), /60003[\s\S]*two-factor/);
+  banReply = { status: 403, body: { message: 'Missing Access', code: 50001 } };
+  await assert.rejects(banFromGuild(LOW, 'Alt accounts'), /50001[\s\S]*DISCORD_GUILD_ID/);
+});
+
+test('an error with no JSON body still says what it can', () => {
+  assert.match(discordErrorText(502, null, 'ban'), /Discord refused to ban them \(Discord 502\)/);
+  assert.match(discordErrorText(401, null, 'ban'), /token was rejected/);
+});
+
+test('role order decides, and the owner cannot be banned', () => {
+  const base = { guildId: GUILD, ownerId: OWNER, roles, bot: { id: BOT, roleIds: ['r-mod'] } };
+  assert.equal(banAbility({ ...base, target: { id: LOW, roleIds: ['r-verified'] } }).canBanTarget, true);
+  const high = banAbility({ ...base, target: { id: HIGH, roleIds: ['r-vip'] } });
+  assert.equal(high.canBanTarget, false);
+  assert.match(high.reason!, /"VIP" is above the bot's highest role "Poker Bot"/);
+  assert.match(banAbility({ ...base, target: { id: OWNER, roleIds: [] } }).reason!, /own the server/);
+  assert.equal(banAbility({ ...base, target: { id: GONE, roleIds: null } }).canBanTarget, true, 'a non-member is banned by id');
+  const level = banAbility({ ...base, target: { id: 'x', roleIds: ['r-mod'] } });
+  assert.equal(level.canBanTarget, false, 'level with the bot is not below it');
+  const noPerm = banAbility({ ...base, bot: { id: BOT, roleIds: [] }, target: { id: LOW, roleIds: [] } });
+  assert.equal(noPerm.hasBanMembers, false);
+  const admin = banAbility({ ...base, roles: [...roles, { id: 'r-admin', name: 'Admin', permissions: String(1n << 3n), position: 20 }],
+    bot: { id: BOT, roleIds: ['r-admin'] }, target: { id: HIGH, roleIds: ['r-vip'] } });
+  assert.equal(admin.canBanTarget, true, 'Administrator implies Ban Members');
+});
+
+test('the setup check names the exact blocker, live', async () => {
+  mfa = 0;
+  const ok = await checkBanSetup(LOW);
+  assert.ok(ok.every(l => l.ok), JSON.stringify(ok));
+
+  const high = await checkBanSetup(HIGH);
+  const bad = high.find(l => !l.ok);
+  assert.ok(bad, 'the VIP member is flagged');
+  assert.match(bad!.detail, /"VIP".*above.*"Poker Bot"/);
+
+  const owner = await checkBanSetup(OWNER);
+  assert.match(owner.find(l => !l.ok)!.detail, /own the server/);
+
+  const gone = await checkBanSetup(GONE);
+  assert.ok(gone.every(l => l.ok), 'not in the server is not a problem');
+
+  mfa = 1;
+  const twofa = await checkBanSetup(null);
+  assert.match(twofa.find(l => !l.ok)!.detail, /2FA/);
+  mfa = 0;
+});
+
+test('a wrong server id or token is reported as that, not as permissions', async () => {
+  process.env.DISCORD_GUILD_ID = '111111111111111111';
+  const g = await checkBanSetup(null);
+  assert.match(g.find(l => !l.ok)!.detail, /10004/);
+  process.env.DISCORD_GUILD_ID = GUILD;
+
+  process.env.DISCORD_BOT_TOKEN = 'wrong';
+  const t = await checkBanSetup(null);
+  assert.match(t.find(l => !l.ok)!.detail, /token was rejected/);
+  process.env.DISCORD_BOT_TOKEN = 'test-token';
+});

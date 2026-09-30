@@ -10,7 +10,14 @@
 
 import { BRAND } from '../../shared/brand.ts';
 
-const API = 'https://discord.com/api/v10';
+// DISCORD_API_BASE points the bot at a stand-in Discord for tests. Honoured
+// only on loopback: a stray value in production must never be able to send
+// the bot token to some other host.
+const API = (() => {
+  const o = process.env.DISCORD_API_BASE?.trim();
+  if (o && /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/.test(o)) return o.replace(/\/$/, '');
+  return 'https://discord.com/api/v10';
+})();
 
 export interface DiscordIdentity {
   id: string;
@@ -479,6 +486,28 @@ function guildBanUrl(discordUserId: string): string {
   return `${API}/guilds/${guild}/bans/${encodeURIComponent(discordUserId)}`;
 }
 
+// The audit-log reason, as a header Discord will accept.
+//
+// Discord wants it URL-encoded, and Node's fetch will not even SEND a header
+// holding a character above U+00FF: a reason with an em dash or an emoji
+// threw "Cannot convert argument to a ByteString" before the request left,
+// and the operator was told the Discord ban failed with no idea why. Encoded,
+// every reason is plain ASCII. Discord's cap is 512 characters, so the raw
+// text is shortened until its ENCODED form fits, never cut mid-escape.
+//
+// Shortened by whole characters, not UTF-16 units: slicing one unit at a time
+// splits an emoji's surrogate pair, and encodeURIComponent throws on the half
+// left behind — so the fix for one crash would have been a new one.
+export function auditReasonHeader(reason: string): string {
+  const chars = Array.from(reason.replace(/[\u0000-\u001f\u007f]/g, ' '));
+  let enc = encodeURIComponent(chars.join(''));
+  while (enc.length > 512 && chars.length > 0) {
+    chars.pop();
+    enc = encodeURIComponent(chars.join(''));
+  }
+  return enc;
+}
+
 function botAuth(reason?: string): Record<string, string> {
   const h: Record<string, string> = {
     Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN!.trim()}`,
@@ -486,19 +515,48 @@ function botAuth(reason?: string): Record<string, string> {
   };
   // Shows up in the server's audit log, so a moderator reading it later can
   // see this came from the poker room and why.
-  if (reason) h['X-Audit-Log-Reason'] = reason.slice(0, 500);
+  if (reason) h['X-Audit-Log-Reason'] = auditReasonHeader(reason);
   return h;
 }
 
-function guildBanError(status: number, verb: string): Error {
-  if (status === 403) {
-    return new Error(
-      `Discord refused to ${verb} them: the bot needs the Ban Members permission, `
-      + 'and its role must sit ABOVE theirs in the server settings.',
-    );
-  }
-  if (status === 404) return new Error('Discord does not know that account, or the bot is not in that server');
-  return new Error(`Discord returned ${status} when trying to ${verb} them`);
+// What Discord said, in words an operator can act on.
+//
+// This used to answer every 403 with "the bot needs Ban Members, and its role
+// must sit above theirs" — Discord's own reason thrown away and a guess put in
+// its place. An operator who had checked Ban Members was then told to check
+// Ban Members. A 403 is several different refusals, and Discord's error code
+// says which, so the code and Discord's own words are always kept.
+export function discordErrorText(status: number, body: unknown, verb: string): string {
+  const b = (body && typeof body === 'object' ? body : {}) as { code?: unknown; message?: unknown };
+  const code = typeof b.code === 'number' ? b.code : null;
+  const said = typeof b.message === 'string' ? b.message : '';
+  const tag = `Discord ${status}${code !== null ? `/${code}` : ''}${said ? ` "${said}"` : ''}`;
+  const hint = (() => {
+    switch (code) {
+      case 50013: return 'the bot lacks Ban Members, or their highest role is at or above the bot\'s highest role, '
+        + 'or they own the server. Drag the bot\'s role above theirs in Server Settings → Roles. '
+        + '"Check Discord ban setup" on the dashboard says which.';
+      case 50001: return 'the bot cannot see the server DISCORD_GUILD_ID points at — it is not in that server, '
+        + 'or the id is a different server.';
+      case 60003: return 'this server requires 2FA for moderation actions, so the Discord account that OWNS '
+        + 'the bot application must have two-factor authentication turned on.';
+      case 10004: return 'DISCORD_GUILD_ID is not a server this bot can see.';
+      case 10013: return 'there is no Discord account with that id.';
+      case 30035: return 'the server has reached Discord\'s limit on bans for people who are not members.';
+      case 0: return 'the bot token was rejected.';
+      default: break;
+    }
+    if (status === 401) return 'the bot token was rejected — check DISCORD_BOT_TOKEN.';
+    if (status === 429) return 'rate limited by Discord — try again in a minute.';
+    return '';
+  })();
+  return `Discord refused to ${verb} them (${tag})${hint ? `: ${hint}` : ''}`;
+}
+
+async function discordError(res: Response, verb: string): Promise<Error> {
+  let body: unknown = null;
+  try { body = await res.json(); } catch { /* not JSON — the status is all there is */ }
+  return new Error(discordErrorText(res.status, body, verb));
 }
 
 export async function banFromGuild(discordUserId: string, reason: string): Promise<void> {
@@ -511,7 +569,7 @@ export async function banFromGuild(discordUserId: string, reason: string): Promi
     body: JSON.stringify({ delete_message_seconds: 0 }),
     signal: AbortSignal.timeout(10_000),
   });
-  if (!res.ok) throw guildBanError(res.status, 'ban');
+  if (!res.ok) throw await discordError(res, 'ban');
 }
 
 export async function unbanFromGuild(discordUserId: string): Promise<void> {
@@ -523,5 +581,138 @@ export async function unbanFromGuild(discordUserId: string): Promise<void> {
   });
   // Already gone is the outcome we wanted, not a failure.
   if (res.status === 404) return;
-  if (!res.ok) throw guildBanError(res.status, 'unban');
+  if (!res.ok) throw await discordError(res, 'unban');
+}
+
+// ---- "Check Discord ban setup" ----
+//
+// Everything that decides whether a ban can go through, checked live against
+// the server the bot will ban in, and against one particular player if given.
+// The answer to "perms are set correctly, why does it fail" is almost always
+// one of these, and each is invisible from the settings page it lives on:
+// the bot's role is BELOW a role the players hold, the test account owns the
+// server, or the server demands 2FA of the bot's owner.
+
+const ADMINISTRATOR = 1n << 3n;
+const BAN_MEMBERS = 1n << 2n;
+
+export interface DiscordRole { id: string; name: string; permissions: string; position: number }
+
+// The pure part: given the guild's roles, who owns it, and two members' role
+// ids, can the one ban the other — and if not, exactly why not.
+export function banAbility(p: {
+  guildId: string;
+  ownerId: string;
+  roles: DiscordRole[];
+  bot: { id: string; roleIds: string[] };
+  target?: { id: string; roleIds: string[] | null } | null; // roleIds null = not in the server
+}): {
+  hasBanMembers: boolean;
+  botTop: { name: string; position: number };
+  targetTop: { name: string; position: number } | null;
+  targetIsOwner: boolean;
+  canBanTarget: boolean | null; // null when no target was given
+  reason: string | null;
+} {
+  const byId = new Map(p.roles.map(r => [r.id, r]));
+  const everyone = byId.get(p.guildId);
+  const top = (ids: string[]) => {
+    let best = { name: '@everyone', position: 0 };
+    for (const id of ids) {
+      const r = byId.get(id);
+      if (r && r.position > best.position) best = { name: r.name, position: r.position };
+    }
+    return best;
+  };
+  let perms = BigInt(everyone?.permissions ?? '0');
+  for (const id of p.bot.roleIds) perms |= BigInt(byId.get(id)?.permissions ?? '0');
+  const hasBanMembers = p.bot.id === p.ownerId || (perms & ADMINISTRATOR) !== 0n || (perms & BAN_MEMBERS) !== 0n;
+  const botTop = top(p.bot.roleIds);
+
+  if (!p.target) {
+    return { hasBanMembers, botTop, targetTop: null, targetIsOwner: false, canBanTarget: null,
+      reason: hasBanMembers ? null : 'the bot has no role granting Ban Members (or Administrator)' };
+  }
+  const targetIsOwner = p.target.id === p.ownerId;
+  const targetTop = p.target.roleIds ? top(p.target.roleIds) : null;
+  let reason: string | null = null;
+  if (!hasBanMembers) reason = 'the bot has no role granting Ban Members (or Administrator)';
+  else if (targetIsOwner) reason = 'they own the server — nobody can ban a server owner';
+  else if (targetTop && targetTop.position >= botTop.position) {
+    reason = `their highest role "${targetTop.name}" is ${targetTop.position === botTop.position ? 'level with' : 'above'} `
+      + `the bot's highest role "${botTop.name}" — drag the bot's role above it in Server Settings → Roles`;
+  }
+  return { hasBanMembers, botTop, targetTop, targetIsOwner, canBanTarget: reason === null, reason };
+}
+
+export interface BanCheckLine { ok: boolean; label: string; detail: string }
+
+export async function checkBanSetup(targetId?: string | null): Promise<BanCheckLine[]> {
+  const lines: BanCheckLine[] = [];
+  const add = (ok: boolean, label: string, detail: string) => { lines.push({ ok, label, detail }); return ok; };
+
+  if (!add(botEnabled(), 'Bot token', botEnabled() ? 'set' : 'DISCORD_BOT_TOKEN is not set')) return lines;
+  const guildId = defaultGuildId();
+  if (!add(!!guildId, 'Server id', guildId ? guildId : 'DISCORD_GUILD_ID is not set')) return lines;
+
+  const get = async (path: string) => {
+    const res = await fetch(`${API}${path}`, { headers: botAuth(), signal: AbortSignal.timeout(10_000) });
+    let body: unknown = null;
+    try { body = await res.json(); } catch { /* empty */ }
+    return { res, body };
+  };
+
+  let me: { id: string; username: string };
+  try {
+    const r = await get('/users/@me');
+    if (!add(r.res.ok, 'Token accepted', r.res.ok
+      ? `signed in as ${(r.body as { username: string }).username}`
+      : discordErrorText(r.res.status, r.body, 'sign in as'))) return lines;
+    me = r.body as { id: string; username: string };
+  } catch (e) {
+    add(false, 'Token accepted', `could not reach Discord: ${e instanceof Error ? e.message : 'network error'}`);
+    return lines;
+  }
+
+  const g = await get(`/guilds/${guildId}`);
+  if (!add(g.res.ok, 'Bot is in the server', g.res.ok
+    ? `"${(g.body as { name: string }).name}"`
+    : discordErrorText(g.res.status, g.body, 'read the server for'))) return lines;
+  const guild = g.body as { id: string; name: string; owner_id: string; roles: DiscordRole[]; mfa_level?: number };
+
+  const bm = await get(`/guilds/${guildId}/members/${me.id}`);
+  if (!add(bm.res.ok, 'Bot membership readable', bm.res.ok ? 'yes' : discordErrorText(bm.res.status, bm.body, 'read the bot in'))) return lines;
+  const botRoles = (bm.body as { roles: string[] }).roles ?? [];
+
+  let target: { id: string; roleIds: string[] | null } | null = null;
+  const tid = targetId?.replace(/^dc_/, '').trim() || null;
+  if (tid) {
+    const tm = await get(`/guilds/${guildId}/members/${tid}`);
+    if (tm.res.ok) target = { id: tid, roleIds: (tm.body as { roles: string[] }).roles ?? [] };
+    else if (tm.res.status === 404) target = { id: tid, roleIds: null };
+    else {
+      add(false, 'Test player', discordErrorText(tm.res.status, tm.body, 'look up'));
+    }
+  }
+
+  const a = banAbility({ guildId: guildId!, ownerId: guild.owner_id, roles: guild.roles, bot: { id: me.id, roleIds: botRoles }, target });
+  add(a.hasBanMembers, 'Ban Members permission', a.hasBanMembers
+    ? `yes — bot's highest role is "${a.botTop.name}"`
+    : 'no role the bot holds grants Ban Members or Administrator');
+  add(guild.mfa_level !== 1, '2FA for moderation', guild.mfa_level === 1
+    ? 'this server requires it — the Discord account that OWNS the bot application must have 2FA on, '
+      + 'or every ban is refused with error 60003'
+    : 'not required');
+  if (tid) {
+    if (target?.roleIds === null) {
+      add(a.canBanTarget !== false, `Can ban ${tid}`, a.canBanTarget
+        ? 'not in the server — a ban by id still works and stops them joining'
+        : a.reason ?? '');
+    } else if (target) {
+      add(a.canBanTarget === true, `Can ban ${tid}`, a.canBanTarget
+        ? `yes — their highest role "${a.targetTop?.name}" is below the bot's "${a.botTop.name}"`
+        : a.reason ?? '');
+    }
+  }
+  return lines;
 }
