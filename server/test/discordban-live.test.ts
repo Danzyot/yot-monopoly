@@ -25,6 +25,10 @@ let botTimedOutUntil: string | null = null;
 const VERIFY = '900000000000000100';
 const CAT = '900000000000000101';
 let verifyOverwrites: { id: string; type: 0 | 1; allow: string; deny: string }[] = [];
+// The bot's own application, as GET /applications/@me reports it.
+let appEndpoint: string | null = null;
+let appKey = 'a'.repeat(64);
+let selfDelayMs = 0;
 let lastBan: { path: string; auth: string | undefined; reason: string | undefined; body: string } | null = null;
 
 const roles = [
@@ -47,6 +51,13 @@ function send(res: ServerResponse, r: Reply) {
 }
 
 const srv = createServer((req: IncomingMessage, res: ServerResponse) => {
+  if (req.url === '/self/api/discord/interactions' && req.method === 'GET') {
+    setTimeout(() => send(res, { status: 200, body: { instance: 'THIS-SERVER' } }), selfDelayMs);
+    return;
+  }
+  if (req.url === '/elsewhere/api/discord/interactions' && req.method === 'GET') {
+    return send(res, { status: 200, body: { instance: 'SOME-OTHER-SERVER' } });
+  }
   let body = '';
   req.on('data', c => { body += c; });
   req.on('end', () => {
@@ -56,6 +67,9 @@ const srv = createServer((req: IncomingMessage, res: ServerResponse) => {
     // Which bot the token belongs to decides everything below it.
     const self = auth === 'Bot other-token' ? { id: OTHER_BOT, username: 'WAWA Giveaways' } : { id: BOT, username: 'PokerBot' };
     if (url === '/users/@me') return send(res, { status: 200, body: self });
+    if (url === '/applications/@me') {
+      return send(res, { status: 200, body: { id: '900000000000000999', name: 'Chekr Poker', verify_key: appKey, interactions_endpoint_url: appEndpoint } });
+    }
     if (url === `/guilds/${GUILD}`) return send(res, { status: 200, body: { id: GUILD, name: 'WAWA', owner_id: OWNER, roles, mfa_level: mfa } });
     if (url === `/guilds/${GUILD}/channels`) {
       return send(res, { status: 200, body: [
@@ -87,7 +101,7 @@ process.env.DISCORD_API_BASE = `http://127.0.0.1:${port}`;
 process.env.DISCORD_BOT_TOKEN = 'test-token';
 process.env.DISCORD_GUILD_ID = GUILD;
 const {
-  auditReasonHeader, banAbility, banFromGuild, channelAccess, checkBanSetup, checkVerifyChannel, discordErrorText,
+  auditReasonHeader, banAbility, banFromGuild, channelAccess, checkBanSetup, checkInteractions, checkVerifyChannel, discordErrorText,
   explainBanRefusal,
 } = await import('../src/discord.ts');
 
@@ -339,4 +353,60 @@ test('an open channel passes every line', async () => {
   verifyOverwrites = [];
   const lines = await checkVerifyChannel(VERIFY);
   assert.ok(lines.every(l => l.ok), JSON.stringify(lines));
+});
+
+// ---- the Verify button: "didn't respond in time" ----
+
+const line = async (label: string) => (await checkInteractions(['self.example'], 'THIS-SERVER')).find(l => l.label === label)!;
+
+test('no Interactions Endpoint URL is named as the cause of the timeout', async () => {
+  process.env.DISCORD_PUBLIC_KEY = 'a'.repeat(64);
+  appEndpoint = null;
+  const l = await line('Verify button goes to');
+  assert.equal(l.ok, false);
+  assert.match(l.detail, /"Chekr Poker" has no Interactions Endpoint URL/);
+  assert.match(l.detail, /didn't respond in time/);
+});
+
+test('an endpoint that reaches this very server passes, however it is spelled', async () => {
+  // Called and identified by instance id, not by hostname: Railway only tells
+  // an app about one of its domains.
+  appEndpoint = `http://127.0.0.1:${port}/self/api/discord/interactions`;
+  const l = await line('Verify button goes to');
+  assert.equal(l.ok, true, l.detail);
+  assert.match(l.detail, /this site \(answered in \d+ms\)/);
+});
+
+test('an endpoint that is another server is called that', async () => {
+  appEndpoint = `http://127.0.0.1:${port}/elsewhere/api/discord/interactions`;
+  const l = await line('Verify button goes to');
+  assert.equal(l.ok, false);
+  assert.match(l.detail, /not this site/);
+});
+
+test('an endpoint that does not answer is called that', async () => {
+  appEndpoint = 'http://127.0.0.1:1/api/discord/interactions';
+  const l = await line('Verify button goes to');
+  assert.equal(l.ok, false);
+  assert.match(l.detail, /did not answer/);
+});
+
+test('this site answering slower than Discord waits is a failure', async () => {
+  appEndpoint = `http://127.0.0.1:${port}/self/api/discord/interactions`;
+  selfDelayMs = 2700;
+  try {
+    const l = await line('Verify button goes to');
+    assert.equal(l.ok, false);
+    assert.match(l.detail, /Discord gives up at 3000ms/);
+  } finally { selfDelayMs = 0; }
+});
+
+test('a public key from another application is caught, with the right one', async () => {
+  appEndpoint = `http://127.0.0.1:${port}/self/api/discord/interactions`;
+  process.env.DISCORD_PUBLIC_KEY = 'b'.repeat(64);
+  const l = await line('Public key');
+  assert.equal(l.ok, false);
+  assert.match(l.detail, new RegExp(`Set it to "Chekr Poker"'s key: ${'a'.repeat(64)}`));
+  process.env.DISCORD_PUBLIC_KEY = 'a'.repeat(64);
+  assert.equal((await line('Public key')).ok, true);
 });

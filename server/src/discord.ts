@@ -899,3 +899,84 @@ export async function checkVerifyChannel(channelId: string | null): Promise<BanC
   }
   return lines;
 }
+
+// ---- where Discord sends the Verify button ----
+//
+// "Chekr Poker didn't respond in time" on the Verify button means Discord
+// sent the click somewhere and got no answer within 3 seconds. The click goes
+// to the Interactions Endpoint URL of the application that OWNS THE BOT that
+// posted the panel — which need not be the application this site signs people
+// in with, or the one an operator last looked at in the Developer Portal. If
+// that URL is empty, Discord delivers clicks over a gateway connection this
+// site never opens, and every click times out. The bot token can read its own
+// application's settings, so this says where clicks actually go.
+
+export function hostOf(u: string | null | undefined): string | null {
+  if (!u) return null;
+  try { return new URL(/^https?:\/\//.test(u) ? u : `https://${u}`).host.toLowerCase(); } catch { return null; }
+}
+
+export async function checkInteractions(thisSiteHosts: string[], instanceId?: string): Promise<BanCheckLine[]> {
+  const lines: BanCheckLine[] = [];
+  const add = (ok: boolean, label: string, detail: string) => { lines.push({ ok, label, detail }); return ok; };
+  if (!botEnabled()) return lines;
+  const hosts = [...new Set(thisSiteHosts.map(h => h.toLowerCase()).filter(Boolean))];
+  const suggest = `https://${hosts.find(h => h.endsWith('.up.railway.app')) ?? hosts[0] ?? 'this-site'}/api/discord/interactions`;
+  try {
+    const res = await fetch(`${API}/applications/@me`, { headers: botAuth(), signal: AbortSignal.timeout(10_000) });
+    let body: unknown = null;
+    try { body = await res.json(); } catch { /* empty */ }
+    if (!add(res.ok, 'Bot\'s application', res.ok
+      ? `"${(body as { name: string }).name}" (id ${(body as { id: string }).id})`
+      : discordErrorText(res.status, body, 'read the application for'))) return lines;
+    const app = body as { name: string; id: string; verify_key?: string; interactions_endpoint_url?: string | null };
+    const url = app.interactions_endpoint_url?.trim() || null;
+    const urlHost = hostOf(url);
+    if (!url) {
+      add(false, 'Verify button goes to', `nowhere — "${app.name}" has no Interactions Endpoint URL, so Discord has no `
+        + 'address to send the click to and it times out ("didn\'t respond in time"). Developer Portal → '
+        + `${app.name} → General Information → Interactions Endpoint URL = ${suggest} — then save.`);
+    } else {
+      // Ask the address itself. Discord gives up after 3 seconds, so a reply
+      // slower than that is as good as none.
+      let reachesUs = false; let ms = 0; let probeErr: string | null = null;
+      if (instanceId) {
+        const t0 = Date.now();
+        try {
+          const r = await fetch(url, { signal: AbortSignal.timeout(6_000) });
+          ms = Date.now() - t0;
+          const j = await r.json().catch(() => null) as { instance?: string } | null;
+          reachesUs = j?.instance === instanceId;
+        } catch (e) {
+          ms = Date.now() - t0;
+          probeErr = e instanceof Error ? e.message : 'unreachable';
+        }
+      }
+      const looksLikeUs = !!urlHost && hosts.includes(urlHost) && /\/api\/discord\/interactions\/?$/.test(new URL(url).pathname);
+      if (reachesUs || (!instanceId && looksLikeUs)) {
+        add(ms < 2500, 'Verify button goes to', ms < 2500
+          ? `${url} — this site (answered in ${ms}ms)`
+          : `${url} — this site, but it took ${ms}ms to answer and Discord gives up at 3000ms`);
+      } else if (probeErr) {
+        add(false, 'Verify button goes to', `${url} — which did not answer (${probeErr}), so every click times out. `
+          + `Set "${app.name}"'s Interactions Endpoint URL to ${suggest}.`);
+      } else {
+        add(false, 'Verify button goes to', `${url} — not this site, so this site never sees the click. `
+          + `If "${app.name}" should verify players here, set its Interactions Endpoint URL to ${suggest}. `
+          + 'If another site uses this same bot, only one of them can receive its button clicks.');
+      }
+    }
+    const key = process.env.DISCORD_PUBLIC_KEY?.trim() || null;
+    if (app.verify_key) {
+      add(!!key && key.toLowerCase() === app.verify_key.toLowerCase(), 'Public key', !key
+        ? `DISCORD_PUBLIC_KEY is not set — set it to ${app.verify_key}`
+        : key.toLowerCase() === app.verify_key.toLowerCase()
+          ? `matches "${app.name}"`
+          : `DISCORD_PUBLIC_KEY is a different application's key, so every click is rejected as forged. `
+            + `Set it to "${app.name}"'s key: ${app.verify_key}`);
+    }
+  } catch (e) {
+    add(false, 'Bot\'s application', `could not reach Discord: ${e instanceof Error ? e.message : 'network error'}`);
+  }
+  return lines;
+}

@@ -10,7 +10,7 @@ import {
 } from './auth.ts';
 import {
   announceChannelId, authorizeUrl, banFromGuild, botEnabled, checkBanSetup, completeOAuth, defaultGuildId,
-  checkVerifyChannel, explainBanRefusal,
+  checkInteractions, checkVerifyChannel, explainBanRefusal, hostOf,
   defaultInviteUrl, discordEnabled, fetchGuildRoles, postVerifyMessage,
   redirectUriFor, registerIdentity, sendDirectMessage, unbanFromGuild,
 } from './discord.ts';
@@ -130,6 +130,12 @@ app.post('/api/discord/interactions', express.raw({ type: '*/*', limit: '1mb' })
 // Health probe for the interactions endpoint (open it in a browser). Discord
 // only ever reports "could not be verified", so this says which piece is
 // actually missing — in plain English, on the machine that has the answer.
+// A random id for this running server. The interactions probe returns it, so
+// "is the Interactions Endpoint URL this site?" is answered by calling that URL
+// and seeing whether it is us — no list of this service's domains needed, and
+// Railway only tells an app about one of them.
+const INSTANCE_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
+
 app.get('/api/discord/interactions', (req, res) => {
   const key = process.env.DISCORD_PUBLIC_KEY?.trim() ?? '';
   // Discord public keys are exactly 32 bytes, hex encoded.
@@ -162,6 +168,7 @@ app.get('/api/discord/interactions', (req, res) => {
   res.json({
     ok: true,
     endpoint: 'discord-interactions',
+    instance: INSTANCE_ID,
     // The single question that matters: would Discord accept this URL now?
     readyForDiscord: keyLooksValid,
     // Paste this exact string into the portal — it is the URL you just opened.
@@ -1138,7 +1145,15 @@ app.get('/api/admin/discord/ban-check', (req, res) => {
       const chanLines = chan && banLines.every(l => l.ok || !/^(Bot token|Server id|Bot this site uses)$/.test(l.label))
         ? (await checkVerifyChannel(chan)).filter(l => !/^(Bot this site uses|Server|Channel list)$/.test(l.label) || !l.ok)
         : [];
-      res.json({ lines: [...banLines, ...chanLines], target: row?.name ?? target });
+      // And where the Verify button's clicks go: a different setting again,
+      // on whichever application owns the bot, and the one behind "didn't
+      // respond in time".
+      const siteHosts = [
+        req.get('host'), hostOf(process.env.PUBLIC_URL), process.env.RAILWAY_PUBLIC_DOMAIN,
+        process.env.RAILWAY_STATIC_URL, ...(process.env.RAILWAY_DOMAINS ?? '').split(','),
+      ].map(h => hostOf(h ?? null)).filter((h): h is string => !!h);
+      const ixLines = chan ? await checkInteractions(siteHosts, INSTANCE_ID) : [];
+      res.json({ lines: [...banLines, ...chanLines, ...ixLines], target: row?.name ?? target });
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : 'Check failed' });
     }
