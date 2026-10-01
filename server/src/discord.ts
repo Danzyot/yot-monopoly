@@ -37,6 +37,19 @@ export function discordEnabled(): boolean {
   return !!(process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET);
 }
 
+// The public keys this server accepts interaction signatures from.
+//
+// More than one, because more than one Discord application sends interactions
+// here: this site's own bot (the poker Verify button) and, when forwarding is
+// on, the main site's application whose casino, giveaways and slash commands
+// this server relays. Each signs with its own key, so a server holding only
+// one of them rejects the other's every interaction as forged. Comma or space
+// separated in DISCORD_PUBLIC_KEY, or listed in DISCORD_PUBLIC_KEYS.
+export function discordPublicKeys(): string[] {
+  const raw = `${process.env.DISCORD_PUBLIC_KEY ?? ''},${process.env.DISCORD_PUBLIC_KEYS ?? ''}`;
+  return [...new Set(raw.split(/[\s,]+/).map(k => k.trim().toLowerCase()).filter(Boolean))];
+}
+
 export function botEnabled(): boolean {
   return !!process.env.DISCORD_BOT_TOKEN;
 }
@@ -966,14 +979,25 @@ export async function checkInteractions(thisSiteHosts: string[], instanceId?: st
           + 'If another site uses this same bot, only one of them can receive its button clicks.');
       }
     }
-    const key = process.env.DISCORD_PUBLIC_KEY?.trim() || null;
+    const keys = discordPublicKeys();
     if (app.verify_key) {
-      add(!!key && key.toLowerCase() === app.verify_key.toLowerCase(), 'Public key', !key
+      const has = keys.includes(app.verify_key.toLowerCase());
+      add(has, 'Public key', keys.length === 0
         ? `DISCORD_PUBLIC_KEY is not set — set it to ${app.verify_key}`
-        : key.toLowerCase() === app.verify_key.toLowerCase()
-          ? `matches "${app.name}"`
-          : `DISCORD_PUBLIC_KEY is a different application's key, so every click is rejected as forged. `
-            + `Set it to "${app.name}"'s key: ${app.verify_key}`);
+        : has
+          ? `"${app.name}"'s key is accepted${keys.length > 1 ? ` (plus ${keys.length - 1} other application${keys.length > 2 ? 's' : ''})` : ''}`
+          : `"${app.name}"'s key is not among DISCORD_PUBLIC_KEY, so every click is rejected as forged. `
+            + `Add it: ${app.verify_key}`);
+    }
+    // Forwarding means a SECOND application's interactions arrive here too —
+    // the main site's — signed with that application's key. If only one key
+    // is held, one of the two applications is being turned away.
+    if (process.env.DISCORD_FORWARD_INTERACTIONS_URL?.trim()) {
+      add(keys.length >= 2, 'Main site\'s interactions', keys.length >= 2
+        ? `${keys.length} keys accepted, so the main site's application can still reach ${process.env.DISCORD_FORWARD_INTERACTIONS_URL.trim()} through here`
+        : 'forwarding is on, so the main site\'s application sends its casino, giveaway and slash-command '
+          + 'interactions here — but only one public key is set, so if that application is not '
+          + `"${app.name}", every one of them is rejected. Add its Public Key to DISCORD_PUBLIC_KEY, comma separated.`);
     }
   } catch (e) {
     add(false, 'Bot\'s application', `could not reach Discord: ${e instanceof Error ? e.message : 'network error'}`);

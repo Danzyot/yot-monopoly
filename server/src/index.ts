@@ -10,7 +10,7 @@ import {
 } from './auth.ts';
 import {
   announceChannelId, authorizeUrl, banFromGuild, botEnabled, checkBanSetup, completeOAuth, defaultGuildId,
-  checkInteractions, checkVerifyChannel, explainBanRefusal, hostOf,
+  checkInteractions, checkVerifyChannel, discordPublicKeys, explainBanRefusal, hostOf,
   defaultInviteUrl, discordEnabled, fetchGuildRoles, postVerifyMessage,
   redirectUriFor, registerIdentity, sendDirectMessage, unbanFromGuild,
 } from './discord.ts';
@@ -103,13 +103,15 @@ app.set('trust proxy', trustedProxyHops());
 // is mounted with a raw parser ahead of express.json().
 app.post('/api/discord/interactions', express.raw({ type: '*/*', limit: '1mb' }), (req, res) => {
   void (async () => {
-    const publicKey = process.env.DISCORD_PUBLIC_KEY?.trim();
+    // Every application that sends interactions here signs with its own key;
+    // any of them may vouch for a request. See discordPublicKeys().
+    const keys = discordPublicKeys();
     const sig = req.headers['x-signature-ed25519'] as string | undefined;
     const ts = req.headers['x-signature-timestamp'] as string | undefined;
     const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from('');
     // Discord probes with a deliberately bad signature and requires a 401.
-    if (!publicKey || !sig || !ts || !validSignature(publicKey, sig, ts, raw)) {
-      res.status(401).json({ error: 'bad signature', publicKeyConfigured: !!publicKey });
+    if (!keys.length || !sig || !ts || !keys.some(k => validSignature(k, sig, ts, raw))) {
+      res.status(401).json({ error: 'bad signature', publicKeyConfigured: keys.length > 0 });
       return;
     }
     let interaction: unknown;
@@ -137,9 +139,11 @@ app.post('/api/discord/interactions', express.raw({ type: '*/*', limit: '1mb' })
 const INSTANCE_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 app.get('/api/discord/interactions', (req, res) => {
-  const key = process.env.DISCORD_PUBLIC_KEY?.trim() ?? '';
-  // Discord public keys are exactly 32 bytes, hex encoded.
-  const keyLooksValid = /^[0-9a-fA-F]{64}$/.test(key);
+  const keys = discordPublicKeys();
+  const key = keys[0] ?? '';
+  // Discord public keys are exactly 32 bytes, hex encoded — every one listed.
+  const badKey = keys.find(k => !/^[0-9a-f]{64}$/.test(k));
+  const keyLooksValid = keys.length > 0 && !badKey;
   const problems: string[] = [];
   const warnings: string[] = [];
 
@@ -151,7 +155,7 @@ app.get('/api/discord/interactions', (req, res) => {
     );
   } else if (!keyLooksValid) {
     problems.push(
-      `DISCORD_PUBLIC_KEY does not look like a public key: expected 64 hex characters, got ${key.length}. `
+      `DISCORD_PUBLIC_KEY does not look like a public key: expected 64 hex characters, got ${(badKey ?? '').length}. `
       + 'Make sure you copied the Public Key — not the Application ID, client secret or bot token.',
     );
   }
@@ -163,7 +167,7 @@ app.get('/api/discord/interactions', (req, res) => {
   // can only verify signatures, never create them). Showing the ends of it lets
   // the operator confirm the value on THIS service matches the app they are
   // editing — the failure that looks identical to "key not set".
-  const keyPreview = key ? `${key.slice(0, 8)}…${key.slice(-8)}` : null;
+  const keyPreview = keys.length ? keys.map(k => `${k.slice(0, 8)}…${k.slice(-8)}`).join(', ') : null;
 
   res.json({
     ok: true,

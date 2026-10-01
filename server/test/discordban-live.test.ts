@@ -102,6 +102,7 @@ process.env.DISCORD_BOT_TOKEN = 'test-token';
 process.env.DISCORD_GUILD_ID = GUILD;
 const {
   auditReasonHeader, banAbility, banFromGuild, channelAccess, checkBanSetup, checkInteractions, checkVerifyChannel, discordErrorText,
+  discordPublicKeys,
   explainBanRefusal,
 } = await import('../src/discord.ts');
 
@@ -406,7 +407,41 @@ test('a public key from another application is caught, with the right one', asyn
   process.env.DISCORD_PUBLIC_KEY = 'b'.repeat(64);
   const l = await line('Public key');
   assert.equal(l.ok, false);
-  assert.match(l.detail, new RegExp(`Set it to "Chekr Poker"'s key: ${'a'.repeat(64)}`));
+  // "Add", not "set": with two applications sending here, replacing the key
+  // would fix one and break the other.
+  assert.match(l.detail, new RegExp(`"Chekr Poker"'s key is not among DISCORD_PUBLIC_KEY[\\s\\S]*Add it: ${'a'.repeat(64)}`));
   process.env.DISCORD_PUBLIC_KEY = 'a'.repeat(64);
   assert.equal((await line('Public key')).ok, true);
+});
+
+// ---- two applications, two keys ----
+
+test('several public keys are read, in either variable, any separator, deduplicated', () => {
+  const a = 'A'.repeat(64); const b = 'b'.repeat(64);
+  process.env.DISCORD_PUBLIC_KEY = ` ${a}, ${b}\n${a} `;
+  process.env.DISCORD_PUBLIC_KEYS = 'c'.repeat(64);
+  try {
+    assert.deepEqual(discordPublicKeys(), ['a'.repeat(64), b, 'c'.repeat(64)]);
+  } finally {
+    process.env.DISCORD_PUBLIC_KEY = 'a'.repeat(64);
+    delete process.env.DISCORD_PUBLIC_KEYS;
+  }
+});
+
+test('with forwarding on and one key, the main site\'s application is flagged', async () => {
+  appEndpoint = `http://127.0.0.1:${port}/self/api/discord/interactions`;
+  process.env.DISCORD_FORWARD_INTERACTIONS_URL = 'https://main.example/api/discord/interactions';
+  try {
+    process.env.DISCORD_PUBLIC_KEY = 'a'.repeat(64);
+    const one = await line("Main site's interactions");
+    assert.equal(one.ok, false);
+    assert.match(one.detail, /Add its Public Key to DISCORD_PUBLIC_KEY, comma separated/);
+    process.env.DISCORD_PUBLIC_KEY = `${'a'.repeat(64)},${'d'.repeat(64)}`;
+    const two = await line("Main site's interactions");
+    assert.equal(two.ok, true);
+    assert.equal((await line('Public key')).ok, true, 'the bot\'s own key is still found among several');
+  } finally {
+    delete process.env.DISCORD_FORWARD_INTERACTIONS_URL;
+    process.env.DISCORD_PUBLIC_KEY = 'a'.repeat(64);
+  }
 });
