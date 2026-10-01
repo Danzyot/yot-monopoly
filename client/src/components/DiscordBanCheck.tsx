@@ -30,7 +30,7 @@ export default function DiscordBanCheck({ target }: { target: string }) {
   return (
     <div className="dban-check">
       <button type="button" className="btn btn-sm" disabled={busy} onClick={() => void run()}>
-        {busy ? 'Checking…' : target.trim() ? 'Check Discord ban for this player' : 'Check Discord ban setup'}
+        {busy ? 'Checking…' : target.trim() ? 'Check Discord setup for this player' : 'Check Discord setup'}
       </button>
       {err && <p className="dban-err">{err}</p>}
       {lines && (

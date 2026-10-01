@@ -10,7 +10,7 @@ import {
 } from './auth.ts';
 import {
   announceChannelId, authorizeUrl, banFromGuild, botEnabled, checkBanSetup, completeOAuth, defaultGuildId,
-  explainBanRefusal,
+  checkVerifyChannel, explainBanRefusal,
   defaultInviteUrl, discordEnabled, fetchGuildRoles, postVerifyMessage,
   redirectUriFor, registerIdentity, sendDirectMessage, unbanFromGuild,
 } from './discord.ts';
@@ -601,7 +601,18 @@ app.post('/api/discord/verify-message', (req, res) => {
   }
   postVerifyMessage(channel, process.env.PUBLIC_URL?.trim() || requestBase(req))
     .then(() => res.json({ ok: true, channelId: channel }))
-    .catch(e => res.status(400).json({ error: e instanceof Error ? e.message : 'Could not post' }));
+    .catch(async e => {
+      let msg = e instanceof Error ? e.message : 'Could not post';
+      // "Missing Access" alone says nothing about which of several invisible
+      // settings is in the way. Look, and say.
+      if (/\(403\)/.test(msg)) {
+        try {
+          const bad = (await checkVerifyChannel(channel)).find(l => !l.ok);
+          if (bad) msg = `${bad.label}: ${bad.detail} (${msg.replace(/^Discord rejected the message /, 'Discord ')})`;
+        } catch { /* keep Discord's own words */ }
+      }
+      res.status(400).json({ error: msg });
+    });
 });
 
 // Operator audit views: who is playing, from where, and anything that looks
@@ -1119,7 +1130,15 @@ app.get('/api/admin/discord/ban-check', (req, res) => {
         res.json({ lines: [{ ok: false, label: 'Test player', detail: `${row?.name ?? raw} has no Discord account on record` }] });
         return;
       }
-      res.json({ lines: await checkBanSetup(target), target: row?.name ?? target });
+      const banLines = await checkBanSetup(target);
+      // The verify channel is checked too when it is configured: it fails for
+      // the same invisible reasons a ban does, and an operator asking "is
+      // Discord set up" means both.
+      const chan = verifyChannelId();
+      const chanLines = chan && banLines.every(l => l.ok || !/^(Bot token|Server id|Bot this site uses)$/.test(l.label))
+        ? (await checkVerifyChannel(chan)).filter(l => !/^(Bot this site uses|Server|Channel list)$/.test(l.label) || !l.ok)
+        : [];
+      res.json({ lines: [...banLines, ...chanLines], target: row?.name ?? target });
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : 'Check failed' });
     }

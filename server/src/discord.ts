@@ -541,7 +541,7 @@ export function discordErrorText(status: number, body: unknown, verb: string): s
       case 50013: return 'Discord says the same thing for all of these: the bot this site\'s token signs in as '
         + 'is not the bot you set up, DISCORD_GUILD_ID is a different server, that bot lacks Ban Members there, '
         + 'the player\'s highest role is at or above the bot\'s, they own the server, or the bot is timed out. '
-        + '"Check Discord ban setup" on the dashboard says which.';
+        + '"Check Discord setup" on the dashboard (Bans panel) says which.';
       case 50001: return 'the bot cannot see the server DISCORD_GUILD_ID points at — it is not in that server, '
         + 'or the id is a different server.';
       case 60003: return 'this server requires 2FA for moderation actions, so the Discord account that OWNS '
@@ -779,4 +779,123 @@ export async function explainBanRefusal(targetId: string): Promise<string | null
   } catch {
     return null;
   }
+}
+
+// ---- the verify channel ----
+//
+// "Missing Access" (50001) when posting the verify panel means the bot cannot
+// see the channel, and Discord does not say why. Usually it is one of two
+// things that look fine from everywhere an operator would check: the token
+// belongs to a different bot than the one set up, or the channel (or the
+// category it sits in) has a permission setting hiding it from the bot's
+// role. This works out which, naming the bot, the channel and the setting.
+
+const VIEW_CHANNEL = 1n << 10n;
+const SEND_MESSAGES = 1n << 11n;
+const EMBED_LINKS = 1n << 14n;
+const ALL_PERMS = (1n << 64n) - 1n;
+
+export interface Overwrite { id: string; type: 0 | 1; allow: string; deny: string }
+
+// What one member may do in one channel, by Discord's own rules: the
+// @everyone role and the member's roles give the base; then the channel's
+// @everyone setting, then its role settings (all denies, then all allows),
+// then a setting for that member alone. For each permission still missing,
+// also say which setting took it away, so the answer is "the 'Members' role
+// is denied View Channel here", not just "no".
+export function channelAccess(p: {
+  guildId: string; ownerId: string; roles: DiscordRole[];
+  member: { id: string; roleIds: string[] };
+  overwrites: Overwrite[];
+}): { view: boolean; send: boolean; embed: boolean; blocker: { view: string | null; send: string | null; embed: string | null } } {
+  const roleById = new Map(p.roles.map(r => [r.id, r]));
+  const name = (id: string) => (id === p.guildId ? '@everyone' : roleById.get(id)?.name ?? `role ${id}`);
+  let perms = BigInt(roleById.get(p.guildId)?.permissions ?? '0');
+  for (const id of p.member.roleIds) perms |= BigInt(roleById.get(id)?.permissions ?? '0');
+  const owner = p.member.id === p.ownerId;
+  const admin = owner || (perms & ADMINISTRATOR) !== 0n;
+  if (admin) {
+    return { view: true, send: true, embed: true, blocker: { view: null, send: null, embed: null } };
+  }
+  const base = perms;
+  const evOw = p.overwrites.find(o => o.type === 0 && o.id === p.guildId);
+  if (evOw) { perms &= ~BigInt(evOw.deny); perms |= BigInt(evOw.allow); }
+  const roleOws = p.overwrites.filter(o => o.type === 0 && o.id !== p.guildId && p.member.roleIds.includes(o.id));
+  let rAllow = 0n; let rDeny = 0n;
+  for (const o of roleOws) { rAllow |= BigInt(o.allow); rDeny |= BigInt(o.deny); }
+  perms &= ~rDeny; perms |= rAllow;
+  const memOw = p.overwrites.find(o => o.type === 1 && o.id === p.member.id);
+  if (memOw) { perms &= ~BigInt(memOw.deny); perms |= BigInt(memOw.allow); }
+
+  const why = (bit: bigint, label: string): string | null => {
+    if ((perms & bit) !== 0n) return null;
+    if (memOw && (BigInt(memOw.deny) & bit)) return `the channel has a setting for the bot itself that denies ${label}`;
+    const denyingRoles = roleOws.filter(o => BigInt(o.deny) & bit).map(o => `"${name(o.id)}"`);
+    if (denyingRoles.length) return `the channel denies ${label} to ${denyingRoles.join(', ')}, which the bot has`;
+    if (evOw && (BigInt(evOw.deny) & bit)) {
+      return `the channel denies ${label} to @everyone and allows it to none of the bot's roles — `
+        + 'add the bot (or its role) to the channel\'s permissions and allow it';
+    }
+    if ((base & bit) === 0n) return `none of the bot's roles grants ${label}, and the channel does not allow it either`;
+    return `${label} is not granted here`;
+  };
+  return {
+    view: (perms & VIEW_CHANNEL) !== 0n,
+    send: (perms & SEND_MESSAGES) !== 0n,
+    embed: (perms & EMBED_LINKS) !== 0n,
+    blocker: { view: why(VIEW_CHANNEL, 'View Channel'), send: why(SEND_MESSAGES, 'Send Messages'), embed: why(EMBED_LINKS, 'Embed Links') },
+  };
+}
+
+export async function checkVerifyChannel(channelId: string | null): Promise<BanCheckLine[]> {
+  const lines: BanCheckLine[] = [];
+  const add = (ok: boolean, label: string, detail: string) => { lines.push({ ok, label, detail }); return ok; };
+  if (!channelId) { add(false, 'Verify channel', 'DISCORD_VERIFY_CHANNEL_ID is not set'); return lines; }
+  if (!botEnabled()) { add(false, 'Verify channel', 'DISCORD_BOT_TOKEN is not set'); return lines; }
+  const guildId = defaultGuildId();
+  const get = async (path: string) => {
+    const res = await fetch(`${API}${path}`, { headers: botAuth(), signal: AbortSignal.timeout(10_000) });
+    let body: unknown = null;
+    try { body = await res.json(); } catch { /* empty */ }
+    return { res, body };
+  };
+  try {
+    const meR = await get('/users/@me');
+    if (!add(meR.res.ok, 'Bot this site uses', meR.res.ok
+      ? `${(meR.body as { username: string }).username} (id ${(meR.body as { id: string }).id})`
+      : discordErrorText(meR.res.status, meR.body, 'sign in as'))) return lines;
+    const me = meR.body as { id: string; username: string };
+
+    // The channel list of the configured server says whether the channel is
+    // even in it, and carries its permission settings — readable here even
+    // when the channel itself is hidden from the bot.
+    if (!guildId) { add(false, 'Verify channel', 'DISCORD_GUILD_ID is not set'); return lines; }
+    const [gR, chR, bmR] = await Promise.all([
+      get(`/guilds/${guildId}`), get(`/guilds/${guildId}/channels`), get(`/guilds/${guildId}/members/${me.id}`),
+    ]);
+    if (!add(gR.res.ok, 'Server', gR.res.ok ? `"${(gR.body as { name: string }).name}"` : discordErrorText(gR.res.status, gR.body, 'read the server for'))) return lines;
+    if (!add(chR.res.ok && bmR.res.ok, 'Channel list', chR.res.ok && bmR.res.ok ? 'readable'
+      : discordErrorText((chR.res.ok ? bmR : chR).res.status, (chR.res.ok ? bmR : chR).body, 'read the channels for'))) return lines;
+    const guild = gR.body as { name: string; owner_id: string; roles: DiscordRole[] };
+    const chans = chR.body as { id: string; name: string; type: number; parent_id?: string | null; permission_overwrites?: Overwrite[] }[];
+    const ch = chans.find(c => c.id === channelId);
+    if (!add(!!ch, 'Verify channel', ch
+      ? `#${ch.name}`
+      : `channel ${channelId} is not in "${guild.name}" — DISCORD_VERIFY_CHANNEL_ID is a channel in another server, or it was deleted and recreated with a new id`)) return lines;
+    const botRoles = (bmR.body as { roles?: string[] }).roles ?? [];
+    const access = channelAccess({
+      guildId, ownerId: guild.owner_id, roles: guild.roles,
+      member: { id: me.id, roleIds: botRoles }, overwrites: ch!.permission_overwrites ?? [],
+    });
+    const cat = ch!.parent_id ? chans.find(c => c.id === ch!.parent_id) : null;
+    const where = `#${ch!.name}${cat ? ` (in the "${cat.name}" category, whose settings it may be copying)` : ''}`;
+    add(access.view, `${me.username} can see ${where}`, access.view ? 'yes' : access.blocker.view!);
+    if (access.view) {
+      add(access.send, `${me.username} can post there`, access.send ? 'yes' : access.blocker.send!);
+      add(access.embed, `${me.username} can post the panel (Embed Links)`, access.embed ? 'yes' : access.blocker.embed!);
+    }
+  } catch (e) {
+    add(false, 'Verify channel', `could not reach Discord: ${e instanceof Error ? e.message : 'network error'}`);
+  }
+  return lines;
 }

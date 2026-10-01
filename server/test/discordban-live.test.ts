@@ -22,10 +22,15 @@ type Reply = { status: number; body?: unknown };
 let banReply: Reply = { status: 204 };
 let mfa = 0;
 let botTimedOutUntil: string | null = null;
+const VERIFY = '900000000000000100';
+const CAT = '900000000000000101';
+let verifyOverwrites: { id: string; type: 0 | 1; allow: string; deny: string }[] = [];
 let lastBan: { path: string; auth: string | undefined; reason: string | undefined; body: string } | null = null;
 
 const roles = [
-  { id: GUILD, name: '@everyone', permissions: '0', position: 0 },
+  // @everyone can view, post and embed, as in any real server; Ban Members
+  // comes only from the bot's own role.
+  { id: GUILD, name: '@everyone', permissions: String((1n << 10n) | (1n << 11n) | (1n << 14n)), position: 0 },
   { id: 'r-mod', name: 'Poker Bot', permissions: String(1n << 2n), position: 5 },
   { id: 'r-vip', name: 'VIP', permissions: '0', position: 9 },
   { id: 'r-verified', name: 'Verified', permissions: '0', position: 2 },
@@ -52,6 +57,12 @@ const srv = createServer((req: IncomingMessage, res: ServerResponse) => {
     const self = auth === 'Bot other-token' ? { id: OTHER_BOT, username: 'WAWA Giveaways' } : { id: BOT, username: 'PokerBot' };
     if (url === '/users/@me') return send(res, { status: 200, body: self });
     if (url === `/guilds/${GUILD}`) return send(res, { status: 200, body: { id: GUILD, name: 'WAWA', owner_id: OWNER, roles, mfa_level: mfa } });
+    if (url === `/guilds/${GUILD}/channels`) {
+      return send(res, { status: 200, body: [
+        { id: CAT, name: 'Poker', type: 4, permission_overwrites: [] },
+        { id: VERIFY, name: 'poker-verify', type: 0, parent_id: CAT, permission_overwrites: verifyOverwrites },
+      ] });
+    }
     const m = url.match(new RegExp(`^/guilds/${GUILD}/members/(\\d+)$`));
     if (m) {
       const r = members[m[1]];
@@ -75,7 +86,10 @@ const port = (srv.address() as { port: number }).port;
 process.env.DISCORD_API_BASE = `http://127.0.0.1:${port}`;
 process.env.DISCORD_BOT_TOKEN = 'test-token';
 process.env.DISCORD_GUILD_ID = GUILD;
-const { auditReasonHeader, banAbility, banFromGuild, checkBanSetup, discordErrorText, explainBanRefusal } = await import('../src/discord.ts');
+const {
+  auditReasonHeader, banAbility, banFromGuild, channelAccess, checkBanSetup, checkVerifyChannel, discordErrorText,
+  explainBanRefusal,
+} = await import('../src/discord.ts');
 
 test.after(() => srv.close());
 
@@ -229,4 +243,100 @@ test('the refusal names both role lists in order, so the operator can see the on
 test('when every check passes the explanation says so rather than inventing a cause', async () => {
   const why = await explainBanRefusal(LOW);
   assert.match(why!, /every check passes for PokerBot/);
+});
+
+// ---- the verify channel: "Missing Access" when posting the panel ----
+
+const VIEW = String(1n << 10n);
+const SENDP = String(1n << 11n);
+const EMBED = String(1n << 14n);
+const baseRoles = [
+  { id: GUILD, name: '@everyone', permissions: String((1n << 10n) | (1n << 11n) | (1n << 14n)), position: 0 },
+  { id: 'r-mod', name: 'Poker Bot', permissions: '0', position: 5 },
+  { id: 'r-member', name: 'Members', permissions: '0', position: 1 },
+];
+const acc = (roleIds: string[], overwrites: { id: string; type: 0 | 1; allow: string; deny: string }[], memberId = BOT) =>
+  channelAccess({ guildId: GUILD, ownerId: OWNER, roles: baseRoles, member: { id: memberId, roleIds }, overwrites });
+
+test('a private channel hides itself from the bot unless the bot is let in', () => {
+  // The usual staff-only setup: @everyone denied View Channel.
+  const hidden = acc(['r-mod'], [{ id: GUILD, type: 0, allow: '0', deny: VIEW }]);
+  assert.equal(hidden.view, false);
+  assert.match(hidden.blocker.view!, /denies View Channel to @everyone and allows it to none of the bot's roles/);
+  // Let the bot's role in, and it can see it again.
+  const letIn = acc(['r-mod'], [{ id: GUILD, type: 0, allow: '0', deny: VIEW }, { id: 'r-mod', type: 0, allow: VIEW, deny: '0' }]);
+  assert.equal(letIn.view, true);
+  // Or the bot itself.
+  assert.equal(acc(['r-mod'], [{ id: GUILD, type: 0, allow: '0', deny: VIEW }, { id: BOT, type: 1, allow: VIEW, deny: '0' }]).view, true);
+});
+
+test('a role the bot holds being denied is named', () => {
+  const r = acc(['r-mod', 'r-member'], [{ id: 'r-member', type: 0, allow: '0', deny: VIEW }]);
+  assert.equal(r.view, false);
+  assert.match(r.blocker.view!, /denies View Channel to "Members", which the bot has/);
+  // An allow on another of its roles wins over a deny on one: Discord unions them.
+  const both = acc(['r-mod', 'r-member'], [{ id: 'r-member', type: 0, allow: '0', deny: VIEW }, { id: 'r-mod', type: 0, allow: VIEW, deny: '0' }]);
+  assert.equal(both.view, true);
+});
+
+test('a setting on the bot itself beats its roles', () => {
+  const r = acc(['r-mod'], [{ id: 'r-mod', type: 0, allow: VIEW, deny: '0' }, { id: BOT, type: 1, allow: '0', deny: VIEW }]);
+  assert.equal(r.view, false);
+  assert.match(r.blocker.view!, /setting for the bot itself/);
+});
+
+test('can see but not post, or post but not embed, is told apart', () => {
+  const r = acc(['r-mod'], [{ id: GUILD, type: 0, allow: '0', deny: String((1n << 11n) | (1n << 14n)) }]);
+  assert.equal(r.view, true);
+  assert.equal(r.send, false);
+  assert.match(r.blocker.send!, /Send Messages/);
+  assert.match(r.blocker.embed!, /Embed Links/);
+});
+
+test('Administrator and the owner see everything', () => {
+  const adminRoles = [...baseRoles, { id: 'r-admin', name: 'Admin', permissions: String(1n << 3n), position: 9 }];
+  const r = channelAccess({ guildId: GUILD, ownerId: OWNER, roles: adminRoles, member: { id: BOT, roleIds: ['r-admin'] },
+    overwrites: [{ id: GUILD, type: 0, allow: '0', deny: VIEW }] });
+  assert.ok(r.view && r.send && r.embed);
+});
+
+test('the live check names the bot, the channel and the setting in the way', async () => {
+  verifyOverwrites = [{ id: GUILD, type: 0, allow: '0', deny: VIEW }];
+  try {
+    const lines = await checkVerifyChannel(VERIFY);
+    assert.match(lines.find(l => l.label === 'Bot this site uses')!.detail, /PokerBot/);
+    const bad = lines.find(l => !l.ok)!;
+    assert.match(bad.label, /PokerBot can see #poker-verify \(in the "Poker" category/);
+    assert.match(bad.detail, /@everyone/);
+  } finally {
+    verifyOverwrites = [];
+  }
+});
+
+test('the wrong bot is what the check shows, when it is the wrong bot', async () => {
+  process.env.DISCORD_BOT_TOKEN = 'other-token';
+  verifyOverwrites = [
+    { id: GUILD, type: 0, allow: '0', deny: VIEW },
+    { id: 'r-mod', type: 0, allow: VIEW, deny: '0' }, // PokerBot's role is let in; the giveaway bot's is not
+  ];
+  try {
+    const lines = await checkVerifyChannel(VERIFY);
+    assert.match(lines.find(l => l.label === 'Bot this site uses')!.detail, /WAWA Giveaways/);
+    assert.match(lines.find(l => !l.ok)!.label, /^WAWA Giveaways can see/);
+  } finally {
+    process.env.DISCORD_BOT_TOKEN = 'test-token';
+    verifyOverwrites = [];
+  }
+});
+
+test('a channel id from somewhere else is called that, not a permission problem', async () => {
+  const bad = (await checkVerifyChannel('123456789012345678')).find(l => !l.ok)!;
+  assert.equal(bad.label, 'Verify channel');
+  assert.match(bad.detail, /is not in "WAWA"/);
+});
+
+test('an open channel passes every line', async () => {
+  verifyOverwrites = [];
+  const lines = await checkVerifyChannel(VERIFY);
+  assert.ok(lines.every(l => l.ok), JSON.stringify(lines));
 });
