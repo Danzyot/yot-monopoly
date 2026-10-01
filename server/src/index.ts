@@ -101,7 +101,22 @@ app.set('trust proxy', trustedProxyHops());
 
 // Discord interactions must be verified against the RAW body, so this route
 // is mounted with a raw parser ahead of express.json().
+// The last few things Discord sent here, kept in memory. "The button times
+// out" has two very different causes — the click never arrives, or it arrives
+// and is turned away — and nothing visible tells them apart. This does: press
+// the button once, then "Check Discord setup" says which.
+interface IxSeen { at: number; ok: boolean; what: string; ms: number }
+const ixSeen: IxSeen[] = [];
+function noteIx(e: IxSeen) { ixSeen.push(e); if (ixSeen.length > 10) ixSeen.shift(); }
+function describeIx(i: { type?: number; data?: { custom_id?: string } } | null): string {
+  if (!i) return 'unreadable body';
+  if (i.type === 1) return 'endpoint check (PING)';
+  const cid = i.data?.custom_id;
+  return cid ? `click on "${cid}"` : `interaction type ${i.type}`;
+}
+
 app.post('/api/discord/interactions', express.raw({ type: '*/*', limit: '1mb' }), (req, res) => {
+  const t0 = Date.now();
   void (async () => {
     // Every application that sends interactions here signs with its own key;
     // any of them may vouch for a request. See discordPublicKeys().
@@ -111,6 +126,14 @@ app.post('/api/discord/interactions', express.raw({ type: '*/*', limit: '1mb' })
     const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from('');
     // Discord probes with a deliberately bad signature and requires a 401.
     if (!keys.length || !sig || !ts || !keys.some(k => validSignature(k, sig, ts, raw))) {
+      let peek: { type?: number; data?: { custom_id?: string } } | null = null;
+      try { peek = JSON.parse(raw.toString('utf8')); } catch { /* not JSON */ }
+      // Discord's own save-time probe sends one deliberately bad signature;
+      // that is expected and not worth reporting as a problem.
+      noteIx({ at: Date.now(), ok: false, ms: Date.now() - t0,
+        what: `${describeIx(peek)} REFUSED — ${!keys.length ? 'no DISCORD_PUBLIC_KEY set'
+          : !sig || !ts ? 'no signature headers (not from Discord)'
+          : `its signature matches none of the ${keys.length} key${keys.length === 1 ? '' : 's'} in DISCORD_PUBLIC_KEY`}` });
       res.status(401).json({ error: 'bad signature', publicKeyConfigured: keys.length > 0 });
       return;
     }
@@ -122,9 +145,14 @@ app.post('/api/discord/interactions', express.raw({ type: '*/*', limit: '1mb' })
       return;
     }
     const mine = handleInteraction(interaction as Parameters<typeof handleInteraction>[0]);
-    if (mine) { res.status(mine.status).json(mine.body); return; }
+    if (mine) {
+      noteIx({ at: Date.now(), ok: true, ms: Date.now() - t0, what: `${describeIx(interaction as never)} answered here` });
+      res.status(mine.status).json(mine.body);
+      return;
+    }
     // This site owns its Discord application outright — there is nowhere to
     // pass an unrecognised interaction on to.
+    noteIx({ at: Date.now(), ok: false, ms: Date.now() - t0, what: `${describeIx(interaction as never)} not recognised` });
     res.status(200).json({ type: 4, data: { content: 'Unsupported interaction.', flags: 64 } });
   })();
 });
@@ -1157,7 +1185,18 @@ app.get('/api/admin/discord/ban-check', (req, res) => {
         process.env.RAILWAY_STATIC_URL, ...(process.env.RAILWAY_DOMAINS ?? '').split(','),
       ].map(h => hostOf(h ?? null)).filter((h): h is string => !!h);
       const ixLines = chan ? await checkInteractions(siteHosts, INSTANCE_ID) : [];
-      res.json({ lines: [...banLines, ...chanLines, ...ixLines], target: row?.name ?? target });
+      const ago = (t: number) => { const s = Math.round((Date.now() - t) / 1000); return s < 90 ? `${s}s ago` : `${Math.round(s / 60)} min ago`; };
+      const recent = [...ixSeen].reverse().slice(0, 3);
+      const clickLine = chan ? [{
+        ok: recent.length > 0 && recent[0].ok,
+        label: 'Last Discord click this server received',
+        detail: recent.length === 0
+          ? `none since the server started ${ago(bootedAt)} — press Verify in Discord, then check again. If this still says none, `
+            + 'the click is not reaching this server: the Interactions Endpoint URL was not saved on the bot\'s application, '
+            + 'or points somewhere else (see "Verify button goes to" above).'
+          : recent.map(r => `${ago(r.at)}: ${r.what}${r.ok ? ` in ${r.ms}ms` : ''}`).join(' · '),
+      }] : [];
+      res.json({ lines: [...banLines, ...chanLines, ...ixLines, ...clickLine], target: row?.name ?? target });
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : 'Check failed' });
     }
