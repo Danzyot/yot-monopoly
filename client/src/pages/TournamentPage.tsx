@@ -187,7 +187,7 @@ export default function TournamentPage() {
 
   // Four ways to bar someone, from the screen that lists everyone in the
   // event — a player who is not at your table has to be reachable too.
-  const confirmBan = async (reason: string, discordBan = false) => {
+  const confirmBan = async (reason: string, discordBan = false, alsoBan: string[] = []) => {
     if (!pendingBan) return;
     const { playerId, name, kind, scope } = pendingBan;
     setPendingBan(null);
@@ -196,9 +196,9 @@ export default function TournamentPage() {
         kind, scope,
         gameId: scope === 'game' ? id : null,
         ...(kind === 'ip' ? { playerId } : { value: playerId }),
-        name, reason, discordBan,
+        name, reason, discordBan, alsoBan,
       });
-      const base = `${name} suspended ${scope === 'game' ? `from ${view.name}` : 'for life'}`;
+      const base = `${name} suspended ${scope === 'game' ? `from ${view.name}` : 'for life'}` + (r.alsoBanned?.length ? `, with ${r.alsoBanned.length} more account${r.alsoBanned.length === 1 ? '' : 's'}: ${r.alsoBanned.join(', ')}` : '');
       // A Discord ban that quietly did not happen is worse than one never
       // attempted — the operator would believe they were gone.
       const failed = !!r.discordNote && /NOT on Discord/.test(r.discordNote);
@@ -779,7 +779,7 @@ export default function TournamentPage() {
       {pendingBan && (
         <BanDialog
           target={pendingBan}
-          onConfirm={(r, d) => void confirmBan(r, d)}
+          onConfirm={(r, d, _bp, alts) => void confirmBan(r, d, alts)}
           onCancel={() => setPendingBan(null)}
         />
       )}

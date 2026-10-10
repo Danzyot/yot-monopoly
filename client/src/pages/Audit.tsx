@@ -160,12 +160,12 @@ export default function Audit() {
   // gets identified, so the action belongs on the row that proves it. These
   // are the lifetime ones — a single event is barred from that event's own
   // screen, where the game is unambiguous.
-  const confirmBan = async (reason: string, discordBan: boolean, banPlayers: boolean) => {
+  const confirmBan = async (reason: string, discordBan: boolean, banPlayers: boolean, alsoBan: string[] = []) => {
     if (!pendingBan) return;
     const { value, name, kind } = pendingBan;
     setPendingBan(null);
     try {
-      const r = await api.ban({ kind, scope: 'lifetime', value, name, reason, discordBan, banPlayers });
+      const r = await api.ban({ kind, scope: 'lifetime', value, name, reason, discordBan, banPlayers, alsoBan });
       const gone = r.ejected.tournaments + r.ejected.tables;
       const also = r.alsoBanned?.length
         ? ` — and ${r.alsoBanned.length} account${r.alsoBanned.length === 1 ? '' : 's'}: ${r.alsoBanned.join(', ')}`
@@ -299,7 +299,7 @@ export default function Audit() {
       {pendingBan && (
         <BanDialog
           target={pendingBan}
-          onConfirm={(r, d, bp) => void confirmBan(r, d, bp)}
+          onConfirm={(r, d, bp, alts) => void confirmBan(r, d, bp, alts)}
           onCancel={() => setPendingBan(null)}
         />
       )}

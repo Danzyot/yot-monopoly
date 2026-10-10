@@ -10,7 +10,7 @@ import { reportFlaggedHands } from './discord.ts';
 import { CAT, categoryOf, evaluate7 } from './engine/evaluator.ts';
 import type { Table } from './engine/table.ts';
 import { countryOf } from './geo.ts';
-import { normaliseIp } from './bans.ts';
+import { banAt, normaliseIp } from './bans.ts';
 import { isInfraPeer } from './net.ts';
 import { classify } from './vpn.ts';
 import { DATA_DIR } from './paths.ts';
@@ -360,7 +360,7 @@ export interface AltGroup {
   // Each address carries the accounts seen from it, so the panel can offer
   // "ban this address AND the accounts behind it" without a second round trip
   // and without the operator having to guess how many people that is.
-  addresses: { ip: string; country: string | null; accounts: { id: string; name: string }[] }[];
+  addresses: { ip: string; country: string | null; accounts: { id: string; name: string; avatar: string; discordTag: string | null; discordId: string | null }[] }[];
   score: number;      // 0-100, higher = more worth a look
   reasons: string[];
   playedTogether: number; // pairs in this group who shared at least one game
@@ -586,6 +586,59 @@ export function accountsOnAddress(ip: string): { id: string; name: string }[] {
   return out;
 }
 
+// Everyone who looks like the same person as one account: the list the ban
+// screen offers to ban in the same breath. Banning one alt of four achieves
+// nothing — the other three are still sitting in the event.
+//
+// Two kinds of evidence, strongest first:
+//   - same browser: the stored browser id matches. One phone, two accounts.
+//   - shared address: seen from the same address, unless that address is
+//     crowded (more than CROWD_LIMIT accounts) — a carrier or a VPN exit holds
+//     strangers, and offering to ban all of them would be a trap.
+// Same browser TRAITS alone are not listed: identical phones produce identical
+// traits, so on its own it names a model of phone, not a person.
+export interface SuspectedAlt {
+  id: string; name: string; avatar: string;
+  discordTag: string | null; discordId: string | null;
+  reasons: string[];
+  strength: 'browser' | 'address';
+  lastSeen: number;
+  alreadyBanned: boolean;
+}
+
+export function suspectedAlts(playerId: string): SuspectedAlt[] {
+  const me = players.get(playerId);
+  if (!me) return [];
+  const found = new Map<string, { rec: PlayerRecord; reasons: Set<string>; browser: boolean }>();
+  const note = (rec: PlayerRecord, why: string, browser: boolean) => {
+    if (rec.id === me.id) return;
+    const f = found.get(rec.id) ?? { rec, reasons: new Set<string>(), browser: false };
+    f.reasons.add(why);
+    f.browser ||= browser;
+    found.set(rec.id, f);
+  };
+  for (const p of players.values()) {
+    if ([...me.devices.keys()].some(d => p.devices.has(d))) note(p, 'same browser', true);
+  }
+  for (const ip of me.ips.keys()) {
+    if (isInfraPeer(ip)) continue;
+    const here = [...players.values()].filter(p => [...p.ips.keys()].some(x => normaliseIp(x) === normaliseIp(ip)));
+    if (here.length > CROWD_LIMIT) continue;
+    for (const p of here) note(p, `same address ${ip}`, false);
+  }
+  return [...found.values()]
+    .map(f => ({
+      id: f.rec.id, name: f.rec.name, avatar: f.rec.avatar,
+      discordTag: f.rec.discordTag, discordId: f.rec.discordId,
+      reasons: [...f.reasons],
+      strength: (f.browser ? 'browser' : 'address') as SuspectedAlt['strength'],
+      lastSeen: f.rec.lastSeen,
+      alreadyBanned: !!banAt('player', f.rec.id),
+    }))
+    .sort((a, b) => (a.strength === b.strength ? 0 : a.strength === 'browser' ? -1 : 1) || b.lastSeen - a.lastSeen)
+    .slice(0, 30);
+}
+
 export function altGroups(): AltGroup[] {
   const byIp = new Map<string, PlayerRecord[]>();
   for (const p of players.values()) {
@@ -679,7 +732,9 @@ export function altGroups(): AltGroup[] {
         // From byIp rather than the group's roster: the group may span four
         // addresses, and banning one of them must only reach the people
         // actually behind THAT one.
-        accounts: (byIp.get(ip) ?? []).map(p => ({ id: p.id, name: p.name })),
+        accounts: (byIp.get(ip) ?? []).map(p => ({
+          id: p.id, name: p.name, avatar: p.avatar, discordTag: p.discordTag, discordId: p.discordId,
+        })),
       })),
       score,
       reasons,

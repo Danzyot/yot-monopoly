@@ -107,7 +107,7 @@ export const api = {
       key: string;
       // Each address carries who is behind it, so a ban started from here can
       // offer to take the accounts with it and name them first.
-      addresses: { ip: string; country: string | null; accounts: { id: string; name: string }[] }[];
+      addresses: { ip: string; country: string | null; accounts: { id: string; name: string; avatar: string; discordTag: string | null; discordId: string | null }[] }[];
       // Reading order, not a probability of guilt — see altGroups() for how it
       // is arrived at and why a big group scores low rather than high.
       score: number; reasons: string[]; playedTogether: number;
@@ -283,6 +283,9 @@ export const api = {
     // For an IP ban: also suspend the accounts seen from that address, so the
     // same people cannot simply come back from a phone.
     banPlayers?: boolean;
+    // Further accounts — the subject's suspected alts — banned in the same
+    // action, with the same reach.
+    alsoBan?: string[];
   }) =>
     request<{
       ban: BanRow; ejected: { tournaments: number; tables: number };
@@ -296,6 +299,13 @@ export const api = {
   discordBanCheck: (target?: string) =>
     request<{ lines: { ok: boolean; label: string; detail: string }[]; target?: string | null }>(
       `/api/admin/discord/ban-check${target ? `?target=${encodeURIComponent(target)}` : ''}`),
+  // Who else this account looks like: same browser, or a shared address that
+  // is not a carrier's. For the ban screen.
+  suspectedAlts: (playerId: string) =>
+    request<{ alts: {
+      id: string; name: string; avatar: string; discordTag: string | null; discordId: string | null;
+      reasons: string[]; strength: 'browser' | 'address'; lastSeen: number; alreadyBanned: boolean;
+    }[] }>(`/api/admin/players/${encodeURIComponent(playerId)}/alts`),
   unban: (b: BanRow) => {
     const q = b.scope === 'game' ? `?scope=game&gameId=${encodeURIComponent(b.gameId ?? '')}` : '';
     return request<{ ok: true }>(

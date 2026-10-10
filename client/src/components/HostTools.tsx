@@ -47,7 +47,7 @@ export default function HostTools({ view, onClose }: { view: TableView; onClose:
   const gameId = view.tournamentId ?? view.id;
   const gameLabel = view.tournamentId ? 'this tournament' : 'this table';
 
-  const confirmBan = async (reason: string, discordBan = false) => {
+  const confirmBan = async (reason: string, discordBan = false, alsoBan: string[] = []) => {
     if (!pending) return;
     const { playerId, name, kind, scope } = pending;
     setPending(null);
@@ -57,9 +57,9 @@ export default function HostTools({ view, onClose }: { view: TableView; onClose:
         kind, scope,
         gameId: scope === 'game' ? gameId : null,
         ...(kind === 'ip' ? { playerId } : { value: playerId }),
-        name, reason, discordBan,
+        name, reason, discordBan, alsoBan,
       });
-      const base = `${name} suspended ${scope === 'game' ? `from ${gameLabel}` : 'for life'}`;
+      const base = `${name} suspended ${scope === 'game' ? `from ${gameLabel}` : 'for life'}` + (r.alsoBanned?.length ? `, with ${r.alsoBanned.length} more account${r.alsoBanned.length === 1 ? '' : 's'}: ${r.alsoBanned.join(', ')}` : '');
       // A Discord ban that quietly did not happen is worse than one never
       // attempted — the operator would believe they were gone.
       const failed = !!r.discordNote && /NOT on Discord/.test(r.discordNote);
@@ -166,7 +166,7 @@ export default function HostTools({ view, onClose }: { view: TableView; onClose:
       {pending && (
         <BanDialog
           target={pending}
-          onConfirm={(r, d) => void confirmBan(r, d)}
+          onConfirm={(r, d, _bp, alts) => void confirmBan(r, d, alts)}
           onCancel={() => setPending(null)}
         />
       )}

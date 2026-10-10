@@ -4510,3 +4510,28 @@ input[type='time']:hover::-webkit-calendar-picker-indicator {
 }
 .dban-verdict.ok { background: color-mix(in srgb, var(--green) 12%, transparent); }
 .dban-verdict.bad { background: color-mix(in srgb, var(--red) 12%, transparent); }
+
+/* The ban screen's account list: suspected alts, or everyone on an address.
+   A face, a name and an id per row, because "ban these four" should be
+   agreed to looking at who they are, not at a count. */
+.modal.modal-wide { max-width: 560px; }
+.ban-alts {
+  display: flex; flex-direction: column; gap: 6px; margin-top: 8px;
+  max-height: 260px; overflow-y: auto; padding-right: 2px;
+}
+.ban-alt {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--panel-2);
+}
+.ban-alt.banned { opacity: 0.55; }
+.ban-alt-box { width: 16px; height: 16px; flex: 0 0 16px; accent-color: var(--red); }
+.ban-alt-who { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ban-alt-name { font-weight: 700; font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ban-alt-tag { font-weight: 500; color: var(--text-dim); }
+.ban-alt-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.ban-alt-reason {
+  font-size: 0.68rem; font-weight: 700; color: var(--text-dim);
+  border: 1px solid var(--line); border-radius: 999px; padding: 0 7px;
+}
+.ban-alts-all { margin-top: 2px; }

@@ -42,6 +42,18 @@ export interface Ban {
   // did rather than what Discord currently holds, an unban here can never
   // undo a ban a moderator made by hand for something unrelated.
   discordBanned?: boolean;
+  // For an account ban: the Discord account linked to it when it was banned.
+  // A guest who links Discord afterwards keeps a g_ id, so without this the
+  // same person on the same Discord could make a fresh guest, link it, and be
+  // let straight back in.
+  discordId?: string;
+}
+
+// The Discord snowflake an account id or bare id stands for, if any.
+function snowflakeOf(v: string | null | undefined): string | null {
+  if (!v) return null;
+  if (v.startsWith('dc_')) return v.slice(3);
+  return /^\d{15,22}$/.test(v) ? v : null;
 }
 
 let bans: Ban[] = [];
@@ -167,6 +179,7 @@ export function addBan(b: Omit<Ban, 'at' | 'scope' | 'gameId' | 'gameName'> & {
     // thing — this site issued no Discord ban — and leaving it out keeps
     // every row written before the feature existed honest by default.
     ...(b.discordBanned ? { discordBanned: true as const } : {}),
+    ...(b.kind === 'player' && snowflakeOf(b.discordId ?? null) ? { discordId: snowflakeOf(b.discordId ?? null)! } : {}),
   };
   // Re-banning updates the note rather than stacking duplicates. A re-ban
   // that did NOT touch Discord must not erase the record of one that did:
@@ -174,6 +187,7 @@ export function addBan(b: Omit<Ban, 'at' | 'scope' | 'gameId' | 'gameName'> & {
   const i = bans.findIndex(x => key(x) === key(ban));
   if (i >= 0) {
     if (bans[i].discordBanned) ban.discordBanned = true;
+    if (bans[i].discordId && !ban.discordId) ban.discordId = bans[i].discordId;
     bans[i] = ban;
   }
   else bans.push(ban);
@@ -226,7 +240,14 @@ export function findBan(
   const ip = normaliseIp(p.ip);
   const matchesWho = (b: Ban) => {
     if (b.kind === 'ip') return !!ip && normaliseIp(b.value) === ip;
-    return (!!p.id && b.value === p.id) || (!!p.discordId && b.value === p.discordId);
+    // By account id, or by the Discord account behind it. A ban on dc_123 is
+    // a ban on Discord 123 whatever account it next turns up on — including a
+    // guest that linked it, whose id is g_… — and so is a ban recorded with
+    // the Discord account the banned guest had linked.
+    if (!!p.id && b.value === p.id) return true;
+    const visitorDiscord = snowflakeOf(p.discordId ?? null) ?? snowflakeOf(p.id ?? null);
+    if (!visitorDiscord) return false;
+    return snowflakeOf(b.value) === visitorDiscord || b.discordId === visitorDiscord;
   };
   // Lifetime first: it is the more serious answer, and the one worth showing.
   for (const b of bans) {

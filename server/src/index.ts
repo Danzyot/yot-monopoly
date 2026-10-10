@@ -20,7 +20,7 @@ import {
   primeVerifyChannel, startCode, verifyChannelId, verifyChannelName,
 } from './verifycode.ts';
 import {
-  accountsOnAddress, altGroups, auditCounts, sharedDevices, connectionsFor, flaggedHands, forgetPlayer, loadAudit,
+  accountsOnAddress, altGroups, auditCounts, suspectedAlts, sharedDevices, connectionsFor, flaggedHands, forgetPlayer, loadAudit,
   playerRows, recentActions,
   saveAudit, suspiciousPairs, standingIdentities,
 } from './audit.ts';
@@ -1203,6 +1203,13 @@ app.get('/api/admin/discord/ban-check', (req, res) => {
   })();
 });
 
+// The suspected alts of one account, for the ban screen: who else is behind
+// the same browser or a shared (non-crowded) address, with face and ids.
+app.get('/api/admin/players/:id/alts', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  res.json({ alts: suspectedAlts(String(req.params.id)) });
+});
+
 app.post('/api/admin/bans', (req, res) => {
   void (async () => {
   const me = requireAdmin(req, res);
@@ -1226,50 +1233,92 @@ app.post('/api/admin/bans', (req, res) => {
       value = row?.ips.at(-1) ?? '';
       if (!value) throw new Error('No address on record for that player yet');
     }
-    // Close the Discord door too, if the operator asked. Only a player ban
-    // can: an address has no Discord account behind it, and a guest has none
-    // either. Done BEFORE the row is stored so a refusal from Discord — the
-    // bot outranked by the target, no Ban Members permission — is reported
-    // instead of leaving a row claiming something that never happened.
-    let discordBanned = false;
-    let discordNote: string | null = null;
-    if (b.discordBan === true) {
-      // The site ban is the primary action and always goes through. Discord
-      // failing — the bot outranked by the target, no Ban Members permission,
-      // no linked account — must not throw away the ban the operator actually
-      // came here to make. It is reported instead, so they know to finish the
-      // job by hand rather than believing it is done.
+    // Every ACCOUNT this one action bans, beyond the row named in the request.
+    //
+    // An address ban on its own is a door, not a verdict: the same user, on
+    // the same Discord, comes straight back from a phone or another network.
+    // So an address ban started from a player (the table's or the standings'
+    // "IP" buttons) bans that player's account as well, which follows them to
+    // any address. The operator can also tick the player's suspected alts on
+    // the ban screen and ban all of them at once, and an address ban from the
+    // audit can take every account seen on that address.
+    const extra = new Map<string, string>(); // account id -> name
+    const nameOf = (id: string) => playerRows().find(p => p.id === id)?.name ?? id;
+    if (kind === 'ip' && b.playerId) extra.set(String(b.playerId), String(b.name ?? '') || nameOf(String(b.playerId)));
+    if (Array.isArray(b.alsoBan)) {
+      for (const id of (b.alsoBan as unknown[]).slice(0, 50)) {
+        if (typeof id === 'string' && id.trim()) extra.set(id.trim(), nameOf(id.trim()));
+      }
+    }
+    if (kind === 'ip' && b.banPlayers === true) {
+      for (const p of accountsOnAddress(value)) extra.set(p.id, p.name);
+    }
+    if (kind === 'player') extra.delete(value);
+
+    // Close the Discord door too, if the operator asked — for every account
+    // banned here that has a Discord account behind it. Done BEFORE the rows
+    // are stored, so a refusal from Discord is reported rather than leaving a
+    // row that claims something that never happened. The site ban is the
+    // primary action and always goes through; Discord failing is reported so
+    // the operator can finish by hand rather than believe it is done.
+    const discordOne = async (accountId: string, reportGuests: boolean): Promise<{ ok: boolean; why: string | null }> => {
       let snowflake: string | null = null;
       try {
-        if (kind !== 'player') {
-          throw new Error('an address has no Discord account behind it');
+        // A site id (dc_…, g_…) or the bare snowflake: the dashboard's form
+        // takes either, and a snowflake nobody signed in with is still
+        // bannable on Discord — it is exactly what Discord wants.
+        const row = playerRows().find(p => p.id === accountId || p.discordVerifiedId === accountId);
+        snowflake = row?.discordVerifiedId ?? (/^\d{15,22}$/.test(accountId) ? accountId : null);
+        if (!snowflake) {
+          return { ok: false, why: reportGuests ? `${row?.name ?? 'they'} signed in as a guest — no Discord account to ban` : null };
         }
-        // The dashboard's form takes "a player or Discord id", so the value
-        // may be a site id (dc_…, g_…) or the bare snowflake. Look the row up
-        // either way; a bare snowflake nobody has signed in with is still
-        // bannable on Discord — the operator gave us exactly what Discord wants.
-        const row = playerRows().find(p => p.id === value || p.discordVerifiedId === value);
-        snowflake = row?.discordVerifiedId ?? (/^\d{15,22}$/.test(value) ? value : null);
-        if (!snowflake) throw new Error(`${row?.name ?? 'they'} signed in as a guest — no Discord account to ban`);
         await banFromGuild(snowflake, String(b.reason ?? ''));
-        discordBanned = true;
-        discordNote = 'Banned from Discord too.';
+        return { ok: true, why: null };
       } catch (e) {
         let why = e instanceof Error ? e.message : 'unknown error';
         // A 403 is Discord saying "Missing Permissions" for any of half a
-        // dozen reasons it will not tell apart. Ask it: the check signs in
-        // with the same token against the same server and this same player,
-        // and names the first thing that is not so — the bot's name, the
-        // server's name, both role lists.
+        // dozen reasons it will not tell apart. Ask it, and name the first
+        // thing that is not so.
         if ((e as { status?: number }).status === 403 && snowflake) {
           const cause = await explainBanRefusal(snowflake);
           if (cause) why = `${cause} (Discord ${(e as { status: number }).status}`
             + `${(e as { code?: number | null }).code ? `/${(e as { code: number }).code}` : ''})`;
         }
-        discordNote = `Banned here, but NOT on Discord: ${why}`;
+        return { ok: false, why };
+      }
+    };
+
+    let discordBanned = false;
+    const discordOk: string[] = [];
+    const discordFail: string[] = [];
+    const extraDiscord = new Map<string, boolean>();
+    if (b.discordBan === true) {
+      if (kind === 'player') {
+        const r = await discordOne(value, true);
+        discordBanned = r.ok;
+        if (r.ok) discordOk.push(String(b.name ?? '') || nameOf(value));
+        else if (r.why) discordFail.push(r.why);
+      }
+      for (const [id, nm] of extra) {
+        // Guests among the extra accounts are simply skipped: there is nothing
+        // to ban, and saying so for each would bury the result that matters.
+        const r = await discordOne(id, false);
+        extraDiscord.set(id, r.ok);
+        if (r.ok) discordOk.push(nm);
+        else if (r.why) discordFail.push(`${nm}: ${r.why}`);
+      }
+      if (kind === 'ip' && extra.size === 0) {
+        discordFail.push('an address on its own has no Discord account behind it');
       }
     }
+    const discordNote = b.discordBan === true
+      ? [
+        discordOk.length ? `Banned from Discord too${discordOk.length > 1 || kind !== 'player' ? `: ${discordOk.join(', ')}` : ''}.` : '',
+        discordFail.length ? `Banned here, but NOT on Discord: ${discordFail.join(' · ')}` : '',
+      ].filter(Boolean).join(' ') || null
+      : null;
 
+    const linkedDiscord = (id: string) => playerRows().find(p => p.id === id)?.discordVerifiedId ?? undefined;
     const ban = addBan({
       kind, scope, gameId, gameName: liveName,
       value,
@@ -1277,41 +1326,33 @@ app.post('/api/admin/bans', (req, res) => {
       reason: String(b.reason ?? ''),
       by: me.name,
       discordBanned,
+      ...(kind === 'player' ? { discordId: linkedDiscord(value) } : {}),
     });
 
-    // Who to remove: a player ban names them, an IP ban has to look them up.
-    const onAddress = kind === 'player' ? [] : accountsOnAddress(ban.value);
-    const targets = kind === 'player' ? [ban.value] : onAddress.map(p => p.id);
-
-    // Ban the accounts behind the address, not just the address.
-    //
-    // An address ban alone is a door, not a verdict: the accounts it shuts out
-    // are untouched, so the same people come back on a phone, a hotspot or a
-    // VPN under the same names, and the operator believes they are gone. When
-    // an address is banned because of who is behind it, the accounts have to
-    // go too.
-    //
-    // Off unless asked, because the other kind of address ban exists as well —
-    // one aimed at a place rather than at people — and a carrier or a VPN exit
-    // holds hundreds of strangers. The caller decides, with the count in front
-    // of them.
+    // The extra accounts, as player bans of the same reach. A game-scoped ban
+    // bars them from that game; a lifetime one from the site.
     const alsoBanned: string[] = [];
-    if (kind === 'ip' && b.banPlayers === true) {
-      for (const p of onAddress) {
-        // Lifetime regardless of the address ban's own scope: a game-scoped
-        // address ban still means these accounts are barred from that game,
-        // and addBan already carries the scope through.
-        addBan({
-          kind: 'player', scope, gameId, gameName: liveName,
-          value: p.id,
-          name: p.name,
-          reason: String(b.reason ?? '') || `Account behind banned address ${ban.value}`,
-          by: me.name,
-          discordBanned: false,
-        });
-        alsoBanned.push(p.name);
-      }
+    for (const [id, nm] of extra) {
+      addBan({
+        kind: 'player', scope, gameId, gameName: liveName,
+        value: id,
+        name: nm,
+        reason: String(b.reason ?? '') || (kind === 'ip' ? `Account behind banned address ${ban.value}` : `Suspected alt of ${String(b.name ?? '') || nameOf(value)}`),
+        by: me.name,
+        discordBanned: extraDiscord.get(id) === true,
+        discordId: linkedDiscord(id),
+      });
+      // The subject's own account is part of THEIR ban, not "one more".
+      if (!(kind === 'ip' && id === String(b.playerId ?? ''))) alsoBanned.push(nm);
     }
+
+    // Who to remove from live games: everyone banned here, plus — for an
+    // address — anyone else currently on it.
+    const onAddress = kind === 'player' ? [] : accountsOnAddress(ban.value);
+    const targets = [...new Set([
+      ...(kind === 'player' ? [ban.value] : onAddress.map(p => p.id)),
+      ...extra.keys(),
+    ])];
 
     let ejected = { tournaments: 0, tables: 0 };
     for (const pid of targets) {
