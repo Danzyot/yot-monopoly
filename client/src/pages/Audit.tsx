@@ -160,17 +160,17 @@ export default function Audit() {
   // gets identified, so the action belongs on the row that proves it. These
   // are the lifetime ones — a single event is barred from that event's own
   // screen, where the game is unambiguous.
-  const confirmBan = async (reason: string, discordBan: boolean, banPlayers: boolean, alsoBan: string[] = []) => {
+  const confirmBan = async (reason: string, discordBan: boolean, banPlayers: boolean, alsoBan: string[] = [], includeMain = true) => {
     if (!pendingBan) return;
     const { value, name, kind } = pendingBan;
     setPendingBan(null);
     try {
-      const r = await api.ban({ kind, scope: 'lifetime', value, name, reason, discordBan, banPlayers, alsoBan });
+      const r = await api.ban({ kind, scope: 'lifetime', value, name, reason, discordBan, banPlayers, alsoBan, skipPrimary: !includeMain });
       const gone = r.ejected.tournaments + r.ejected.tables;
       const also = r.alsoBanned?.length
         ? ` — and ${r.alsoBanned.length} account${r.alsoBanned.length === 1 ? '' : 's'}: ${r.alsoBanned.join(', ')}`
         : '';
-      const base = (gone
+      const base = !includeMain ? `${r.alsoBanned?.length ?? 0} alt${(r.alsoBanned?.length ?? 0) === 1 ? '' : 's'} of ${name} suspended${r.alsoBanned?.length ? `: ${r.alsoBanned.join(', ')}` : ''} — ${name} was not touched` : (gone
         ? `${name} suspended, and removed from ${gone} live game${gone === 1 ? '' : 's'}`
         : `${name} suspended`) + also;
       // A Discord ban that quietly did not happen is worse than one never
@@ -299,7 +299,7 @@ export default function Audit() {
       {pendingBan && (
         <BanDialog
           target={pendingBan}
-          onConfirm={(r, d, bp, alts) => void confirmBan(r, d, bp, alts)}
+          onConfirm={(r, d, bp, alts, main) => void confirmBan(r, d, bp, alts, main)}
           onCancel={() => setPendingBan(null)}
         />
       )}

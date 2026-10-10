@@ -47,7 +47,7 @@ export default function HostTools({ view, onClose }: { view: TableView; onClose:
   const gameId = view.tournamentId ?? view.id;
   const gameLabel = view.tournamentId ? 'this tournament' : 'this table';
 
-  const confirmBan = async (reason: string, discordBan = false, alsoBan: string[] = []) => {
+  const confirmBan = async (reason: string, discordBan = false, alsoBan: string[] = [], includeMain = true) => {
     if (!pending) return;
     const { playerId, name, kind, scope } = pending;
     setPending(null);
@@ -57,9 +57,9 @@ export default function HostTools({ view, onClose }: { view: TableView; onClose:
         kind, scope,
         gameId: scope === 'game' ? gameId : null,
         ...(kind === 'ip' ? { playerId } : { value: playerId }),
-        name, reason, discordBan, alsoBan,
+        name, reason, discordBan, alsoBan, skipPrimary: !includeMain,
       });
-      const base = `${name} suspended ${scope === 'game' ? `from ${gameLabel}` : 'for life'}` + (r.alsoBanned?.length ? `, with ${r.alsoBanned.length} more account${r.alsoBanned.length === 1 ? '' : 's'}: ${r.alsoBanned.join(', ')}` : '');
+      const base = !includeMain ? `${r.alsoBanned?.length ?? 0} alt${(r.alsoBanned?.length ?? 0) === 1 ? '' : 's'} of ${name} suspended${r.alsoBanned?.length ? `: ${r.alsoBanned.join(', ')}` : ''} — ${name} was not touched` : `${name} suspended ${scope === 'game' ? `from ${gameLabel}` : 'for life'}` + (r.alsoBanned?.length ? `, with ${r.alsoBanned.length} more account${r.alsoBanned.length === 1 ? '' : 's'}: ${r.alsoBanned.join(', ')}` : '');
       // A Discord ban that quietly did not happen is worse than one never
       // attempted — the operator would believe they were gone.
       const failed = !!r.discordNote && /NOT on Discord/.test(r.discordNote);
@@ -166,7 +166,7 @@ export default function HostTools({ view, onClose }: { view: TableView; onClose:
       {pending && (
         <BanDialog
           target={pending}
-          onConfirm={(r, d, _bp, alts) => void confirmBan(r, d, alts)}
+          onConfirm={(r, d, _bp, alts, main) => void confirmBan(r, d, alts, main)}
           onCancel={() => setPending(null)}
         />
       )}

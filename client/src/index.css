@@ -4535,3 +4535,5 @@ input[type='time']:hover::-webkit-calendar-picker-indicator {
   border: 1px solid var(--line); border-radius: 999px; padding: 0 7px;
 }
 .ban-alts-all { margin-top: 2px; }
+/* The player the ban was started from, above their alts. */
+.ban-alt.main { border-color: color-mix(in srgb, var(--red) 45%, var(--line)); }

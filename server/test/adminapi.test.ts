@@ -123,3 +123,60 @@ test('a game still cannot be created nameless or with a taken name', async () =>
   const dupe = await admin('/api/tables', { method: 'POST', body: JSON.stringify({ name: '  round   trip ' }) });
   assert.equal(dupe.status, 400, 'case and spacing do not make it a different name');
 });
+
+// "Ban only the alts": the player the ban was started from is unticked on the
+// ban screen. Their alts are banned; they are not — no account row, no
+// address row, nothing that would catch them on their next visit.
+test('banning only the alts leaves the player themselves alone', async () => {
+  type Row = { kind: string; value: string; reason: string };
+  const r = await admin('/api/admin/bans', {
+    method: 'POST',
+    body: JSON.stringify({
+      kind: 'ip', scope: 'lifetime', playerId: 'g_main', name: 'Main',
+      alsoBan: ['g_alt1', 'g_alt2'], skipPrimary: true,
+    }),
+  });
+  assert.equal(r.status, 200, 'no address on record for the main is fine: theirs is not being banned');
+  const body = await r.json() as { ban: unknown; alsoBanned: string[] };
+  assert.equal(body.ban, null, 'no row for the player or their address');
+  assert.equal(body.alsoBanned.length, 2);
+
+  const { bans } = await admin('/api/admin/bans').then(x => x.json() as Promise<{ bans: Row[] }>);
+  const values = bans.map(b => b.value);
+  assert.ok(values.includes('g_alt1') && values.includes('g_alt2'), 'both alts are banned');
+  assert.ok(!values.includes('g_main'), 'the player is not');
+  assert.ok(bans.every(b => b.kind === 'player'), 'and no address was banned');
+  assert.match(bans.find(b => b.value === 'g_alt1')!.reason, /Suspected alt of Main/);
+});
+
+test('a player ban with the player unticked and the same account in the list still skips them', async () => {
+  const r = await admin('/api/admin/bans', {
+    method: 'POST',
+    body: JSON.stringify({ kind: 'player', scope: 'lifetime', value: 'g_main2', name: 'Main2', alsoBan: ['g_main2', 'g_alt3'], skipPrimary: true }),
+  });
+  assert.equal(r.status, 200);
+  const { bans } = await admin('/api/admin/bans').then(x => x.json() as Promise<{ bans: { value: string }[] }>);
+  assert.ok(bans.some(b => b.value === 'g_alt3'));
+  assert.ok(!bans.some(b => b.value === 'g_main2'));
+});
+
+test('unticking the player with no alt picked bans nobody, and says why', async () => {
+  const r = await admin('/api/admin/bans', {
+    method: 'POST',
+    body: JSON.stringify({ kind: 'player', scope: 'lifetime', value: 'g_main3', name: 'Main3', alsoBan: [], skipPrimary: true }),
+  });
+  assert.equal(r.status, 400);
+  assert.match((await r.json() as { error: string }).error, /Pick at least one alt/);
+  const { bans } = await admin('/api/admin/bans').then(x => x.json() as Promise<{ bans: { value: string }[] }>);
+  assert.ok(!bans.some(b => b.value === 'g_main3'));
+});
+
+test('with the player ticked, the usual ban still takes them and the alts', async () => {
+  const r = await admin('/api/admin/bans', {
+    method: 'POST',
+    body: JSON.stringify({ kind: 'player', scope: 'lifetime', value: 'g_main4', name: 'Main4', alsoBan: ['g_alt4'] }),
+  });
+  assert.equal(r.status, 200);
+  const { bans } = await admin('/api/admin/bans').then(x => x.json() as Promise<{ bans: { value: string }[] }>);
+  assert.ok(bans.some(b => b.value === 'g_main4') && bans.some(b => b.value === 'g_alt4'));
+});

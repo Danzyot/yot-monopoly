@@ -1207,7 +1207,12 @@ app.get('/api/admin/discord/ban-check', (req, res) => {
 // the same browser or a shared (non-crowded) address, with face and ids.
 app.get('/api/admin/players/:id/alts', (req, res) => {
   if (!requireAdmin(req, res)) return;
-  res.json({ alts: suspectedAlts(String(req.params.id)) });
+  const id = String(req.params.id);
+  const row = playerRows().find(p => p.id === id);
+  res.json({
+    self: row ? { id: row.id, name: row.name, avatar: row.avatar, discordTag: row.discordTag, discordId: row.discordVerifiedId } : null,
+    alts: suspectedAlts(id),
+  });
 });
 
 app.post('/api/admin/bans', (req, res) => {
@@ -1231,7 +1236,9 @@ app.post('/api/admin/bans', (req, res) => {
     if (kind === 'ip' && !value.trim() && b.playerId) {
       const row = playerRows().find(p => p.id === String(b.playerId));
       value = row?.ips.at(-1) ?? '';
-      if (!value) throw new Error('No address on record for that player yet');
+      // Banning only their alts never touches their address, so not having
+      // one on record is no reason to refuse.
+      if (!value && b.skipPrimary !== true) throw new Error('No address on record for that player yet');
     }
     // Every ACCOUNT this one action bans, beyond the row named in the request.
     //
@@ -1244,7 +1251,11 @@ app.post('/api/admin/bans', (req, res) => {
     // audit can take every account seen on that address.
     const extra = new Map<string, string>(); // account id -> name
     const nameOf = (id: string) => playerRows().find(p => p.id === id)?.name ?? id;
-    if (kind === 'ip' && b.playerId) extra.set(String(b.playerId), String(b.name ?? '') || nameOf(String(b.playerId)));
+    // The operator can untick the player the ban was started from and ban only
+    // their alts. Then that player is left completely alone: no account ban,
+    // no address ban (the address is theirs), no Discord ban.
+    const onlyAlts = b.skipPrimary === true;
+    if (kind === 'ip' && b.playerId && !onlyAlts) extra.set(String(b.playerId), String(b.name ?? '') || nameOf(String(b.playerId)));
     if (Array.isArray(b.alsoBan)) {
       for (const id of (b.alsoBan as unknown[]).slice(0, 50)) {
         if (typeof id === 'string' && id.trim()) extra.set(id.trim(), nameOf(id.trim()));
@@ -1254,6 +1265,11 @@ app.post('/api/admin/bans', (req, res) => {
       for (const p of accountsOnAddress(value)) extra.set(p.id, p.name);
     }
     if (kind === 'player') extra.delete(value);
+    if (onlyAlts) {
+      extra.delete(value);
+      if (b.playerId) extra.delete(String(b.playerId));
+      if (extra.size === 0) throw new Error('Pick at least one alt to ban, or keep the player ticked');
+    }
 
     // Close the Discord door too, if the operator asked — for every account
     // banned here that has a Discord account behind it. Done BEFORE the rows
@@ -1293,7 +1309,7 @@ app.post('/api/admin/bans', (req, res) => {
     const discordFail: string[] = [];
     const extraDiscord = new Map<string, boolean>();
     if (b.discordBan === true) {
-      if (kind === 'player') {
+      if (kind === 'player' && !onlyAlts) {
         const r = await discordOne(value, true);
         discordBanned = r.ok;
         if (r.ok) discordOk.push(String(b.name ?? '') || nameOf(value));
@@ -1307,7 +1323,7 @@ app.post('/api/admin/bans', (req, res) => {
         if (r.ok) discordOk.push(nm);
         else if (r.why) discordFail.push(`${nm}: ${r.why}`);
       }
-      if (kind === 'ip' && extra.size === 0) {
+      if (kind === 'ip' && extra.size === 0 && !onlyAlts) {
         discordFail.push('an address on its own has no Discord account behind it');
       }
     }
@@ -1319,7 +1335,7 @@ app.post('/api/admin/bans', (req, res) => {
       : null;
 
     const linkedDiscord = (id: string) => playerRows().find(p => p.id === id)?.discordVerifiedId ?? undefined;
-    const ban = addBan({
+    const ban = onlyAlts ? null : addBan({
       kind, scope, gameId, gameName: liveName,
       value,
       name: String(b.name ?? ''),
@@ -1337,7 +1353,7 @@ app.post('/api/admin/bans', (req, res) => {
         kind: 'player', scope, gameId, gameName: liveName,
         value: id,
         name: nm,
-        reason: String(b.reason ?? '') || (kind === 'ip' ? `Account behind banned address ${ban.value}` : `Suspected alt of ${String(b.name ?? '') || nameOf(value)}`),
+        reason: String(b.reason ?? '') || (kind === 'ip' && ban ? `Account behind banned address ${ban.value}` : `Suspected alt of ${String(b.name ?? '') || nameOf(String(b.playerId ?? value))}`),
         by: me.name,
         discordBanned: extraDiscord.get(id) === true,
         discordId: linkedDiscord(id),
@@ -1348,9 +1364,9 @@ app.post('/api/admin/bans', (req, res) => {
 
     // Who to remove from live games: everyone banned here, plus — for an
     // address — anyone else currently on it.
-    const onAddress = kind === 'player' ? [] : accountsOnAddress(ban.value);
+    const onAddress = !ban || kind === 'player' ? [] : accountsOnAddress(ban.value);
     const targets = [...new Set([
-      ...(kind === 'player' ? [ban.value] : onAddress.map(p => p.id)),
+      ...(ban && kind === 'player' ? [ban.value] : onAddress.map(p => p.id)),
       ...extra.keys(),
     ])];
 
@@ -1358,14 +1374,14 @@ app.post('/api/admin/bans', (req, res) => {
     for (const pid of targets) {
       // A lifetime ban clears them out everywhere; a game ban only out of the
       // game it names — they keep the rest of the site.
-      const r = ban.scope === 'game' && ban.gameId
-        ? registry.ejectFromGame(ban.gameId, pid)
+      const r = scope === 'game' && gameId
+        ? registry.ejectFromGame(gameId, pid)
         : registry.ejectPlayer(pid);
       ejected = { tournaments: ejected.tournaments + r.tournaments, tables: ejected.tables + r.tables };
     }
     // A lifetime ban also cuts live connections; a game ban must not, or it
     // would knock someone off the whole site over one event.
-    const disconnected = ban.scope === 'lifetime' ? disconnectBanned() : 0;
+    const disconnected = scope === 'lifetime' ? disconnectBanned() : 0;
     res.json({ ban, ejected, disconnected, discordNote, alsoBanned });
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : 'Could not ban' });

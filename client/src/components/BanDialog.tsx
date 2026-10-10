@@ -47,7 +47,7 @@ type Alt = Awaited<ReturnType<typeof api.suspectedAlts>>['alts'][number];
 
 export default function BanDialog({ target, onConfirm, onCancel }: {
   target: BanTarget;
-  onConfirm: (reason: string, discordBan: boolean, banPlayers: boolean, alsoBan: string[]) => void;
+  onConfirm: (reason: string, discordBan: boolean, banPlayers: boolean, alsoBan: string[], includeMain: boolean) => void;
   onCancel: () => void;
 }) {
   const [reason, setReason] = useState('');
@@ -61,12 +61,16 @@ export default function BanDialog({ target, onConfirm, onCancel }: {
 
   // Suspected alts of the subject, fetched when the screen opens.
   const [alts, setAlts] = useState<Alt[] | null>(null);
+  const [self, setSelf] = useState<Account | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  // The player the ban was started from. Ticked by default; untick them to
+  // ban only their alts and leave them alone.
+  const [includeMain, setIncludeMain] = useState(true);
   useEffect(() => {
     if (!subject) { setAlts([]); return; }
     let stale = false;
     api.suspectedAlts(subject)
-      .then(r => { if (!stale) setAlts(r.alts); })
+      .then(r => { if (!stale) { setAlts(r.alts); setSelf(r.self); } })
       .catch(() => { if (!stale) setAlts([]); });
     return () => { stale = true; };
   }, [subject]);
@@ -95,9 +99,12 @@ export default function BanDialog({ target, onConfirm, onCancel }: {
     || picked.size > 0
     || (canBanPlayers && banPlayers);
 
-  const what = target.kind === 'ip'
-    ? (subject ? `${target.name} — their account and address` : `${target.name}'s address — and everyone else on it`)
-    : target.name;
+  const onlyAlts = !!subject && !includeMain;
+  const what = onlyAlts
+    ? `${target.name}'s alts — not ${target.name}`
+    : target.kind === 'ip'
+      ? (subject ? `${target.name} — their account and address` : `${target.name}'s address — and everyone else on it`)
+      : target.name;
   // Built as whole sentences rather than a shared template with a slot: the
   // slot version read "removed from WAWA Poker tournaments, for good right
   // now", which is not English.
@@ -105,15 +112,15 @@ export default function BanDialog({ target, onConfirm, onCancel }: {
     ? `They are removed from every ${BRAND.name} game right now, and can never come back.`
     : 'They are removed from this game right now and cannot come back — late registration included.';
 
-  const confirm = () => onConfirm(
-    reason.trim(),
-    discordBan && reachesAccount,
-    banPlayers && canBanPlayers,
-    [...picked],
-  );
+  // Nothing to do when the player is unticked and no alt is picked.
+  const nothing = onlyAlts && picked.size === 0;
+  const confirm = () => {
+    if (nothing) return;
+    onConfirm(reason.trim(), discordBan && reachesAccount, banPlayers && canBanPlayers, [...picked], !onlyAlts);
+  };
 
   const accountRow = (a: Account & { reasons?: string[]; alreadyBanned?: boolean }, control: React.ReactNode) => (
-    <div key={a.id} className={`ban-alt${a.alreadyBanned ? ' banned' : ''}`}>
+    <div key={a.id} className={`ban-alt${a.alreadyBanned ? ' banned' : ''}${a.id === subject ? ' main' : ''}`}>
       {control}
       <Avatar value={a.avatar ?? ''} size={28} />
       <span className="ban-alt-who">
@@ -135,8 +142,10 @@ export default function BanDialog({ target, onConfirm, onCancel }: {
       <div className="modal modal-wide" onClick={e => e.stopPropagation()}>
         <h3>Suspend {what}</h3>
         <p className="tag">
-          {consequence}
-          {target.kind === 'ip' && subject
+          {onlyAlts
+            ? `Only the ticked alts are suspended. ${target.name} keeps playing — their account and address are not touched.`
+            : consequence}
+          {!onlyAlts && target.kind === 'ip' && subject
             && ' Their account is banned along with the address, so another network or phone does not get them back in.'}
           {target.kind === 'ip' && !subject && ' Check the audit for a shared household first.'}
         </p>
@@ -181,7 +190,7 @@ export default function BanDialog({ target, onConfirm, onCancel }: {
                   <label className="ban-discord ban-alts-all">
                     <input type="checkbox" checked={allPicked} onChange={e => toggleAll(e.target.checked)} />
                     <span>
-                      Ban all {bannable.length} suspected alt{bannable.length === 1 ? '' : 's'} too
+                      Ban all {bannable.length} suspected alt{bannable.length === 1 ? '' : 's'}{onlyAlts ? '' : ' too'}
                       <span className="field-hint">
                         Same browser is near certain. Same address can be a household — untick anyone
                         you are not sure about.
@@ -190,6 +199,11 @@ export default function BanDialog({ target, onConfirm, onCancel }: {
                   </label>
                 )}
                 <div className="ban-alts">
+                  {accountRow(
+                    { ...(self ?? { id: subject, name: target.name }), reasons: ['this player'] },
+                    <input type="checkbox" className="ban-alt-box" checked={includeMain}
+                      onChange={e => setIncludeMain(e.target.checked)} aria-label={`Ban ${target.name}`} />,
+                  )}
                   {alts.map(a => accountRow(a, a.alreadyBanned
                     ? <span className="ban-alt-box" />
                     : <input type="checkbox" className="ban-alt-box" checked={picked.has(a.id)} onChange={() => toggleOne(a.id)} />))}
@@ -243,9 +257,10 @@ export default function BanDialog({ target, onConfirm, onCancel }: {
 
         <div className="modal-actions">
           <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
-          <button className="btn btn-danger" onClick={confirm}>
-            {target.scope === 'lifetime' ? 'Suspend for life' : 'Suspend from this game'}
-            {picked.size > 0 ? ` (+${picked.size})` : ''}
+          <button className="btn btn-danger" onClick={confirm} disabled={nothing}>
+            {onlyAlts
+              ? (picked.size ? `Suspend ${picked.size} alt${picked.size === 1 ? '' : 's'} only` : 'Pick an alt to suspend')
+              : <>{target.scope === 'lifetime' ? 'Suspend for life' : 'Suspend from this game'}{picked.size > 0 ? ` (+${picked.size})` : ''}</>}
           </button>
         </div>
       </div>

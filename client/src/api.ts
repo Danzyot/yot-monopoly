@@ -286,6 +286,9 @@ export const api = {
     // Further accounts — the subject's suspected alts — banned in the same
     // action, with the same reach.
     alsoBan?: string[];
+    // Ban ONLY the alts in alsoBan: the player named by value/playerId is
+    // left alone — no account ban, no address ban, no Discord ban.
+    skipPrimary?: boolean;
   }) =>
     request<{
       ban: BanRow; ejected: { tournaments: number; tables: number };
@@ -302,7 +305,7 @@ export const api = {
   // Who else this account looks like: same browser, or a shared address that
   // is not a carrier's. For the ban screen.
   suspectedAlts: (playerId: string) =>
-    request<{ alts: {
+    request<{ self: { id: string; name: string; avatar: string; discordTag: string | null; discordId: string | null } | null; alts: {
       id: string; name: string; avatar: string; discordTag: string | null; discordId: string | null;
       reasons: string[]; strength: 'browser' | 'address'; lastSeen: number; alreadyBanned: boolean;
     }[] }>(`/api/admin/players/${encodeURIComponent(playerId)}/alts`),
