@@ -12,6 +12,7 @@ import { Pieces, type PieceReaction } from './characters/Pieces.tsx';
 import { Environment, FLOOR, TABLE_R, envLook } from './environments/index.tsx';
 import { Dice } from './Dice.tsx';
 import { CameraDirector } from './CameraDirector.tsx';
+import { MoneyFX } from './MoneyFX.tsx';
 import { ModelBuildings, ModelTable, WithModel, preloadModels, type BuildingSpot } from './models.tsx';
 
 preloadModels();
@@ -308,6 +309,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
           <>
             <Ownership game={game} theme={theme} />
             <Pieces game={game} n={theme.spaces.length} reactions={reactions} />
+            <MoneyFX game={game} n={theme.spaces.length} currency={theme.currency} />
             <Dice dice={game.dice} seq={game.rollSeq} speed={game.speed ?? null} body={theme.palette.die} pip={theme.palette.pip} />
           </>
         )}

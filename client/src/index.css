@@ -1325,3 +1325,20 @@ button.edition:hover:not(:disabled) { transform: translateY(-2px); }
   /* The card is trapped in the stack's layer: lift the whole stack above the dock while it's open. */
   .hud-bottom:has(.deed-float) { z-index: 9; }
 }
+
+/* Floating cash change over a piece (MoneyFX). */
+.fx-money {
+  display: block; white-space: nowrap; font: 400 22px/1 var(--display); letter-spacing: 0.01em;
+  -webkit-text-stroke: 4px rgba(10, 20, 50, 0.85); paint-order: stroke fill;
+  animation: fxMoney 1.7s cubic-bezier(.2, .9, .3, 1) forwards;
+}
+.fx-money.gain { color: #7dff6a; }
+.fx-money.loss { color: #ff6b5e; }
+@keyframes fxMoney {
+  0% { transform: translateY(10px) scale(0.4); opacity: 0; }
+  14% { transform: translateY(-6px) scale(1.15); opacity: 1; }
+  24% { transform: translateY(-10px) scale(1); }
+  75% { opacity: 1; }
+  100% { transform: translateY(-48px) scale(0.95); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .fx-money { animation-duration: 0.01s; animation-delay: 1.2s; } }
