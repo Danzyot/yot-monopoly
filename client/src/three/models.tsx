@@ -2,10 +2,11 @@
 // code-drawn stand-in that shows while the file downloads and stays if it
 // fails, so a slow or broken asset never leaves a hole in the scene.
 
-import { Component, Suspense, useMemo, type ReactNode } from 'react';
+import { Component, Suspense, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useFrame } from '@react-three/fiber';
 import { useGLTF, useTexture } from '@react-three/drei';
 import {
-  Color, MeshBasicMaterial, MeshStandardMaterial, SRGBColorSpace, type Material, type Mesh, type Object3D,
+  Color, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, SRGBColorSpace, type Material, type Mesh, type Object3D,
 } from 'three';
 import { ASSETS } from './assets.gen.ts';
 
@@ -114,8 +115,14 @@ export function ModelBuildings({ spots, house, hotel }: { spots: BuildingSpot[];
       for (const m of meshes(root)) {
         m.castShadow = true;
         m.receiveShadow = true;
+        // Glossy moulded plastic, like the real pieces, tinted to the edition.
         const tint = (mat: Material) => {
-          const c = (mat as MeshStandardMaterial).clone();
+          const src = mat as MeshStandardMaterial;
+          if (src.name === 'BuildingGlass') return src.clone();
+          const c = new MeshPhysicalMaterial({
+            name: src.name, color: src.color, roughness: Math.min(src.roughness, 0.4), metalness: 0,
+            clearcoat: 0.7, clearcoatRoughness: 0.2,
+          });
           if (c.name === 'BuildingBody') c.color.set(color);
           if (c.name === 'BuildingRoof') c.color.set(color).multiplyScalar(0.72);
           return c;
@@ -126,16 +133,44 @@ export function ModelBuildings({ spots, house, hotel }: { spots: BuildingSpot[];
     };
     return { house: make('House', house), hotel: make('Hotel', hotel) };
   }, [gltf.scene, house, hotel]);
+  // Buildings already standing when the board appears are just there; new ones drop in.
+  const standing = useRef<Set<string> | null>(null);
+  if (standing.current === null) standing.current = new Set(spots.map(s => s.key));
+  useEffect(() => { standing.current = new Set(); }, []);
   return (
     <group>
-      {spots.map(s => <Building key={s.key} proto={s.hotel ? protos.hotel : protos.house} spot={s} />)}
+      {spots.map(s => (
+        <Building key={s.key} proto={s.hotel ? protos.hotel : protos.house} spot={s} drop={!standing.current!.has(s.key)} />
+      ))}
     </group>
   );
 }
 
-function Building({ proto, spot }: { proto: Object3D; spot: BuildingSpot }) {
+const DROP_MS = 620;
+
+function Building({ proto, spot, drop }: { proto: Object3D; spot: BuildingSpot; drop: boolean }) {
   // One clone per building, kept across re-renders (geometry and materials are shared).
   const obj = useMemo(() => proto.clone(), [proto]);
+  const start = useRef(drop ? performance.now() : 0);
+  // Falls onto the lot, then squashes and settles.
+  useFrame(() => {
+    if (!start.current) return;
+    const t = (performance.now() - start.current) / DROP_MS;
+    if (t >= 1) {
+      obj.position.y = 0;
+      obj.scale.set(1, 1, 1);
+      start.current = 0;
+    } else if (t < 0.5) {
+      const k = t / 0.5;
+      obj.position.y = 0.7 * (1 - k * k);
+      obj.scale.set(0.92, 1.1, 0.92);
+    } else {
+      const k = (t - 0.5) / 0.5;
+      const s = Math.sin(k * Math.PI * 2) * (1 - k) * 0.24;
+      obj.position.y = 0;
+      obj.scale.set(1 + s * 0.5, 1 - s, 1 + s * 0.5);
+    }
+  });
   return <primitive object={obj} position={[spot.x, 0, spot.z]} rotation={[0, spot.rotY, 0]} />;
 }
 
