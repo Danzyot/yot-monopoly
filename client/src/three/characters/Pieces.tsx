@@ -67,6 +67,8 @@ interface Motion {
   opacity: number;
   marker: number;
   scale: number;
+  /** Head turn toward whoever is playing (radians, + to its left). */
+  watch: number;
 }
 
 /** Ease `v` toward `to` at `rate` per second, frame-rate independent. */
@@ -78,9 +80,11 @@ function turnToward(from: number, to: number, rate: number, dt: number): number 
   return from + d * (1 - Math.exp(-rate * dt));
 }
 
-function Piece({ p, slot, count, turn, winner, emote, n, reaction }: {
+function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId }: {
   p: PlayerState; slot: number; count: number; turn: boolean; winner: boolean; emote?: Emote; n: number;
   reaction?: PieceReaction;
+  /** Whose turn it is: everyone else's heads follow that piece round the board. */
+  focusId?: string | null;
 }) {
   const ref = useRef<Group>(null);
   const yawRef = useRef<Group>(null);
@@ -122,7 +126,7 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction }: {
       yaw: 0, phase: Math.random() * Math.PI * 2, landAt: 0, pending: null, emote: null, emoteAt: 0,
       lastEmote: emote?.seq ?? 0, nextIdle: performance.now() + 5000 + Math.random() * 8000, hops: 0,
       slump: p.inJail ? 1 : 0, lie: out, grey: 0, opacity: 1 - out, marker: 0,
-      scale: figureScale(n, count),
+      scale: figureScale(n, count), watch: 0,
     };
   } else if (emote && emote.seq !== motion.current.lastEmote) {
     motion.current.lastEmote = emote.seq;
@@ -250,9 +254,21 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction }: {
     m.scale = approach(m.scale, figureScale(n, count), 6, dt);
     scaleRef.current?.scale.setScalar(m.scale);
 
+    // At rest, keep an eye on whoever is playing (within what a neck can turn).
+    let watch = 0;
+    const focus = focusId && focusId !== p.id && !hopping && !winner && !p.bankrupt ? pieceObjects.get(focusId) : undefined;
+    if (focus) {
+      const dx = focus.position.x - g.position.x, dz = focus.position.z - g.position.z;
+      if (dx * dx + dz * dz > 0.04) {
+        const rel = Math.atan2(Math.sin(Math.atan2(dx, dz) - m.yaw), Math.cos(Math.atan2(dx, dz) - m.yaw));
+        watch = Math.max(-1, Math.min(1, rel)) * (p.inJail ? 0.5 : 0.85);
+      }
+    }
+    m.watch = approach(m.watch, watch, 3, dt);
+
     poseRig(rig, {
       time, phase: m.phase, slump: m.slump, lie: m.lie, handsUp, squash,
-      walk, stride: m.hops % 2 ? 1 : -1, look, wave, pump, sad, stomp,
+      walk, stride: m.hops % 2 ? 1 : -1, look: look + m.watch * (1 - Math.abs(look)), wave, pump, sad, stomp,
     });
 
     // Whose turn: a bobbing, spinning arrow above the head and a ground ring.
@@ -377,7 +393,7 @@ export function Pieces({ game, n, reactions }: {
         return (
           <Piece key={p.id} p={p} slot={s.slot} count={s.count} n={n}
             turn={p.id === current && !winner} winner={p.id === winner} emote={emotes[p.id]}
-            reaction={reactions?.[p.id]} />
+            reaction={reactions?.[p.id]} focusId={winner ?? current} />
         );
       })}
     </>
