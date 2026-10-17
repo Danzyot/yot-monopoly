@@ -6,7 +6,9 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
-import { Color, CylinderGeometry, Quaternion, Vector3, type Group, type Material, type Mesh, type Object3D } from 'three';
+import {
+  BufferAttribute, BufferGeometry, Color, DynamicDrawUsage, Vector3, type Group, type Material, type Mesh, type Object3D,
+} from 'three';
 import { ASSETS } from '../assets.gen.ts';
 import { WithModel } from '../models.tsx';
 import type { CharacterId } from '../../../../shared/characters.ts';
@@ -57,49 +59,110 @@ const PART_NAMES = ['Body', 'Head', 'HandL', 'HandR', 'FootL', 'FootR'] as const
 // ---- limbs -----------------------------------------------------------------
 // Characters with `arms` / `legs` get a limb from each shoulder to its hand and
 // from each hip to its foot. Hands and feet are animated by poseRig; each
-// frame the limbs are re-aimed at them, so they follow every move.
+// frame the limbs are rebuilt to reach them, rubber-hose style: a smooth tube
+// that bows at the elbow (back and out) or the knee (forward) when the hand or
+// foot comes in close, and pulls straight when it reaches away.
 
-const LIMB_GEO = new CylinderGeometry(1, 0.85, 1, 10, 1, true);
-const UP = new Vector3(0, 1, 0);
-const tmpDir = new Vector3();
-const tmpQ = new Quaternion();
+const RADIAL = 10;
+const RINGS = 8;
 
-function aim(mesh: Mesh, ax: number, ay: number, az: number, bx: number, by: number, bz: number, radius: number) {
-  tmpDir.set(bx - ax, by - ay, bz - az);
-  const len = Math.max(0.001, tmpDir.length());
-  mesh.position.set(ax + tmpDir.x / 2, ay + tmpDir.y / 2, az + tmpDir.z / 2);
-  mesh.quaternion.copy(tmpQ.setFromUnitVectors(UP, tmpDir.divideScalar(len)));
-  mesh.scale.set(radius, len, radius);
+function limbGeometry(): BufferGeometry {
+  const g = new BufferGeometry();
+  const n = (RINGS + 1) * (RADIAL + 1) * 3;
+  g.setAttribute('position', new BufferAttribute(new Float32Array(n), 3).setUsage(DynamicDrawUsage));
+  g.setAttribute('normal', new BufferAttribute(new Float32Array(n), 3).setUsage(DynamicDrawUsage));
+  const index: number[] = [];
+  for (let r = 0; r < RINGS; r++) {
+    for (let k = 0; k < RADIAL; k++) {
+      const a = r * (RADIAL + 1) + k, b = a + RADIAL + 1;
+      index.push(a, a + 1, b, b, a + 1, b + 1);
+    }
+  }
+  g.setIndex(index);
+  return g;
 }
 
+const vS = new Vector3(), vH = new Vector3(), vU = new Vector3(), vBend = new Vector3(), vN = new Vector3();
+const vC = new Vector3(), vP = new Vector3(), vT = new Vector3(), vB = new Vector3();
+
+/**
+ * Re-shape `g` into a tube from s to h (radius r0 → r1) that bows toward `pole`
+ * as much as a limb of length `natural` would have to when its ends are closer.
+ */
+function bend(g: BufferGeometry, s: Vector3, h: Vector3, r0: number, r1: number, natural: number, pole: Vector3) {
+  vU.subVectors(h, s);
+  const len = Math.max(1e-4, vU.length());
+  vU.divideScalar(len);
+  vBend.copy(pole).addScaledVector(vU, -pole.dot(vU));
+  if (vBend.lengthSq() < 1e-8) vBend.set(0, 0, 1).addScaledVector(vU, -vU.z);
+  vBend.normalize();
+  vN.crossVectors(vU, vBend).normalize();
+  // The apex of a quadratic curve sits halfway to its control point.
+  const bow = 0.6 * Math.sqrt(Math.max(0, natural * natural - len * len));
+  vC.addVectors(s, h).multiplyScalar(0.5).addScaledVector(vBend, bow);
+  const pos = g.attributes.position.array as Float32Array;
+  const nor = g.attributes.normal.array as Float32Array;
+  let o = 0;
+  for (let i = 0; i <= RINGS; i++) {
+    const t = i / RINGS, u = 1 - t;
+    vP.set(0, 0, 0).addScaledVector(s, u * u).addScaledVector(vC, 2 * u * t).addScaledVector(h, t * t);
+    vT.subVectors(vC, s).multiplyScalar(2 * u).addScaledVector(vB.subVectors(h, vC), 2 * t).normalize();
+    vB.crossVectors(vT, vN);
+    const r = r0 + (r1 - r0) * t;
+    for (let k = 0; k <= RADIAL; k++) {
+      const a = (k / RADIAL) * Math.PI * 2;
+      const c = Math.cos(a), sn = Math.sin(a);
+      const nx = vN.x * c + vB.x * sn, ny = vN.y * c + vB.y * sn, nz = vN.z * c + vB.z * sn;
+      pos[o] = vP.x + nx * r; pos[o + 1] = vP.y + ny * r; pos[o + 2] = vP.z + nz * r;
+      nor[o] = nx; nor[o + 1] = ny; nor[o + 2] = nz;
+      o += 3;
+    }
+  }
+  g.attributes.position.needsUpdate = true;
+  g.attributes.normal.needsUpdate = true;
+}
+
+/** Rest-ish lengths: arms bow a little hanging at the side and pull straight raised; knees bend as a foot lifts. */
+const ARM_LEN = 0.09;
+const LEG_LEN = 0.05;
+const poleArm = [new Vector3(0.6, -0.25, -0.75), new Vector3(-0.6, -0.25, -0.75)];
+const poleLeg = [new Vector3(0.12, 0, 1), new Vector3(-0.12, 0, 1)];
+
 function Limbs({ look, mats, rig }: { look: Look; mats: Mats; rig: Rig }) {
-  const armL = useRef<Mesh>(null);
-  const armR = useRef<Mesh>(null);
-  const legL = useRef<Mesh>(null);
-  const legR = useRef<Mesh>(null);
+  const geos = useMemo(() => [limbGeometry(), limbGeometry(), limbGeometry(), limbGeometry()], []);
+  useEffect(() => () => geos.forEach(g => g.dispose()), [geos]);
+  return (
+    <>
+      {look.arms && <mesh geometry={geos[0]} material={mats[look.arms.mat]} castShadow frustumCulled={false} />}
+      {look.arms && <mesh geometry={geos[1]} material={mats[look.arms.mat]} castShadow frustumCulled={false} />}
+      {look.legs && <mesh geometry={geos[2]} material={mats[look.legs.mat]} castShadow frustumCulled={false} />}
+      {look.legs && <mesh geometry={geos[3]} material={mats[look.legs.mat]} castShadow frustumCulled={false} />}
+      <LimbDriver look={look} geos={geos} rig={rig} />
+    </>
+  );
+}
+
+/** Rebuilds the limb tubes each frame from the rig's current hand and foot positions. */
+function LimbDriver({ look, geos, rig }: { look: Look; geos: BufferGeometry[]; rig: Rig }) {
   useFrame(() => {
     const { arms, legs } = look;
     if (arms) {
-      for (const [mesh, hand, side] of [[armL.current, rig.handL, 1], [armR.current, rig.handR, -1]] as const) {
-        if (!mesh || !hand) continue;
-        aim(mesh, arms.shoulder[0] * side, arms.shoulder[1], arms.shoulder[2], hand.position.x, hand.position.y, hand.position.z, arms.radius);
+      for (const [g, hand, side, i] of [[geos[0], rig.handL, 1, 0], [geos[1], rig.handR, -1, 1]] as const) {
+        if (!hand) continue;
+        vS.set(arms.shoulder[0] * side, arms.shoulder[1], arms.shoulder[2]);
+        bend(g, vS, vH.copy(hand.position), arms.radius, arms.radius * 0.85, ARM_LEN, poleArm[i]);
       }
     }
     if (legs) {
-      for (const [mesh, foot, side] of [[legL.current, rig.footL, 1], [legR.current, rig.footR, -1]] as const) {
-        if (!mesh || !foot) continue;
-        aim(mesh, legs.hip[0] * side, legs.hip[1], legs.hip[2], foot.position.x, foot.position.y + ANKLE, foot.position.z - 0.006, legs.radius);
+      for (const [g, foot, side, i] of [[geos[2], rig.footL, 1, 0], [geos[3], rig.footR, -1, 1]] as const) {
+        if (!foot) continue;
+        vS.set(legs.hip[0] * side, legs.hip[1], legs.hip[2]);
+        vH.set(foot.position.x, foot.position.y + ANKLE, foot.position.z - 0.006);
+        bend(g, vS, vH, legs.radius, legs.radius * 0.9, LEG_LEN, poleLeg[i]);
       }
     }
   });
-  return (
-    <>
-      {look.arms && <mesh ref={armL} geometry={LIMB_GEO} material={mats[look.arms.mat]} castShadow />}
-      {look.arms && <mesh ref={armR} geometry={LIMB_GEO} material={mats[look.arms.mat]} castShadow />}
-      {look.legs && <mesh ref={legL} geometry={LIMB_GEO} material={mats[look.legs.mat]} castShadow />}
-      {look.legs && <mesh ref={legR} geometry={LIMB_GEO} material={mats[look.legs.mat]} castShadow />}
-    </>
-  );
+  return null;
 }
 
 function ModelFigure({ id, mats, rig }: { id: CharacterId; mats: Mats; rig: Rig }) {
