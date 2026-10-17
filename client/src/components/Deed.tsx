@@ -1,6 +1,6 @@
-import { isOwnable, mortgageValue, unmortgageCost } from '../../../shared/board.ts';
+import { isOwnable, mortgageValue } from '../../../shared/board.ts';
 import {
-  buildProblem, manageProblem, mortgageProblem, sellProblem, unmortgageProblem,
+  buildProblem, liftCost, manageProblem, mortgageProblem, sellProblem, unmortgageProblem,
 } from '../../../shared/holdings.ts';
 import { resolveTheme } from '../../../shared/themes.ts';
 import type { GameView } from '../../../shared/types.ts';
@@ -93,7 +93,7 @@ export default function Deed({ game, index, me, onClose }: {
             )}
             {o.mortgaged ? (
               <button className="btn small" disabled={!!why.unmortgage} title={why.unmortgage ?? undefined}
-                onClick={() => run('unmortgage')}>Unmortgage · {cur(unmortgageCost(s))}</button>
+                onClick={() => run('unmortgage')}>Unmortgage · {cur(liftCost(theme.spaces, index, o))}</button>
             ) : (
               <button className="btn small" disabled={!!why.mortgage} title={why.mortgage ?? undefined}
                 onClick={() => run('mortgage')}>Mortgage · +{cur(mortgageValue(s))}</button>

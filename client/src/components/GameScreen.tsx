@@ -117,8 +117,10 @@ export default function GameScreen({ room, game, me, chat, skew }: {
           <TimeLeft game={game} skew={skew} />
           <PauseButton room={room} game={game} me={me} />
           {/* The bank's stock in one place: buildings left and the jackpot. */}
-          <span className="pill tb-bank" title="Houses and hotels left in the bank">
-            🏠 {game.housesLeft}<span className="tb-sep">·</span>🏨 {game.hotelsLeft}
+          <span className="pill tb-bank" title={game.rules.limitedBuildings ? 'Houses and hotels left in the bank' : 'Unlimited houses and hotels'}>
+            {game.rules.limitedBuildings
+              ? <>🏠 {game.housesLeft}<span className="tb-sep">·</span>🏨 {game.hotelsLeft}</>
+              : <>🏠 ∞</>}
             {game.rules.freeParkingPot && <><span className="tb-sep">·</span><span title="Free Parking jackpot">🅿️ {theme.currency}{game.pot.toLocaleString()}</span></>}
           </span>
           <MusicPlayer />
