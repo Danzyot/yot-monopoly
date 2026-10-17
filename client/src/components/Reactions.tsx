@@ -38,7 +38,7 @@ export function ReactionPicker({ disabled }: { disabled?: boolean }) {
         </div>
       )}
       <button className={`dock-btn ${open ? 'on' : ''}`} disabled={disabled} onClick={() => setOpen(o => !o)}
-        title={disabled ? 'Reactions are switched off' : 'Send a reaction'} aria-expanded={open}>😀</button>
+        title={disabled ? 'Reactions are switched off' : 'Send a reaction'} aria-label="Send a reaction" aria-expanded={open}>😀</button>
     </div>
   );
 }
@@ -98,7 +98,7 @@ export function PokeButton({ room, game, me, skew, disabled }: {
   if (!st.ok || disabled) return null;
   const target = game.players.find(p => p.id === game.current)!;
   return (
-    <button className="dock-btn poke-btn" onClick={() => { primeAudio(); sendPoke().catch(toastError); }} title={st.why}>
+    <button className="dock-btn poke-btn" onClick={() => { primeAudio(); sendPoke().catch(toastError); }} title={st.why} aria-label={`Poke ${target.name}`}>
       👉 <span className="poke-label">Poke {target.name}</span>
     </button>
   );

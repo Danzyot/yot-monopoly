@@ -34,7 +34,7 @@ export default function Deed({ game, index, me, onClose }: {
       <div className="deed-head" style={{ background: s.kind === 'property' ? color : '#2a3142' }}>
         <small>{s.kind === 'property' ? 'TITLE DEED' : s.kind.toUpperCase()}</small>
         <b>{s.name}</b>
-        {onClose && <button className="deed-x" onClick={onClose}>✕</button>}
+        {onClose && <button className="deed-x" onClick={onClose} aria-label="Close the deed card">✕</button>}
       </div>
       <div className="deed-body">
         {s.kind === 'property' && (

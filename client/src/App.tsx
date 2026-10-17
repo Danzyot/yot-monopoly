@@ -10,6 +10,7 @@ import BanScreen from './components/BanScreen.tsx';
 import { AuthModalHost } from './components/AuthModal.tsx';
 import { AuthProvider } from './auth.tsx';
 import { ToastHost } from './toast.tsx';
+import { DialogHost } from './components/Modal.tsx';
 
 function Shell() {
   // The game screen is full-bleed 3D; everything else gets the site header.
@@ -29,6 +30,7 @@ function Shell() {
       <AuthModalHost />
       <BanScreen />
       <ToastHost />
+      <DialogHost />
     </>
   );
 }

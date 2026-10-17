@@ -1,8 +1,7 @@
-// Keyboard shortcuts for the game screen, and the "?" popover that lists
-// them. Each key does what the matching action-bar button would, only when
+// Keyboard shortcuts for the game screen (listed in the How to play dialog). Each key does what the matching action-bar button would, only when
 // that button would be there, so a stray key press never sends a move the
 // server would refuse. Keys are ignored while typing (chat, bids, trades).
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import type { Action, GameView } from '../../../shared/types.ts';
 import { act } from '../net.ts';
 import { toastError } from '../toast.tsx';
@@ -13,10 +12,11 @@ export const SHORTCUTS: [string, string][] = [
   ['A', 'Auction it (or pass)'],
   ['E', 'End your turn'],
   ['P', 'Pay your debt'],
-  ['T', 'Trade… (opens portfolios)'],
   ['C', 'Change camera view'],
+  ['H', 'Build & manage your deeds'],
+  ['T', 'Make a trade'],
   ['Esc', 'Close dialogs'],
-  ['?', 'Show this list'],
+  ['?', 'How to play & this list'],
 ];
 
 function typing(t: EventTarget | null): boolean {
@@ -55,6 +55,7 @@ export function useShortcuts(game: GameView, me: string, h: {
   onHelp: () => void;
   /** Next camera view. */
   onCamera?: () => void;
+  onBuild: () => void;
 }): void {
   // Handlers read the latest props without re-binding the listener every state.
   const ref = useRef({ game, me, h });
@@ -72,6 +73,7 @@ export function useShortcuts(game: GameView, me: string, h: {
       if (key === '?') { e.preventDefault(); h.onHelp(); return; }
       if (key === 't') { e.preventDefault(); h.onTrade(); return; }
       if (key === 'c' && h.onCamera) { e.preventDefault(); h.onCamera(); return; }
+      if (key === 'h') { e.preventDefault(); h.onBuild(); return; }
       // Space on a focused button already clicks it: don't double up.
       if (key === ' ' && (e.target as HTMLElement | null)?.tagName === 'BUTTON') return;
       const a = actionForKey(key, game, me);
@@ -84,36 +86,4 @@ export function useShortcuts(game: GameView, me: string, h: {
     window.addEventListener('keydown', down);
     return () => window.removeEventListener('keydown', down);
   }, []);
-}
-
-/** "?" button with a popover listing the shortcuts. */
-export function ShortcutHelp({ open, onToggle }: { open: boolean; onToggle: () => void }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const away = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) onToggle(); };
-    window.addEventListener('pointerdown', away);
-    return () => window.removeEventListener('pointerdown', away);
-  }, [open, onToggle]);
-  return (
-    <div className="kb-help" ref={ref}>
-      {open && (
-        <div className="kb-pop" role="dialog" aria-label="Keyboard shortcuts">
-          <b>Keyboard shortcuts</b>
-          <table>
-            <tbody>
-              {SHORTCUTS.map(([k, what]) => <tr key={k}><td><kbd>{k}</kbd></td><td>{what}</td></tr>)}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <button className={`dock-btn ${open ? 'on' : ''} hide-touch`} onClick={onToggle} title="Keyboard shortcuts (?)" aria-expanded={open}>?</button>
-    </div>
-  );
-}
-
-/** Small hook for the popover's open state that other code (Esc) can close. */
-export function useToggle(initial = false): [boolean, () => void, (v: boolean) => void] {
-  const [v, setV] = useState(initial);
-  return [v, () => setV(x => !x), setV];
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, getToken } from '../../api.ts';
 import { loadLibrary } from '../../music.ts';
 import { toast, toastError } from '../../toast.tsx';
+import { askConfirm, askText } from '../Modal.tsx';
 
 // The operator's music library, for the dashboard's Music tab: upload files,
 // group them into playlists, rename, move and delete. Everything here reaches
@@ -161,16 +162,16 @@ export default function MusicManager() {
   const retitle = (s: SongRow, name: string) =>
     api(`/api/admin/music/${s.id}`, { method: 'PATCH', json: { name } }).then(changed).catch(toastError);
 
-  const move = (s: SongRow, choice: string) => {
-    const to = choice === NEW ? (prompt('Name the new playlist', '') ?? '').trim() : choice;
+  const move = async (s: SongRow, choice: string) => {
+    const to = choice === NEW ? ((await askText({ title: 'Name the new playlist', placeholder: 'Playlist name', confirm: 'Create' })) ?? '').trim() : choice;
     if (!to || to === s.playlist) return;
     api(`/api/admin/music/${s.id}`, { method: 'PATCH', json: { playlist: to } })
       .then(() => { toast(`Moved “${s.name}” to ${to}`); return changed(); })
       .catch(toastError);
   };
 
-  const remove = (s: SongRow) => {
-    if (!confirm(`Delete “${s.name}”? The file is removed from the server.`)) return;
+  const remove = async (s: SongRow) => {
+    if (!(await askConfirm({ title: `Delete “${s.name}”?`, body: 'The file is removed from the server.', confirm: 'Delete', danger: true }))) return;
     api(`/api/admin/music/${s.id}`, { method: 'DELETE' })
       .then(() => { toast(`Deleted “${s.name}”`); return changed(); })
       .catch(toastError);
@@ -275,7 +276,7 @@ export default function MusicManager() {
                 </select>
                 <span className="row">
                   <EditableText value={s.name} label={s.name} onSave={v => void retitle(s, v)} />
-                  <button className="btn tiny ghost" onClick={() => remove(s)}>Delete</button>
+                  <button className="btn tiny ghost" onClick={() => void remove(s)}>Delete</button>
                 </span>
               </div>
             ))}
