@@ -76,7 +76,7 @@ export function JailCell({ game, n }: { game: GameView | null; n: number }) {
   const doorBars = [0.25, 0.5, 0.75].map(f => f * DOOR_W);
   return (
     <group position={[cx, 0, cz]}>
-      <instancedMesh ref={bars} args={[barGeo, iron, spots.length]} castShadow />
+      <instancedMesh ref={bars} args={[barGeo, iron, spots.length]} castShadow frustumCulled={false} />
       {/* Top rails, and a lower rail just above the floor. */}
       {[0.02, H].map(y => (
         <group key={y}>

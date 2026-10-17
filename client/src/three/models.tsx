@@ -144,10 +144,14 @@ export function ModelBuildings({ spots, house, hotel }: { spots: BuildingSpot[];
   const standing = useRef<Set<string> | null>(null);
   if (standing.current === null) standing.current = new Set(spots.map(s => s.key));
   useEffect(() => { standing.current = new Set(); }, []);
+  // A hotel sold back down to houses: the houses are simply there in its place.
+  const hotelLots = useRef(new Set<string>());
+  useEffect(() => { hotelLots.current = new Set(spots.filter(s => s.hotel).map(s => s.key.split('-')[0])); });
+  const drops = (s: BuildingSpot) => !standing.current!.has(s.key) && (s.hotel || !hotelLots.current.has(s.key.split('-')[0]));
   return (
     <group>
       {spots.map(s => (
-        <Building key={s.key} proto={s.hotel ? protos.hotel : protos.house} spot={s} drop={!standing.current!.has(s.key)} />
+        <Building key={s.key} proto={s.hotel ? protos.hotel : protos.house} spot={s} drop={drops(s)} />
       ))}
     </group>
   );
