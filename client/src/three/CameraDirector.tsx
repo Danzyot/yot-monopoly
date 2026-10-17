@@ -6,6 +6,7 @@
 //   - anyone builds a hotel         -> the same, for everyone
 //   - anyone is sent to jail        -> the cell
 //   - anyone goes bankrupt          -> their piece falling over
+//   - the game is won               -> a slow circle round the winner's victory dance
 // Shots wait for the dice and the walk to finish, never stack up, and give
 // way the moment the player grabs the camera. They can be switched off.
 
@@ -15,9 +16,9 @@ import { Vector3 } from 'three';
 import type { GameView } from '../../../shared/types.ts';
 import { tile } from './layout.ts';
 import { useSceneBusy } from './sequence.ts';
-import { setDirectorActive, type CameraMode } from './camera.ts';
+import { pieceObjects, setDirectorActive, type CameraMode } from './camera.ts';
 
-interface Shot { pos: Vector3; target: Vector3; hold: number }
+interface Shot { pos: Vector3; target: Vector3; hold: number; /** Circle the target at this many radians a second while holding. */ orbit?: number }
 
 interface Playing {
   shot: Shot;
@@ -33,6 +34,7 @@ interface Playing {
 }
 
 const drift = new Vector3();
+const UP = new Vector3(0, 1, 0);
 
 const IN_MS = 900;
 const OUT_MS = 800;
@@ -92,6 +94,19 @@ export function CameraDirector({ game, me, n, enabled, mode }: { game: GameView;
       if (!was) continue;
       if (p.inJail && !was.inJail) shots.push(tileShot(p.position, n, { height: 1.4, dist: 2.1, side: -0.7, hold: 1800 }));
       if (p.bankrupt && !was.bankrupt) shots.push(tileShot(p.position, n, { height: 1.8, dist: 2.6, side: 0.4, hold: 2200 }));
+    }
+    if (game.winner && !before.winner) {
+      const w = game.players.find(p => p.id === game.winner);
+      const piece = pieceObjects.get(game.winner);
+      if (w) {
+        const shot = tileShot(w.position, n, { height: 1.25, dist: 1.9, side: 0.5, hold: 14000 });
+        if (piece) {
+          shot.pos.add(new Vector3(piece.position.x, 0, piece.position.z).sub(shot.target.clone().setY(0)));
+          shot.target.set(piece.position.x, 0.3, piece.position.z);
+        }
+        shot.orbit = 0.32;
+        shots.push(shot);
+      }
     }
     // Several at once (an auction win + a build): the last is the one worth seeing.
     if (shots.length) queue.current = [shots[shots.length - 1]];
@@ -153,7 +168,14 @@ export function CameraDirector({ game, me, n, enabled, mode }: { game: GameView;
     } else if (p.stage === 'hold') {
       // A slow drift keeps the hold alive.
       const d = (t / p.shot.hold) * 0.25;
-      camera.position.copy(p.shot.pos).add(drift.set(Math.sin(d) * 0.25, d * 0.15, 0));
+      if (p.shot.orbit) {
+        // Swing round the target, easing in so the cut from the glide is seamless.
+        const a = p.shot.orbit * (t / 1000) * Math.min(1, t / 1500);
+        drift.subVectors(p.shot.pos, p.shot.target).applyAxisAngle(UP, a);
+        camera.position.copy(p.shot.target).add(drift);
+      } else {
+        camera.position.copy(p.shot.pos).add(drift.set(Math.sin(d) * 0.25, d * 0.15, 0));
+      }
       controls.target.copy(p.shot.target);
       if (t >= p.shot.hold) {
         if (steer.current) {
