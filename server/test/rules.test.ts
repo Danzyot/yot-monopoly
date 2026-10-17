@@ -67,6 +67,16 @@ test('money owed is not there to spend: no buying, building, lifting mortgages o
   assert.equal(g.owned[6].owner, 'p0');
 });
 
+test('jail: the fine cannot be paid out of money already owed', () => {
+  const { g, act } = scripted(2);
+  const p = g.player('p0');
+  p.inJail = true; p.position = 10;
+  g.debts.push({ from: 'p0', to: 'p1', amount: 1480, reason: 'test' });
+  assert.throws(() => act('p0', { type: 'payJail' }), /Settle your debts first/);
+  act('p0', { type: 'payDebt' });
+  assert.throws(() => act('p0', { type: 'payJail' }), /Not enough cash/);
+});
+
 test('mortgaged deed received in a trade: 10% now, and lifting it at once costs only the principal', () => {
   const { g, dice, act } = scripted(2, { auctions: false });
   g.owned[39] = own('p0', 0, true); // mortgage 200

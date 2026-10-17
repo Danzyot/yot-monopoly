@@ -924,6 +924,7 @@ export class Game {
   private payJail(p: PlayerState) {
     this.requireTurn(p, 'roll');
     if (!p.inJail) fail('You are not in jail');
+    if (this.debtOf(p.id) > 0) fail('Settle your debts first');
     if (p.cash < this.rules.jailFine) fail('Not enough cash');
     this.charge(p, null, this.rules.jailFine, 'jail fine');
     this.leaveJail(p);
