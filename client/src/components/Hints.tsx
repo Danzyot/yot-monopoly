@@ -35,25 +35,31 @@ function useSeen(): Set<string> {
   return s;
 }
 
-/** One of my sets is split only between me and other players: a trade could finish it. */
-function tradeChance(game: GameView, me: string): boolean {
+/**
+ * Who holds the rest of a set I've started (only other players, no bank
+ * deeds left): the natural trade partner. Fewest missing deeds first.
+ */
+export function tradePartnerFor(game: GameView, me: string): string | null {
   const theme = resolveTheme(game.themeId, game.mapId);
   const groups = new Set(ownedBy(game, me).map(i => theme.spaces[i]).filter(s => s.kind === 'property').map(s => s.group!));
-  return [...groups].some(g => {
-    const idx = groupIndices(theme.spaces, g);
-    const missing = idx.filter(i => game.owned[i]?.owner !== me);
-    return missing.length > 0 && missing.every(i => {
-      const o = game.owned[i];
-      return o && o.owner !== me && !game.players.find(p => p.id === o.owner)?.bankrupt;
-    });
-  });
+  let best: { owner: string; missing: number } | null = null;
+  for (const g of groups) {
+    const missing = groupIndices(theme.spaces, g).filter(i => game.owned[i]?.owner !== me);
+    // Every missing deed held by the same (still playing) player.
+    const owners = new Set(missing.map(i => game.owned[i]?.owner ?? ''));
+    if (!missing.length || owners.has('') || owners.size !== 1) continue;
+    const owner = [...owners][0];
+    if (game.players.find(p => p.id === owner)?.bankrupt) continue;
+    if (!best || missing.length < best.missing) best = { owner, missing: missing.length };
+  }
+  return best?.owner ?? null;
 }
 
-export function CoachHint({ game, me, busy, onHelp, onBuild, onRaise }: {
+export function CoachHint({ game, me, busy, onHelp, onBuild, onRaise, onTrade }: {
   game: GameView; me: string;
   /** Something else is going on (dice rolling, a dialog open): hold the tip. */
   busy: boolean;
-  onHelp: () => void; onBuild: () => void; onRaise: () => void;
+  onHelp: () => void; onBuild: () => void; onRaise: () => void; onTrade: () => void;
 }) {
   const seen = useSeen();
   const p = game.players.find(x => x.id === me);
@@ -73,8 +79,8 @@ export function CoachHint({ game, me, busy, onHelp, onBuild, onRaise }: {
     };
   } else if (calm && canBuildAnywhere(game, theme.spaces, me) && !seen.has('build')) {
     hint = { id: 'build', icon: '🏗️', text: 'You own a full colour set! Build houses on it — rent shoots way up.', action: ['Build', onBuild] };
-  } else if (mine && game.phase === 'done' && !seen.has('trade') && tradeChance(game, me)) {
-    hint = { id: 'trade', icon: '🤝', text: "One trade from a full set? Tap ⇄ next to a player to offer cash or deeds." };
+  } else if (mine && game.phase === 'done' && !seen.has('trade') && tradePartnerFor(game, me)) {
+    hint = { id: 'trade', icon: '🤝', text: 'One trade away from a full set? Offer cash or deeds for the missing one.', action: ['Trade', onTrade] };
   } else if (!seen.has('welcome') && !howToSeen()) {
     hint = { id: 'welcome', icon: '👋', text: 'New here? The rules fit on one screen.', action: ['How to play', onHelp] };
   }

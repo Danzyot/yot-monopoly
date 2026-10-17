@@ -1707,6 +1707,7 @@ input.tr-slider { width: 100%; padding: 0; height: 26px; accent-color: var(--hi)
   .modal .end-title { font-size: 28px; }
   .modal.end-screen { padding: 14px 12px; }
   .tag.watch-tag { display: none; }
+  .ab-hint { display: none; }
   /* The dock column ducks under the bottom stack when an open panel reaches it. */
   .social-dock { z-index: 4; }
 }

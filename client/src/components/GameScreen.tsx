@@ -28,7 +28,7 @@ import ManagePanel, { type ManageMode } from './ManagePanel.tsx';
 import HowToPlay, { markHowToSeen } from './HowToPlay.tsx';
 import { AuctionPanel, SoldBanner } from './Auction.tsx';
 import EventFeed from './EventFeed.tsx';
-import { CoachHint, markHint } from './Hints.tsx';
+import { CoachHint, markHint, tradePartnerFor } from './Hints.tsx';
 import { askConfirm } from './Modal.tsx';
 import { canBuildAnywhere, debtOf, hasFullSet, ownedBy, raisable } from '../gameHelpers.ts';
 import { useSocial } from '../social.ts';
@@ -53,6 +53,11 @@ export default function GameScreen({ room, game, me, chat, skew }: {
     markHint(m === 'raise' ? 'raise' : 'build');
   };
   const openHelp = () => { setHelpOpen(true); markHowToSeen(); markHint('welcome'); };
+  /** A new offer, to whoever holds the rest of a set I've started (else the first opponent). */
+  const openTrade = () => {
+    const id = tradePartnerFor(game, me) ?? game.players.find(x => x.id !== me && !x.bankrupt)?.id;
+    if (id) { setTradeWith(id); markHint('trade'); }
+  };
   // Phones start with the side panel folded so the board stays visible.
   const [panelOpen, setPanelOpen] = useState(() => window.innerWidth > 760);
   const pickTab = (t: typeof tab) => {
@@ -84,9 +89,8 @@ export default function GameScreen({ room, game, me, chat, skew }: {
     dialogOpen,
     onEscape: closeDialogs,
     onTrade: () => {
-      const partner = game.players.find(p => p.id !== me && !p.bankrupt);
-      if (amIn && partner) setTradeWith(partner.id);
-      else setPortfolio(partner?.id ?? me);
+      if (amIn) openTrade();
+      else setPortfolio(game.players.find(p => p.id !== me && !p.bankrupt)?.id ?? me);
     },
     onHelp: () => (helpOpen ? setHelpOpen(false) : openHelp()),
     onBuild: () => { if (amIn) openManage(debtOf(game, me) > myPlayer!.cash ? 'raise' : 'build'); },
@@ -145,7 +149,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
       <div className="hud-bottom">
       <EventFeed game={game} me={me} />
       <CoachHint game={game} me={me} busy={dialogOpen || game.phase === 'auction' || game.phase === 'minigame'}
-        onHelp={openHelp} onBuild={() => openManage('build')} onRaise={() => openManage('raise')} />
+        onHelp={openHelp} onBuild={() => openManage('build')} onRaise={() => openManage('raise')} onTrade={openTrade} />
       <aside className={`sidepanel ${panelOpen ? '' : 'closed'}`}>
         <TradeOffers game={game} me={me} onCounter={t => setCounter(counterDraft(t))} />
         <div className="tabs" role="tablist">
@@ -170,7 +174,8 @@ export default function GameScreen({ room, game, me, chat, skew }: {
         <div className="deed-float"><Deed game={game} index={selected} me={me} onClose={() => setSelected(null)} /></div>
       )}
 
-      <ActionBar game={game} me={me} skew={skew} selected={selected} onManage={openManage} onLeave={leave} />
+      <ActionBar game={game} me={me} skew={skew} selected={selected} onManage={openManage} onLeave={leave}
+        onTrade={openTrade} />
       </div>
 
       <AuctionPanel game={game} me={me} skew={skew} />
@@ -197,13 +202,13 @@ export default function GameScreen({ room, game, me, chat, skew }: {
       <SpectatorReactions reactions={social.reactions} />
       <PokeNotice poke={social.poke} game={game} me={me} />
 
-      {tradeWith && <TradeModal game={game} me={me} withId={tradeWith} onClose={() => setTradeWith(null)} />}
-      {counter && <TradeModal key={counter.counterOf} game={game} me={me} withId={counter.withId} counter={counter} onClose={() => setCounter(null)} />}
+      {tradeWith && amIn && <TradeModal game={game} me={me} withId={tradeWith} onClose={() => setTradeWith(null)} />}
+      {counter && amIn && <TradeModal key={counter.counterOf} game={game} me={me} withId={counter.withId} counter={counter} onClose={() => setCounter(null)} />}
       {portfolio !== undefined && (
         <PortfolioModal game={game} me={me} focus={portfolio} onPick={setSelected}
           onTrade={id => { setPortfolio(undefined); setTradeWith(id); }} onClose={() => setPortfolio(undefined)} />
       )}
-      {manage && myPlayer && !myPlayer.bankrupt && (
+      {manage && amIn && (
         <ManagePanel game={game} me={me} mode={manage} onClose={() => setManage(null)} onPick={i => { setManage(null); setSelected(i); }} />
       )}
       {helpOpen && <HowToPlay rules={game.rules} shortcuts={!!myPlayer} onClose={() => setHelpOpen(false)} />}
@@ -263,9 +268,9 @@ function Players({ game, room, me, onTrade, reactions, onPortfolio }: {
   );
 }
 
-function ActionBar({ game, me, skew, selected, onManage, onLeave }: {
+function ActionBar({ game, me, skew, selected, onManage, onLeave, onTrade }: {
   game: GameView; me: string; skew: number; selected: number | null;
-  onManage: (mode: ManageMode) => void; onLeave: () => void;
+  onManage: (mode: ManageMode) => void; onLeave: () => void; onTrade: () => void;
 }) {
   const theme = resolveTheme(game.themeId, game.mapId);
   const cur = (n: number) => `${theme.currency}${n.toLocaleString()}`;
@@ -428,8 +433,9 @@ function ActionBar({ game, me, skew, selected, onManage, onLeave }: {
     return (
       <div className="actionbar mine">
         {dice}
-        <span className="ab-prompt small">{buildable ? 'Build on your sets, trade — then' : owns ? 'Trade or manage your deeds — then' : 'All done? Then'}</span>
+        <span className="ab-prompt small ab-hint">{buildable ? 'Build, trade — then' : 'Trade or manage — then'}</span>
         {buildBtn(buildable)}
+        <button className="btn small ghost" onClick={onTrade} aria-keyshortcuts="t" title="Offer another player a trade (T)">🤝 Trade</button>
         <button className="btn primary chunky" disabled={busy} onClick={() => run({ type: 'endTurn' })} aria-keyshortcuts="e">End turn ✓</button>
       </div>
     );

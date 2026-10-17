@@ -16,7 +16,7 @@ export function howToSteps(rules?: Partial<RuleConfig>): Step[] {
     { icon: '🏠', title: 'Buy property', text: `Land on a deed nobody owns and buy it.${auctions ? ' Skip it and it goes to auction — anyone can bid, even you.' : ''}` },
     { icon: '💰', title: 'Collect rent', text: 'Anyone landing on your deed pays you rent. Own a whole colour set and the rent doubles.' },
     { icon: '🏗️', title: 'Build houses', text: 'With a full set, tap Build: up to 4 houses, then a hotel. Rent skyrockets. Build evenly across the set.' },
-    { icon: '🤝', title: 'Trade', text: 'Missing one deed of a set? Tap ⇄ on a player to swap deeds and cash. They can accept, decline or counter.' },
+    { icon: '🤝', title: 'Trade', text: 'Missing one deed of a set? Tap Trade (or ⇄ on a player) to swap deeds and cash. They can accept, decline or counter.' },
     { icon: '🔒', title: 'Jail & cash trouble', text: 'In jail: roll doubles (3 tries), pay bail or use a card. Short on cash? Sell houses or mortgage deeds to pay what you owe.' },
     { icon: '🏆', title: 'Win', text: timed ? 'Bankrupt everyone else — or be the richest when the clock runs out.' : 'Be the last player standing: everyone who can\'t pay goes bankrupt.' },
   ];
