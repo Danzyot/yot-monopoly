@@ -12,6 +12,7 @@ import type { GameView, PlayerState } from '../../../../shared/types.ts';
 import { tileWidth, tokenSpot } from '../layout.ts';
 import { CharacterFigure, Tinter, newRig, poseRig, useCharacterMaterials } from './Figure.tsx';
 import { ReactionBubble } from './ReactionBubble.tsx';
+import { diceSettleAt, holdUntil } from '../sequence.ts';
 
 /** An emoji reaction currently showing over a player's character. */
 export interface PieceReaction { emoji: string; seq: number }
@@ -118,7 +119,11 @@ function Piece({ p, slot, count, turn, winner, cheer, n, reaction }: {
     const time = state.clock.elapsedTime;
 
     let k = a.t0 ? (now - a.t0) / a.dur : 1;
-    while (k >= 1 && a.queue.length) {
+    // A fresh move waits for the dice to land first.
+    const settle = diceSettleAt();
+    const waiting = k >= 1 && a.queue.length > 0 && now < settle;
+    if (a.queue.length) holdUntil(Math.max(now, waiting ? settle : now) + a.queue.length * HOP_MS + LAND_MS + 250);
+    while (k >= 1 && a.queue.length && !waiting) {
       // Chain hops back to back from when the previous one ended rather than
       // from this frame, so slow frames (phones, software GL) can't leave a
       // piece trailing behind the game; hops that are already over resolve
@@ -153,6 +158,7 @@ function Piece({ p, slot, count, turn, winner, cheer, n, reaction }: {
       if (long) { handsUp = Math.sin(Math.PI * k); spin = k * Math.PI * 2; }
       faceYaw = Math.atan2(a.to[0] - a.from[0], a.to[1] - a.from[1]);
       m.landAt = now + a.dur * (1 - k);
+      holdUntil(m.landAt + LAND_MS + 250);
     } else {
       if (!p.bankrupt) {
         // Settle into the (possibly changed) slot when other pieces arrive/leave.

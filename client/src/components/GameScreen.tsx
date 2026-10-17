@@ -13,6 +13,8 @@ import Chat from './Chat.tsx';
 import Deed from './Deed.tsx';
 import MusicPlayer from './MusicPlayer.tsx';
 import { useGameSounds } from '../useGameSounds.ts';
+import { useSceneBusy } from '../three/sequence.ts';
+import { useCinematicPref } from '../three/cinematic.ts';
 import PlayerMenu from './PlayerMenu.tsx';
 import { TradeModal, TradeOffers, counterDraft, type CounterDraft } from './Trade.tsx';
 import MinigamePanel from './MinigamePanel.tsx';
@@ -56,6 +58,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   const social = useSocial(me);
   const reactionsOn = config.features.reactions !== false && config.features.chat;
   const [notify, toggleNotify] = useNotifyPref();
+  const [cinematic, toggleCinematic] = useCinematicPref();
   useTurnAlerts(game, me, notify, `${room.code} · Yot Monopoly`);
   const over = !!game.winner || room.status === 'finished';
   const closeDialogs = () => {
@@ -84,7 +87,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
 
   return (
     <div className={`game ${theme.ui ? 'branded' : ''} ${pokedMe ? 'poked' : ''}`} style={themeStyle(theme)}>
-      <div className="scene"><BoardScene themeId={game.themeId} mapId={game.mapId} game={game} selected={selected} onSelect={setSelected} tableStyle={room.style} reactions={pieceReactions} /></div>
+      <div className="scene"><BoardScene themeId={game.themeId} mapId={game.mapId} game={game} selected={selected} onSelect={setSelected} tableStyle={room.style} reactions={pieceReactions} me={me} cinematic={cinematic} /></div>
 
       <header className="topbar">
         <div className="tb-left">
@@ -154,6 +157,8 @@ export default function GameScreen({ room, game, me, chat, skew }: {
             title={notify ? 'Turn alerts on — click to turn off' : 'Notify me when it\'s my turn (while this tab is hidden)'}
             aria-pressed={notify}>{notify ? '🔔' : '🔕'}</button>
         )}
+        <button className={`dock-btn ${cinematic ? 'on' : ''}`} onClick={toggleCinematic} aria-pressed={cinematic}
+          title={cinematic ? 'Cinematic camera on — big moments get a close-up. Click to turn off' : 'Cinematic camera off — click to turn on'}>🎬</button>
         {myPlayer && !over && <ShortcutHelp open={helpOpen} onToggle={() => setHelpOpen(o => !o)} />}
       </div>
       <SpectatorReactions reactions={social.reactions} />
@@ -232,9 +237,14 @@ function ActionBar({ game, me, skew, selected }: { game: GameView; me: string; s
     act(a).catch(toastError).finally(() => setBusy(false));
   };
 
+  const sceneBusy = useSceneBusy();
   const dice = <DiceRead game={game} />;
 
   if (game.phase === 'over') return null;
+  // Roll → walk → result: hold my buttons while the dice tumble and the piece moves.
+  if (sceneBusy && game.current === me && !game.paused) {
+    return <div className="actionbar mine"><span className="ab-status rolling">🎲 Rolling…</span></div>;
+  }
   if (game.paused) return <div className="actionbar"><span className="ab-status">⏸️ Game paused</span>{dice}</div>;
   if (!p || p.bankrupt) {
     return <div className="actionbar"><span className="ab-status">{p ? 'You’re out! ' : '👀 Watching · '}<b style={{ color: current.color }}>{current.name}</b>’s turn</span>{dice}</div>;
@@ -294,6 +304,13 @@ function ActionBar({ game, me, skew, selected }: { game: GameView; me: string; s
         <span className="ab-prompt"><b className="ab-big">For sale!</b> <b>{s.name}</b></span>
         <button className="btn primary chunky" disabled={busy || p.cash < (s.price ?? 0)} onClick={() => run({ type: 'buy' })}>Buy it · {cur(s.price!)}</button>
         <button className="btn" disabled={busy} onClick={() => run({ type: 'decline' })}>{game.rules.auctions ? 'Auction it' : 'Skip'}</button>
+        {/* Pass and hand over in one tap (after the auction, when auctions are on). Doubles still roll again. */}
+        {!game.extraRoll && (
+          <button className="btn ghost" disabled={busy} onClick={() => run({ type: 'decline', endTurn: true })}
+            title={game.rules.auctions ? 'Skip it: it goes to auction, then your turn ends' : 'Skip it and end your turn'}>
+            End turn
+          </button>
+        )}
       </div>
     );
   }
@@ -368,12 +385,19 @@ function CardPopup({ game }: { game: GameView }) {
   const theme = resolveTheme(game.themeId, game.mapId);
   const firstSeq = useRef(card?.seq ?? 0);
   const [shown, setShown] = useState<number | null>(null);
+  // Turn the card over once the piece has arrived, not while it is still walking.
+  const busy = useSceneBusy();
+  const pending = card && card.seq > firstSeq.current ? card.seq : null;
   useEffect(() => {
-    if (!card || card.seq <= firstSeq.current) return;
-    setShown(card.seq);
+    if (pending === null || busy) return;
+    firstSeq.current = pending;
+    setShown(pending);
+  }, [pending, busy]);
+  useEffect(() => {
+    if (shown === null) return;
     const t = setTimeout(() => setShown(null), 5000);
     return () => clearTimeout(t);
-  }, [card?.seq]);
+  }, [shown]);
   if (!card || shown !== card.seq) return null;
   const who = game.players.find(p => p.id === card.player);
   return (

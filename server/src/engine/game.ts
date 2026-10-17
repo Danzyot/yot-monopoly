@@ -111,6 +111,7 @@ export interface GameSnapshot {
   speed?: SpeedFace | null;
   choice?: MoveChoice | null;
   speedPending?: 'mr' | null;
+  endAfter?: boolean;
   estateQueue?: number[];
   resumePhase?: TurnPhase | null;
   /** Optional: snapshots written before the end-of-game summary existed lack these. */
@@ -147,6 +148,8 @@ export class Game {
   rollSeq = 0;
   doublesCount = 0;
   extraRoll = false;
+  /** The current player chose "End turn" on a buy: hand over as soon as the property is settled. */
+  endAfter = false;
   debts: Debt[] = [];
   auction: Auction | null = null;
   trades: Trade[] = [];
@@ -488,6 +491,10 @@ export class Game {
       }
     }
     this.phase = this.extraRoll && !this.current.inJail ? 'roll' : 'done';
+    if (this.endAfter) {
+      this.endAfter = false;
+      if (this.phase === 'done' && this.debtOf(this.current.id) === 0) this.nextTurn();
+    }
   }
 
   private nextTurn() {
@@ -495,6 +502,7 @@ export class Game {
     this.doublesCount = 0;
     this.extraRoll = false;
     this.speedPending = null;
+    this.endAfter = false;
     this.choice = null;
     do this.currentIdx = (this.currentIdx + 1) % this.players.length;
     while (this.current.bankrupt);
@@ -543,7 +551,7 @@ export class Game {
     switch (a.type) {
       case 'roll': return this.roll(p);
       case 'buy': return this.buy(p);
-      case 'decline': return this.decline(p);
+      case 'decline': return this.decline(p, a.endTurn === true);
       case 'bid': return this.bid(p, a.amount);
       case 'pass': return this.pass(p);
       case 'endTurn': return this.endTurn(p);
@@ -712,9 +720,11 @@ export class Game {
     this.afterResolution();
   }
 
-  private decline(p: PlayerState) {
+  private decline(p: PlayerState, endTurn = false) {
     this.requireTurn(p, 'buy');
     const s = this.spaces[p.position];
+    // "End turn" on an unbought property: pass on it and hand over once it is settled.
+    this.endAfter = endTurn && !this.extraRoll;
     if (!this.rules.auctions) {
       this.say(`${p.name} passed on ${s.name}.`, p.id);
       this.afterResolution();
@@ -1551,7 +1561,7 @@ export class Game {
       minigame: this.minigame, minigameSeq: this.minigameSeq, savedAt: this.now(),
       turnEndsAt: this.turnEndsAt, turnKey: this.turnKey, debtEndsAt: this.debtEndsAt,
       timeoutStreak: this.timeoutStreak, paused: this.paused, endsAt: this.endsAt, timeUp: this.timeUp,
-      speed: this.speed, choice: this.choice, speedPending: this.speedPending,
+      speed: this.speed, choice: this.choice, speedPending: this.speedPending, endAfter: this.endAfter,
       estateQueue: this.estateQueue, resumePhase: this.resumePhase,
       stats: this.stats, startedAt: this.startedAt, endedAt: this.endedAt,
     });
@@ -1576,6 +1586,7 @@ export class Game {
     g.speed = snap.speed ?? null;
     g.choice = snap.choice ?? null;
     g.speedPending = snap.speedPending ?? null;
+    g.endAfter = snap.endAfter ?? false;
     g.estateQueue = snap.estateQueue ?? [];
     g.resumePhase = snap.resumePhase ?? null;
     g.stats ??= {};

@@ -3,9 +3,10 @@ import { useMemo, useRef } from 'react';
 import { CanvasTexture, Euler, MeshStandardMaterial, Quaternion, SRGBColorSpace, type Mesh } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { SpeedFace } from '../../../shared/types.ts';
+import { DICE_MS, markRoll } from './sequence.ts';
 
 const SIZE = 0.5;
-const ROLL_MS = 1100;
+const ROLL_MS = DICE_MS;
 // Rounded edges like a real die; keeps BoxGeometry's face groups and UVs.
 const DIE_GEO = new RoundedBoxGeometry(SIZE, SIZE, SIZE, 4, 0.07);
 
@@ -162,6 +163,10 @@ export function Dice({ dice, seq, pip = '#111', body = '#fbfbf7', speed = null }
   speed?: SpeedFace | null;
 }) {
   const [a, b] = dice ?? [5, 2];
+  // Tell the scene a throw is under way (pieces wait for the dice to settle).
+  const mounted = useRef(false);
+  markRoll(seq, !mounted.current);
+  mounted.current = true;
   const pipMaterials = useMemo(
     () => FACE_VALUES.map(v => new MeshStandardMaterial({ map: canvasTexture(g => drawPips(g, v, pip, body)), roughness: 0.35 })),
     [pip, body],

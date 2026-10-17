@@ -143,6 +143,47 @@ test('auction: timeout awards to high bidder', () => {
   assert.equal(g.owned[3].owner, 'p1');
 });
 
+test('end turn on an unbought property: passes it, hands over once settled', () => {
+  // No auctions: straight to the next player.
+  const a = scripted(3, { auctions: false });
+  a.dice(1, 2);
+  a.act('p0', { type: 'roll' });
+  a.act('p0', { type: 'decline', endTurn: true });
+  assert.equal(a.g.owned[3], undefined);
+  assert.equal(a.g.current.id, 'p1');
+  assert.equal(a.g.phase, 'roll');
+
+  // Auctions: the lot runs first, then the turn passes on its own.
+  const b = scripted(3);
+  b.dice(1, 2);
+  b.act('p0', { type: 'roll' });
+  b.act('p0', { type: 'decline', endTurn: true });
+  assert.equal(b.g.phase, 'auction');
+  assert.equal(b.g.current.id, 'p0');
+  b.act('p1', { type: 'bid', amount: 30 });
+  b.act('p0', { type: 'pass' });
+  b.act('p2', { type: 'pass' });
+  assert.equal(b.g.owned[3].owner, 'p1');
+  assert.equal(b.g.current.id, 'p1');
+  assert.equal(b.g.phase, 'roll');
+
+  // Doubles: the extra roll is not thrown away.
+  const c = scripted(2, { auctions: false });
+  c.dice(3, 3);
+  c.act('p0', { type: 'roll' });
+  assert.equal(c.g.phase, 'buy');
+  c.act('p0', { type: 'decline', endTurn: true });
+  assert.equal(c.g.current.id, 'p0');
+  assert.equal(c.g.phase, 'roll');
+
+  // Survives a save/restore mid-auction.
+  const d = scripted(2);
+  d.dice(1, 2);
+  d.act('p0', { type: 'roll' });
+  d.act('p0', { type: 'decline', endTurn: true });
+  assert.equal(d.g.snapshot().endAfter, true);
+});
+
 test('building: needs set, builds evenly, respects supply', () => {
   const { g, act } = scripted();
   g.owned[1] = { owner: 'p0', houses: 0, mortgaged: false };

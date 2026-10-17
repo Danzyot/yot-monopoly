@@ -11,6 +11,7 @@ import { C, W, buildingSpots, tile, tileAt, tileWidth } from './layout.ts';
 import { Pieces, type PieceReaction } from './characters/Pieces.tsx';
 import { Environment, FLOOR, TABLE_R, envLook } from './environments/index.tsx';
 import { Dice } from './Dice.tsx';
+import { CameraDirector } from './CameraDirector.tsx';
 import { ModelBuildings, ModelTable, WithModel, preloadModels, type BuildingSpot } from './models.tsx';
 
 preloadModels();
@@ -239,7 +240,7 @@ function Spinner({ children, spin }: { children: React.ReactNode; spin?: boolean
   return <group ref={ref}>{children}</group>;
 }
 
-export default function BoardScene({ themeId, mapId, game, selected, onSelect, spin, tableStyle, reactions }: {
+export default function BoardScene({ themeId, mapId, game, selected, onSelect, spin, tableStyle, reactions, me, cinematic = false }: {
   themeId: string;
   mapId: string;
   game: GameView | null;
@@ -250,6 +251,10 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
   tableStyle?: TableStyle | null;
   /** Emoji reactions to pop over the characters, by player id. */
   reactions?: Record<string, PieceReaction>;
+  /** The viewer (for shots of their own buys and builds). */
+  me?: string;
+  /** Swoop the camera down for the big moments (CameraDirector). */
+  cinematic?: boolean;
 }) {
   const theme = resolveTheme(themeId, mapId);
   // Re-checked here as well as on the server: this string ends up in CSS.
@@ -305,6 +310,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
         onIncline={() => setDpr(Math.min(1.5, window.devicePixelRatio || 1))}
         flipflops={3} onFallback={() => setDpr(1)} />
       <CameraFit hud={!!game} fogNear={look.fogNear} fogFar={look.fogFar} />
+      {game && !spin && <CameraDirector game={game} me={me} n={theme.spaces.length} enabled={cinematic} />}
       <OrbitControls makeDefault enablePan={false} enabled={!spin}
         minDistance={6} maxDistance={60} minPolarAngle={0.05} maxPolarAngle={Math.PI / 2.4}
         target={[0, 0, 0]} />

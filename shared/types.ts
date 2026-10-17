@@ -183,7 +183,8 @@ export interface PlayerStats {
 export type Action =
   | { type: 'roll' }
   | { type: 'buy' }
-  | { type: 'decline' }
+  /** `endTurn`: also end the turn once the property is settled (straight away, or after its auction). */
+  | { type: 'decline'; endTurn?: boolean }
   | { type: 'bid'; amount: number }
   | { type: 'pass' }
   | { type: 'endTurn' }
