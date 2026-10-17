@@ -1,7 +1,8 @@
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { OrbitControls, PerformanceMonitor } from '@react-three/drei';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { MeshStandardMaterial, Vector3, type Group, type Mesh } from 'three';
+import { MeshPhysicalMaterial, MeshStandardMaterial, Vector3, type Group, type Mesh } from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { resolveTheme, type Theme } from '../../../shared/themes.ts';
 import { getMap } from '../../../shared/maps.ts';
 import type { GameView } from '../../../shared/types.ts';
@@ -86,6 +87,29 @@ function Board({ theme, customLogo, onPick, onHover }: {
       onClick={pick} onPointerMove={hover} onPointerOut={() => onHover?.(null)}>
       <boxGeometry args={[W, THICK, W]} />
     </mesh>
+  );
+}
+
+const RIM = 0.13;
+const RIM_UP = 0.035;
+
+/** A lacquered rim round the board's edge, standing a hair proud of the printed face. */
+function BoardRim({ theme }: { theme: Theme }) {
+  const mat = useMemo(() => new MeshPhysicalMaterial({
+    color: theme.palette.boardLine, roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.15,
+  }), [theme.palette.boardLine]);
+  const geo = useMemo(() => new RoundedBoxGeometry(W + RIM * 2, THICK + RIM_UP + 0.02, RIM, 2, 0.03), []);
+  useEffect(() => () => mat.dispose(), [mat]);
+  useEffect(() => () => geo.dispose(), [geo]);
+  const y = (RIM_UP - THICK - 0.02) / 2 + 0.01;
+  const off = W / 2 + RIM / 2;
+  return (
+    <group>
+      {[0, 1, 2, 3].map(k => (
+        <mesh key={k} geometry={geo} material={mat} receiveShadow castShadow
+          rotation={[0, (k * Math.PI) / 2, 0]} position={[k % 2 ? (k === 1 ? off : -off) : 0, y, k % 2 ? 0 : (k === 0 ? off : -off)]} />
+      ))}
+    </group>
   );
 }
 
@@ -284,12 +308,12 @@ function CameraRig({ hud, fogNear, fogFar, mode, followId }: {
         if (out.lengthSq() < 0.01) out.set(0, 0, 1);
         out.normalize();
         // Close enough to see the character, high enough to keep the board ahead in view;
-        // the target sits just past the piece, which puts it a little below the middle of
-        // the frame, clear of the action bar.
+        // aimed at the character itself, so it stays mid-frame, clear of the action bar
+        // and tips along the bottom.
         // Portrait screens are narrow: stand back a little so the street stays in view.
         const back = aspect < 1 ? 1.3 : 1;
         pos = tmpPos.set(p.x + out.x * 3.0 * back, 2.6 * back + p.y * 0.3, p.z + out.z * 3.0 * back);
-        target = tmpTarget.set(p.x - out.x * 0.5, 0.2, p.z - out.z * 0.5);
+        target = tmpTarget.set(p.x - out.x * 0.15, 0.3, p.z - out.z * 0.15);
       } else {
         // Nearly straight down; the slight tilt keeps the board square to the screen (straight down has no 'up').
         pos = tmpPos.set(0, 17.5 * Math.max(1, 1 / aspect), 1.6);
@@ -397,6 +421,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
       <Spinner spin={spin}>
         <Table theme={theme} presetId={tableStyle?.table} />
         <Board theme={theme} customLogo={customLogo} onPick={onSelect} onHover={onSelect ? setHover : undefined} />
+        <BoardRim theme={theme} />
         {theme.spaces[theme.spaces.length / 4]?.kind === 'jail' && <JailCell game={game} n={theme.spaces.length} />}
         <CardDecks theme={theme} withLogo={!!(customLogo || theme.logoUrl)} lastCard={game?.lastCard ?? null} />
         <TileHighlight index={hover} color="#ffffff" n={theme.spaces.length} />
