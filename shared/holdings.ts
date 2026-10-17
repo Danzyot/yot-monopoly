@@ -1,9 +1,9 @@
 // Managing property — building, selling, mortgaging — as pure checks shared
 // by the engine (which enforces them) and the deed card (which greys out the
 // buttons and says why), so the two can never disagree.
-import { groupIndices, unmortgageCost, type SpaceDef } from './board.ts';
+import { groupIndices, mortgageValue, unmortgageCost, type SpaceDef } from './board.ts';
 import type { RuleConfig } from './themes.ts';
-import type { OwnedSpace, TurnPhase } from './types.ts';
+import type { Debt, OwnedSpace, TurnPhase } from './types.ts';
 
 /** What the checks need from a game: the engine's Game and a client's GameView both fit. */
 export interface Holdings {
@@ -12,6 +12,22 @@ export interface Holdings {
   housesLeft: number;
   hotelsLeft: number;
   rules: Pick<RuleConfig, 'evenBuild' | 'limitedBuildings'>;
+  /** Unpaid debts: money a player owes is not theirs to spend. Absent: none. */
+  debts?: Debt[];
+}
+
+/** What `id` owes right now. */
+export function owedBy(h: Pick<Holdings, 'debts'>, id: string): number {
+  return (h.debts ?? []).filter(d => d.from === id).reduce((a, d) => a + d.amount, 0);
+}
+
+/**
+ * Cost to lift the mortgage on `space`: principal plus 10%, or the principal
+ * alone when the 10% was already paid on receiving the deed this turn
+ * (official rule for mortgaged deeds changing hands).
+ */
+export function liftCost(spaces: SpaceDef[], space: number, o: OwnedSpace | undefined): number {
+  return o?.interestPaid ? mortgageValue(spaces[space]) : unmortgageCost(spaces[space]);
 }
 
 /** Can `id` touch this deed at all right now? Every management action starts here. */
@@ -34,6 +50,7 @@ export function buildProblem(h: Holdings, spaces: SpaceDef[], id: string, space:
   if (grp.some(i => h.owned[i].mortgaged)) return 'Lift the mortgages in this group first';
   if (o.houses >= 5) return 'Already has a hotel';
   if (h.rules.evenBuild && o.houses > Math.min(...grp.map(i => h.owned[i].houses))) return 'Build evenly across the group';
+  if (owedBy(h, id) > 0) return 'Settle your debts first';
   if (cash < s.houseCost!) return 'Not enough cash';
   if (h.rules.limitedBuildings) {
     if (o.houses === 4 && h.hotelsLeft === 0) return 'The bank is out of hotels';
@@ -62,7 +79,9 @@ export function mortgageProblem(h: Holdings, spaces: SpaceDef[], space: number):
 
 /** Why the mortgage on `space` cannot be lifted by someone holding `cash`, or null (after manageProblem). */
 export function unmortgageProblem(h: Holdings, spaces: SpaceDef[], space: number, cash: number): string | null {
-  if (!h.owned[space]?.mortgaged) return 'Not mortgaged';
-  if (cash < unmortgageCost(spaces[space])) return 'Not enough cash';
+  const o = h.owned[space];
+  if (!o?.mortgaged) return 'Not mortgaged';
+  if (owedBy(h, o.owner) > 0) return 'Settle your debts first';
+  if (cash < liftCost(spaces, space, o)) return 'Not enough cash';
   return null;
 }

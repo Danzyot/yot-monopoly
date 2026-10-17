@@ -3,11 +3,11 @@
 // Rooms own pacing (auction deadlines, bots); this file owns the rules.
 
 import {
-  groupIndices, isOwnable, mortgageValue, unmortgageCost, type SpaceDef,
+  groupIndices, isOwnable, mortgageValue, type SpaceDef,
 } from '../../../shared/board.ts';
 import type { CardEffect, DeckId } from '../../../shared/cards.ts';
 import {
-  buildProblem, manageProblem, mortgageProblem, sellProblem, unmortgageProblem,
+  buildProblem, liftCost, manageProblem, mortgageProblem, sellProblem, unmortgageProblem,
 } from '../../../shared/holdings.ts';
 import type { RuleConfig, Theme } from '../../../shared/themes.ts';
 import {
@@ -62,6 +62,12 @@ export interface GameInit {
   onLog?: (text: string) => void;
   /** Site-wide mini-game switch, read live so flipping it affects running games. Default on. */
   minigamesEnabled?: () => boolean;
+  /**
+   * Every movement of money between a player and the bank (positive: the bank
+   * pays out). Player-to-player payments and the Free Parking pot are not bank
+   * money. Lets tests prove cash is never created or lost by accident.
+   */
+  onBank?: (amount: number, reason: string) => void;
 }
 
 /** A running arcade round. `data` belongs to the module named by `kind` (and may hold secrets). */
@@ -202,6 +208,7 @@ export class Game {
   private cardSeq = 0;
   private tradeSeq = 0;
   private onLog?: (text: string) => void;
+  private onBank?: (amount: number, reason: string) => void;
   private rng: Rng;
   private now: () => number;
 
@@ -216,6 +223,7 @@ export class Game {
     this.rng = init.rng ?? (n => Math.floor(Math.random() * n));
     this.now = init.now ?? Date.now;
     this.onLog = init.onLog;
+    this.onBank = init.onBank;
     this.minigamesEnabled = init.minigamesEnabled ?? (() => true);
     this.startedAt = this.now();
     this.players = init.players.map(p => ({
@@ -313,12 +321,26 @@ export class Game {
 
   // ---- money ----------------------------------------------------------------
 
+  /** The bank pays `p` (a negative amount: `p` pays the bank). All bank money goes through here. */
+  private bankPays(p: PlayerState, amount: number, reason: string) {
+    if (!amount) return;
+    p.cash += amount;
+    this.onBank?.(amount, reason);
+  }
+
   /** Pay now if possible; otherwise record a debt the payer must settle. */
   private charge(from: PlayerState, to: PlayerState | null, amount: number, reason: string, toPot = false) {
     if (amount <= 0) return;
     if (from.cash >= amount) {
-      from.cash -= amount;
-      if (to) to.cash += amount;
+      if (to) {
+        from.cash -= amount;
+        to.cash += amount;
+      } else if (toPot && this.rules.freeParkingPot) {
+        from.cash -= amount;
+        this.pot += amount;
+      } else {
+        this.bankPays(from, -amount, reason);
+      }
       // Counted when the money moves (now, or later via payDebt with the same
       // reason), so rent that ended in bankruptcy is not credited.
       if (to && reason.startsWith(RENT_REASON)) {
@@ -326,7 +348,6 @@ export class Game {
         const payer = this.stat(from.id);
         payer.biggestRentPaid = Math.max(payer.biggestRentPaid, amount);
       }
-      else if (toPot && this.rules.freeParkingPot) this.pot += amount;
       this.say(`${from.name} paid ${this.money(amount)}${to ? ` to ${to.name}` : ''} (${reason}).`, from.id);
     } else {
       this.debts.push({ from: from.id, to: to?.id ?? null, amount, reason, toPot });
@@ -341,7 +362,7 @@ export class Game {
     if (target >= this.size) {
       const landedOnGo = target % this.size === 0;
       const pay = this.rules.goSalary * (landedOnGo && this.rules.doubleOnGo ? 2 : 1);
-      p.cash += pay;
+      this.bankPays(p, pay, 'salary');
       p.passedGo = true;
       this.say(`${p.name} ${landedOnGo ? 'landed on' : 'passed'} ${this.spaces[0].name} and collected ${this.money(pay)}.`, p.id);
     }
@@ -459,7 +480,7 @@ export class Game {
       case 'jailFree':
         break;
       case 'collect':
-        p.cash += e.amount;
+        this.bankPays(p, e.amount, 'card');
         break;
       case 'pay':
         this.charge(p, null, e.amount, 'card', true);
@@ -490,8 +511,13 @@ export class Game {
       this.nextTurn();
       return;
     }
-    // Speed Die: Mr. Monopoly moves on once the first landing is fully dealt with.
+    // Speed Die: Mr. Monopoly moves on once the first landing is fully dealt
+    // with — rent included: while it is owed he waits (see resumeAfterDebt).
     if (this.speedPending === 'mr') {
+      if (!this.current.inJail && this.debtOf(this.current.id) > 0) {
+        this.phase = 'done';
+        return;
+      }
       this.speedPending = null;
       if (!this.current.inJail) {
         // Leave the phase that just ended (a mini-game or an auction) first:
@@ -510,6 +536,8 @@ export class Game {
 
   private nextTurn() {
     if (this.checkWinner()) return;
+    // "Lift the mortgage at once for the principal" lasts until the turn ends.
+    for (const o of Object.values(this.owned)) delete o.interestPaid;
     this.doublesCount = 0;
     this.extraRoll = false;
     this.speedPending = null;
@@ -654,7 +682,7 @@ export class Game {
           return;
         }
         this.say(`${p.name} must pay the ${this.money(this.rules.jailFine)} fine after three tries.`, p.id);
-        this.charge(p, null, this.rules.jailFine, 'jail fine', true);
+        this.charge(p, null, this.rules.jailFine, 'jail fine');
         p.inJail = false;
         p.jailTurns = 0;
       }
@@ -752,8 +780,10 @@ export class Game {
     this.requireTurn(p, 'buy');
     const s = this.spaces[p.position];
     const price = s.price ?? 0;
-    if (p.cash < price) fail('Not enough cash — auction it or raise funds');
-    p.cash -= price;
+    // Money already owed is not there to spend.
+    const owe = this.debtOf(p.id);
+    if (p.cash - owe < price) fail(owe ? 'Settle your debts first — or auction it' : 'Not enough cash — auction it or raise funds');
+    this.bankPays(p, -price, 'purchase');
     this.owned[p.position] = { owner: p.id, houses: 0, mortgaged: false };
     this.stat(p.id).propertiesBought++;
     this.say(`${p.name} bought ${s.name} for ${this.money(price)}.`, p.id);
@@ -840,7 +870,7 @@ export class Game {
       // Bids are capped at cash, but cash can move during the auction (a debt
       // paid, an operator fix): whatever is missing becomes an ordinary debt.
       const paid = Math.max(0, Math.min(a.highBid, w.cash));
-      w.cash -= paid;
+      this.bankPays(w, -paid, 'auction');
       this.owned[a.space] = { owner: w.id, houses: 0, mortgaged: false };
       this.stat(w.id).propertiesBought++;
       this.say(`${w.name} won ${s.name} for ${this.money(a.highBid)}.`, w.id);
@@ -894,8 +924,9 @@ export class Game {
   private payJail(p: PlayerState) {
     this.requireTurn(p, 'roll');
     if (!p.inJail) fail('You are not in jail');
+    if (this.debtOf(p.id) > 0) fail('Settle your debts first');
     if (p.cash < this.rules.jailFine) fail('Not enough cash');
-    this.charge(p, null, this.rules.jailFine, 'jail fine', true);
+    this.charge(p, null, this.rules.jailFine, 'jail fine');
     this.leaveJail(p);
   }
 
@@ -924,7 +955,7 @@ export class Game {
     const { s, o } = this.requireOwn(p, space);
     const why = this.canBuild(p.id, space);
     if (why) fail(why);
-    p.cash -= s.houseCost!;
+    this.bankPays(p, -s.houseCost!, 'building');
     if (o.houses === 4) {
       this.hotelsLeft--;
       this.housesLeft += 4;
@@ -936,29 +967,77 @@ export class Game {
   }
 
   private sell(p: PlayerState, space: number) {
-    const { s, o } = this.requireOwn(p, space);
+    this.requireOwn(p, space);
     const why = sellProblem(this, this.spaces, space);
     if (why) fail(why);
-    this.sellOne(p, s, o);
+    this.sellOne(p, space);
   }
 
   /** Sell one building back to the bank (checks done by the caller). */
-  private sellOne(p: PlayerState, s: SpaceDef, o: OwnedSpace) {
-    let newLevel = o.houses - 1;
-    if (o.houses === 5) {
-      this.hotelsLeft++;
-      // Breaking a hotel needs four houses back from the bank; with fewer, the
-      // property drops to whatever the bank can supply.
-      const back = this.rules.limitedBuildings ? Math.min(4, this.housesLeft) : 4;
-      newLevel = back;
-      this.housesLeft -= back;
-    } else {
+  private sellOne(p: PlayerState, space: number) {
+    const s = this.spaces[space];
+    const o = this.owned[space];
+    if (o.houses < 5) {
+      o.houses--;
       this.housesLeft++;
+      const refund = Math.floor(s.houseCost! / 2);
+      this.bankPays(p, refund, 'building sold');
+      this.say(`${p.name} sold a house on ${s.name} for ${this.money(refund)}.`, p.id);
+      return;
     }
-    const refund = Math.floor(s.houseCost! / 2) * (o.houses - newLevel);
-    o.houses = newLevel;
-    p.cash += refund;
-    this.say(`${p.name} sold a building on ${s.name} for ${this.money(refund)}.`, p.id);
+    // A hotel is broken back into four houses, which come from the bank.
+    let refund = 0;
+    const changed: string[] = [];
+    for (const [i, level] of this.hotelBreak(space)) {
+      const lot = this.owned[i];
+      if (level === lot.houses) continue;
+      if (lot.houses === 5) this.hotelsLeft++;
+      else this.housesLeft += lot.houses;
+      this.housesLeft -= level; // never a hotel: lots only come down
+      refund += Math.floor(this.spaces[i].houseCost! / 2) * (lot.houses - level);
+      lot.houses = level;
+      changed.push(`${this.spaces[i].name} → ${level === 0 ? 'no houses' : `${level} house${level === 1 ? '' : 's'}`}`);
+    }
+    this.bankPays(p, refund, 'building sold');
+    if (changed.length === 1 && o.houses === 4) {
+      this.say(`${p.name} sold the hotel on ${s.name} for ${this.money(refund)}.`, p.id);
+    } else {
+      this.say(`${p.name} sold the hotel on ${s.name}, but the bank was short of houses to replace it: ${changed.join(', ')} (${this.money(refund)}).`, p.id);
+    }
+  }
+
+  /**
+   * New house counts when the hotel on `space` is sold: four houses, if the
+   * bank has them. In a housing shortage the lot can only drop to what the
+   * bank can supply, and with even building on, the rest of the group must
+   * come down with it (official rule: sell down further). Of every even
+   * arrangement the bank can supply, the one that sells the least.
+   */
+  private hotelBreak(space: number): Map<number, number> {
+    const bank = this.rules.limitedBuildings ? Math.max(0, this.housesLeft) : Infinity;
+    if (bank >= 4) return new Map([[space, 4]]);
+    if (!this.rules.evenBuild) return new Map([[space, bank]]);
+    const grp = groupIndices(this.spaces, this.spaces[space].group!);
+    const now = grp.map(i => this.owned[i].houses);
+    const housesNow = now.reduce((a, h) => a + (h < 5 ? h : 0), 0);
+    const pick = grp.map(() => 0);
+    let best = pick.map(() => 0);
+    let bestSum = -1;
+    const visit = (k: number) => {
+      if (k === grp.length) {
+        if (Math.max(...pick) - Math.min(...pick) > 1) return;
+        const need = pick.reduce((a, h) => a + (h < 5 ? h : 0), 0) - housesNow;
+        const sum = pick.reduce((a, h) => a + h, 0);
+        if (need <= bank && sum > bestSum) { best = [...pick]; bestSum = sum; }
+        return;
+      }
+      for (let v = grp[k] === space ? Math.min(4, now[k]) : now[k]; v >= 0; v--) {
+        pick[k] = v;
+        visit(k + 1);
+      }
+    };
+    visit(0);
+    return new Map(grp.map((i, k) => [i, best[k]]));
   }
 
   private mortgage(p: PlayerState, space: number) {
@@ -970,7 +1049,7 @@ export class Game {
 
   private mortgageOne(p: PlayerState, s: SpaceDef, o: OwnedSpace) {
     o.mortgaged = true;
-    p.cash += mortgageValue(s);
+    this.bankPays(p, mortgageValue(s), 'mortgage');
     this.say(`${p.name} mortgaged ${s.name} for ${this.money(mortgageValue(s))}.`, p.id);
   }
 
@@ -978,9 +1057,10 @@ export class Game {
     const { s, o } = this.requireOwn(p, space);
     const why = unmortgageProblem(this, this.spaces, space, p.cash);
     if (why) fail(why);
-    const cost = unmortgageCost(s);
-    p.cash -= cost;
+    const cost = liftCost(this.spaces, space, o);
+    this.bankPays(p, -cost, 'mortgage lifted');
     o.mortgaged = false;
+    delete o.interestPaid;
     this.say(`${p.name} lifted the mortgage on ${s.name} for ${this.money(cost)}.`, p.id);
   }
 
@@ -991,42 +1071,64 @@ export class Game {
     if (p.cash < total) fail(`You need ${this.money(total - p.cash)} more`);
     this.debts = this.debts.filter(d => d.from !== p.id);
     for (const d of mine) this.charge(p, d.to ? this.player(d.to) : null, d.amount, d.reason, d.toPot);
+    this.resumeAfterDebt(p);
   }
 
-  /** Voluntary resignation or failure to pay. */
+  /** The current player's debt is settled: a Mr. Monopoly move waiting on it goes ahead. */
+  private resumeAfterDebt(p: PlayerState) {
+    if (p === this.current && this.speedPending === 'mr' && this.phase === 'done' && this.debtOf(p.id) === 0) {
+      this.afterResolution();
+    }
+  }
+
+  /**
+   * Voluntary resignation or failure to pay. Buildings go back to the bank at
+   * half price first. Then debts are met in the order they arose, each in full
+   * while the cash lasts, as they would be across the table; the first one that
+   * cannot be met is who `p` goes bankrupt to. A player creditor takes
+   * everything left (cash, deeds as they are, Get Out of Jail Free cards, and
+   * what others owe `p`), paying the 10% on mortgaged deeds; the bank auctions
+   * the deeds unmortgaged and puts the jail cards back under their decks.
+   */
   private goBankrupt(p: PlayerState) {
     const mine = this.debts.filter(d => d.from === p.id);
-    const creditors = new Set(mine.map(d => d.to));
-    const creditorId = creditors.size === 1 ? [...creditors][0] : null;
-    const creditor = creditorId ? this.player(creditorId) : null;
-    this.debts = this.debts
-      .filter(d => d.from !== p.id)
-      .map(d => (d.to === p.id ? { ...d, to: null } : d));
+    this.debts = this.debts.filter(d => d.from !== p.id);
     this.trades = this.trades.filter(t => t.from !== p.id && t.to !== p.id);
 
-    // Buildings go back to the bank at half price either way.
-    let buildingCash = 0;
-    for (const i of this.ownedBy(p.id)) {
-      const o = this.owned[i];
-      if (o.houses > 0) {
-        buildingCash += Math.floor(this.spaces[i].houseCost! / 2) * o.houses;
-        if (o.houses === 5) this.hotelsLeft++;
-        else this.housesLeft += o.houses;
-        o.houses = 0;
+    for (const i of this.ownedBy(p.id)) if (this.owned[i].houses > 0) this.clearBuildings(i);
+
+    let creditor: PlayerState | null = null;
+    for (const d of mine) {
+      const to = d.to ? this.player(d.to) : null;
+      if (p.cash < d.amount) {
+        creditor = to;
+        break;
       }
+      this.charge(p, to, d.amount, d.reason, d.toPot);
     }
 
     if (creditor) {
-      creditor.cash += p.cash + buildingCash;
-      for (const i of this.ownedBy(p.id)) this.owned[i].owner = creditor.id;
-      creditor.jailCards.push(...p.jailCards);
-      this.say(`${p.name} went bankrupt — everything goes to ${creditor.name}.`, p.id);
+      const c = creditor;
+      const deeds = this.ownedBy(p.id).sort((a, b) => a - b);
+      if (p.cash) this.say(`${c.name} receives ${p.name}'s remaining ${this.money(p.cash)}.`, c.id);
+      c.cash += p.cash;
+      p.cash = 0;
+      for (const i of deeds) this.owned[i].owner = c.id;
+      c.jailCards.push(...p.jailCards);
+      // Money others owed p is now owed to the creditor (and cancelled if it is their own).
+      this.debts = this.debts
+        .map(d => (d.to === p.id ? { ...d, to: c.id } : d))
+        .filter(d => d.from !== d.to);
+      this.say(`${p.name} went bankrupt — everything goes to ${c.name}.`, p.id);
+      this.mortgageInterest(c, deeds);
     } else {
       const estate = this.ownedBy(p.id).sort((a, b) => a - b);
       // Official rule: the bank auctions the estate, each deed unmortgaged.
       for (const i of estate) delete this.owned[i];
       if (this.rules.auctions) this.estateQueue.push(...estate);
+      this.bankPays(p, -p.cash, 'bankruptcy');
       for (const deck of p.jailCards) this.returnJailCard(deck);
+      this.debts = this.debts.map(d => (d.to === p.id ? { ...d, to: null } : d));
       this.say(`${p.name} went bankrupt — their property returns to the bank${estate.length && this.rules.auctions ? ' to be auctioned' : ''}.`, p.id);
     }
     delete this.debtEndsAt[p.id];
@@ -1061,6 +1163,22 @@ export class Game {
   }
 
   /**
+   * Both sides of an offer between `from` and `to`, as it stands right now.
+   * Players may not lend or give each other money (official rule), so someone
+   * who owes may not pay out, net, more than the cash they have over their debts.
+   */
+  private validateTrade(from: PlayerState, to: PlayerState, give: TradeSide, get: TradeSide) {
+    this.validateSide(from, give);
+    this.validateSide(to, get);
+    for (const [who, out, back] of [[from, give.cash, get.cash], [to, get.cash, give.cash]] as const) {
+      const owe = this.debtOf(who.id);
+      if (owe > 0 && out - back > Math.max(0, who.cash - owe)) {
+        fail(`${who.name} owes ${this.money(owe)} and cannot pay out cash before settling it`);
+      }
+    }
+  }
+
+  /**
    * `counterOf` names an offer made *to* p by `toId`; the new offer replaces
    * it in one step, so the original is never left dangling (or accepted)
    * while the counter is on its way. Everything is validated before either
@@ -1078,8 +1196,7 @@ export class Game {
     if (this.trades.filter(t => t.from === p.id).length >= MAX_OPEN_TRADES) fail('Too many open offers');
     const empty = (s: TradeSide) => !s.cash && !s.spaces.length && !s.jailCards;
     if (empty(give) && empty(get)) fail('Empty trade');
-    this.validateSide(p, give);
-    this.validateSide(to, get);
+    this.validateTrade(p, to, give, get);
     if (original) this.trades = this.trades.filter(t => t !== original);
     const t: Trade = { id: `t${++this.tradeSeq}`, from: p.id, to: to.id, give, get };
     this.trades.push(t);
@@ -1089,8 +1206,7 @@ export class Game {
   /** Why an open offer could not go through right now (null: it still could). */
   tradeProblem(t: Trade): string | null {
     try {
-      this.validateSide(this.player(t.from), t.give);
-      this.validateSide(this.player(t.to), t.get);
+      this.validateTrade(this.player(t.from), this.player(t.to), t.give, t.get);
       return null;
     } catch (e) {
       if (e instanceof EngineError) return e.message;
@@ -1104,8 +1220,7 @@ export class Game {
     if (this.phase === 'auction') fail('Wait for the auction to finish');
     if (this.phase === 'minigame') fail('Wait for the mini-game to finish');
     const from = this.player(t.from);
-    this.validateSide(from, t.give);
-    this.validateSide(p, t.get);
+    this.validateTrade(from, p, t.give, t.get);
     this.trades = this.trades.filter(x => x.id !== id);
     this.transfer(from, p, t.give);
     this.transfer(p, from, t.get);
@@ -1125,11 +1240,19 @@ export class Game {
     for (let k = 0; k < side.jailCards; k++) b.jailCards.push(a.jailCards.pop()!);
   }
 
+  /**
+   * Official rule for a mortgaged deed changing hands (trade or bankruptcy):
+   * the new owner pays the bank 10% interest at once, and may lift the
+   * mortgage straight away for the principal alone (interestPaid, until the
+   * turn ends); lifting it later costs principal plus 10% again.
+   */
   private mortgageInterest(p: PlayerState, spaces: number[]) {
     for (const i of spaces) {
-      if (!this.owned[i]?.mortgaged) continue;
+      const o = this.owned[i];
+      if (!o?.mortgaged) continue;
       const fee = Math.ceil(mortgageValue(this.spaces[i]) / 10);
       this.charge(p, null, fee, `10% interest on mortgaged ${this.spaces[i].name}`);
+      o.interestPaid = true;
     }
   }
 
@@ -1245,7 +1368,7 @@ export class Game {
         po.amount = 50;
       }
       if (po.amount > 0) {
-        p.cash += po.amount;
+        this.bankPays(p, po.amount, title);
         this.say(`${p.name} won ${this.money(po.amount)} from the bank (${title}).`, p.id);
       } else if (po.amount < 0) {
         this.charge(p, null, -po.amount, title, true);
@@ -1403,7 +1526,10 @@ export class Game {
     if (owe > 0) {
       // Nothing can move until the debt is settled; its own clock decides that.
       if (p.cash < owe) return;
+      const waiting = this.speedPending === 'mr';
       this.payDebt(p);
+      // Mr. Monopoly just moved on: wherever he went gets its own full step.
+      if (waiting) return;
     }
     this.say(`⏱ ${p.name} ran out of time.`, p.id);
     switch (this.phase) {
@@ -1451,7 +1577,7 @@ export class Game {
       // Always the most built-up deed, which keeps the group even.
       const built = mine.filter(i => this.owned[i].houses > 0).sort((a, b) => this.owned[b].houses - this.owned[a].houses)[0];
       if (built === undefined) break;
-      this.sellOne(p, this.spaces[built], this.owned[built]);
+      this.sellOne(p, built);
     }
     return p.cash >= need;
   }
@@ -1527,7 +1653,7 @@ export class Game {
     const p = this.livePlayer(id);
     if (!Number.isInteger(cash) || cash < 0 || cash > 1_000_000) fail('Cash must be a whole number from 0 to 1,000,000');
     const was = p.cash;
-    p.cash = cash;
+    this.bankPays(p, cash - was, 'operator');
     this.say(`🛠 An operator set ${p.name}'s cash to ${this.money(cash)} (was ${this.money(was)}).`, p.id);
     this.settle();
   }
@@ -1562,7 +1688,7 @@ export class Game {
     if (o.houses === 5) this.hotelsLeft++;
     else this.housesLeft += o.houses;
     o.houses = 0;
-    this.player(o.owner).cash += refund;
+    this.bankPays(this.player(o.owner), refund, 'buildings sold');
   }
 
   adminJailCard(id: string, give: boolean) {
@@ -1588,6 +1714,7 @@ export class Game {
     if (!owe) fail(`${p.name} owes nothing`);
     this.debts = this.debts.filter(d => d.from !== p.id);
     this.say(`🛠 An operator cleared ${p.name}'s debt of ${this.money(owe)}.`, p.id);
+    this.resumeAfterDebt(p);
     this.settle();
   }
 

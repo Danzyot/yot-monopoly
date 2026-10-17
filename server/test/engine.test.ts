@@ -334,7 +334,11 @@ test('bot games run to completion without illegal moves', () => {
     const map = MAPS[seed % MAPS.length];
     const coin = seeded(seed * 7919);
     const timers = coin(3) === 0;
+    // Money conservation: cash in hands plus the pot only ever changes by what
+    // the bank pays out or takes in (onBank sees every such movement).
+    let bank = 0;
     const g = new Game({
+      onBank: n => { bank += n; },
       theme: resolveTheme(seed % 2 ? 'classic' : 'tptv', map.id),
       // Every third game also makes Free Parking an arcade, so Classic plays mini-games too.
       rules: {
@@ -346,6 +350,8 @@ test('bot games run to completion without illegal moves', () => {
       rng: seeded(seed),
       now: () => clock,
     });
+    const money = () => g.players.reduce((s, p) => s + p.cash, 0) + g.pot;
+    const start = money();
     let lastRound = -1;
     // Only real moves count toward the step budget; mini-game waiting (bots
     // thinking, result screens) just advances the clock, with its own guard.
@@ -384,6 +390,10 @@ test('bot games run to completion without illegal moves', () => {
       if ((g.clockDeadline() ?? Infinity) <= clock) g.clockTimeout();
       if (g.timeUp && g.winner) timeEndings++;
       for (const p of g.players) assert.ok(p.cash >= 0, `negative cash seed ${seed}`);
+      assert.equal(money(), start + bank, `money conservation seed ${seed} step ${step}`);
+      assert.ok(g.pot >= 0, `negative pot seed ${seed}`);
+      for (const p of g.players) if (p.bankrupt) assert.equal(g.debtOf(p.id), 0, `bankrupt debtor seed ${seed}`);
+      for (const d of g.debts) if (d.to) assert.ok(!g.player(d.to).bankrupt, `debt owed to a bankrupt player seed ${seed}`);
       const houses = Object.values(g.owned).reduce((s, o) => s + (o.houses < 5 ? o.houses : 0), 0);
       const hotels = Object.values(g.owned).filter(o => o.houses === 5).length;
       assert.equal(houses + g.housesLeft, 32, `house supply seed ${seed}`);
