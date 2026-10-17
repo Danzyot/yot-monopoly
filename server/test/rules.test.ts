@@ -423,6 +423,10 @@ test('bot: jail — out early (card first), sits tight late once the board is bu
   g.spaces.forEach((s, i) => { if (s.price && i !== 1 && i !== 3) g.owned[i] = own('p1'); });
   g.owned[37].houses = 3; g.owned[39].houses = 3;
   assert.deepEqual(botAction(g, 'p0'), { type: 'roll' });
+  // …unless "no rent in jail" is on and it has rent to collect.
+  g.owned[1] = own('p0');
+  (g.rules as { noRentInJail: boolean }).noRentInJail = true;
+  assert.deepEqual(botAction(g, 'p0'), { type: 'useJailCard' });
 });
 
 test('bot: resigns at once when even selling everything cannot cover a debt; otherwise raises it', () => {

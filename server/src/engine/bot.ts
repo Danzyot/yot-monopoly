@@ -195,6 +195,8 @@ function reserve(g: Game, id: string): number {
 
 /** Late game: little left to buy and opponents have built — sit in jail and roll for doubles. */
 function stayInJail(g: Game, id: string): boolean {
+  // House rule: no rent while in jail — sitting there costs more than it saves.
+  if (g.rules.noRentInJail && g.ownedBy(id).some(i => !g.owned[i].mortgaged)) return false;
   const unowned = g.spaces.filter((s, i) => isOwnable(s) && !g.owned[i]).length;
   const danger = Object.values(g.owned).some(o => o.owner !== id && o.houses > 0);
   return unowned <= 4 || (unowned <= 10 && danger);
