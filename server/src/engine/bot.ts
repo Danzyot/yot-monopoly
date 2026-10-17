@@ -98,6 +98,32 @@ export function botAction(g: Game, id: string): Action | null {
 }
 
 /**
+ * The bot's move made safe for an absent human (autopilot): keep the game
+ * moving, but never spend their money on a whim or make deals in their name.
+ * Null: let the clock run instead (mini-games play safe for them).
+ */
+export function autopilotAction(g: Game, id: string, action: Action): Action | null {
+  switch (action.type) {
+    case 'minigame': return null;
+    case 'bid': return { type: 'pass' };
+    case 'acceptTrade': return { type: 'rejectTrade', id: action.id };
+    case 'buy': return { type: 'decline' };
+    case 'sell':
+    case 'mortgage':
+      // Only to raise money owed; never to build or buy with.
+      if (g.debtOf(id) > 0) return action;
+      break;
+    case 'proposeTrade':
+    case 'build':
+    case 'unmortgage':
+      break;
+    default:
+      return action;
+  }
+  return g.phase === 'done' ? { type: 'endTurn' } : g.phase === 'buy' ? { type: 'decline' } : { type: 'roll' };
+}
+
+/**
  * Rough worth of a space to a player: price, boosted if it builds toward a
  * set. `leaving`: deeds the player hands over in the same deal, which no
  * longer count toward the set.

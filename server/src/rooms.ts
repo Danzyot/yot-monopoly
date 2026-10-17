@@ -5,7 +5,7 @@
 
 import { randomInt } from 'node:crypto';
 import { EngineError, Game, type GameSnapshot } from './engine/game.ts';
-import { botAction } from './engine/bot.ts';
+import { autopilotAction, botAction } from './engine/bot.ts';
 import { isOn } from './features.ts';
 import { DEFAULT_RULES, getTheme, resolveTheme, type RuleConfig } from '../../shared/themes.ts';
 import { getMap } from '../../shared/maps.ts';
@@ -667,15 +667,8 @@ export class Room {
       // Autopilot keeps an absent player's game moving but never spends their
       // money on a whim or makes deals in their name.
       if (mode === 'autopilot') {
-        // Absent players just let a mini-game's clock run out (it plays safe for them).
-        if (action.type === 'minigame') continue;
-        if (action.type === 'bid') action = { type: 'pass' };
-        else if (action.type === 'acceptTrade') action = { type: 'rejectTrade', id: action.id };
-        else if (action.type === 'proposeTrade' || action.type === 'build' || action.type === 'unmortgage'
-          // Selling or mortgaging only to raise money owed; never to build or buy with.
-          || ((action.type === 'sell' || action.type === 'mortgage') && g.debtOf(id) === 0)) {
-          action = g.phase === 'done' ? { type: 'endTurn' } : g.phase === 'buy' ? { type: 'decline' } : { type: 'roll' };
-        } else if (action.type === 'buy') action = { type: 'decline' };
+        action = autopilotAction(g, id, action);
+        if (!action) continue;
       }
       if (this.failedMoves.get(id) === JSON.stringify(action)) continue;
       return { id, action };

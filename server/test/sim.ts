@@ -3,7 +3,7 @@
 //   npx tsx server/test/sim.ts 500
 import assert from 'node:assert/strict';
 import { Game } from '../src/engine/game.ts';
-import { botAction } from '../src/engine/bot.ts';
+import { autopilotAction, botAction } from '../src/engine/bot.ts';
 import { DEFAULT_RULES, resolveTheme, type RuleConfig } from '../../shared/themes.ts';
 import { MAPS } from '../../shared/maps.ts';
 import { seeded } from './helpers.ts';
@@ -88,7 +88,8 @@ export function simulate(games: number, seed0 = 1): SimStats {
       speedDie: coin(2) === 0,
       minigames: coin(3) === 0,
       arcadeParking: coin(4) === 0,
-      turnSeconds: 0,
+      // Some games run the turn timer with one dozy human seat the timeouts and autopilot cover for.
+      turnSeconds: seed % 4 === 0 ? 30 : 0,
       timeLimitMin: coin(5) === 0 ? 3 : 0,
     };
     let clock = 0;
@@ -97,7 +98,7 @@ export function simulate(games: number, seed0 = 1): SimStats {
     const g = new Game({
       theme: resolveTheme(seed % 3 === 0 ? 'chog' : 'classic', map.id),
       rules,
-      players: Array.from({ length: n }, (_, i) => ({ id: `b${i}`, name: `Bot${i}`, character: 'spiky' as const, color: '#fff', isBot: true })),
+      players: Array.from({ length: n }, (_, i) => ({ id: `b${i}`, name: `Bot${i}`, character: 'spiky' as const, color: '#fff', isBot: !(seed % 4 === 0 && i === 0) })),
       rng: seeded(seed),
       now: () => clock,
       onBank: x => { bank += x; },
@@ -110,10 +111,14 @@ export function simulate(games: number, seed0 = 1): SimStats {
       let acted = false;
       for (const p of [g.current, ...g.players.filter(x => x !== g.current)]) {
         if (p.bankrupt) continue;
-        const a = botAction(g, p.id);
+        // The human often dozes off; once marked away, autopilot plays for them.
+        const away = !p.isBot && !!p.afk;
+        if (!p.isBot && !away && coin(3) > 0) continue;
+        let a = botAction(g, p.id);
+        if (a && away) a = autopilotAction(g, p.id, a);
         if (!a) continue;
         if (a.type === 'acceptTrade') st.trades++;
-        g.apply(p.id, a);
+        g.apply(p.id, a, { auto: away });
         acted = true;
         break;
       }
