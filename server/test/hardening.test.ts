@@ -325,6 +325,39 @@ test('a host who drops at the end hands a finished room on, so the rematch can s
   }
 });
 
+// ---- persistence ---------------------------------------------------------------
+
+test('live snapshots are written only when a room changed, via temp file and rename', async () => {
+  const { saveIfDirty } = await import('../src/persist.ts');
+  const { mkdtempSync, readFileSync, readdirSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'yot-persist-'));
+  try {
+    const reg = new Registry(quietHooks(), 1e9);
+    const r = reg.create('a');
+    r.join({ id: 'a', name: 'A', avatar: '' });
+    assert.equal(await saveIfDirty(reg, dir), true, 'first save writes');
+    assert.deepEqual(readdirSync(dir), ['live.json'], 'no temp file left behind');
+    assert.equal(JSON.parse(readFileSync(join(dir, 'live.json'), 'utf8'))[0].code, r.code);
+    assert.equal(await saveIfDirty(reg, dir), false, 'nothing changed: nothing written');
+
+    r.addBot('a', false);
+    assert.equal(await saveIfDirty(reg, dir), true, 'a lobby change is saved');
+    r.start('a', false);
+    r.dispose();
+    assert.equal(await saveIfDirty(reg, dir), true);
+    assert.equal(await saveIfDirty(reg, dir), false);
+    r.act(r.game!.current.id, { type: 'roll' }, true);
+    assert.equal(await saveIfDirty(reg, dir), true, 'a game move is saved');
+    reg.delete(r.code);
+    assert.equal(await saveIfDirty(reg, dir), true, 'a closed room is dropped from the file');
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, 'live.json'), 'utf8')), []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // ---- room limits and kicks -------------------------------------------------------
 
 test('a lobby closes the moment its last human leaves (bots do not count)', () => {

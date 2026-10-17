@@ -110,6 +110,8 @@ export class Room {
   lastActivity = Date.now();
   /** Sockets watching without a seat; maintained by the socket layer. */
   spectators = 0;
+  /** Changed since the last live snapshot was written (persist.ts); every mutation sets it. */
+  dirty = true;
   private botTimer: NodeJS.Timeout | null = null;
   private auctionTimer: NodeJS.Timeout | null = null;
   private minigameTimer: NodeJS.Timeout | null = null;
@@ -144,6 +146,7 @@ export class Room {
 
   /** Take a seat (lobby) or reclaim one (any time). Throws when neither is possible. */
   join(m: Member): Seat {
+    this.dirty = true;
     this.lastActivity = Date.now();
     const existing = this.seat(m.id);
     if (existing) {
@@ -177,6 +180,7 @@ export class Room {
 
   /** Leave for good: lobby frees the seat; in a game it forfeits. */
   leave(id: string) {
+    this.dirty = true;
     const s = this.seat(id);
     if (!s) return;
     if (this.status === 'lobby') {
@@ -207,6 +211,7 @@ export class Room {
 
   /** The host (or an operator) makes another seated human the host — lobby or mid-game. */
   transferHost(byId: string, target: string, isAdmin: boolean) {
+    this.dirty = true;
     this.requireHost(byId, isAdmin);
     const s = this.seat(target) ?? fail('Not in this room');
     if (s.isBot) fail('A bot cannot be the host');
@@ -240,6 +245,7 @@ export class Room {
       return false;
     }
     const was = this.seat(from)?.name;
+    this.dirty = true;
     this.hostId = next.id;
     this.hooks.onEvent(this, `${next.name} is now the host (${was ?? 'the host'} ${why})`);
     return true;
@@ -273,6 +279,7 @@ export class Room {
 
   /** Host (or operator) sets who may take a seat. Validation happens in requirements.ts. */
   setRequirements(id: string, isAdmin: boolean, req: JoinRequirements | null) {
+    this.dirty = true;
     this.requireHost(id, isAdmin);
     this.requireLobby();
     this.requirements = req;
@@ -282,6 +289,7 @@ export class Room {
   }
 
   setConnected(id: string, connected: boolean) {
+    this.dirty = true;
     const s = this.seat(id);
     if (!s || s.isBot) return;
     s.connected = connected;
@@ -300,6 +308,7 @@ export class Room {
   }
 
   configure(id: string, isAdmin: boolean, p: { themeId?: string; mapId?: string; rules?: Partial<RuleConfig>; private?: boolean }) {
+    this.dirty = true;
     this.requireHost(id, isAdmin);
     this.requireLobby();
     if (p.mapId) {
@@ -326,12 +335,14 @@ export class Room {
 
   /** Host (or operator) picks the table look. Always sanitised: every viewer loads these URLs. */
   setStyle(id: string, isAdmin: boolean, raw: unknown) {
+    this.dirty = true;
     this.requireHost(id, isAdmin);
     this.requireLobby();
     this.style = sanitizeTableStyle(raw);
   }
 
   pickCharacter(id: string, character: CharacterId) {
+    this.dirty = true;
     this.requireLobby();
     if (!CHARACTERS.includes(character)) fail('Unknown character');
     const s = this.seat(id) ?? fail('You are not seated');
@@ -340,6 +351,7 @@ export class Room {
   }
 
   pickColor(id: string, color: string) {
+    this.dirty = true;
     this.requireLobby();
     if (!PLAYER_COLORS.includes(color)) fail('Unknown colour');
     const s = this.seat(id) ?? fail('You are not seated');
@@ -348,6 +360,7 @@ export class Room {
   }
 
   addBot(id: string, isAdmin: boolean) {
+    this.dirty = true;
     this.requireHost(id, isAdmin);
     this.requireLobby();
     if (this.seats.length >= this.rules.maxPlayers) fail('The room is full');
@@ -376,6 +389,7 @@ export class Room {
 
   /** Remove a player regardless of who asks (bans, kicks). */
   remove(target: string) {
+    this.dirty = true;
     if (this.status === 'lobby') {
       if (this.hostId === target) this.passHost(target, 'was removed');
       this.seats = this.seats.filter(s => s.id !== target);
@@ -390,6 +404,7 @@ export class Room {
   }
 
   start(id: string, isAdmin: boolean) {
+    this.dirty = true;
     this.requireHost(id, isAdmin);
     this.requireLobby();
     if (this.seats.length < 2) fail('Need at least 2 players (add a bot?)');
@@ -420,6 +435,7 @@ export class Room {
    * character and colour.
    */
   rematch(byId: string, isAdmin: boolean, present: (id: string) => boolean) {
+    this.dirty = true;
     this.requireHost(byId, isAdmin);
     if (this.status !== 'finished') fail('The game is not over yet');
     this.clearTimers();
@@ -437,6 +453,7 @@ export class Room {
 
   /** Operator stops a game outright. */
   end(reason: string) {
+    this.dirty = true;
     this.clearTimers();
     this.hooks.onEvent(this, `Game ended by an operator: ${reason}`);
     this.status = 'finished';
@@ -477,6 +494,7 @@ export class Room {
 
   /** Host or operator freezes every clock in the game (chat keeps working). */
   pause(id: string, isAdmin: boolean, byName: string) {
+    this.dirty = true;
     this.requireHost(id, isAdmin);
     const g = this.runningGame();
     g.pause(byName);
@@ -494,6 +512,7 @@ export class Room {
 
   /** Host or operator hands a (connected but absent) player to autopilot, or takes them off it. */
   setAutopilot(byId: string, target: string, on: boolean, isAdmin: boolean) {
+    this.dirty = true;
     this.requireHost(byId, isAdmin);
     const g = this.runningGame();
     const s = this.seat(target) ?? fail('Not in this room');
@@ -522,6 +541,7 @@ export class Room {
   }
 
   private afterChange() {
+    this.dirty = true;
     this.failedMoves.clear();
     if (this.game?.phase === 'over' && this.status !== 'finished') {
       this.status = 'finished';
@@ -840,6 +860,8 @@ export class Registry {
   private hooks: RoomHooks;
   /** When each account opened its recent rooms (see CREATES_PER_WINDOW). */
   private created = new Map<string, number[]>();
+  /** Rooms added or removed since the last live snapshot (each room tracks its own changes). */
+  private dirty = true;
 
   constructor(hooks: RoomHooks, sweepEveryMs = 60_000) {
     this.hooks = { ...hooks, onEmpty: r => { if (this.rooms.get(r.code) === r) this.delete(r.code); } };
@@ -861,6 +883,7 @@ export class Registry {
     while (this.rooms.has(code));
     const room = new Room(code, hostId, this.hooks);
     this.rooms.set(code, room);
+    this.dirty = true;
     return room;
   }
 
@@ -881,6 +904,7 @@ export class Registry {
     if (!r) return false;
     r.dispose();
     this.rooms.delete(code);
+    this.dirty = true;
     return true;
   }
 
@@ -891,6 +915,22 @@ export class Registry {
 
   snapshot(): RoomSnapshot[] {
     return [...this.rooms.values()].filter(r => r.status !== 'finished').map(r => r.snapshot());
+  }
+
+  /** Has anything changed since the last call? Clears the flags: call it just before snapshot(). */
+  takeDirty(): boolean {
+    let dirty = this.dirty;
+    this.dirty = false;
+    for (const r of this.rooms.values()) {
+      if (r.dirty) dirty = true;
+      r.dirty = false;
+    }
+    return dirty;
+  }
+
+  /** A snapshot could not be written: try again next time. */
+  markDirty() {
+    this.dirty = true;
   }
 
   restore(snaps: RoomSnapshot[]): number {
