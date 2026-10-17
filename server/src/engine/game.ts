@@ -511,8 +511,13 @@ export class Game {
       this.nextTurn();
       return;
     }
-    // Speed Die: Mr. Monopoly moves on once the first landing is fully dealt with.
+    // Speed Die: Mr. Monopoly moves on once the first landing is fully dealt
+    // with — rent included: while it is owed he waits (see resumeAfterDebt).
     if (this.speedPending === 'mr') {
+      if (!this.current.inJail && this.debtOf(this.current.id) > 0) {
+        this.phase = 'done';
+        return;
+      }
       this.speedPending = null;
       if (!this.current.inJail) {
         // Leave the phase that just ended (a mini-game or an auction) first:
@@ -1065,6 +1070,14 @@ export class Game {
     if (p.cash < total) fail(`You need ${this.money(total - p.cash)} more`);
     this.debts = this.debts.filter(d => d.from !== p.id);
     for (const d of mine) this.charge(p, d.to ? this.player(d.to) : null, d.amount, d.reason, d.toPot);
+    this.resumeAfterDebt(p);
+  }
+
+  /** The current player's debt is settled: a Mr. Monopoly move waiting on it goes ahead. */
+  private resumeAfterDebt(p: PlayerState) {
+    if (p === this.current && this.speedPending === 'mr' && this.phase === 'done' && this.debtOf(p.id) === 0) {
+      this.afterResolution();
+    }
   }
 
   /**
@@ -1512,7 +1525,10 @@ export class Game {
     if (owe > 0) {
       // Nothing can move until the debt is settled; its own clock decides that.
       if (p.cash < owe) return;
+      const waiting = this.speedPending === 'mr';
       this.payDebt(p);
+      // Mr. Monopoly just moved on: wherever he went gets its own full step.
+      if (waiting) return;
     }
     this.say(`⏱ ${p.name} ran out of time.`, p.id);
     switch (this.phase) {
@@ -1697,6 +1713,7 @@ export class Game {
     if (!owe) fail(`${p.name} owes nothing`);
     this.debts = this.debts.filter(d => d.from !== p.id);
     this.say(`🛠 An operator cleared ${p.name}'s debt of ${this.money(owe)}.`, p.id);
+    this.resumeAfterDebt(p);
     this.settle();
   }
 

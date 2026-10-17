@@ -3,7 +3,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { botAction } from '../src/engine/bot.ts';
+import { Room } from '../src/rooms.ts';
 import { resolveTheme } from '../../shared/themes.ts';
+import { SPEED_FACES, type Action } from '../../shared/types.ts';
 import { scripted } from './helpers.ts';
 import { simulate } from './sim.ts';
 
@@ -174,6 +176,195 @@ test('selling a hotel: four houses back from the bank; in a shortage the group s
   e.g.housesLeft = 0;
   e.act('p0', { type: 'sell', space: 39 });
   assert.equal(e.g.owned[39].houses, 4);
+});
+
+test('speed die: Mr. Monopoly waits until the rent from the first landing is paid', () => {
+  const { g, dice, raw, act } = scripted(2, { speedDie: true });
+  const p0 = g.player('p0');
+  p0.passedGo = true;
+  p0.cash = 10;
+  g.owned[1] = own('p1'); g.owned[39] = own('p1', 5);
+  p0.position = 34;
+  dice(2, 3); raw(SPEED_FACES.indexOf('mr')); // 34 → 39, $2000 rent
+  act('p0', { type: 'roll' });
+  assert.equal(p0.position, 39);
+  assert.equal(g.debtOf('p0'), 2000);
+  assert.equal(g.phase, 'done');
+  assert.throws(() => act('p0', { type: 'endTurn' }), /debts/);
+  p0.cash = 3000; // (raised somehow)
+  act('p0', { type: 'payDebt' });
+  // Now he moves on: past GO (+200), skipping p1's Mediterranean, to the first unowned deed (Baltic).
+  assert.equal(p0.position, 3);
+  assert.equal(g.phase, 'buy');
+  assert.equal(p0.cash, 3000 - 2000 + 200);
+});
+
+test('autopilot never sells or mortgages unless money is owed (bot shortage play, set-completing buys)', () => {
+  const r = new Room('AUTO', 'a', { onChange() {}, onEvent() {}, onFinished() {} });
+  r.join({ id: 'a', name: 'A', avatar: '' });
+  r.join({ id: 'b', name: 'B', avatar: '' });
+  r.start('a', false);
+  r.dispose();
+  const g = r.game!;
+  const cur = g.current.id;
+  g.owned[1] = own(cur, 2); g.owned[3] = own(cur, 2);
+  g.owned[37] = own(cur, 2); g.owned[39] = own(cur, 2);
+  g.housesLeft = 0;
+  g.player(cur).cash = 5000;
+  g.phase = 'done';
+  assert.equal(botAction(g, cur)?.type, 'sell', 'the bot itself would sell for its shortage play');
+  r.setAutopilot('a', cur, true, false);
+  r.dispose();
+  const next = (r as unknown as { nextAutomatedAction(now: number): { action: Action } | null }).nextAutomatedAction(Date.now());
+  assert.deepEqual(next?.action, { type: 'endTurn' });
+  // Owing money, it raises it.
+  g.owned[5] = own(cur);
+  g.debts.push({ from: cur, to: null, amount: 5100, reason: 'test' });
+  const raise = (r as unknown as { nextAutomatedAction(now: number): { action: Action } | null }).nextAutomatedAction(Date.now());
+  assert.deepEqual(raise?.action, { type: 'mortgage', space: 5 });
+  r.dispose();
+});
+
+// ---- official rules that were already right: pinned so they stay that way ------
+
+test('salary: passing or landing on GO pays (double on landing with the house rule); jail never does', () => {
+  const a = scripted(2, { doubleOnGo: true, auctions: false });
+  a.g.player('p0').position = 38;
+  a.dice(1, 1); // lands exactly on GO
+  a.act('p0', { type: 'roll' });
+  assert.equal(a.g.player('p0').cash, 1900);
+  a.dice(1, 2); // doubles → roll again: 0 → 3
+  a.act('p0', { type: 'roll' });
+  assert.equal(a.g.player('p0').cash, 1900, 'leaving GO pays nothing');
+  // Chance at 36 sends p1 to jail, round past GO: no salary.
+  const jail = CLASSIC.chance.findIndex(c => c.effect.type === 'jail');
+  a.act('p0', { type: 'decline', endTurn: true });
+  a.g.decks.chance = [jail];
+  a.g.player('p1').position = 33;
+  a.dice(1, 2);
+  a.act('p1', { type: 'roll' });
+  assert.equal(a.g.player('p1').position, 10);
+  assert.equal(a.g.player('p1').inJail, true);
+  assert.equal(a.g.player('p1').cash, 1500);
+  // Advance-to cards pay when they pass GO: Chance 36 → St. Charles (11).
+  const charles = CLASSIC.chance.findIndex(c => c.effect.type === 'advance' && c.effect.to === 11);
+  const b = scripted(2);
+  b.g.decks.chance = [charles];
+  b.g.player('p0').position = 33;
+  b.dice(1, 2);
+  b.act('p0', { type: 'roll' });
+  assert.equal(b.g.player('p0').position, 11);
+  assert.equal(b.g.player('p0').cash, 1700);
+  assert.equal(b.g.phase, 'buy');
+});
+
+test('rent: a mortgaged lot in a set still leaves the others at double rent; no rent on it; railroads and utilities count it', () => {
+  const { g } = scripted(2);
+  g.owned[37] = own('p0', 0, true); g.owned[39] = own('p0');
+  assert.equal(g.rentFor(39), 100, 'Boardwalk doubled: the set is owned even though Park Place is mortgaged');
+  assert.equal(g.rentFor(37), 0);
+  g.owned[5] = own('p0', 0, true); g.owned[15] = own('p0');
+  assert.equal(g.rentFor(15), 50, 'two railroads owned');
+  g.owned[12] = own('p0', 0, true); g.owned[28] = own('p0');
+  assert.equal(g.rentFor(28, {}, 8), 80, 'both utilities: 10×');
+});
+
+test('jail: card returns to the bottom of its own deck, even after changing hands', () => {
+  const { g, act } = scripted(2);
+  const idx = CLASSIC.chest.findIndex(c => c.effect.type === 'jailFree');
+  g.decks.chest = g.decks.chest.filter(i => i !== idx);
+  g.player('p1').jailCards = ['chest'];
+  act('p1', { type: 'proposeTrade', to: 'p0', give: { cash: 0, spaces: [], jailCards: 1 }, get: { cash: 30, spaces: [], jailCards: 0 } });
+  act('p0', { type: 'acceptTrade', id: g.trades[0].id });
+  assert.deepEqual(g.player('p0').jailCards, ['chest']);
+  const p0 = g.player('p0');
+  p0.inJail = true; p0.position = 10;
+  act('p0', { type: 'useJailCard' });
+  assert.equal(p0.inJail, false);
+  assert.equal(g.decks.chest.at(-1), idx, 'bottom of Community Chest');
+  assert.equal(g.decks.chest.length, CLASSIC.chest.length);
+  assert.equal(g.phase, 'roll', 'and then rolls as usual');
+});
+
+test('jail: no paying out or using a card once rolled; three misses then the fine and move', () => {
+  const { g, dice, act } = scripted(2);
+  const p = g.player('p0');
+  p.inJail = true; p.position = 10;
+  dice(1, 2);
+  act('p0', { type: 'roll' });
+  assert.equal(p.inJail, true);
+  assert.equal(p.position, 10);
+  assert.equal(g.phase, 'done');
+  assert.throws(() => act('p0', { type: 'payJail' }), /Can't do that now/);
+  assert.throws(() => act('p0', { type: 'useJailCard' }), /Can't do that now/);
+  assert.equal(p.jailTurns, 1);
+  act('p0', { type: 'endTurn' });
+  assert.equal(g.current.id, 'p1');
+});
+
+test('auction: the player who declined may bid and win; nobody bidding leaves it with the bank', () => {
+  const { g, dice, act } = scripted(3);
+  dice(1, 2);
+  act('p0', { type: 'roll' });
+  act('p0', { type: 'decline' });
+  assert.deepEqual(g.auction!.bidders, ['p0', 'p1', 'p2']);
+  act('p0', { type: 'bid', amount: 1 });
+  act('p1', { type: 'pass' }); act('p2', { type: 'pass' });
+  assert.equal(g.owned[3].owner, 'p0');
+  assert.equal(g.player('p0').cash, 1499, 'bidding starts at any amount');
+  act('p0', { type: 'endTurn' });
+  dice(1, 2);
+  act('p1', { type: 'roll' }); // 0 → 3 owned by p0: rent
+  assert.equal(g.phase, 'done');
+});
+
+test('cards: go back 3 spaces lands and resolves (Community Chest draws); repairs; pay each player short of cash', () => {
+  const { g, dice, act } = scripted(3);
+  const back = CLASSIC.chance.findIndex(c => c.effect.type === 'back');
+  const birthday = CLASSIC.chest.findIndex(c => c.effect.type === 'collectEach');
+  g.decks.chance = [back];
+  g.decks.chest = [birthday];
+  g.player('p0').position = 33;
+  dice(1, 2); // 33 → 36 Chance → back to 33 Community Chest → birthday
+  act('p0', { type: 'roll' });
+  assert.equal(g.player('p0').position, 33);
+  assert.equal(g.player('p0').cash, 1520);
+  act('p0', { type: 'endTurn' });
+
+  // Repairs: $25 per house, $100 per hotel (Chance), into the pot only with the house rule.
+  const rep = CLASSIC.chance.findIndex(c => c.effect.type === 'repairs');
+  g.owned[37] = own('p1', 5); g.owned[39] = own('p1', 3);
+  g.owned[1] = own('p1', 2); g.owned[3] = own('p1', 2);
+  g.decks.chance = [rep];
+  dice(3, 4); // p1: 0 → 7
+  act('p1', { type: 'roll' });
+  assert.equal(g.player('p1').cash, 1500 - 10 - (100 + 7 * 25), 'less the birthday $10');
+  act('p1', { type: 'endTurn' });
+
+  // Chairman of the Board with too little: pays whom it can, owes the rest.
+  const chair = CLASSIC.chance.findIndex(c => c.effect.type === 'payEach');
+  g.decks.chance = [chair];
+  g.player('p2').cash = 70;
+  dice(3, 4); // p2: 0 → 7
+  act('p2', { type: 'roll' });
+  assert.equal(g.player('p0').cash, 1570);
+  assert.equal(g.debtOf('p2'), 50);
+  assert.deepEqual(g.debts.map(d => d.to), ['p1']);
+});
+
+test('trades: any time, not just on your turn; deeds of a built-on group are refused; counter-offers replace', () => {
+  const { g, act } = scripted(3);
+  const side = (cash: number, spaces: number[] = []) => ({ cash, spaces, jailCards: 0 });
+  g.owned[1] = own('p1'); g.owned[3] = own('p1');
+  g.owned[6] = own('p2');
+  act('p1', { type: 'proposeTrade', to: 'p2', give: side(0, [1]), get: side(0, [6]) });
+  act('p2', { type: 'proposeTrade', to: 'p1', give: side(0, [6]), get: side(10, [1]), counterOf: g.trades[0].id });
+  assert.equal(g.trades.length, 1);
+  act('p1', { type: 'acceptTrade', id: g.trades[0].id }); // on p0's turn
+  assert.equal(g.owned[6].owner, 'p1');
+  g.owned[8] = own('p1'); g.owned[9] = own('p1');
+  g.owned[6].houses = 1;
+  assert.throws(() => act('p1', { type: 'proposeTrade', to: 'p2', give: side(0, [9]), get: side(5) }), /Sell the buildings/);
 });
 
 // ---- bots ---------------------------------------------------------------------

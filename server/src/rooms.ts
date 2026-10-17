@@ -671,8 +671,10 @@ export class Room {
         if (action.type === 'minigame') continue;
         if (action.type === 'bid') action = { type: 'pass' };
         else if (action.type === 'acceptTrade') action = { type: 'rejectTrade', id: action.id };
-        else if (action.type === 'proposeTrade' || action.type === 'build' || action.type === 'unmortgage') {
-          action = g.phase === 'done' ? { type: 'endTurn' } : { type: 'roll' };
+        else if (action.type === 'proposeTrade' || action.type === 'build' || action.type === 'unmortgage'
+          // Selling or mortgaging only to raise money owed; never to build or buy with.
+          || ((action.type === 'sell' || action.type === 'mortgage') && g.debtOf(id) === 0)) {
+          action = g.phase === 'done' ? { type: 'endTurn' } : g.phase === 'buy' ? { type: 'decline' } : { type: 'roll' };
         } else if (action.type === 'buy') action = { type: 'decline' };
       }
       if (this.failedMoves.get(id) === JSON.stringify(action)) continue;
