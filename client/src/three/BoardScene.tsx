@@ -286,7 +286,9 @@ function CameraRig({ hud, fogNear, fogFar, mode, followId }: {
         // Close enough to see the character, high enough to keep the board ahead in view;
         // the target sits just past the piece, which puts it a little below the middle of
         // the frame, clear of the action bar.
-        pos = tmpPos.set(p.x + out.x * 3.0, 2.6 + p.y * 0.3, p.z + out.z * 3.0);
+        // Portrait screens are narrow: stand back a little so the street stays in view.
+        const back = aspect < 1 ? 1.3 : 1;
+        pos = tmpPos.set(p.x + out.x * 3.0 * back, 2.6 * back + p.y * 0.3, p.z + out.z * 3.0 * back);
         target = tmpTarget.set(p.x - out.x * 0.5, 0.2, p.z - out.z * 0.5);
       } else {
         // Nearly straight down; the slight tilt keeps the board square to the screen (straight down has no 'up').
