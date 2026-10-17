@@ -238,6 +238,19 @@ export function playCardFlip(at = 0) {
   burst(at + 0.07, 0.05, 0.07, 'bandpass', 1800, 2);
 }
 
+/** A house or hotel set down on its lot: a little plastic clack and a knock. */
+export function playBuild(at = 0) {
+  burst(at, 0.04, 0.16, 'bandpass', 2600, 3);
+  tone(520, at, 0.09, 0.07, 'triangle', 380);
+  burst(at + 0.05, 0.06, 0.08, 'lowpass', 700, 1);
+}
+
+/** Let out of jail: the cell door swinging open with a creak. */
+export function playJailOpen(at = 0) {
+  burst(at, 0.12, 0.14, 'lowpass', 900, 3);
+  tone(330, at + 0.05, 0.35, 0.04, 'sawtooth', 520);
+}
+
 /** Go to jail: a low, sour buzz with a cell-door clank. */
 export function playJail(at = 0) {
   tone(110, at, 0.55, 0.12, 'sawtooth', 70);

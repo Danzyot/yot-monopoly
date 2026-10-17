@@ -6,14 +6,15 @@ import { useEffect, useRef } from 'react';
 import { resolveTheme } from '../../shared/themes.ts';
 import type { GameView } from '../../shared/types.ts';
 import {
-  playBankrupt, playBid, playBuy, playCardFlip, playDiceRoll, playDoubles, playHop, playJail,
-  playPay, playReceive, playWin, playYourTurn,
+  playBankrupt, playBid, playBuild, playBuy, playCardFlip, playDiceRoll, playDoubles, playHop, playJail,
+  playJailOpen, playPay, playReceive, playWin, playYourTurn,
 } from './sound.ts';
 
-// Keep in step with the board animation (three/Dice.tsx ROLL_MS and
-// three/Tokens.tsx HOP_MS) so ticks land with the piece.
+// Keep in step with the board animation (three/sequence.ts DICE_MS and
+// three/characters/Pieces.tsx HOP_MS) so ticks land with the piece, which
+// waits for the dice to settle before it walks.
 const DICE_S = 1.1;
-const HOP_S = 0.17;
+const HOP_S = 0.19;
 /** Longer moves (and jail) fly straight in Tokens.tsx rather than hopping. */
 const MAX_HOPS = 12;
 
@@ -41,14 +42,16 @@ export function useGameSounds(game: GameView | null, me: string): void {
       if (!was) continue;
       if (p.position !== was.position) {
         const steps = (p.position - was.position + n) % n;
+        const start = rolled ? DICE_S : 0;
         if (!p.inJail && steps > 0 && steps <= MAX_HOPS) {
-          for (let k = 0; k < steps; k++) playHop(k * HOP_S + 0.05);
-          landAt = Math.max(landAt, steps * HOP_S + 0.1);
+          for (let k = 0; k < steps; k++) playHop(start + k * HOP_S + 0.05);
+          landAt = Math.max(landAt, start + steps * HOP_S + 0.1);
         } else {
-          landAt = Math.max(landAt, 0.75);
+          landAt = Math.max(landAt, start + 0.75);
         }
       }
       if (p.inJail && !was.inJail) playJail(Math.max(landAt, rolled ? 0.4 : 0));
+      if (!p.inJail && was.inJail && !p.bankrupt) playJailOpen(rolled ? DICE_S : 0);
       if (p.bankrupt && !was.bankrupt) playBankrupt(landAt);
     }
 
@@ -64,6 +67,13 @@ export function useGameSounds(game: GameView | null, me: string): void {
       if (o.owner === me) iBought = true;
     }
     if (someoneBought) playBuy(landAt);
+    // Building: a clack as each new house or hotel drops onto its lot.
+    let built = 0;
+    for (const [k, o] of Object.entries(game.owned)) {
+      const was = before.owned[Number(k)];
+      if (was && o.houses > was.houses) built += o.houses === 5 ? 1 : o.houses - was.houses;
+    }
+    for (let i = 0; i < Math.min(built, 4); i++) playBuild(0.3 + i * 0.12);
 
     // Money is only voiced for this player: everyone else's rent would be noise.
     const mine = game.players.find(p => p.id === me);
