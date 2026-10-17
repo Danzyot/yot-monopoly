@@ -51,6 +51,7 @@ export interface LookColors {
   c1?: string;
   c2?: string;
   c3?: string;
+  glass?: string;
 }
 
 /**
@@ -71,7 +72,7 @@ export function makeMaterials(color: string, c: LookColors = {}): Mats {
     metal: std('#b9c2cf', 0.3, 0.75),
     gold: std('#f4c542', 0.3, 0.8),
     glow: new MeshStandardMaterial({ color: glowColor, emissive: glowColor, emissiveIntensity: 1.4, roughness: 0.4 }),
-    glass: std('#1c2438', 0.12, 0.7),
+    glass: std(c.glass ?? '#1c2438', 0.12, 0.7),
     wood: std('#7a4a24', 0.8),
     hair: std(c.hair ?? '#2a1d16', 0.75),
     cloth: std(c.cloth ?? '#1d1d22', 0.85),

@@ -6,7 +6,7 @@ export const ASSETS = {
     "url": "/models/buildings.glb?v=a06bfad5d1"
   },
   "characters": {
-    "url": "/models/characters.glb?v=70fa8aa7e5"
+    "url": "/models/characters.glb?v=f24fd1c8ee"
   },
   "classicRoom": {
     "lightmap": "/models/classic/room-light.webp?v=2c302deed5",

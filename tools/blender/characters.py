@@ -271,8 +271,10 @@ def preview(nodes_by_char, path, close=False):
         cam.rotation_euler = (math.radians(81), 0, 0)
         cam.data.lens = 42
     else:
-        cam.location = blib.V(0, 0.95, 3.0)
-        cam.rotation_euler = (math.radians(74), 0, 0)
+        # Back off far enough for the whole lineup.
+        dist = max(3.0, 0.33 * len(ids) / 1.1)
+        cam.location = blib.V(0, 0.3 + dist * 0.2, dist)
+        cam.rotation_euler = (math.radians(80), 0, 0)
         cam.data.lens = 32
     sc.camera = cam
     sun = bpy.data.objects.new('Sun', bpy.data.lights.new('Sun', 'SUN'))

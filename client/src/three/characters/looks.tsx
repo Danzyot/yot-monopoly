@@ -51,7 +51,8 @@ const SPIKES: [number, number, number, number, number][] = [
 ];
 
 const spiky: Look = {
-  colors: { skin: '#f6dcb4', accent: '#e0262d' },
+  colors: { skin: '#f6dcb4', accent: '#e0262d', c1: '#2f9e4f' },
+  arms: { shoulder: [0.08, 0.165, 0], radius: 0.017, mat: 'main' },
   hand: 'white',
   foot: 'accent',
   extras: m => <Part g={GEO.sphere} m={m.skin} p={[0, 0.11, 0.045]} s={[0.058, 0.066, 0.036]} />,
@@ -72,6 +73,7 @@ const spiky: Look = {
 
 const robot: Look = {
   colors: { glow: '#63f3ff' },
+  arms: { shoulder: [0.085, 0.165, 0], radius: 0.012, mat: 'metal' },
   hand: 'metal',
   foot: 'metal',
   body: m => (
@@ -99,7 +101,8 @@ const robot: Look = {
 };
 
 const cat: Look = {
-  colors: { accent: '#ff8fb3' },
+  colors: { accent: '#ff8fb3', c1: '#7bc043' },
+  arms: { shoulder: [0.08, 0.165, 0], radius: 0.017, mat: 'main' },
   hand: 'main',
   foot: 'white',
   extras: m => (
@@ -128,7 +131,8 @@ const cat: Look = {
 };
 
 const knight: Look = {
-  colors: { accent: '#f4c542' },
+  colors: { accent: '#f4c542', c1: '#d23a2e' },
+  arms: { shoulder: [0.08, 0.165, 0], radius: 0.017, mat: 'metal' },
   hand: 'metal',
   foot: 'metal',
   extras: m => (
@@ -166,7 +170,8 @@ const knight: Look = {
 };
 
 const wizard: Look = {
-  colors: { glow: '#b8f0ff', accent: '#f4c542' },
+  colors: { glow: '#b8f0ff', accent: '#f4c542', c3: '#3a5a8c' },
+  arms: { shoulder: [0.065, 0.17, 0], radius: 0.02, mat: 'main' },
   hand: 'skin',
   foot: 'ink',
   body: m => (
@@ -196,7 +201,8 @@ const wizard: Look = {
 };
 
 const astronaut: Look = {
-  colors: { accent: '#ff7a1a' },
+  colors: { accent: '#ff7a1a', glass: '#141a2e' },
+  arms: { shoulder: [0.08, 0.165, 0], radius: 0.018, mat: 'white' },
   hand: 'white',
   foot: 'white',
   body: m => <DefaultBody m={m} mat="white" />,
@@ -221,7 +227,8 @@ const astronaut: Look = {
 };
 
 const pirate: Look = {
-  colors: { accent: '#f4c542' },
+  colors: { accent: '#f4c542', hair: '#5a3a22', c3: '#3b6b8c' },
+  arms: { shoulder: [0.08, 0.165, 0], radius: 0.018, mat: 'main' },
   hand: 'skin',
   foot: 'ink',
   extras: m => (
@@ -253,7 +260,8 @@ const pirate: Look = {
 };
 
 const ninja: Look = {
-  colors: { accent: '#e0262d' },
+  colors: { accent: '#e0262d', c3: '#4a2e1c' },
+  arms: { shoulder: [0.08, 0.165, 0], radius: 0.016, mat: 'main' },
   hand: 'main',
   foot: 'ink',
   extras: m => (
@@ -279,7 +287,8 @@ const ninja: Look = {
 };
 
 const chef: Look = {
-  colors: { accent: '#e0262d' },
+  colors: { accent: '#e0262d', c1: '#33333d', c2: '#f19a8e', c3: '#4a7a3a' },
+  arms: { shoulder: [0.08, 0.165, 0], radius: 0.018, mat: 'white' },
   hand: 'skin',
   foot: 'ink',
   extras: m => (
@@ -315,6 +324,7 @@ const chef: Look = {
 
 const alien: Look = {
   colors: { glow: '#b6ff5c' },
+  arms: { shoulder: [0.062, 0.16, 0], radius: 0.013, mat: 'main' },
   hand: 'main',
   foot: 'main',
   body: m => <Part g={GEO.sphere} m={m.main} p={[0, 0.11, 0]} s={[0.07, 0.09, 0.065]} cast />,
