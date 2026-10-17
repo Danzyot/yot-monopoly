@@ -6,9 +6,9 @@
     "url": "/models/characters.glb?v=b4fee1238a"
   },
   "classicRoom": {
-    "lightmap": "/models/classic/room-light.webp?v=b1ccdf7b70",
-    "lightmapIntensity": 28.457,
-    "url": "/models/classic/room.glb?v=295bc6a8b6"
+    "lightmap": "/models/classic/room-light.webp?v=2c302deed5",
+    "lightmapIntensity": 27.5562,
+    "url": "/models/classic/room.glb?v=750098563e"
   },
   "table": {
     "url": "/models/table.glb?v=948e42f7ea"
