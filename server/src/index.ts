@@ -29,6 +29,11 @@ import type { SiteConfig } from '../../shared/types.ts';
 const __dir = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 8080);
 
+// Last line of defence. Room timers guard themselves (rooms.ts), but one stray
+// bug anywhere must not end every game on the server: log it and keep going.
+process.on('uncaughtException', e => console.error('Uncaught exception (still running):', e));
+process.on('unhandledRejection', e => console.error('Unhandled rejection (still running):', e));
+
 loadFeatures();
 loadBans();
 loadMutes();
@@ -155,6 +160,11 @@ if (existsSync(dist)) {
   app.get(/^\/(?!api|socket\.io).*/, (_req, res) => res.sendFile(join(dist, 'index.html')));
 }
 
+// Failing to listen (port taken) is fatal: without this it would only be logged above.
+http.on('error', e => {
+  console.error('HTTP server error:', e);
+  process.exit(1);
+});
 http.listen(PORT, () => {
   console.log(`Yot Monopoly server on :${PORT}`);
   if (demoMode()) console.warn('⚠️  DEMO_MODE=1 — anyone can sign in with just a name. Turn it off for real events.');

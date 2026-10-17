@@ -23,10 +23,12 @@ export function botAction(g: Game, id: string): Action | null {
     return owe > 0 && me.cash >= owe ? { type: 'payDebt' } : null;
   }
 
-  // 1. Debts come first, even out of turn.
+  // 1. Debts come first, even out of turn. While an auction runs property is
+  // locked, so there is nothing to raise funds with: sit it out (and bid
+  // nothing), the debt clock still runs.
   if (owe > 0) {
     if (me.cash >= owe) return { type: 'payDebt' };
-    return raiseFunds(g, id) ?? { type: 'bankrupt' };
+    if (g.phase !== 'auction') return raiseFunds(g, id) ?? { type: 'bankrupt' };
   }
 
   // 2. Auctions.
@@ -36,13 +38,15 @@ export function botAction(g: Game, id: string): Action | null {
     const s = g.spaces[a.space];
     const value = valueOf(g, id, a.space);
     const next = a.highBid + Math.max(5, Math.round((s.price ?? 100) * 0.05));
-    if (next <= value && next <= me.cash - RESERVE / 2) return { type: 'bid', amount: next };
+    if (next <= value && next <= me.cash - owe - RESERVE / 2) return { type: 'bid', amount: next };
     return { type: 'pass' };
   }
 
   // 3. Trade offers aimed at us.
   for (const t of g.trades) {
     if (t.to !== id) continue;
+    // Things moved since it was offered (cash spent, a deed sold on): it cannot go through.
+    if (g.tradeProblem(t)) return { type: 'rejectTrade', id: t.id };
     const gain = t.give.cash + t.give.spaces.reduce((s, i) => s + valueOf(g, id, i), 0) + t.give.jailCards * 40;
     // Handing someone the last piece of a set costs more than the deed is worth.
     const loss = t.get.cash + t.get.spaces.reduce((s, i) => s + valueOf(g, id, i) + (completesFor(g, t.from, i) ? g.spaces[i].price! : 0), 0)

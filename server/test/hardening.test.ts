@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import { EngineError, Game, type GameSnapshot } from '../src/engine/game.ts';
 import { botAction } from '../src/engine/bot.ts';
 import { DEFAULT_RULES, resolveTheme } from '../../shared/themes.ts';
-import type { Action } from '../../shared/types.ts';
+import { Room, type RoomHooks } from '../src/rooms.ts';
+import type { Action, Trade } from '../../shared/types.ts';
 import { scripted } from './helpers.ts';
 
 const CLASSIC = resolveTheme('classic', 'classic');
@@ -100,4 +101,90 @@ test('a snapshot holding a malformed offer still restores, without it', () => {
   const g2 = Game.restore({ theme: CLASSIC, rules: { ...DEFAULT_RULES } }, snap);
   assert.deepEqual(g2.trades.map(t => t.id), ['t2']);
   assert.doesNotThrow(() => botAction(g2, 'p1'));
+});
+
+// ---- room timers and automated moves ----------------------------------------
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+const quietHooks = (): RoomHooks => ({ onChange() {}, onEvent() {}, onFinished() {} });
+
+/** A started room with one human ('a') and one bot; timers stopped so tests drive it. */
+function botRoom(code: string) {
+  const r = new Room(code, 'a', quietHooks());
+  r.join({ id: 'a', name: 'A', avatar: '' });
+  r.addBot('a', false);
+  r.start('a', false);
+  r.dispose();
+  const bot = r.seats.find(s => s.isBot)!.id;
+  return { r, g: r.game!, bot };
+}
+
+/** Capture console.error for the duration of `fn`. */
+async function capturingErrors(fn: (logged: string[]) => Promise<void> | void) {
+  const logged: string[] = [];
+  const orig = console.error;
+  console.error = (...a: unknown[]) => { logged.push(a.map(x => (x instanceof Error ? x.message : String(x))).join(' ')); };
+  try { await fn(logged); } finally { console.error = orig; }
+}
+
+test('a timer body that throws is logged with the room code and re-armed, not fatal', async () => {
+  const { r, g, bot } = botRoom('BOOM1');
+  g.currentIdx = g.players.findIndex(p => p.id === bot);
+  const apply = g.apply;
+  g.apply = () => { throw new TypeError('engine bug'); };
+  await capturingErrors(async logged => {
+    r.setConnected('a', true); // re-arms the timers: the bot moves in ~1 s
+    await sleep(1_200);
+    assert.ok(logged.some(l => l.includes('[room BOOM1]') && l.includes('engine bug')), logged.join('\n'));
+    const retry = (r as unknown as { retryTimer: NodeJS.Timeout | null }).retryTimer;
+    assert.ok(retry, 'the timers are re-armed after a pause');
+  });
+  g.apply = apply;
+  assert.equal(r.status, 'playing');
+  r.dispose();
+});
+
+test('the automated-move picker skips a seat whose bot code throws', async () => {
+  const { r, g, bot } = botRoom('BOOM2');
+  g.currentIdx = g.players.findIndex(p => p.id === bot);
+  // Something no validated path can store any more, standing in for any bot bug.
+  g.trades.push({ id: 'tx', from: 'a', to: bot, give: null, get: null } as unknown as Trade);
+  await capturingErrors(logged => {
+    const next = (r as unknown as { nextAutomatedAction(now: number): unknown }).nextAutomatedAction(Date.now());
+    assert.equal(next, null);
+    assert.ok(logged.some(l => l.includes('[room BOOM2]')));
+  });
+  r.dispose();
+});
+
+test('a stale trade is rejected, never accepted into a failure (or a bankruptcy)', () => {
+  const { r, g, bot } = botRoom('STALE');
+  g.currentIdx = g.players.findIndex(p => p.id === bot);
+  g.apply('a', { type: 'proposeTrade', to: bot, give: { cash: 1000, spaces: [], jailCards: 0 }, get: { cash: 0, spaces: [], jailCards: 0 } });
+  assert.equal(botAction(g, bot)?.type, 'acceptTrade', 'a gift is worth taking');
+  g.player('a').cash = 10; // …but the cash is spent before the bot gets to it
+  assert.deepEqual(botAction(g, bot), { type: 'rejectTrade', id: g.trades[0].id });
+  // Even if an accept does fail (a race), the fallback declines it instead.
+  (r as unknown as { fallback(id: string, a: Action): void }).fallback(bot, { type: 'acceptTrade', id: g.trades[0].id });
+  assert.equal(g.trades.length, 0);
+  assert.equal(g.player(bot).bankrupt, false);
+  r.dispose();
+});
+
+test('a debt during an auction: the bot waits, and the fallback never resigns for it', () => {
+  const { r, g, bot } = botRoom('DEBT1');
+  g.owned[1] = { owner: bot, houses: 0, mortgaged: false };
+  g.auction = { space: 3, highBid: 50, highBidder: bot, bidders: ['a', bot], endsAt: Date.now() + 60_000 };
+  g.phase = 'auction';
+  g.player(bot).cash = 100;
+  g.debts.push({ from: bot, to: 'a', amount: 5_000, reason: 'test' });
+  assert.equal(botAction(g, bot), null, 'no mortgaging (locked) and no bidding while it owes more than it has');
+  g.auction.highBidder = 'a';
+  assert.deepEqual(botAction(g, bot), { type: 'pass' });
+  g.auction.highBidder = bot;
+  // The old fallback went pass → endTurn → bankrupt; neither applies here.
+  (r as unknown as { fallback(id: string, a: Action): void }).fallback(bot, { type: 'mortgage', space: 1 });
+  assert.equal(g.player(bot).bankrupt, false);
+  assert.equal(g.phase, 'auction');
+  r.dispose();
 });

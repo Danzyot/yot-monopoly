@@ -21,6 +21,8 @@ const BOT_DELAY_MS = 900;
 const MINIGAME_BOT_DELAY_MS = 60;
 /** How often to look in on bots waiting to make a mini-game move. */
 const MINIGAME_POLL_MS = 150;
+/** After a timer body throws, the room's timers are re-armed this much later (no tight error loops). */
+const TIMER_RETRY_MS = 5_000;
 /** A disconnected player's turn is auto-played after this long. */
 export const AUTOPILOT_GRACE_MS = 45_000;
 /** A host away this long hands the room to someone who is here. */
@@ -105,6 +107,13 @@ export class Room {
   private clockTimer: NodeJS.Timeout | null = null;
   /** Separate from the game timers: host handover must not depend on schedule(). */
   private hostTimer: NodeJS.Timeout | null = null;
+  /** Re-arms everything after a timer body threw (see guarded). */
+  private retryTimer: NodeJS.Timeout | null = null;
+  /**
+   * Per seat, the automated move that just failed: not tried again until the
+   * game changes, so a move the engine refuses cannot loop every BOT_DELAY_MS.
+   */
+  private failedMoves = new Map<string, string>();
   /** Players who left a running game for good; they keep their seat but can't host. */
   private departed = new Set<string>();
 
@@ -231,7 +240,7 @@ export class Room {
     if (h && !gone && h.disconnectedAt !== null) {
       const due = h.disconnectedAt + HOST_GRACE_MS - Date.now();
       if (due > 0) {
-        this.hostTimer = setTimeout(() => this.watchHost(), due + 50);
+        this.hostTimer = setTimeout(() => this.guarded('host', () => this.watchHost(), false), due + 50);
         this.hostTimer.unref?.();
         return;
       }
@@ -470,6 +479,7 @@ export class Room {
   }
 
   private afterChange() {
+    this.failedMoves.clear();
     if (this.game?.phase === 'over' && this.status !== 'finished') {
       this.status = 'finished';
       this.finishedAt = Date.now();
@@ -497,26 +507,26 @@ export class Room {
 
     const clockDue = g.clockDeadline();
     if (clockDue !== null) {
-      this.clockTimer = setTimeout(() => {
+      this.clockTimer = setTimeout(() => this.guarded('clock', () => {
         if (this.game?.clockTimeout()) {
           this.afterChange();
           this.hooks.onChange(this);
         } else {
           this.schedule();
         }
-      }, Math.max(0, clockDue - Date.now()) + 50);
+      }), Math.max(0, clockDue - Date.now()) + 50);
     }
 
     if (g.auction) {
       const wait = Math.max(0, g.auction.endsAt - Date.now()) + 50;
-      this.auctionTimer = setTimeout(() => {
+      this.auctionTimer = setTimeout(() => this.guarded('auction', () => {
         if (this.game?.auctionTimeout()) {
           this.afterChange();
           this.hooks.onChange(this);
         } else {
           this.schedule();
         }
-      }, wait);
+      }), wait);
     }
 
     const now = Date.now();
@@ -527,33 +537,41 @@ export class Room {
       const botWaiting = g.minigame?.stage === 'play'
         && this.seats.some(s => this.automated(s, now) === 'bot' && !g.player(s.id).bankrupt);
       const wait = Math.max(0, mgDue - now) + 20;
-      this.minigameTimer = setTimeout(() => {
+      this.minigameTimer = setTimeout(() => this.guarded('mini-game', () => {
         if (this.game?.minigameTimeout()) {
           this.afterChange();
           this.hooks.onChange(this);
         } else {
           this.schedule();
         }
-      }, botWaiting ? Math.min(wait, MINIGAME_POLL_MS) : wait);
+      }), botWaiting ? Math.min(wait, MINIGAME_POLL_MS) : wait);
     }
 
     const next = this.nextAutomatedAction(now);
     if (next) {
-      this.botTimer = setTimeout(() => {
+      this.botTimer = setTimeout(() => this.guarded('bot', () => {
         const next = this.nextAutomatedAction(Date.now());
-        if (!next) return;
+        if (!next) {
+          this.schedule();
+          return;
+        }
         try {
           this.act(next.id, next.action, true);
         } catch (e) {
-          // A bot choosing an illegal move is a bug, but it must never wedge
-          // the room: log it and fall back to something always legal.
+          // A bot choosing an illegal move is a bug, or the move went stale (a
+          // trade whose cash was spent meanwhile), but it must never wedge the
+          // room: log it and fall back to something harmless.
           console.error(`[room ${this.code}] automated ${next.action.type} failed:`, (e as Error).message);
           // A mini-game move can go stale (the round moved on); that's never worth a fallback.
-          if (next.action.type !== 'minigame') this.fallback(next.id);
-          else this.schedule();
+          if (next.action.type !== 'minigame') {
+            this.failedMoves.set(next.id, JSON.stringify(next.action));
+            this.fallback(next.id, next.action);
+          } else {
+            this.schedule();
+          }
         }
         this.hooks.onChange(this);
-      }, next.action.type === 'minigame' ? MINIGAME_BOT_DELAY_MS : BOT_DELAY_MS);
+      }), next.action.type === 'minigame' ? MINIGAME_BOT_DELAY_MS : BOT_DELAY_MS);
       return;
     }
 
@@ -562,7 +580,7 @@ export class Room {
       .map(s => s.disconnectedAt! + AUTOPILOT_GRACE_MS - now)
       .filter(ms => ms > 0);
     if (pending.length) {
-      this.autopilotTimer = setTimeout(() => { this.schedule(); this.hooks.onChange(this); }, Math.min(...pending) + 50);
+      this.autopilotTimer = setTimeout(() => this.guarded('autopilot', () => { this.schedule(); this.hooks.onChange(this); }), Math.min(...pending) + 50);
     }
   }
 
@@ -574,7 +592,14 @@ export class Room {
       const s = this.seat(id);
       const mode = s ? this.automated(s, now) : null;
       if (!mode) continue;
-      let action = botAction(g, id);
+      let action: Action | null;
+      try {
+        action = botAction(g, id);
+      } catch (e) {
+        // A bug in the bot for this seat must not stop everyone else's moves.
+        console.error(`[room ${this.code}] bot for ${id} failed:`, e);
+        continue;
+      }
       if (!action) continue;
       // Autopilot keeps an absent player's game moving but never spends their
       // money on a whim or makes deals in their name.
@@ -587,20 +612,51 @@ export class Room {
           action = g.phase === 'done' ? { type: 'endTurn' } : { type: 'roll' };
         } else if (action.type === 'buy') action = { type: 'decline' };
       }
+      if (this.failedMoves.get(id) === JSON.stringify(action)) continue;
       return { id, action };
     }
     return null;
   }
 
-  private fallback(id: string) {
-    for (const a of [{ type: 'pass' }, { type: 'endTurn' }, { type: 'bankrupt' }] as Action[]) {
+  /**
+   * An automated move failed: try something harmless instead. Never
+   * bankruptcy — a stale trade or a debt during an auction is no reason to
+   * resign for anyone; the debt clock decides that. With nothing harmless to
+   * do, the seat waits (its failed move is not retried until the game moves).
+   */
+  private fallback(id: string, failed: Action) {
+    const tries: Action[] = [];
+    if (failed.type === 'acceptTrade') tries.push({ type: 'rejectTrade', id: failed.id });
+    tries.push({ type: 'pass' }, { type: 'endTurn' });
+    for (const a of tries) {
       try { this.act(id, a, true); return; } catch (e) { if (!(e instanceof EngineError)) throw e; }
+    }
+    this.schedule();
+  }
+
+  /**
+   * Every timer body runs through here: a bug in the engine, the bot or a hook
+   * is logged with the room code and, unless `rearm` is false, the room's
+   * timers are re-armed a little later. It must never take the server (and
+   * every other table) down with it.
+   */
+  private guarded(what: string, fn: () => void, rearm = true) {
+    try {
+      fn();
+    } catch (e) {
+      console.error(`[room ${this.code}] ${what} timer failed:`, e);
+      if (!rearm) return;
+      this.clearTimers();
+      this.retryTimer = setTimeout(() => this.guarded('retry', () => {
+        this.schedule();
+        this.hooks.onChange(this);
+      }), TIMER_RETRY_MS);
     }
   }
 
   private clearTimers() {
-    for (const t of [this.botTimer, this.auctionTimer, this.minigameTimer, this.autopilotTimer, this.clockTimer]) if (t) clearTimeout(t);
-    this.botTimer = this.auctionTimer = this.minigameTimer = this.autopilotTimer = this.clockTimer = null;
+    for (const t of [this.botTimer, this.auctionTimer, this.minigameTimer, this.autopilotTimer, this.clockTimer, this.retryTimer]) if (t) clearTimeout(t);
+    this.botTimer = this.auctionTimer = this.minigameTimer = this.autopilotTimer = this.clockTimer = this.retryTimer = null;
   }
 
   dispose() {
@@ -685,9 +741,15 @@ export class Room {
       }, game);
     }
     if (r.status === 'finished') r.finishedAt = now;
-    r.schedule();
-    // The host is disconnected like everyone else: start their 2-minute clock.
-    r.watchHost();
+    try {
+      r.schedule();
+      // The host is disconnected like everyone else: start their 2-minute clock.
+      r.watchHost();
+    } catch (e) {
+      // Not restored after all: leave no timers running for a room nobody can reach.
+      r.dispose();
+      throw e;
+    }
     return r;
   }
 }
@@ -790,14 +852,21 @@ export class Registry {
   private sweep() {
     const now = Date.now();
     for (const [code, r] of this.rooms) {
-      const idle = !r.hasConnectedHumans() && r.spectators === 0 && now - r.lastActivity > IDLE_ROOM_MS;
-      // A finished table stays while people are still at it (reading the
-      // summary, waiting on the host's rematch), within a hard cap.
-      const since = now - (r.finishedAt ?? now);
-      const occupied = r.hasConnectedHumans() || r.spectators > 0;
-      const done = r.status === 'finished' && since > FINISHED_ROOM_MS && (!occupied || since > FINISHED_ROOM_MAX_MS);
-      if (idle || done) this.delete(code);
+      try {
+        this.sweepOne(code, r, now);
+      } catch (e) {
+        console.error(`[room ${code}] sweep failed:`, e);
+      }
     }
   }
-}
 
+  private sweepOne(code: string, r: Room, now: number) {
+    const idle = !r.hasConnectedHumans() && r.spectators === 0 && now - r.lastActivity > IDLE_ROOM_MS;
+    // A finished table stays while people are still at it (reading the
+    // summary, waiting on the host's rematch), within a hard cap.
+    const since = now - (r.finishedAt ?? now);
+    const occupied = r.hasConnectedHumans() || r.spectators > 0;
+    const done = r.status === 'finished' && since > FINISHED_ROOM_MS && (!occupied || since > FINISHED_ROOM_MAX_MS);
+    if (idle || done) this.delete(code);
+  }
+}
