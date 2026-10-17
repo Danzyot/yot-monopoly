@@ -229,6 +229,7 @@ def snacky(m):
     for side in (-1, 1):
         G = M((side * 0.042, 0.004, 0.096), (0, side * 0.36, 0))
         head.append(ell(f'{cid}_Sclera{side}', (0, 0, 0), (0.021, 0.022, 0.011), m['white'], parent=G, seg=(20, 14)))
+        blink_lid(cid, head, m, G, side, (0.021, 0.022, 0.011))
         head.append(ell(f'{cid}_Iris{side}', (0, -0.001, 0.0075), (0.0155, 0.017, 0.006), m['c3'], parent=G, seg=(18, 12)))
         head.append(ell(f'{cid}_Pupil{side}', (0, -0.001, 0.0115), (0.008, 0.009, 0.003), m['ink'], parent=G, seg=(14, 10)))
         head.append(ell(f'{cid}_Glint{side}', (-0.006, 0.007, 0.0135), (0.0045, 0.0045, 0.002), m['white'], parent=G, seg=(10, 6)))
@@ -381,7 +382,7 @@ ARMS = {'snacky': ((0.085, 0.165, 0.0), 0.019), 'starer': ((0.072, 0.16, 0.0), 0
 # --------------------------------------------------------------------------
 
 def eyes(cid, head, m, y=0.005, gap=0.042, z=0.096, size=(0.021, 0.024), iris='c3', yaw=0.36,
-         slit=False, lids=True, pupil=1.0):
+         slit=False, lids=True, pupil=1.0, blink=True):
     """A pair of toon eyes: white, coloured iris, pupil, catchlight and an upper lid line."""
     for side in (-1, 1):
         G = M((side * gap, y, z), (0, side * yaw, 0))
@@ -391,10 +392,29 @@ def eyes(cid, head, m, y=0.005, gap=0.042, z=0.096, size=(0.021, 0.024), iris='c
         pr = (rx * 0.22, ry * 0.6) if slit else (rx * 0.38 * pupil, ry * 0.4 * pupil)
         head.append(ell(f'{cid}_Pupil{side}', (0, -ry * 0.05, rx * 0.55), (pr[0], pr[1], rx * 0.14), m['ink'], parent=G, seg=(14, 10)))
         head.append(ell(f'{cid}_Glint{side}', (-rx * 0.28, ry * 0.3, rx * 0.64), (rx * 0.21, rx * 0.21, rx * 0.08), m['white'], parent=G, seg=(10, 6)))
+        if blink:
+            blink_lid(cid, head, m, G, side, (rx, ry, rx * 0.55))
         if lids:
             head.append(strand(f'{cid}_Lid{side}', [(-rx * 1.08, ry * 0.2, rx * 0.25), (-rx * 0.5, ry * 0.92, rx * 0.45),
                                                      (rx * 0.5, ry * 0.95, rx * 0.45), (rx * 1.08, ry * 0.35, rx * 0.25)],
                                0.0028, 0.002, m['ink'], parent=G, ring=6))
+
+
+# What colour each character's eyelids are: the skin around the eyes.
+LID_MATS = {'spiky': 'main', 'cat': 'main', 'alien': 'main'}
+
+
+def blink_lid(cid, head, m, G, side, rad):
+    """An eyelid the game closes to blink: a shell just over the eye, hinged along its top.
+
+    build_detailed splits it off as LidL / LidR, re-centred on the hinge (kept in the
+    node's extras), and the game folds it up out of sight between blinks."""
+    rx, ry, rz = rad
+    o = ell(f'{cid}_BlinkLid{side}', (0, 0, rz * 0.12), (rx * 1.14, ry * 1.12, rz * 1.22), m[LID_MATS.get(cid, 'skin')],
+            parent=G, seg=(20, 12))
+    o['hinge'] = tuple(G @ Vector((0, ry * 1.08, rz * 0.4)))
+    o['side'] = side
+    head.append(o)
 
 
 def legs(cid, m, out, mat, top=0.075, x=0.034, r=0.025):
@@ -653,6 +673,7 @@ def pirate(m):
     # One eye and a patch.
     G = M((0.036, 0.012, 0.086), (0, 0.36, 0))
     head.append(ell(f'{cid}_Sclera', (0, 0, 0), (0.017, 0.019, 0.009), m['white'], parent=G, seg=(18, 12)))
+    blink_lid(cid, head, m, G, 1, (0.017, 0.019, 0.009))
     head.append(ell(f'{cid}_Iris', (0, -0.001, 0.006), (0.012, 0.013, 0.005), m['c3'], parent=G, seg=(16, 10)))
     head.append(ell(f'{cid}_Pupil', (0, -0.001, 0.0095), (0.006, 0.007, 0.003), m['ink'], parent=G, seg=(12, 8)))
     head.append(ell(f'{cid}_Glint', (-0.004, 0.006, 0.011), (0.0035, 0.0035, 0.0015), m['white'], parent=G, seg=(8, 6)))
@@ -769,6 +790,7 @@ def alien(m):
     for side in (-1, 1):
         G = M((side * 0.047, 0.004, 0.097), (0, side * 0.42, -side * 0.38))
         head.append(ell(f'{cid}_Eye{side}', (0, 0, 0), (0.034, 0.022, 0.016), m['ink'], parent=G, seg=(22, 14)))
+        blink_lid(cid, head, m, G, side, (0.034, 0.022, 0.016))
         head.append(ell(f'{cid}_EyeGlint{side}', (-0.012, 0.008, 0.014), (0.007, 0.005, 0.002), m['white'], parent=G, seg=(10, 6)))
         head.append(ell(f'{cid}_EyeGlint2{side}', (0.012, -0.006, 0.014), (0.003, 0.003, 0.0015), m['white'], parent=G, seg=(8, 6)))
         head.append(strand(f'{cid}_Antenna{side}', [(side * 0.04, 0.11, 0.0), (side * 0.06, 0.15, -0.01), (side * 0.08, 0.19, 0.0)],

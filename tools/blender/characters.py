@@ -229,6 +229,21 @@ def build_detailed(cid, spec):
             keep.append(o)
     built['Body'] = keep
     built.update({k: v for k, v in feet.items() if v})
+    # Split the eyelids off the head, each re-centred on its hinge (head space),
+    # which rides along in the node's extras for the game to hang it from.
+    hinges = {}
+    head = []
+    blib.realize(built['Head'])
+    for o in built['Head']:
+        if 'BlinkLid' not in o.name:
+            head.append(o)
+            continue
+        part = 'LidL' if o['side'] > 0 else 'LidR'
+        hx, hy, hz = o['hinge']
+        o.data.transform(Matrix.Translation((-hx, hz, -hy)))
+        hinges[part] = [round(hx, 5), round(hy, 5), round(hz, 5)]
+        built.setdefault(part, []).append(o)
+    built['Head'] = head
     for part, objs in built.items():
         blib.realize(objs)
         groups: dict[str, list] = {}
@@ -243,7 +258,10 @@ def build_detailed(cid, spec):
             budget = max(int(o.get('budget', FACE_BUDGET)) for o in os_)
             fine = any('Hair' in o.name or 'Skull' in o.name for o in os_)
             pieces.append(fuse(os_, f'{cid}_{part}_{mat}', budget=budget, voxel=0.0018 if fine else VOXEL))
-        nodes.append(blib.join(pieces + loose, f'{cid}_{part}'))
+        node = blib.join(pieces + loose, f'{cid}_{part}')
+        if part in hinges:
+            node['hinge'] = hinges[part]
+        nodes.append(node)
     return nodes
 
 
@@ -283,6 +301,12 @@ def preview(nodes_by_char, path, close=False):
         x = (i - (len(ids) - 1) / 2) * (0.36 if close else 0.32)
         for n in nodes_by_char[cid]:
             part = n.name.split('_', 1)[1]
+            if part in ('LidL', 'LidR'):
+                # Hung from the head; shown half closed so the preview checks the fit.
+                (hx, hy, hz), (px, py, pz) = n['hinge'], PART_PIVOTS['Head']
+                n.location = blib.V(x + px + hx, py + hy, pz + hz)
+                n.scale = (1, 1, 0.5)
+                continue
             px, py, pz = PART_PIVOTS[part]
             n.location = blib.V(x + px, py, pz)
         if cid in detailed.LEGS:
@@ -343,6 +367,7 @@ def main():
                 close=bool(only))
         for n in nodes:
             n.location = (0, 0, 0)
+            n.scale = (1, 1, 1)
     blib.export_glb(nodes, 'models/characters.glb', images='NONE')
     blib.record('characters', {'url': '/models/characters.glb'})
 

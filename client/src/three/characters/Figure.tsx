@@ -22,9 +22,12 @@ export interface Rig {
   handR: Group | null;
   footL: Group | null;
   footR: Group | null;
+  /** Eyelids (characters that blink), hinged along the top of each eye. */
+  lidL: Group | null;
+  lidR: Group | null;
 }
 
-export const newRig = (): Rig => ({ pose: null, head: null, handL: null, handR: null, footL: null, footR: null });
+export const newRig = (): Rig => ({ pose: null, head: null, handL: null, handR: null, footL: null, footR: null, lidL: null, lidR: null });
 
 /** Per-figure materials in the player's colour, freed when the figure goes. */
 export function useCharacterMaterials(id: CharacterId, color: string): Mats {
@@ -185,6 +188,22 @@ function ModelFigure({ id, mats, rig }: { id: CharacterId; mats: Mats; rig: Rig 
       return [name, obj];
     })) as Record<(typeof PART_NAMES)[number], Object3D>;
   }, [gltf.scene, id, mats]);
+  // Eyelids, for the characters that blink: each hangs from its hinge on the head.
+  const lids = useMemo(() => {
+    const cid = LOOKS[id] ? id : 'spiky';
+    return (['LidL', 'LidR'] as const).map(name => {
+      const src = gltf.scene.getObjectByName(`${cid}_${name}`);
+      const hinge = src?.userData.hinge as [number, number, number] | undefined;
+      if (!src || !hinge) return null;
+      const obj = src.clone(true);
+      obj.position.set(0, 0, 0);
+      obj.traverse((o: Object3D) => {
+        const m = o as Mesh;
+        if (m.isMesh) m.material = mats[((m.material as Material).name.split(':')[1] ?? 'skin') as keyof Mats] ?? mats.skin;
+      });
+      return { obj, hinge };
+    });
+  }, [gltf.scene, id, mats]);
   const look = LOOKS[id] ?? LOOKS.spiky;
   return (
     <group ref={g => { rig.pose = g; }}>
@@ -204,6 +223,11 @@ function ModelFigure({ id, mats, rig }: { id: CharacterId; mats: Mats; rig: Rig 
       </group>
       <group ref={g => { rig.head = g; }} position={[0, HEAD_Y, 0]}>
         <primitive object={parts.Head} />
+        {lids.map((l, i) => l && (
+          <group key={i} ref={g => { rig[i ? 'lidR' : 'lidL'] = g; }} position={l.hinge} visible={false}>
+            <primitive object={l.obj} />
+          </group>
+        ))}
       </group>
     </group>
   );
@@ -262,13 +286,28 @@ export interface PoseInput {
   sad?: number;
   /** 0–1 through a stomping tantrum (sent to jail). */
   stomp?: number;
+  /** 0–1: eyes closed (on top of blinking, sulking and dozing in jail). */
+  lids?: number;
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 export function poseRig(rig: Rig, o: PoseInput) {
-  const { pose, head, handL, handR, footL, footR } = rig;
+  const { pose, head, handL, handR, footL, footR, lidL, lidR } = rig;
   if (!pose || !head || !handL || !handR) return;
+  if (lidL || lidR) {
+    // A blink every few seconds (each piece on its own beat), heavy lids when
+    // sulking or slumped in jail, shut when out of the game.
+    const period = 3.4 + ((o.phase * 0.37) % 1) * 2.4;
+    const k = (o.time + o.phase * 5) % period;
+    const blink = k < 0.17 ? Math.sin((Math.PI * k) / 0.17) : 0;
+    const shut = Math.max(blink, (o.sad ?? 0) * 0.55, o.slump * 0.5, o.lie, o.lids ?? 0);
+    for (const lid of [lidL, lidR]) {
+      if (!lid) continue;
+      lid.visible = shut > 0.03;
+      lid.scale.y = Math.max(0.03, shut);
+    }
+  }
   const alive = 1 - o.lie;
   const sad = o.sad ?? 0;
   const wave = o.wave ?? 0;
