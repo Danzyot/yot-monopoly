@@ -6,10 +6,11 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import Avatar from '../components/Avatar';
 import CopyId, { discordIdOf } from '../components/CopyId';
+import DiscordInvites from '../components/DiscordInvites';
 import { IconArrowLeft, IconRefresh, IconShield } from '../components/icons';
 import { chips, timeAgo } from '../format';
 
-type Tab = 'flags' | 'lookup' | 'players' | 'alts' | 'devices' | 'pairs' | 'actions' | 'events' | 'ipcheck';
+type Tab = 'flags' | 'lookup' | 'players' | 'alts' | 'devices' | 'invites' | 'pairs' | 'actions' | 'events' | 'ipcheck';
 
 const RANK: Record<number, string> = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
 const SUIT = ['\u2660', '\u2665', '\u2666', '\u2663'];
@@ -288,6 +289,7 @@ export default function Audit() {
     { key: 'players', label: `Players${data ? ` (${data.players.length})` : ''}` },
     { key: 'alts', label: `Shared IPs${data ? ` (${data.alts.length})` : ''}` },
     { key: 'devices', label: `Shared devices${data ? ` (${data.devices.length})` : ''}` },
+    { key: 'invites', label: 'Discord invites' },
     { key: 'pairs', label: `Chip flow${data ? ` (${data.pairs.length})` : ''}` },
     { key: 'actions', label: 'Move log' },
     { key: 'events', label: 'Event logs' },
@@ -850,6 +852,13 @@ export default function Audit() {
                 </div>
               )}
             </>
+          )}
+
+          {tab === 'invites' && (
+            <DiscordInvites
+              onLookup={id => { setLookupQ(id); setTab('lookup'); void runLookup(id); }}
+              onBan={t => setPendingBan({ ...t, kind: 'player', scope: 'lifetime' })}
+            />
           )}
 
           {tab === 'pairs' && (

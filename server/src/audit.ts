@@ -13,6 +13,7 @@ import { countryOf } from './geo.ts';
 import { banAt, normaliseIp } from './bans.ts';
 import { isInfraPeer } from './net.ts';
 import { classify } from './vpn.ts';
+import { accountAgeDays, ageText, isYoung, joinsInvolving } from './invitelog.ts';
 import { DATA_DIR } from './paths.ts';
 
 export interface PlayerRecord {
@@ -601,7 +602,9 @@ export interface SuspectedAlt {
   id: string; name: string; avatar: string;
   discordTag: string | null; discordId: string | null;
   reasons: string[];
-  strength: 'browser' | 'address';
+  // 'invite': only linked through a Discord invite, to or from a fresh
+  // Discord account. Weaker than either of the others, and listed last.
+  strength: 'browser' | 'address' | 'invite';
   lastSeen: number;
   alreadyBanned: boolean;
 }
@@ -609,33 +612,68 @@ export interface SuspectedAlt {
 export function suspectedAlts(playerId: string): SuspectedAlt[] {
   const me = players.get(playerId);
   if (!me) return [];
-  const found = new Map<string, { rec: PlayerRecord; reasons: Set<string>; browser: boolean }>();
-  const note = (rec: PlayerRecord, why: string, browser: boolean) => {
+  type Found = Omit<SuspectedAlt, 'reasons' | 'strength' | 'alreadyBanned'> & { reasons: Set<string>; rank: number };
+  const found = new Map<string, Found>();
+  // rank: 0 same browser, 1 same address, 2 Discord invite only.
+  const note = (rec: PlayerRecord, why: string, rank: number) => {
     if (rec.id === me.id) return;
-    const f = found.get(rec.id) ?? { rec, reasons: new Set<string>(), browser: false };
+    const f = found.get(rec.id) ?? {
+      id: rec.id, name: rec.name, avatar: rec.avatar, discordTag: rec.discordTag, discordId: rec.discordId,
+      lastSeen: rec.lastSeen, reasons: new Set<string>(), rank,
+    };
     f.reasons.add(why);
-    f.browser ||= browser;
+    f.rank = Math.min(f.rank, rank);
     found.set(rec.id, f);
   };
   for (const p of players.values()) {
-    if ([...me.devices.keys()].some(d => p.devices.has(d))) note(p, 'same browser', true);
+    if ([...me.devices.keys()].some(d => p.devices.has(d))) note(p, 'same browser', 0);
   }
   for (const ip of me.ips.keys()) {
     if (isInfraPeer(ip)) continue;
     const here = [...players.values()].filter(p => [...p.ips.keys()].some(x => normaliseIp(x) === normaliseIp(ip)));
     if (here.length > CROWD_LIMIT) continue;
-    for (const p of here) note(p, `same address ${ip}`, false);
+    for (const p of here) note(p, `same address ${ip}`, 1);
   }
+
+  // Discord invites: who they brought into the Discord, and who brought them.
+  // An account already found above just gains a chip. One found ONLY through
+  // an invite is listed when the account that joined was fresh — friends
+  // invite friends, but a member bringing in week-old accounts is the alt
+  // pattern. Someone who never signed in to the site is still listed, by
+  // their Discord id, so they can be banned here and on Discord before they do.
+  if (me.discordId) {
+    const { invited, invitedBy } = joinsInvolving(me.discordId);
+    const links = [
+      ...invited.map(j => ({ j, other: j.memberId, name: j.memberName, avatar: j.memberAvatar,
+        why: `joined the Discord through their invite · account ${ageText(accountAgeDays(j))}` })),
+      ...invitedBy.map(j => ({ j, other: j.inviterId!, name: j.inviterName ?? j.inviterId!, avatar: null as string | null,
+        why: `invited them to the Discord · their account was ${ageText(accountAgeDays(j))}` })),
+    ];
+    for (const l of links) {
+      if (l.other === me.discordId) continue;
+      const rec = [...players.values()].find(p => p.discordId === l.other);
+      const known = found.get(rec?.id ?? l.other);
+      if (known) { known.reasons.add('Discord invite'); continue; }
+      if (!isYoung(l.j)) continue;
+      if (rec) { note(rec, l.why, 2); continue; }
+      found.set(l.other, {
+        id: l.other, name: l.name, avatar: l.avatar ?? '', discordTag: null, discordId: l.other,
+        lastSeen: l.j.joinedAt, reasons: new Set([`${l.why} · never signed in here`]), rank: 2,
+      });
+    }
+  }
+
+  const strength = ['browser', 'address', 'invite'] as const;
   return [...found.values()]
     .map(f => ({
-      id: f.rec.id, name: f.rec.name, avatar: f.rec.avatar,
-      discordTag: f.rec.discordTag, discordId: f.rec.discordId,
+      id: f.id, name: f.name, avatar: f.avatar,
+      discordTag: f.discordTag, discordId: f.discordId,
       reasons: [...f.reasons],
-      strength: (f.browser ? 'browser' : 'address') as SuspectedAlt['strength'],
-      lastSeen: f.rec.lastSeen,
-      alreadyBanned: !!banAt('player', f.rec.id),
+      strength: strength[f.rank],
+      lastSeen: f.lastSeen,
+      alreadyBanned: !!banAt('player', f.id) || (!!f.discordId && !!banAt('player', `dc_${f.discordId}`)),
     }))
-    .sort((a, b) => (a.strength === b.strength ? 0 : a.strength === 'browser' ? -1 : 1) || b.lastSeen - a.lastSeen)
+    .sort((a, b) => strength.indexOf(a.strength) - strength.indexOf(b.strength) || b.lastSeen - a.lastSeen)
     .slice(0, 30);
 }
 

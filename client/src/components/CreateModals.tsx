@@ -6,6 +6,7 @@ import { useToast } from '../toast';
 import BlindEditor, { niceChip, type LevelRow } from './BlindEditor';
 import ThemePicker from './ThemePicker';
 import type { TableTheme } from '../../../shared/types';
+import LateClockField, { lateClockState, lateClockValue } from './LateClockField';
 
 // Left blank on purpose. The Discord pair below fills itself in from
 // /api/config the moment it arrives — the server already knows the guild and
@@ -46,6 +47,8 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
   // Off unless the host asks for it.
   const [betCapOn, setBetCapOn] = useState(false);
   const [betCapMinutes, setBetCapMinutes] = useState(15);
+  // Extra time near the end: off unless the host asks for it.
+  const [lateClock, setLateClock] = useState(lateClockState(null));
   const [lateRegCustom, setLateRegCustom] = useState(false);
   const [approveRegistrations, setApproveRegistrations] = useState(false);
   const [speedHelp, setSpeedHelp] = useState(false);
@@ -103,6 +106,7 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
         name: name.trim(), startingStack, levelMinutes, structure,
         maxPlayers, prizeText, lateRegMinutes, joinMinutes, approveRegistrations,
         betCapMinutes: betCapOn ? betCapMinutes : null,
+        lateClock: lateClockValue(lateClock),
         breakEveryLevels, maxReentries, minPlayers: 2, seatsPerTable,
         rabbitHunting, displayMode, actionSeconds, timebankSeconds,
         theme: theme ?? undefined,
@@ -192,6 +196,7 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
           </div>
           )}
         </div>
+        <LateClockField value={lateClock} onChange={setLateClock} />
         <label className="check-row">
           <input type="checkbox" checked={customBlinds} onChange={e => setCustomBlinds(e.target.checked)} />
           <span>Custom blind levels (write the exact schedule yourself)</span>

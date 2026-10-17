@@ -48,6 +48,11 @@ export default function FeltInfo({ view }: { view: TableView }) {
         <span className="dim">Next {chips(t.nextSb ?? 0)}/{chips(t.nextBb)}</span>
       )}
       <span>{t.playersLeft} left of {t.totalEntries}</span>
+      {(t.lateClockSeconds ?? 0) > 0 && (
+        <span className="late-clock-on" title="Extra time near the end is on: every decision gets these seconds on top of the turn limit">
+          +{t.lateClockSeconds}s per turn
+        </span>
+      )}
       {view.myRank !== null && (
         <span className="rank">
           Your rank {view.myRank}/{t.playersLeft} ({view.myRank} of {t.totalEntries})

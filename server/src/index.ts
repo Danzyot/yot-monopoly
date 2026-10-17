@@ -26,7 +26,10 @@ import {
 } from './audit.ts';
 import { BRAND } from '../../shared/brand.ts';
 import { registry } from './registry.ts';
-import { DEFAULT_BET_CAP_MINUTES } from './tournament/tournament.ts';
+import { DEFAULT_BET_CAP_MINUTES, parseLateClock } from './tournament/tournament.ts';
+import { loadInviteLog } from './invitelog.ts';
+import { inviteReport } from './invitereport.ts';
+import { gatewayStatus, inviteTrackingWanted, restartGateway, startGateway } from './discordgateway.ts';
 import { attachSockets, clientIp, disconnectBanned, trustedProxyHops } from './sockets.ts';
 import { loadVpnLists } from './vpn.ts';
 import { blockEnabled as vpnBlockEnabled, vpnGate } from './vpngate.ts';
@@ -88,6 +91,7 @@ loadGraphics();
 loadPromo();
 loadCashRecords();
 loadBans();
+loadInviteLog();
 loadVpnSetting();
 const vpnRanges = loadVpnLists();
 loadFeatures();
@@ -1157,6 +1161,20 @@ app.get('/api/admin/bannable-games', (req, res) => {
 // from this server — the one place that can reach Discord with the bot's own
 // token. Optionally against one player, since the usual failure is not the
 // permission but where the bot's role sits relative to theirs.
+// Who joined the Discord through whose invite, with what makes each one look
+// like an alt. The connection's state comes with it, so a switch left off on
+// Discord's side is named on the page rather than showing an empty list.
+app.get('/api/admin/discord/invites', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  res.json({ status: gatewayStatus(), wanted: inviteTrackingWanted(), ...inviteReport() });
+});
+
+app.post('/api/admin/discord/invites/reconnect', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  restartGateway();
+  res.json({ status: gatewayStatus() });
+});
+
 app.get('/api/admin/discord/ban-check', (req, res) => {
   void (async () => {
     if (!requireAdmin(req, res)) return;
@@ -1611,6 +1629,9 @@ app.post('/api/tournaments', (req, res) => {
       betCapMinutes: b.betCapMinutes === null || b.betCapMinutes === undefined
         ? null
         : clampInt(b.betCapMinutes, 1, 240, DEFAULT_BET_CAP_MINUTES) || null,
+      // Extra time per decision once the field is down to N players. Off
+      // unless the host switches it on.
+      lateClock: parseLateClock(b.lateClock),
       approveRegistrations: !!b.approveRegistrations,
       buyIn: 0, // no in-site currency — prizes are described in prizeText
       prizeText: typeof b.prizeText === 'string' && b.prizeText.trim()

@@ -151,6 +151,8 @@ export interface TableReaction {
 }
 
 // Event context painted faintly in the middle of the felt, PokerNow style.
+export interface LateClock { players: number; extraSeconds: number }
+
 export interface TableTourneyInfo {
   level: number;
   sb: number;
@@ -175,6 +177,9 @@ export interface TableTourneyInfo {
   // harmless — there is one clock for the event, read live, not a per-table
   // counter that a seat change could reset or double-count.
   betCap?: { endsAt: number; fraction: number } | null;
+  // Seconds being added to every decision right now by the late clock; 0 or
+  // absent when it is off or the field has not got that small yet.
+  lateClockSeconds?: number;
 }
 
 // Custom table look, PokerNow-style: a felt color preset plus optional
@@ -351,6 +356,10 @@ export interface TournamentConfig {
   // asks for it. Calling is never restricted, and blinds and antes are forced
   // posts that never go through the bet path at all.
   betCapMinutes?: number | null;
+  // Extra time near the end: once `players` or fewer are left in the event,
+  // every decision gets `extraSeconds` on top of the normal clock, so the
+  // hands that decide the prizes are not rushed. Null or absent is off.
+  lateClock?: LateClock | null;
   // Host must approve each registration before the player is seated.
   approveRegistrations: boolean;
   buyIn: number; // legacy, always 0 — there is no in-site currency

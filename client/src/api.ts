@@ -299,6 +299,10 @@ export const api = {
     }),
   // Live check of everything a Discord ban depends on, optionally against one
   // player. Run by the server, which holds the bot token.
+  // Who joined the Discord through whose invite, and the bot's live connection.
+  discordInvites: () => request<DiscordInvitesReport>('/api/admin/discord/invites'),
+  discordInvitesReconnect: () =>
+    request<{ status: DiscordInvitesReport['status'] }>('/api/admin/discord/invites/reconnect', { method: 'POST', body: '{}' }),
   discordBanCheck: (target?: string) =>
     request<{ lines: { ok: boolean; label: string; detail: string }[]; target?: string | null }>(
       `/api/admin/discord/ban-check${target ? `?target=${encodeURIComponent(target)}` : ''}`),
@@ -471,4 +475,28 @@ export interface GraphicRow {
   file: string;
   size: number;
   addedAt: number;
+}
+
+type SiteAccount = { id: string; name: string; avatar: string };
+export interface DiscordInvitesReport {
+  status: {
+    state: 'off' | 'connecting' | 'ready' | 'failed'; detail: string; since: number;
+    invitesReadable: boolean | null; invitesTracked: number; lastJoinAt: number | null;
+  };
+  wanted: boolean;
+  total: number;
+  joins: {
+    memberId: string; memberName: string; memberAvatar: string | null;
+    accountCreatedAt: number; joinedAt: number;
+    how: 'invite' | 'vanity' | 'ambiguous' | 'unknown';
+    code: string | null; inviterId: string | null; inviterName: string | null;
+    candidates?: { code: string; inviterId: string | null; inviterName: string | null }[];
+    ageDays: number; young: boolean;
+    member: SiteAccount | null; inviter: SiteAccount | null;
+    flags: string[];
+  }[];
+  inviters: {
+    inviterId: string; inviterName: string; inviter: SiteAccount | null;
+    invited: number; fresh: number; flagged: number; banned: boolean;
+  }[];
 }

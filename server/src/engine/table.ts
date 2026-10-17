@@ -227,6 +227,9 @@ export class Table {
   // Set by the Tournament that owns this table: shared event context for the
   // felt overlay, and the viewer's live rank in the field.
   tourneyInfo: (() => TableTourneyInfo | null) | null = null;
+  // Extra milliseconds on every decision, read live when a clock starts. A
+  // tournament sets it for its late clock; a cash table leaves it unset.
+  extraActionMs: (() => number) | null = null;
   rankOf: ((playerId: string) => number | null) | null = null;
   private rabbitCards: CardT[] = [];
   private rabbitShown = false;
@@ -715,11 +718,17 @@ export class Table {
     // Away AND disconnected: resolve in a blink rather than burning the full
     // clock every hand. Away but still connected keeps the normal clock —
     // they may simply have missed one turn and still be sitting there.
-    const wait = st?.sittingOut && !isOnline(st.player.id) ? 600 : this.actionTimeMs;
+    const wait = st?.sittingOut && !isOnline(st.player.id) ? 600 : this.clockMs();
     this.actionStarted = Date.now();
     this.actionDeadline = this.actionStarted + wait;
     this.usingTimebankFor = null;
     this.actionTimer = setTimeout(() => this.onActionTimeout(seat), wait);
+  }
+
+  // A full decision's worth of time: the table's clock plus whatever the
+  // tournament is adding right now.
+  private clockMs() {
+    return this.actionTimeMs + Math.max(0, this.extraActionMs?.() ?? 0);
   }
 
   private runoutStep() {
@@ -1095,7 +1104,7 @@ export class Table {
     const seat = this.hand?.actionSeat() ?? null;
     if (this.hand && seat !== null && seat >= 0) {
       // Hand it back with the time that was left on it.
-      const left = this.pausedClockMs ?? this.actionTimeMs;
+      const left = this.pausedClockMs ?? this.clockMs();
       this.pausedClockMs = null;
       this.actionDeadline = Date.now() + left;
       this.actionStarted = Date.now();

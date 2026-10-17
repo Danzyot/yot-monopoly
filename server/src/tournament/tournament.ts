@@ -13,6 +13,19 @@ import { isOnline } from '../presence.ts';
 const clamp = (n: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, Number.isFinite(n) ? n : lo));
 
+// The late clock as the host sent it, or null for off. Anything that is not
+// an object with a sensible player count and number of seconds is off, so an
+// old client that never heard of it creates exactly what it used to.
+export const LATE_CLOCK_DEFAULT = { players: 30, extraSeconds: 10 };
+export function parseLateClock(v: unknown): { players: number; extraSeconds: number } | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as { players?: unknown; extraSeconds?: unknown };
+  const players = Math.floor(Number(o.players ?? LATE_CLOCK_DEFAULT.players));
+  const extra = Math.floor(Number(o.extraSeconds ?? LATE_CLOCK_DEFAULT.extraSeconds));
+  if (!Number.isFinite(players) || !Number.isFinite(extra) || players < 2 || extra < 1) return null;
+  return { players: clamp(players, 2, 1000), extraSeconds: clamp(extra, 1, 120) };
+}
+
 export interface TPlayer {
   id: string;
   name: string;
@@ -792,8 +805,10 @@ export class Tournament {
       betCap: this.betCapActive
         ? { endsAt: this.betCapEndsAt!, fraction: BET_CAP_FRACTION }
         : null,
+      lateClockSeconds: this.lateClockMs() / 1000,
     });
     table.rankOf = (playerId: string) => this.rankOf(playerId);
+    table.extraActionMs = () => this.lateClockMs();
     this.tables.set(table.id, table);
     return table;
   }
@@ -882,6 +897,7 @@ export class Tournament {
     blinds?: { sb: number; bb: number; ante: number } | null;
     jumpLevel?: number;
     betCapMinutes?: number | null;
+    lateClock?: unknown;
     theme?: import('../../../shared/types.ts').TableTheme | null;
   }) {
     if (this.state === 'finished' || this.state === 'cancelled') {
@@ -943,6 +959,19 @@ export class Tournament {
         changes.push(next === null
           ? 'opening bet cap off'
           : `opening bet cap ${next}m (max ${Math.round(BET_CAP_FRACTION * 100)}% of stack per bet)`);
+      }
+    }
+    if (p.lateClock !== undefined) {
+      const before = this.config.lateClock ?? null;
+      const next = parseLateClock(p.lateClock);
+      if (JSON.stringify(next) !== JSON.stringify(before)) {
+        this.config.lateClock = next;
+        // Read live when each clock starts, so this applies from the next
+        // decision; nobody's running clock jumps.
+        changes.push(next === null
+          ? 'extra time near the end off'
+          : `+${next.extraSeconds}s per decision from ${next.players} players left`);
+        this.lateClockAnnounced = this.lateClockMs() > 0;
       }
     }
     if (p.lateRegMinutes !== undefined) {
@@ -1342,7 +1371,29 @@ export class Tournament {
 
     this.rebalance(table);
     this.maybeFinalRedraw();
+    this.maybeAnnounceLateClock();
     this.cb.broadcastTourney(this);
+  }
+
+  // The late clock: once the field is down to the host's number, every
+  // decision gets extra seconds. Nothing is copied onto the tables — each one
+  // asks here whenever it starts a clock, so a table that breaks, a player
+  // who is moved, or a restart can neither lose nor double it.
+  lateClockMs(): number {
+    const lc = this.config.lateClock;
+    if (!lc || this.startedAt === null) return 0;
+    if (this.state === 'finished' || this.state === 'cancelled') return 0;
+    return this.alivePlayers().length <= lc.players ? lc.extraSeconds * 1000 : 0;
+  }
+
+  private lateClockAnnounced = false;
+  private maybeAnnounceLateClock() {
+    if (this.lateClockAnnounced || this.lateClockMs() === 0) return;
+    this.lateClockAnnounced = true;
+    const lc = this.config.lateClock!;
+    const text = `Down to ${this.alivePlayers().length} players — everyone now gets +${lc.extraSeconds}s on every decision`;
+    this.systemChat(text);
+    for (const t of this.tables.values()) if (!t.closed) this.cb.tableEvent(t, text);
   }
 
   // When the field consolidates onto the final table, real tournaments redraw
@@ -1758,6 +1809,7 @@ export class Tournament {
       discordWebhookUrl: this.discordWebhookUrl,
       finalPayouts: this.finalPayouts,
       finalRedrawDone: this.finalRedrawDone,
+      lateClockAnnounced: this.lateClockAnnounced,
       players: [...this.players.values()].map(p => ({ ...p })),
       tables: [...this.tables.values()].filter(t => !t.closed).map(t => ({
         id: t.id,
@@ -1805,6 +1857,9 @@ export class Tournament {
     // fields that actually consolidated (a lone starting table never redraws).
     t.finalRedrawDone = snap.finalRedrawDone
       ?? (snap.tableCounter > 1 && snap.tables.length === 1);
+    // Snapshots from before the late clock existed: if it is already on,
+    // the field passed the mark before the restart — do not announce it twice.
+    t.lateClockAnnounced = snap.lateClockAnnounced ?? t.lateClockMs() > 0;
 
     // A break interrupted by the restart just ends: land on the next
     // playable level and give it a fresh clock.
@@ -1863,6 +1918,7 @@ export interface TournamentSnap {
   discordWebhookUrl: string | null;
   finalPayouts: PayoutEntry[] | null;
   finalRedrawDone?: boolean;
+  lateClockAnnounced?: boolean;
   players: TPlayer[];
   tables: {
     id: string;

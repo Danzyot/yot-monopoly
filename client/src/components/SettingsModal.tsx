@@ -4,6 +4,7 @@ import type { TableTheme, TournamentView } from '../../../shared/types';
 import { getSocket } from '../socket';
 import BlindEditor, { type LevelRow } from './BlindEditor';
 import ThemePicker from './ThemePicker';
+import LateClockField, { lateClockState, lateClockValue } from './LateClockField';
 
 // Host-only: edit everything about a tournament after it was created,
 // including mid-game. Every field the create form offers is editable here.
@@ -21,6 +22,7 @@ export default function SettingsModal({ view, onClose }: {
   const [joinMinutes, setJoinMinutes] = useState(view.config.joinMinutes ?? 15);
   const [betCapOn, setBetCapOn] = useState((view.config.betCapMinutes ?? null) !== null);
   const [betCapMinutes, setBetCapMinutes] = useState(view.config.betCapMinutes ?? 15);
+  const [lateClock, setLateClock] = useState(lateClockState(view.config.lateClock));
   const [lateRegCustom, setLateRegCustom] = useState(
     ![0, 5, 10, 15, 20, 30, 45, 60].includes(view.config.lateRegMinutes));
   const [approve, setApprove] = useState(view.config.approveRegistrations);
@@ -53,6 +55,7 @@ export default function SettingsModal({ view, onClose }: {
       lateRegMinutes,
       joinMinutes,
       betCapMinutes: betCapOn ? betCapMinutes : null,
+      lateClock: lateClockValue(lateClock),
       approveRegistrations: approve,
       prizeText: prizeText.trim() || null,
       actionSeconds,
@@ -200,6 +203,8 @@ export default function SettingsModal({ view, onClose }: {
               onChange={e => setMaxPlayers(Math.max(2, Math.min(1000, Math.floor(Number(e.target.value) || 2))))} />
           </div>
         </div>
+
+        <LateClockField value={lateClock} onChange={setLateClock} />
 
         <div className="row">
           <div className="field">

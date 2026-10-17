@@ -532,6 +532,32 @@ function botAuth(reason?: string): Record<string, string> {
   return h;
 }
 
+// A plain authorised read, for code outside this file (the gateway and the
+// invite tracker) that needs the bot's token without ever holding it.
+export function botGet(path: string): Promise<Response> {
+  return fetch(`${API}${path}`, { headers: botAuth() });
+}
+
+// Where REST calls go: Discord, or the stand-in a test points at.
+export function discordApiBase(): string {
+  return API;
+}
+
+// One embed to the audit channel. Used for the invite tracker's warnings;
+// the chip-dumping alerts batch through their own path above.
+export async function postAuditEmbed(embed: Record<string, unknown>): Promise<void> {
+  const channel = auditChannelId();
+  if (!channel || !botEnabled()) return;
+  try {
+    const res = await fetch(`${API}/channels/${channel}/messages`, {
+      method: 'POST', headers: botAuth(), body: JSON.stringify({ embeds: [embed] }),
+    });
+    if (!res.ok) console.error('Audit post rejected by Discord:', res.status, (await res.text().catch(() => '')).slice(0, 160));
+  } catch (e) {
+    console.error('Audit post failed:', e instanceof Error ? e.message : e);
+  }
+}
+
 // What Discord said, in words an operator can act on.
 //
 // This used to answer every 403 with "the bot needs Ban Members, and its role
