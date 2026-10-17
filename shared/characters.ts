@@ -1,9 +1,11 @@
 // Characters: the figure each player walks around the board as. The id list
 // lives here (not in types.ts) so the catalogue — names, blurbs, 2D badges —
 // has one home that server validation and every client view read from. The 3D
-// models are procedural and live in client/src/three/characters/.
+// models are built in tools/blender/characters.py; their drawn stand-ins and
+// the rig live in client/src/three/characters/.
 
 export type CharacterId =
+  | 'snacky' | 'starer'
   | 'spiky' | 'robot' | 'cat' | 'knight' | 'wizard'
   | 'astronaut' | 'pirate' | 'ninja' | 'chef' | 'alien';
 
@@ -17,6 +19,8 @@ export interface CharacterDef {
 }
 
 export const CHARACTER_DEFS: CharacterDef[] = [
+  { id: 'snacky', name: 'Snacky', blurb: 'Never seen without a snack. Never seen without a grin.', emoji: '🍫' },
+  { id: 'starer', name: 'Mr. Stare', blurb: 'Has been looking at your hotels. For a while now.', emoji: '👀' },
   { id: 'spiky', name: 'Spiky', blurb: 'Purple, pointy and always in a hurry.', emoji: '🦔' },
   { id: 'robot', name: 'Robo', blurb: 'Counts rent to the last cent.', emoji: '🤖' },
   { id: 'cat', name: 'Whiskers', blurb: 'Lands on its feet. Usually on your hotel.', emoji: '🐱' },

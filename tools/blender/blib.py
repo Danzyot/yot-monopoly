@@ -520,6 +520,7 @@ def join(objs, name):
     o.name = name
     o.data.name = name
     merge_slots(o)
+    o.data.validate(clean_customdata=False)
     return o
 
 

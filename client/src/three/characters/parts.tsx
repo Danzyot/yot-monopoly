@@ -34,7 +34,9 @@ export const GEO = {
 };
 
 export type MatKey =
-  | 'main' | 'skin' | 'accent' | 'white' | 'ink' | 'metal' | 'gold' | 'glow' | 'glass' | 'wood';
+  | 'main' | 'skin' | 'accent' | 'white' | 'ink' | 'metal' | 'gold' | 'glow' | 'glass' | 'wood'
+  // Detailed characters: hair, clothes and three free colours of their own.
+  | 'hair' | 'cloth' | 'denim' | 'c1' | 'c2' | 'c3';
 
 export type Mats = Record<MatKey, MeshStandardMaterial>;
 
@@ -43,6 +45,12 @@ export interface LookColors {
   skin?: string;
   accent?: string;
   glow?: string;
+  hair?: string;
+  cloth?: string;
+  denim?: string;
+  c1?: string;
+  c2?: string;
+  c3?: string;
 }
 
 /**
@@ -65,6 +73,12 @@ export function makeMaterials(color: string, c: LookColors = {}): Mats {
     glow: new MeshStandardMaterial({ color: glowColor, emissive: glowColor, emissiveIntensity: 1.4, roughness: 0.4 }),
     glass: std('#1c2438', 0.12, 0.7),
     wood: std('#7a4a24', 0.8),
+    hair: std(c.hair ?? '#2a1d16', 0.75),
+    cloth: std(c.cloth ?? '#1d1d22', 0.85),
+    denim: std(c.denim ?? '#2f4466', 0.8),
+    c1: std(c.c1 ?? '#3fa34d', 0.5),
+    c2: std(c.c2 ?? '#5a1a1a', 0.6),
+    c3: std(c.c3 ?? '#4a2e1c', 0.4),
   };
 }
 

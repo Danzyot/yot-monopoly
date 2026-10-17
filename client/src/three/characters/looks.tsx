@@ -25,6 +25,8 @@ export interface Look {
   /** Held in the left (+x) / right (−x) hand. */
   left?: (m: Mats) => ReactNode;
   right?: (m: Mats) => ReactNode;
+  /** Real arms: a limb from each shoulder (left side, +x; mirrored) to the hand, following the rig. */
+  arms?: { shoulder: [number, number, number]; radius: number; mat: MatKey };
 }
 
 const PI = Math.PI;
@@ -333,6 +335,68 @@ const alien: Look = {
   ),
 };
 
+// Snacky and Mr. Stare are modelled in detail in Blender (tools/blender/
+// characters.py); these simple versions show only while the model loads.
+
+const snacky: Look = {
+  colors: { skin: '#e3ad86', hair: '#1f1611', cloth: '#1c1c21', denim: '#2e4568', accent: '#d8322a', c1: '#3c9a48', c2: '#5c1d1d', c3: '#4a2e1c' },
+  hand: 'skin',
+  foot: 'main',
+  arms: { shoulder: [0.085, 0.165, 0], radius: 0.019, mat: 'skin' },
+  body: m => (
+    <>
+      <Part g={GEO.sphere} m={m.cloth} p={[0, 0.125, 0]} s={[0.082, 0.085, 0.066]} cast />
+      <Part g={GEO.box} m={m.main} p={[0, 0.135, 0.064]} s={[0.05, 0.034, 0.006]} />
+      <Part g={GEO.cyl} m={m.denim} p={[-0.034, 0.05, 0]} s={[0.027, 0.06, 0.027]} />
+      <Part g={GEO.cyl} m={m.denim} p={[0.034, 0.05, 0]} s={[0.027, 0.06, 0.027]} />
+    </>
+  ),
+  head: m => (
+    <>
+      <Part g={GEO.sphere} m={m.skin} s={[0.118, 0.115, 0.11]} cast />
+      <Part g={GEO.sphere} m={m.hair} p={[0, 0.045, -0.012]} s={[0.125, 0.09, 0.118]} cast />
+      <Part g={GEO.sphere} m={m.hair} p={[0, 0.06, 0.07]} s={[0.1, 0.035, 0.05]} r={[0.5, 0, 0]} />
+      <Eyes m={m} y={0.0} z={0.098} gap={0.042} r={0.022} />
+      <Part g={GEO.sphere} m={m.white} p={[0, -0.052, 0.1]} s={[0.032, 0.012, 0.01]} />
+    </>
+  ),
+  right: m => (
+    <group position={[-0.005, 0.03, 0.02]} rotation={[0, 0, 0.35]}>
+      <Part g={GEO.box} m={m.gold} s={[0.028, 0.15, 0.012]} />
+      <Part g={GEO.box} m={m.accent} p={[0, 0.03, 0]} s={[0.029, 0.03, 0.013]} />
+      <Part g={GEO.box} m={m.c1} p={[0, 0.07, 0]} s={[0.029, 0.014, 0.013]} />
+    </group>
+  ),
+};
+
+const starer: Look = {
+  colors: { skin: '#8b5a3c', c1: '#c4977a', c2: '#5a3624' },
+  hand: 'skin',
+  foot: 'main',
+  arms: { shoulder: [0.072, 0.16, 0], radius: 0.018, mat: 'skin' },
+  body: m => (
+    <>
+      <Part g={GEO.sphere} m={m.skin} p={[0, 0.12, 0]} s={[0.08, 0.095, 0.07]} cast />
+      <Part g={GEO.cone} m={m.main} p={[-0.022, 0.19, 0.062]} r={[0, 0, PI / 2]} s={[0.018, 0.034, 0.01]} />
+      <Part g={GEO.cone} m={m.main} p={[0.022, 0.19, 0.062]} r={[0, 0, -PI / 2]} s={[0.018, 0.034, 0.01]} />
+    </>
+  ),
+  head: m => (
+    <>
+      <Part g={GEO.sphere} m={m.skin} s={[0.11, 0.14, 0.105]} cast />
+      {[-1, 1].map(side => (
+        <group key={side} position={[side * 0.048, 0.035, 0.085]}>
+          <Part g={GEO.sphere} m={m.white} s={0.034} />
+          <Part g={GEO.sphere} m={m.ink} p={[0, 0, 0.026]} s={[0.016, 0.016, 0.01]} />
+        </group>
+      ))}
+      <Part g={GEO.sphere} m={m.c1} p={[0, -0.035, 0.118]} s={0.022} />
+      <Part g={GEO.torus(0.15, PI)} m={m.ink} p={[0, -0.075, 0.1]} s={0.04} />
+    </>
+  ),
+};
+
 export const LOOKS: Record<CharacterId, Look> = {
+  snacky, starer,
   spiky, robot, cat, knight, wizard, astronaut, pirate, ninja, chef, alien,
 };

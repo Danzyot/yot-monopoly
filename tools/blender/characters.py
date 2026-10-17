@@ -29,6 +29,7 @@ import bmesh  # noqa: E402
 import numpy as np  # noqa: E402
 from mathutils import Matrix  # noqa: E402
 import blib  # noqa: E402
+import detailed  # noqa: E402
 
 PART_PIVOTS = {'Body': (0, 0, 0), 'Head': (0, 0.29, 0), 'HandL': (0.11, 0.115, 0.015), 'HandR': (-0.11, 0.115, 0.015)}
 FUSE_MATS = {'main', 'skin', 'white', 'metal', 'wood'}
@@ -157,12 +158,12 @@ def thickness(e):
     return min(s * c for s, c in zip(size, cols))
 
 
-def fuse(objs, name):
+def fuse(objs, name, budget=FACE_BUDGET, voxel=VOXEL):
     """Join overlapping shapes into one smooth surface (voxel remesh, smooth, decimate)."""
     o = blib.join(objs, name)
     rm = o.modifiers.new('Fuse', 'REMESH')
     rm.mode = 'VOXEL'
-    rm.voxel_size = VOXEL
+    rm.voxel_size = voxel
     rm.adaptivity = 0.0
     rm.use_smooth_shade = True
     sm = o.modifiers.new('Soften', 'SMOOTH')
@@ -172,9 +173,9 @@ def fuse(objs, name):
     for m in list(o.modifiers):
         bpy.ops.object.modifier_apply(modifier=m.name)
     faces = len(o.data.polygons)
-    if faces > FACE_BUDGET:
+    if faces > budget:
         dm = o.modifiers.new('Budget', 'DECIMATE')
-        dm.ratio = FACE_BUDGET / faces
+        dm.ratio = budget / faces
         bpy.ops.object.modifier_apply(modifier=dm.name)
     o.data.shade_smooth()
     return o
@@ -196,7 +197,31 @@ def materials_for(cid, spec):
     return mats
 
 
+def build_detailed(cid, spec):
+    """A hand-built character (detailed.py): fuse what is flagged, per material."""
+    mats = materials_for(cid, spec)
+    nodes = []
+    for part, objs in detailed.BUILDERS[cid](mats).items():
+        blib.realize(objs)
+        groups: dict[str, list] = {}
+        loose = []
+        for o in objs:
+            if o.get('fuse'):
+                groups.setdefault(o.data.materials[0].name, []).append(o)
+            else:
+                loose.append(o)
+        pieces = []
+        for mat, os_ in groups.items():
+            budget = max(int(o.get('budget', FACE_BUDGET)) for o in os_)
+            fine = any('Hair' in o.name or 'Skull' in o.name for o in os_)
+            pieces.append(fuse(os_, f'{cid}_{part}_{mat}', budget=budget, voxel=0.0018 if fine else VOXEL))
+        nodes.append(blib.join(pieces + loose, f'{cid}_{part}'))
+    return nodes
+
+
 def build_character(cid, spec):
+    if cid in detailed.BUILDERS:
+        return build_detailed(cid, spec)
     mats = materials_for(cid, spec)
     nodes = []
     for part, entries in spec['parts'].items():
@@ -218,21 +243,37 @@ def build_character(cid, spec):
     return nodes
 
 
-def preview(nodes_by_char, path):
+def preview(nodes_by_char, path, close=False):
     """A lineup render (Cycles) to eyeball the models; not used by the game."""
     sc = bpy.context.scene
     ids = list(nodes_by_char)
+    # Characters not in the shot stand far off-camera.
+    for o in bpy.context.scene.objects:
+        if o.type == 'MESH' and o.name.split('_', 1)[0] not in ids:
+            o.location = (100, 100, 0)
     for i, cid in enumerate(ids):
-        x = (i - (len(ids) - 1) / 2) * 0.32
+        x = (i - (len(ids) - 1) / 2) * (0.36 if close else 0.32)
         for n in nodes_by_char[cid]:
             part = n.name.split('_', 1)[1]
             px, py, pz = PART_PIVOTS[part]
             n.location = blib.V(x + px, py, pz)
+        if cid in detailed.ARMS:
+            (sx, sy, sz), rad = detailed.ARMS[cid]
+            skin = bpy.data.materials.get(f'{cid}:skin')
+            for side, hand in ((1, PART_PIVOTS['HandL']), (-1, PART_PIVOTS['HandR'])):
+                a = (x + sx * side, sy, sz)
+                b = (x + hand[0], hand[1], hand[2])
+                blib.tube(f'PreviewArm{cid}{side}', [a, b], rad, skin, segs=10)
     cam = bpy.data.objects.new('Cam', bpy.data.cameras.new('Cam'))
     blib.link(cam)
-    cam.location = blib.V(0, 0.95, 3.0)
-    cam.rotation_euler = (math.radians(74), 0, 0)
-    cam.data.lens = 32
+    if close:
+        cam.location = blib.V(0, 0.42, 1.25)
+        cam.rotation_euler = (math.radians(81), 0, 0)
+        cam.data.lens = 42
+    else:
+        cam.location = blib.V(0, 0.95, 3.0)
+        cam.rotation_euler = (math.radians(74), 0, 0)
+        cam.data.lens = 32
     sc.camera = cam
     sun = bpy.data.objects.new('Sun', bpy.data.lights.new('Sun', 'SUN'))
     sun.data.energy = 3.5
@@ -244,7 +285,7 @@ def preview(nodes_by_char, path):
     world.node_tree.nodes['Background'].inputs['Strength'].default_value = 0.8
     sc.world = world
     ground = blib.box('Ground', (6, 0.02, 3), (0, -0.01, 0), blib.flat('#d8d2bf', 0.8))
-    sc.render.resolution_x, sc.render.resolution_y = 1600, 520
+    sc.render.resolution_x, sc.render.resolution_y = (1200, 760) if close else (1600, 520)
     sc.cycles.samples = 24
     sc.cycles.use_denoising = True
     sc.render.filepath = path
@@ -262,7 +303,9 @@ def main():
         blib.log(cid, ', '.join(f'{n.name.split("_", 1)[1]} {len(n.data.polygons)}f' for n in by_char[cid]))
     nodes = [n for ns in by_char.values() for n in ns]
     if '--preview' in sys.argv:
-        preview(by_char, sys.argv[sys.argv.index('--preview') + 1])
+        only = sys.argv[sys.argv.index('--only') + 1].split(',') if '--only' in sys.argv else None
+        preview({k: v for k, v in by_char.items() if not only or k in only}, sys.argv[sys.argv.index('--preview') + 1],
+                close=bool(only))
         for n in nodes:
             n.location = (0, 0, 0)
     blib.export_glb(nodes, 'models/characters.glb', images='NONE')

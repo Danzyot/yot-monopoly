@@ -3,14 +3,15 @@
 // (the board pieces, the lobby preview) drives it through `poseRig` so both
 // move the same way.
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
-import { Color, type Group, type Material, type Mesh, type Object3D } from 'three';
+import { Color, CylinderGeometry, Quaternion, Vector3, type Group, type Material, type Mesh, type Object3D } from 'three';
 import { ASSETS } from '../assets.gen.ts';
 import { WithModel } from '../models.tsx';
 import type { CharacterId } from '../../../../shared/characters.ts';
 import { GEO, Part, disposeMaterials, makeMaterials, type Mats } from './parts.tsx';
-import { HEAD_Y, LOOKS, DefaultBody } from './looks.tsx';
+import { HEAD_Y, LOOKS, DefaultBody, type Look } from './looks.tsx';
 
 export interface Rig {
   pose: Group | null;
@@ -47,6 +48,37 @@ export function CharacterFigure(props: { id: CharacterId; mats: Mats; rig: Rig }
 
 const PART_NAMES = ['Body', 'Head', 'HandL', 'HandR'] as const;
 
+// ---- arms ------------------------------------------------------------------
+// Characters with `arms` get a limb from each shoulder to its hand. The hands
+// are animated by poseRig; each frame the limbs are re-aimed at them.
+
+const ARM_GEO = new CylinderGeometry(1, 0.85, 1, 10, 1, true);
+const UP = new Vector3(0, 1, 0);
+const tmpDir = new Vector3();
+const tmpQ = new Quaternion();
+
+function ArmLinks({ arms, mats, rig }: { arms: NonNullable<Look['arms']>; mats: Mats; rig: Rig }) {
+  const left = useRef<Mesh>(null);
+  const right = useRef<Mesh>(null);
+  useFrame(() => {
+    for (const [mesh, hand, side] of [[left.current, rig.handL, 1], [right.current, rig.handR, -1]] as const) {
+      if (!mesh || !hand) continue;
+      const sx = arms.shoulder[0] * side, sy = arms.shoulder[1], sz = arms.shoulder[2];
+      tmpDir.set(hand.position.x - sx, hand.position.y - sy, hand.position.z - sz);
+      const len = Math.max(0.001, tmpDir.length());
+      mesh.position.set(sx + tmpDir.x / 2, sy + tmpDir.y / 2, sz + tmpDir.z / 2);
+      mesh.quaternion.copy(tmpQ.setFromUnitVectors(UP, tmpDir.divideScalar(len)));
+      mesh.scale.set(arms.radius, len, arms.radius);
+    }
+  });
+  return (
+    <>
+      <mesh ref={left} geometry={ARM_GEO} material={mats[arms.mat]} castShadow />
+      <mesh ref={right} geometry={ARM_GEO} material={mats[arms.mat]} castShadow />
+    </>
+  );
+}
+
 function ModelFigure({ id, mats, rig }: { id: CharacterId; mats: Mats; rig: Rig }) {
   const gltf = useGLTF(ASSETS.characters.url);
   const parts = useMemo(() => {
@@ -67,9 +99,11 @@ function ModelFigure({ id, mats, rig }: { id: CharacterId; mats: Mats; rig: Rig 
       return [name, obj];
     })) as Record<(typeof PART_NAMES)[number], Object3D>;
   }, [gltf.scene, id, mats]);
+  const look = LOOKS[id] ?? LOOKS.spiky;
   return (
     <group ref={g => { rig.pose = g; }}>
       <primitive object={parts.Body} />
+      {look.arms && <ArmLinks arms={look.arms} mats={mats} rig={rig} />}
       <group ref={g => { rig.handL = g; }} position={[HAND_REST[0], HAND_REST[1], HAND_REST[2]]}>
         <primitive object={parts.HandL} />
       </group>
@@ -89,6 +123,7 @@ function DrawnFigure({ id, mats, rig }: { id: CharacterId; mats: Mats; rig: Rig 
     <group ref={g => { rig.pose = g; }}>
       {look.body ? look.body(mats) : <DefaultBody m={mats} />}
       {look.extras?.(mats)}
+      {look.arms && <ArmLinks arms={look.arms} mats={mats} rig={rig} />}
       {[-1, 1].map(side => (
         <Part key={side} g={GEO.sphere} m={mats[look.foot]} p={[side * 0.045, 0.018, 0.018]} s={[0.036, 0.022, 0.052]} cast />
       ))}
