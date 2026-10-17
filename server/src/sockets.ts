@@ -280,6 +280,15 @@ export function attachSockets(io: Server): SocketLayer {
 
     on('room:leave', () => { leaveCurrent(true); });
 
+    // Navigating away from the room page (back button, a link) without
+    // leaving for good: the seat is kept but shows as disconnected, so
+    // autopilot takes over after the usual grace. Opening the room again
+    // (room:join) reconnects it. `code` guards against a late message from a
+    // page that has already moved on to another room.
+    on<{ code?: string }>('room:away', p => {
+      if (data.room && data.room === String(p.code ?? '').toUpperCase()) leaveCurrent(false);
+    }, false);
+
     on<{ themeId?: string; mapId?: string; rules?: Partial<RuleConfig>; private?: boolean }>('room:configure', (p, room) => {
       const r = inRoom(room);
       r.configure(me(), isAdmin(), {

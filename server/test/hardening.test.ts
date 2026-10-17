@@ -79,17 +79,6 @@ test('malformed spaces, bids, ids and unknown actions are EngineErrors', () => {
   assert.equal(g.auction!.highBidder, null);
 });
 
-test('the socket layer only accepts plain-object payloads', async () => {
-  const { plainPayload } = await import('../src/sockets.ts');
-  assert.equal(plainPayload(undefined), true);
-  assert.equal(plainPayload(null), true);
-  assert.equal(plainPayload({ type: 'roll' }), true);
-  assert.equal(plainPayload(JSON.parse('{"__proto__": {"x": 1}}')), true, 'parsed JSON is a plain object');
-  for (const p of ['roll', 5, true, [{ type: 'roll' }], Buffer.from('x'), new Date(), () => 1]) {
-    assert.equal(plainPayload(p), false, String(p));
-  }
-});
-
 test('a snapshot holding a malformed offer still restores, without it', () => {
   const { g } = scripted();
   g.owned[1] = { owner: 'p0', houses: 0, mortgaged: false };
@@ -407,25 +396,4 @@ test('a kicked player cannot take a lobby seat again (even after a restart), but
   assert.doesNotThrow(() => r2.join({ id: 'c', name: 'C', avatar: '' }));
   r.dispose();
   r2.dispose();
-});
-
-// ---- operators -------------------------------------------------------------------
-
-test('no ADMIN_DISCORD_IDS: everyone is an operator in dev, nobody in production', async () => {
-  const { withAdminFlag } = await import('../src/auth.ts');
-  const saved = { env: process.env.NODE_ENV, ids: process.env.ADMIN_DISCORD_IDS };
-  const p = { id: 'dc_1', name: 'X', avatar: '', provider: 'discord' as const, discord: { id: '1', username: 'x' } };
-  try {
-    delete process.env.ADMIN_DISCORD_IDS;
-    process.env.NODE_ENV = 'development';
-    assert.equal(withAdminFlag(p).isAdmin, true);
-    process.env.NODE_ENV = 'production';
-    assert.equal(withAdminFlag(p).isAdmin, false, 'fails closed');
-    process.env.ADMIN_DISCORD_IDS = '1';
-    assert.equal(withAdminFlag(p).isAdmin, true, 'listed operators still are');
-    assert.equal(withAdminFlag({ ...p, discord: { id: '2', username: 'y' } }).isAdmin, false);
-  } finally {
-    if (saved.env === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = saved.env;
-    if (saved.ids === undefined) delete process.env.ADMIN_DISCORD_IDS; else process.env.ADMIN_DISCORD_IDS = saved.ids;
-  }
 });

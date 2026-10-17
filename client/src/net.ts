@@ -121,6 +121,9 @@ export function useRoom(code: string, watch = false) {
       off();
       s.off('room:state', onState);
       s.off('chat', onChat);
+      // Leaving the page is not leaving the game: the server keeps the seat but
+      // marks it away, so autopilot can cover it until we come back.
+      if (s.connected) s.emit('room:away', { code });
     };
   }, [code, watch]);
 
