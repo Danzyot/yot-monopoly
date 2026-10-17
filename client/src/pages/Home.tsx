@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { call, useConnected, useRoomList } from '../net.ts';
 import { THEMES, getTheme } from '../../../shared/themes.ts';
 import { MAPS, getMap } from '../../../shared/maps.ts';
@@ -62,7 +62,10 @@ export default function Home() {
             <button className="btn gold" type="submit">Join!</button>
           </form>
         </div>
-        <div className="hero-howto"><HowToPlayButton className="btn small ghost" label="❓ New here? How to play" /></div>
+        <div className="hero-howto">
+          <HowToPlayButton className="btn small ghost" label="❓ New here? How to play" />
+          <Link className="btn small ghost" to="/characters">🎭 Meet the characters</Link>
+        </div>
         <p className="hero-status muted small">
           {!connected ? 'Connecting to server…'
             : rooms.length === 0 ? 'No tables open yet — start one and invite your friends!'

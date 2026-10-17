@@ -1430,7 +1430,7 @@ button.edition:hover:not(:disabled) { transform: translateY(-2px); }
 .howto-keys td { padding: 6px 4px; border-top: 1px solid color-mix(in srgb, var(--line) 35%, transparent); }
 .howto-keys td:first-child { width: 110px; }
 .btn.big.howto-go { margin-top: 14px; }
-.hero-howto { margin-top: 14px; }
+.hero-howto { margin-top: 14px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .lobby-howto { display: flex; justify-content: center; margin-top: 12px; }
 
 /* ---- Build & manage (ManagePanel.tsx) ---- */
