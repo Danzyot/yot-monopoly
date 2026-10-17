@@ -249,12 +249,12 @@ export class Room {
    * Hand the room on when its host is gone: left a running game, or away for
    * HOST_GRACE_MS. Called whenever someone connects or drops, so a room whose
    * host vanished while nobody else was around recovers the moment someone
-   * returns.
+   * returns. Finished rooms too: someone still at the table must be able to
+   * start the rematch.
    */
   private watchHost() {
     if (this.hostTimer) clearTimeout(this.hostTimer);
     this.hostTimer = null;
-    if (this.status === 'finished') return;
     const h = this.seat(this.hostId);
     let gone = !h || this.departed.has(this.hostId);
     if (h && !gone && h.disconnectedAt !== null) {

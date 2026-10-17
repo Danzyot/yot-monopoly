@@ -1,12 +1,12 @@
 // Regressions from the security / robustness audit: untrusted client input,
 // timers that must never take the process down, automated moves that must
 // never bankrupt anyone, and rooms that must not live (or multiply) forever.
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EngineError, Game, type GameSnapshot } from '../src/engine/game.ts';
 import { botAction } from '../src/engine/bot.ts';
 import { DEFAULT_RULES, resolveTheme } from '../../shared/themes.ts';
-import { CREATES_PER_WINDOW, Registry, Room, RoomError, type RoomHooks } from '../src/rooms.ts';
+import { CREATES_PER_WINDOW, HOST_GRACE_MS, Registry, Room, RoomError, type RoomHooks } from '../src/rooms.ts';
 import type { Action, Trade } from '../../shared/types.ts';
 import { scripted } from './helpers.ts';
 
@@ -301,6 +301,28 @@ test('a running game with no humans for 30 minutes ends on net worth, then is sw
   r.spectators = 0;
   sweep();
   assert.equal(reg.get(r.code), undefined, 'then swept as usual');
+});
+
+test('a host who drops at the end hands a finished room on, so the rematch can start', () => {
+  mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 7_000_000 });
+  try {
+    const reg = new Registry(quietHooks(), 1e9);
+    const r = reg.create('a');
+    for (const id of ['a', 'b', 'c']) r.join({ id, name: id.toUpperCase(), avatar: '' });
+    r.start('a', false);
+    r.dispose();
+    r.act('c', { type: 'bankrupt' });
+    r.act('b', { type: 'bankrupt' });
+    assert.equal(r.status, 'finished');
+    r.setConnected('a', false);
+    mock.timers.tick(HOST_GRACE_MS + 1_000);
+    assert.equal(r.hostId, 'b', 'a connected human takes over');
+    r.rematch('b', false, id => id !== 'a');
+    assert.equal(r.status, 'lobby');
+    r.dispose();
+  } finally {
+    mock.timers.reset();
+  }
 });
 
 // ---- room limits and kicks -------------------------------------------------------
