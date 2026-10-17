@@ -15,7 +15,7 @@ import { Vector3 } from 'three';
 import type { GameView } from '../../../shared/types.ts';
 import { tile } from './layout.ts';
 import { useSceneBusy } from './sequence.ts';
-import { setDirectorActive } from './camera.ts';
+import { setDirectorActive, type CameraMode } from './camera.ts';
 
 interface Shot { pos: Vector3; target: Vector3; hold: number }
 
@@ -53,7 +53,7 @@ function tileShot(i: number, n: number, opts: { height?: number; dist?: number; 
 
 const ease = (k: number) => (k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2);
 
-export function CameraDirector({ game, me, n, enabled }: { game: GameView; me?: string; n: number; enabled: boolean }) {
+export function CameraDirector({ game, me, n, enabled, mode }: { game: GameView; me?: string; n: number; enabled: boolean; mode: CameraMode }) {
   const { camera, controls, gl } = useThree() as unknown as {
     camera: import('three').PerspectiveCamera;
     gl: import('three').WebGLRenderer;
@@ -66,6 +66,11 @@ export function CameraDirector({ game, me, n, enabled }: { game: GameView; me?: 
   const lastEnd = useRef(0);
   const ctl = useRef(controls);
   ctl.current = controls;
+  // Views that steer themselves (follow, overhead) take the camera back from
+  // wherever the shot ends; the others glide home to where the player left it.
+  const selfSteering = mode === 'follow' || mode === 'top';
+  const steer = useRef(selfSteering);
+  steer.current = selfSteering;
 
   // Spot what changed since the last state and line up a shot for it.
   useEffect(() => {
@@ -98,7 +103,12 @@ export function CameraDirector({ game, me, n, enabled }: { game: GameView; me?: 
     const el = gl.domElement;
     const cut = () => {
       const p = playing.current;
-      if (p && p.stage !== 'out') goOut(p, performance.now());
+      if (!p || p.stage === 'out') return;
+      if (steer.current) {
+        playing.current = null;
+        setDirectorActive(false);
+        lastEnd.current = performance.now();
+      } else goOut(p, performance.now());
     };
     el.addEventListener('pointerdown', cut);
     el.addEventListener('wheel', cut, { passive: true });
@@ -145,7 +155,15 @@ export function CameraDirector({ game, me, n, enabled }: { game: GameView; me?: 
       const d = (t / p.shot.hold) * 0.25;
       camera.position.copy(p.shot.pos).add(drift.set(Math.sin(d) * 0.25, d * 0.15, 0));
       controls.target.copy(p.shot.target);
-      if (t >= p.shot.hold) goOut(p, now);
+      if (t >= p.shot.hold) {
+        if (steer.current) {
+          playing.current = null;
+          setDirectorActive(false);
+          lastEnd.current = now;
+          return;
+        }
+        goOut(p, now);
+      }
     } else {
       const k = ease(Math.min(1, t / OUT_MS));
       camera.position.lerpVectors(p.outPos, p.homePos, k);

@@ -73,8 +73,10 @@ export function tokenSpot(i: number, slot: number, count: number, inJail: boolea
     if (inJail) {
       // Inside the cell, the inner square of the corner.
       const cx = g.x + 0.22, cz = g.z - 0.22;
-      const a = (slot / Math.max(1, count)) * Math.PI * 2;
-      return [cx + Math.cos(a) * 0.18 * (count > 1 ? 1 : 0), cz + Math.sin(a) * 0.18 * (count > 1 ? 1 : 0)];
+      // Spread along the cell's diagonal first, square to the table and follow views.
+      const a = Math.PI / 4 + (slot / Math.max(1, count)) * Math.PI * 2;
+      const r = count > 1 ? 0.22 : 0;
+      return [cx + Math.cos(a) * r, cz + Math.sin(a) * r];
     }
     // Just visiting: along the outer L of the corner.
     const path: [number, number][] = [[-0.55, -0.1], [-0.55, 0.35], [-0.3, 0.58], [0.1, 0.58], [-0.55, -0.45], [0.45, 0.58], [-0.55, 0.1], [0.3, 0.58]];

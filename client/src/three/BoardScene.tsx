@@ -14,6 +14,7 @@ import { Dice } from './Dice.tsx';
 import { CameraDirector } from './CameraDirector.tsx';
 import { MoneyFX } from './MoneyFX.tsx';
 import { CardDecks } from './CardDecks.tsx';
+import { JailCell } from './JailCell.tsx';
 import { SceneEnv } from './SceneEnv.tsx';
 import { isDirectorActive, pieceObjects, type CameraMode } from './camera.ts';
 import { ASSETS } from './assets.gen.ts';
@@ -368,6 +369,8 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
   return (
     <Canvas shadows dpr={dpr} frameloop={hidden ? 'never' : 'always'} camera={{ position: [0, 11.5, 10.5], fov: 45 }}
       onPointerMissed={() => onSelect?.(null)}
+      // ?perf: expose the renderer and pieces so draw calls, triangles and positions can be read from the console.
+      onCreated={({ gl }) => { if (location.search.includes('perf')) Object.assign(window, { __yotGl: gl, __yotPieces: pieceObjects }); }}
       // A custom backdrop replaces the map's 3D surroundings: it is painted
       // behind a transparent canvas, keeps its aspect ratio on any screen and
       // needs no CORS, so any https image works.
@@ -391,6 +394,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
       <Spinner spin={spin}>
         <Table theme={theme} presetId={tableStyle?.table} />
         <Board theme={theme} customLogo={customLogo} onPick={onSelect} onHover={onSelect ? setHover : undefined} />
+        {theme.spaces[theme.spaces.length / 4]?.kind === 'jail' && <JailCell game={game} n={theme.spaces.length} />}
         <CardDecks theme={theme} withLogo={!!(customLogo || theme.logoUrl)} lastCard={game?.lastCard ?? null} />
         <TileHighlight index={hover} color="#ffffff" n={theme.spaces.length} />
         <TileHighlight index={selected ?? null} color={theme.palette.accent} pulse n={theme.spaces.length} />
@@ -410,7 +414,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
         onIncline={() => setDpr(Math.min(1.5, window.devicePixelRatio || 1))}
         flipflops={3} onFallback={() => { setDpr(1); setLowPower(true); }} />
       <CameraRig hud={!!game} fogNear={look.fogNear} fogFar={look.fogFar} mode={spin ? 'table' : cameraMode} followId={game?.current} />
-      {game && !spin && <CameraDirector game={game} me={me} n={theme.spaces.length} enabled={cinematic} />}
+      {game && !spin && <CameraDirector game={game} me={me} n={theme.spaces.length} enabled={cinematic} mode={cameraMode} />}
       <OrbitControls makeDefault enablePan={false} enabled={!spin}
         minDistance={6} maxDistance={60} minPolarAngle={0.05} maxPolarAngle={Math.PI / 2.4}
         enableDamping dampingFactor={0.12}
