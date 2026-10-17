@@ -2,18 +2,22 @@
 // concrete roof with a parapet, string lights, AC units, a water tower and a
 // blinking mast; beyond the edge, a city of instanced towers with lit
 // windows falls away into the haze; overhead, stars and a glowing moon.
+// This drawn roof is the stand-in for the modelled, light-baked one
+// (tools/blender/skyline_set.py); both share the night sky below.
 
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import {
-  AdditiveBlending, BoxGeometry, BufferGeometry, Float32BufferAttribute, type MeshStandardMaterial,
+  AdditiveBlending, BackSide, BoxGeometry, BufferGeometry, Color, Float32BufferAttribute, SphereGeometry,
+  type MeshStandardMaterial,
 } from 'three';
 import type { Theme } from '../../../../shared/themes.ts';
 import { FLOOR, Scatter, mix, rng, speckle, useCanvasTexture, type Inst } from './common.tsx';
 
 const ROOF = 18;          // rooftop half-width
 const STREET = -70;       // ground level of the city far below
-const MOON: [number, number, number] = [-110, 85, -230];
+// Where the moon hangs (the baked set's moonlight comes from here too).
+const MOON: [number, number, number] = [-150, 160, -240];
 
 /** Box whose top/bottom faces sample a dark corner of the window texture. */
 function towerGeometry(): BoxGeometry {
@@ -62,15 +66,6 @@ export function Skyline({ theme }: { theme: Theme }) {
     }
   }, [concrete], [9, 9]);
 
-  const glowTex = useCanvasTexture(128, 128, g => {
-    const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-    grad.addColorStop(0, 'rgba(255,250,230,0.9)');
-    grad.addColorStop(0.25, 'rgba(210,225,255,0.35)');
-    grad.addColorStop(1, 'rgba(160,180,255,0)');
-    g.fillStyle = grad;
-    g.fillRect(0, 0, 128, 128);
-  }, []);
-
   const towerGeo = useMemo(towerGeometry, []);
 
   const city = useMemo(() => {
@@ -95,20 +90,6 @@ export function Skyline({ theme }: { theme: Theme }) {
       if (r() < 0.25) beacons.push({ p: [x, top + 0.6, z], s: 0.45 });
     }
     return { towers, beacons };
-  }, []);
-
-  const stars = useMemo(() => {
-    const r = rng(99);
-    const pos: number[] = [];
-    for (let i = 0; i < 800; i++) {
-      const a = r() * Math.PI * 2;
-      const el = 0.08 + r() * 1.3; // above the horizon
-      const R = 380;
-      pos.push(Math.cos(a) * Math.cos(el) * R, Math.sin(el) * R, Math.sin(a) * Math.cos(el) * R);
-    }
-    const g = new BufferGeometry();
-    g.setAttribute('position', new Float32BufferAttribute(pos, 3));
-    return g;
   }, []);
 
   const bulbs = useMemo<Inst[]>(() => {
@@ -139,7 +120,7 @@ export function Skyline({ theme }: { theme: Theme }) {
   }), [acUnits]);
 
   // Built here rather than as JSX children, so free them here too.
-  useEffect(() => () => { towerGeo.dispose(); stars.dispose(); }, [towerGeo, stars]);
+  useEffect(() => () => { towerGeo.dispose(); }, [towerGeo]);
 
   // The mast's warning light blinks, as they do.
   const beaconRef = useRef<MeshStandardMaterial>(null);
@@ -215,7 +196,69 @@ export function Skyline({ theme }: { theme: Theme }) {
         <meshBasicMaterial color="#ff3b3b" toneMapped={false} />
       </Scatter>
 
-      {/* Sky: stars and a moon with a soft halo; both ignore the haze. */}
+      <NightSky />
+    </group>
+  );
+}
+
+/**
+ * Stars and a moon with a soft halo, all ignoring the haze. With `horizon`,
+ * also a dome that fades from that colour (the fog's) at the horizon to deep
+ * navy overhead, so distant towers melt into the sky rather than a flat fill.
+ */
+export function NightSky({ horizon }: { horizon?: string }) {
+  const glowTex = useCanvasTexture(128, 128, g => {
+    const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grad.addColorStop(0, 'rgba(255,250,230,0.9)');
+    grad.addColorStop(0.25, 'rgba(210,225,255,0.35)');
+    grad.addColorStop(1, 'rgba(160,180,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 128, 128);
+  }, []);
+
+  const stars = useMemo(() => {
+    const r = rng(99);
+    const pos: number[] = [];
+    for (let i = 0; i < 800; i++) {
+      const a = r() * Math.PI * 2;
+      const el = 0.08 + r() * 1.3; // above the horizon
+      const R = 380;
+      pos.push(Math.cos(a) * Math.cos(el) * R, Math.sin(el) * R, Math.sin(a) * Math.cos(el) * R);
+    }
+    const g = new BufferGeometry();
+    g.setAttribute('position', new Float32BufferAttribute(pos, 3));
+    return g;
+  }, []);
+
+  const dome = useMemo(() => {
+    if (!horizon) return null;
+    const g = new SphereGeometry(700, 32, 24);
+    const low = new Color(horizon);
+    const mid = new Color('#151a3a');
+    const top = new Color('#05070f');
+    const c = new Color();
+    const pos = g.getAttribute('position');
+    const cols: number[] = [];
+    for (let i = 0; i < pos.count; i++) {
+      // Elevation 0 at the horizon, 1 straight up; below the horizon stays haze.
+      const el = Math.max(0, pos.getY(i) / 700);
+      if (el < 0.25) c.copy(low).lerp(mid, Math.pow(el / 0.25, 0.7));
+      else c.copy(mid).lerp(top, Math.min(1, (el - 0.25) / 0.6));
+      cols.push(c.r, c.g, c.b);
+    }
+    g.setAttribute('color', new Float32BufferAttribute(cols, 3));
+    return g;
+  }, [horizon]);
+
+  useEffect(() => () => { stars.dispose(); dome?.dispose(); }, [stars, dome]);
+
+  return (
+    <group>
+      {dome && (
+        <mesh geometry={dome} renderOrder={-1}>
+          <meshBasicMaterial vertexColors side={BackSide} fog={false} depthWrite={false} toneMapped={false} />
+        </mesh>
+      )}
       <points geometry={stars}>
         <pointsMaterial size={2} sizeAttenuation={false} color="#ffffff" fog={false} transparent opacity={0.85} />
       </points>
