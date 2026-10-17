@@ -1,3 +1,4 @@
+import { useRef, useState, type InputHTMLAttributes } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { call, type ChatMsg } from '../net.ts';
 import { THEMES, TIME_LIMIT_CHOICES, TURN_SECONDS_CHOICES, getTheme, type RuleConfig } from '../../../shared/themes.ts';
@@ -31,6 +32,35 @@ const TOGGLES: [keyof RuleConfig, string, string][] = [
 
 /** A select's options, keeping a value set some other way (e.g. an edition) visible. */
 const withCurrent = (choices: number[], v: number) => (choices.includes(v) ? choices : [...choices, v].sort((a, b) => a - b));
+
+/**
+ * A number setting typed as a local draft and sent on blur or Enter (Escape
+ * drops it). The server clamps every value it gets, so sending each
+ * keystroke would rewrite the field mid-typing.
+ */
+function DraftNumber({ value, onCommit, ...rest }: {
+  value: number; onCommit: (n: number) => Promise<unknown>;
+} & Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type'>) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const sending = useRef(false);
+  const commit = () => {
+    if (draft === null || sending.current) return;
+    const n = Number(draft);
+    if (draft.trim() === '' || !Number.isFinite(n) || n === value) { setDraft(null); return; }
+    // The room's new state arrives before the reply: show the draft until then.
+    sending.current = true;
+    void onCommit(n).finally(() => { sending.current = false; setDraft(null); });
+  };
+  return (
+    <input {...rest} type="number" value={draft ?? value}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => {
+        if (e.key === 'Enter') commit();
+        else if (e.key === 'Escape') setDraft(null);
+      }} />
+  );
+}
 
 export default function Lobby({ room, me, spectating, chat }: {
   room: RoomView; me: string; spectating: boolean; chat: ChatMsg[];
@@ -178,8 +208,8 @@ export default function Lobby({ room, me, spectating, chat }: {
           <div className="rules">
             <label className="rule">
               <span>Starting cash</span>
-              <input type="number" step={100} min={100} disabled={!isHost} value={room.rules.startingCash}
-                onChange={e => configure({ rules: { startingCash: Number(e.target.value) } })} />
+              <DraftNumber step={100} min={100} disabled={!isHost} value={room.rules.startingCash}
+                onCommit={n => configure({ rules: { startingCash: n } })} />
             </label>
             <label className="rule">
               <span>Max players</span>
