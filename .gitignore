@@ -6,3 +6,5 @@ data/
 .DS_Store
 *.tsbuildinfo
 .claude/worktrees/
+tools/blender/.venv/
+tools/blender/.cache/

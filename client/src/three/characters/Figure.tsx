@@ -4,7 +4,10 @@
 // move the same way.
 
 import { useEffect, useMemo } from 'react';
-import { Color, type Group } from 'three';
+import { useGLTF } from '@react-three/drei';
+import { Color, type Group, type Material, type Mesh, type Object3D } from 'three';
+import { ASSETS } from '../assets.gen.ts';
+import { WithModel } from '../models.tsx';
 import type { CharacterId } from '../../../../shared/characters.ts';
 import { GEO, Part, disposeMaterials, makeMaterials, type Mats } from './parts.tsx';
 import { HEAD_Y, LOOKS, DefaultBody } from './looks.tsx';
@@ -29,7 +32,58 @@ const HAND_REST: [number, number, number] = [0.11, 0.115, 0.015];
 const HAND_UP: [number, number, number] = [0.125, 0.37, 0.02];
 const HAND_DROOP: [number, number, number] = [0.085, 0.07, 0.035];
 
-export function CharacterFigure({ id, mats, rig }: { id: CharacterId; mats: Mats; rig: Rig }) {
+/**
+ * A character on the rig. The modelled version (tools/blender/characters.py)
+ * shows once characters.glb is in; until then, or if it fails, the same design
+ * drawn from primitives. Both hang their parts on the same rig groups.
+ */
+export function CharacterFigure(props: { id: CharacterId; mats: Mats; rig: Rig }) {
+  return (
+    <WithModel fallback={<DrawnFigure {...props} />}>
+      <ModelFigure {...props} />
+    </WithModel>
+  );
+}
+
+const PART_NAMES = ['Body', 'Head', 'HandL', 'HandR'] as const;
+
+function ModelFigure({ id, mats, rig }: { id: CharacterId; mats: Mats; rig: Rig }) {
+  const gltf = useGLTF(ASSETS.characters.url);
+  const parts = useMemo(() => {
+    const cid = LOOKS[id] ? id : 'spiky';
+    return Object.fromEntries(PART_NAMES.map(name => {
+      const src = gltf.scene.getObjectByName(`${cid}_${name}`);
+      if (!src) throw new Error(`characters.glb has no ${cid}_${name}`);
+      const obj = src.clone(true);
+      obj.position.set(0, 0, 0);
+      obj.traverse((o: Object3D) => {
+        const m = o as Mesh;
+        if (!m.isMesh) return;
+        // "<id>:<key>" -> this figure's own material of that key (player colour, jail grey, fade).
+        const swap = (mat: Material) => mats[(mat.name.split(':')[1] ?? 'main') as keyof Mats] ?? mats.main;
+        m.material = Array.isArray(m.material) ? m.material.map(swap) : swap(m.material);
+        m.castShadow = name === 'Body' || name === 'Head';
+      });
+      return [name, obj];
+    })) as Record<(typeof PART_NAMES)[number], Object3D>;
+  }, [gltf.scene, id, mats]);
+  return (
+    <group ref={g => { rig.pose = g; }}>
+      <primitive object={parts.Body} />
+      <group ref={g => { rig.handL = g; }} position={[HAND_REST[0], HAND_REST[1], HAND_REST[2]]}>
+        <primitive object={parts.HandL} />
+      </group>
+      <group ref={g => { rig.handR = g; }} position={[-HAND_REST[0], HAND_REST[1], HAND_REST[2]]}>
+        <primitive object={parts.HandR} />
+      </group>
+      <group ref={g => { rig.head = g; }} position={[0, HEAD_Y, 0]}>
+        <primitive object={parts.Head} />
+      </group>
+    </group>
+  );
+}
+
+function DrawnFigure({ id, mats, rig }: { id: CharacterId; mats: Mats; rig: Rig }) {
   const look = LOOKS[id] ?? LOOKS.spiky;
   return (
     <group ref={g => { rig.pose = g; }}>

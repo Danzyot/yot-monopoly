@@ -1,10 +1,13 @@
 import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import { CanvasTexture, Euler, MeshStandardMaterial, Quaternion, SRGBColorSpace, type Mesh } from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { SpeedFace } from '../../../shared/types.ts';
 
 const SIZE = 0.5;
 const ROLL_MS = 1100;
+// Rounded edges like a real die; keeps BoxGeometry's face groups and UVs.
+const DIE_GEO = new RoundedBoxGeometry(SIZE, SIZE, SIZE, 4, 0.07);
 
 // BoxGeometry face order: +x, -x, +y, -y, +z, -z. Opposite faces sum to 7.
 const FACE_VALUES = [3, 4, 1, 6, 2, 5];
@@ -44,11 +47,23 @@ function canvasTexture(draw: (g: CanvasRenderingContext2D) => void): CanvasTextu
 function drawPips(g: CanvasRenderingContext2D, v: number, pip: string, body: string) {
   g.fillStyle = body;
   g.fillRect(0, 0, 128, 128);
-  g.fillStyle = pip;
   for (const [x, y] of PIPS[v]) {
+    // Drilled pips: a darker rim and a lit lower edge read as a dent.
+    const r = v === 1 ? 16 : 12;
+    const cx = x * 128, cy = y * 128;
+    const grad = g.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.1, cx, cy, r);
+    grad.addColorStop(0, pip);
+    grad.addColorStop(0.75, pip);
+    grad.addColorStop(1, 'rgba(0,0,0,0.85)');
+    g.fillStyle = grad;
     g.beginPath();
-    g.arc(x * 128, y * 128, v === 1 ? 16 : 12, 0, Math.PI * 2);
+    g.arc(cx, cy, r, 0, Math.PI * 2);
     g.fill();
+    g.strokeStyle = 'rgba(255,255,255,0.35)';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.arc(cx, cy, r + 1, Math.PI * 0.15, Math.PI * 0.85);
+    g.stroke();
   }
 }
 
@@ -137,9 +152,7 @@ function Die({ top, seq, home, delay, materials, rollOnMount = false }: {
   });
 
   return (
-    <mesh ref={ref} castShadow material={materials} position={[home[0], SIZE / 2, home[1]]}>
-      <boxGeometry args={[SIZE, SIZE, SIZE]} />
-    </mesh>
+    <mesh ref={ref} castShadow geometry={DIE_GEO} material={materials} position={[home[0], SIZE / 2, home[1]]} />
   );
 }
 

@@ -4,8 +4,9 @@
 
 import type { EnvironmentId } from '../../../../shared/maps.ts';
 import type { Theme } from '../../../../shared/themes.ts';
-import { mix } from './common.tsx';
+import { FLOOR, mix } from './common.tsx';
 import { Lounge } from './Lounge.tsx';
+import { ClassicRoom, WithModel } from '../models.tsx';
 import { Skyline } from './Skyline.tsx';
 import { Speedway } from './Speedway.tsx';
 
@@ -40,6 +41,28 @@ export function Environment({ kind, theme }: { kind: EnvironmentId; theme: Theme
     case 'speedway': return <Speedway theme={theme} />;
     case 'skyline': return <Skyline theme={theme} />;
     case 'lounge':
-    default: return <Lounge theme={theme} />;
+    default:
+      // The Classic edition has its own modelled, light-baked room; other
+      // editions keep the drawn lounge in their palette until they get one.
+      if (theme.id === 'classic') {
+        return (
+          <WithModel fallback={<Lounge theme={theme} />}>
+            <ClassicRoom />
+            <RoomLights />
+          </WithModel>
+        );
+      }
+      return <Lounge theme={theme} />;
   }
+}
+
+/** Live light for what moves (board, pieces, dice) matching the baked room: warm lamp, fire on the left. */
+function RoomLights() {
+  return (
+    <>
+      <hemisphereLight args={['#ffe2bd', '#2a1a10', 0.6]} />
+      <pointLight position={[13.6, FLOOR + 9.4, -10.5]} color="#ffb46b" intensity={260} decay={2} />
+      <pointLight position={[-18, FLOOR + 2, 0]} color="#ff7a2e" intensity={220} decay={2} />
+    </>
+  );
 }

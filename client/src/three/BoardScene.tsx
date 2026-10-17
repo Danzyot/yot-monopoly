@@ -11,6 +11,9 @@ import { C, W, buildingSpots, tile, tileAt, tileWidth } from './layout.ts';
 import { Pieces, type PieceReaction } from './characters/Pieces.tsx';
 import { Environment, FLOOR, TABLE_R, envLook } from './environments/index.tsx';
 import { Dice } from './Dice.tsx';
+import { ModelBuildings, ModelTable, WithModel, preloadModels, type BuildingSpot } from './models.tsx';
+
+preloadModels();
 
 const THICK = 0.28;
 
@@ -81,6 +84,16 @@ function Table({ theme, presetId }: { theme: Theme; presetId?: string }) {
   // The room's table preset, or the edition's own colour for 'edition'.
   const preset = getTablePreset(presetId);
   const color = preset.color ?? theme.palette.table;
+  return (
+    <WithModel fallback={<DrawnTable color={color} roughness={preset.roughness} metalness={preset.metalness} />}>
+      <ModelTable color={color} roughness={preset.roughness} metalness={preset.metalness} />
+    </WithModel>
+  );
+}
+
+/** The code-drawn table: shown while the modelled one loads (or if it cannot). */
+function DrawnTable({ color, roughness, metalness }: { color: string; roughness: number; metalness: number }) {
+  const preset = { roughness, metalness };
   // Pedestal from under the top down to the environment's floor.
   const legTop = -THICK - 0.5;
   const leg = legTop - FLOOR;
@@ -162,27 +175,39 @@ function Ownership({ game, theme }: { game: GameView; theme: Theme }) {
 function Buildings({ game, theme }: { game: GameView; theme: Theme }) {
   const house = theme.palette.house ?? '#1f9d49';
   const hotel = theme.palette.hotel ?? '#d2202f';
+  const spots: BuildingSpot[] = Object.entries(game.owned).flatMap(([k, o]) => {
+    const i = Number(k);
+    if (!o.houses) return [];
+    const g = tile(i, theme.spaces.length);
+    const rotY = g.out[0] === 0 ? 0 : Math.PI / 2;
+    return buildingSpots(i, o.houses, theme.spaces.length).map(([x, z], n) => ({
+      key: o.houses === 5 ? `${i}-h` : `${i}-${n}`, x, z, rotY, hotel: o.houses === 5,
+    }));
+  });
+  if (!spots.length) return null;
+  return (
+    <WithModel fallback={<DrawnBuildings spots={spots} house={house} hotel={hotel} />}>
+      <ModelBuildings spots={spots} house={house} hotel={hotel} />
+    </WithModel>
+  );
+}
+
+function DrawnBuildings({ spots, house, hotel }: { spots: BuildingSpot[]; house: string; hotel: string }) {
   return (
     <group>
-      {Object.entries(game.owned).flatMap(([k, o]) => {
-        const i = Number(k);
-        if (!o.houses) return [];
-        const g = tile(i, theme.spaces.length);
-        const rotY = g.out[0] === 0 ? 0 : Math.PI / 2;
-        return buildingSpots(i, o.houses, theme.spaces.length).map(([x, z], n) =>
-          o.houses === 5 ? (
-            <group key={`${i}-h`} position={[x, 0, z]} rotation={[0, rotY, 0]}>
-              <mesh castShadow position={[0, 0.1, 0]}><boxGeometry args={[0.36, 0.2, 0.2]} /><meshStandardMaterial color={hotel} roughness={0.4} /></mesh>
-              <mesh castShadow position={[0, 0.24, 0]} rotation={[0, 0, Math.PI / 4]} scale={[1, 1, 1]}><boxGeometry args={[0.12, 0.12, 0.2]} /><meshStandardMaterial color={hotel} roughness={0.6} /></mesh>
-            </group>
-          ) : (
-            <group key={`${i}-${n}`} position={[x, 0, z]} rotation={[0, rotY, 0]}>
-              <mesh castShadow position={[0, 0.06, 0]}><boxGeometry args={[0.13, 0.12, 0.15]} /><meshStandardMaterial color={house} roughness={0.4} /></mesh>
-              <mesh castShadow position={[0, 0.15, 0]} rotation={[0, 0, Math.PI / 4]}><boxGeometry args={[0.1, 0.1, 0.15]} /><meshStandardMaterial color={house} roughness={0.6} /></mesh>
-            </group>
-          ),
-        );
-      })}
+      {spots.map(({ key, x, z, rotY, hotel: big }) =>
+        big ? (
+          <group key={key} position={[x, 0, z]} rotation={[0, rotY, 0]}>
+            <mesh castShadow position={[0, 0.1, 0]}><boxGeometry args={[0.36, 0.2, 0.2]} /><meshStandardMaterial color={hotel} roughness={0.4} /></mesh>
+            <mesh castShadow position={[0, 0.24, 0]} rotation={[0, 0, Math.PI / 4]} scale={[1, 1, 1]}><boxGeometry args={[0.12, 0.12, 0.2]} /><meshStandardMaterial color={hotel} roughness={0.6} /></mesh>
+          </group>
+        ) : (
+          <group key={key} position={[x, 0, z]} rotation={[0, rotY, 0]}>
+            <mesh castShadow position={[0, 0.06, 0]}><boxGeometry args={[0.13, 0.12, 0.15]} /><meshStandardMaterial color={house} roughness={0.4} /></mesh>
+            <mesh castShadow position={[0, 0.15, 0]} rotation={[0, 0, Math.PI / 4]}><boxGeometry args={[0.1, 0.1, 0.15]} /><meshStandardMaterial color={house} roughness={0.6} /></mesh>
+          </group>
+        ),
+      )}
     </group>
   );
 }

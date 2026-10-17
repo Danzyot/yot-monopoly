@@ -10,15 +10,16 @@ mini-games, music, and a full operator dashboard.
 - **Many games at once** — every table is a room with a 5-letter code and an invite
   link; public or private; 2–8 players (default 6), plus spectators.
 - **Three maps**, each with its own 3D surroundings:
-  - **Classic** — 40 spaces, the standard game, in a cosy lounge.
+  - **Classic** — 40 spaces, the standard game, in a cosy lounge. With the Classic edition
+    it's a modelled, light-baked study (fireplace, moonlit window, bookshelf, Chesterfield).
   - **Speedway** — 32 spaces, two-street colour sets, two arcades; ~30-minute games at a racetrack.
   - **Metropolis** — 48 spaces, ten colour sets, two arcades; built for 5–8 players, on a night rooftop.
 - **Editions** (skins that work on any map): Classic, **Chog** (built from the Chog
   Poker design system: purple room, Chog pink, Outfit font, the Chog character on the
   board) and **Takeprofit TV** (from the takeprofit-tv site: ink black, amber, colour-bar sets, Big Shoulders + Space Mono, the TPTV logo on the board). Card text always names the board's own spaces.
 - **3D characters** instead of tokens — ten chibi figures (Spiky, Robo, Whiskers,
-  Sir Deed, Merlot, Cosmo, Captain Cash, Shade, Chef Gusto, Zorp), tinted in each
-  player's colour. They hop tile by tile, cheer when they buy or earn, slump in jail,
+  Sir Deed, Merlot, Cosmo, Captain Cash, Shade, Chef Gusto, Zorp), modelled in Blender
+  and tinted in each player's colour. They hop tile by tile, cheer when they buy or earn, slump in jail,
   fall over when bankrupt and dance when they win.
 - **Full rules**: rent (sets, houses, railroads, utilities), doubles and jail, all
   Chance/Community Chest cards, auctions, even building, the 32/12 building supply,
@@ -143,7 +144,9 @@ server/src/
   music.ts, graphics.ts  operator libraries
   routes/                auth, admin, music, graphics
 client/src/
-  three/                 3D: board texture, layout, characters, environments, dice
+  three/                 3D: board texture, layout, characters, environments, dice, models
+client/public/models/    GLB models + lightmaps, built by tools/blender (see its README)
+tools/blender/           headless-Blender build scripts for every model
   components/            lobby, HUD, deeds, trades, auctions, mini-games, music, admin/
   pages/                 home, room, leaderboard, admin
 ```
