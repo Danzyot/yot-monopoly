@@ -15,6 +15,7 @@ import { CameraDirector } from './CameraDirector.tsx';
 import { MoneyFX } from './MoneyFX.tsx';
 import { CardDecks } from './CardDecks.tsx';
 import { JailCell } from './JailCell.tsx';
+import { ParkingPot } from './ParkingPot.tsx';
 import { SceneEnv } from './SceneEnv.tsx';
 import { isDirectorActive, pieceObjects, type CameraMode } from './camera.ts';
 import { ASSETS } from './assets.gen.ts';
@@ -401,6 +402,8 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
         {game && (
           <>
             <Ownership game={game} theme={theme} />
+            {game.rules.freeParkingPot && theme.spaces[theme.spaces.length / 2]?.kind === 'parking' &&
+              <ParkingPot pot={game.pot} n={theme.spaces.length} />}
             <Pieces game={game} n={theme.spaces.length} reactions={reactions} />
             <MoneyFX game={game} n={theme.spaces.length} currency={theme.currency} />
             <Dice dice={game.dice} seq={game.rollSeq} speed={game.speed ?? null} body={theme.palette.die} pip={theme.palette.pip} />
