@@ -1,10 +1,17 @@
-// The player's "cinematic camera" preference (on by default), remembered per browser.
+// The player's "cinematic camera" preference, remembered per browser: on by
+// default, off by default for anyone who has asked their system for less motion.
 import { useCallback, useState } from 'react';
 
 const KEY = 'yot:cinematic';
 
 function read(): boolean {
-  try { return localStorage.getItem(KEY) !== '0'; } catch { return true; }
+  const calm = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  try {
+    const v = localStorage.getItem(KEY);
+    return v === null ? !calm : v !== '0';
+  } catch {
+    return !calm;
+  }
 }
 
 export function useCinematicPref(): [boolean, () => void] {
