@@ -773,6 +773,7 @@ export class Game {
       highBidder: null,
       bidders: this.active().map(x => x.id),
       endsAt: this.now() + AUCTION_MS,
+      bids: [],
     };
     this.phase = 'auction';
     this.say(`${s.name} is up for auction!`);
@@ -783,9 +784,12 @@ export class Game {
     if (this.phase !== 'auction' || !a) fail('No auction running');
     if (!a.bidders.includes(p.id)) fail('You have left this auction');
     if (typeof amount !== 'number' || !Number.isInteger(amount) || amount <= a.highBid) fail(`Bid more than ${this.money(a.highBid)}`);
-    if (amount > p.cash) fail('You cannot bid more than your cash');
+    // What they already owe is spoken for: the winner must be able to pay.
+    const owe = this.debtOf(p.id);
+    if (amount > p.cash - owe) fail(owe ? `You cannot bid more than your cash less the ${this.money(owe)} you owe` : 'You cannot bid more than your cash');
     a.highBid = amount;
     a.highBidder = p.id;
+    a.bids = [...(a.bids ?? []).filter(b => b.id !== p.id), { id: p.id, amount }];
     a.endsAt = Math.max(a.endsAt, this.now() + AUCTION_EXTEND_MS);
     this.say(`${p.name} bid ${this.money(amount)}.`, p.id);
     if (a.bidders.length === 1) this.finishAuction();
@@ -804,8 +808,12 @@ export class Game {
     if (!a) return;
     a.bidders = a.bidders.filter(b => b !== id);
     if (a.highBidder === id) {
-      a.highBidder = null;
-      a.highBid = 0;
+      // The lead goes back to the best bid from someone still in, not to nothing.
+      const best = (a.bids ?? [])
+        .filter(b => b.id !== id && a.bidders.includes(b.id))
+        .sort((x, y) => y.amount - x.amount)[0];
+      a.highBidder = best?.id ?? null;
+      a.highBid = best?.amount ?? 0;
     }
     if (a.bidders.length === 0 || (a.bidders.length === 1 && a.highBidder === a.bidders[0])) {
       this.finishAuction();
@@ -826,10 +834,14 @@ export class Game {
     this.auction = null;
     if (a.highBidder) {
       const w = this.player(a.highBidder);
-      w.cash -= a.highBid;
+      // Bids are capped at cash, but cash can move during the auction (a debt
+      // paid, an operator fix): whatever is missing becomes an ordinary debt.
+      const paid = Math.max(0, Math.min(a.highBid, w.cash));
+      w.cash -= paid;
       this.owned[a.space] = { owner: w.id, houses: 0, mortgaged: false };
       this.stat(w.id).propertiesBought++;
       this.say(`${w.name} won ${s.name} for ${this.money(a.highBid)}.`, w.id);
+      if (paid < a.highBid) this.charge(w, null, a.highBid - paid, `the rest of the ${s.name} auction`);
     } else {
       this.say(`Nobody bid on ${s.name}${a.bank ? ' — it stays with the bank' : ''}.`);
     }
@@ -857,7 +869,7 @@ export class Game {
       this.resumePhase = this.phase;
       this.auction = {
         space, highBid: 0, highBidder: null, bidders: this.active().map(x => x.id),
-        endsAt: this.now() + AUCTION_MS, bank: true,
+        endsAt: this.now() + AUCTION_MS, bank: true, bids: [],
       };
       this.phase = 'auction';
       this.say(`The bank is auctioning ${this.spaces[space].name}.`);

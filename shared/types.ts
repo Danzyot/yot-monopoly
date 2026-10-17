@@ -84,6 +84,8 @@ export interface Auction {
   endsAt: number;
   /** Selling a bankrupt player's estate for the bank (not the current player's landing). */
   bank?: boolean;
+  /** Each bidder's best bid so far, so a resigning high bidder hands the lead back. Absent in older snapshots. */
+  bids?: { id: string; amount: number }[];
 }
 
 export interface TradeSide {

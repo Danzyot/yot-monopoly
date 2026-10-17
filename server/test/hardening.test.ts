@@ -188,3 +188,56 @@ test('a debt during an auction: the bot waits, and the fallback never resigns fo
   assert.equal(g.phase, 'auction');
   r.dispose();
 });
+
+// ---- auctions ------------------------------------------------------------------
+
+test('auction: a winner short of cash at the end owes the rest as a debt', () => {
+  const { g, dice, act, tick } = scripted(3);
+  dice(1, 2);
+  act('p0', { type: 'roll' });
+  act('p0', { type: 'decline' });
+  const p1 = g.player('p1');
+  p1.cash = 150;
+  act('p1', { type: 'bid', amount: 100 });
+  // A debt arrives and is paid mid-auction: the bid now exceeds the cash.
+  g.debts.push({ from: 'p1', to: 'p2', amount: 100, reason: 'test' });
+  act('p1', { type: 'payDebt' });
+  assert.equal(p1.cash, 50);
+  tick(60_000);
+  assert.equal(g.auctionTimeout(), true);
+  assert.equal(g.owned[3].owner, 'p1');
+  assert.ok(p1.cash >= 0, `cash ${p1.cash}`);
+  assert.equal(p1.cash, 0);
+  assert.equal(g.debtOf('p1'), 50, 'the shortfall is an ordinary debt');
+  assert.deepEqual(g.debts.map(d => d.to), [null], 'owed to the bank');
+});
+
+test('auction: bids are capped at cash less what the bidder already owes', () => {
+  const { g, dice, act } = scripted(3);
+  dice(1, 2);
+  act('p0', { type: 'roll' });
+  act('p0', { type: 'decline' });
+  g.player('p1').cash = 150;
+  g.debts.push({ from: 'p1', to: 'p2', amount: 100, reason: 'test' });
+  assert.throws(() => act('p1', { type: 'bid', amount: 51 }), /owe/);
+  act('p1', { type: 'bid', amount: 50 });
+  assert.equal(g.auction!.highBid, 50);
+});
+
+test('auction: when the high bidder resigns, the best bid still in takes the lead', () => {
+  const { g, dice, act } = scripted(4);
+  dice(1, 2);
+  act('p0', { type: 'roll' });
+  act('p0', { type: 'decline' });
+  act('p1', { type: 'bid', amount: 100 });
+  act('p2', { type: 'bid', amount: 120 });
+  act('p3', { type: 'bid', amount: 200 });
+  act('p2', { type: 'pass' }); // p2's bid leaves with p2
+  act('p3', { type: 'bankrupt' });
+  assert.equal(g.auction!.highBidder, 'p1');
+  assert.equal(g.auction!.highBid, 100, 'not back to nothing (a $1 deed)');
+  assert.throws(() => act('p0', { type: 'bid', amount: 100 }), /more than/);
+  act('p0', { type: 'pass' });
+  assert.equal(g.owned[3].owner, 'p1');
+  assert.equal(g.player('p1').cash, 1400);
+});
