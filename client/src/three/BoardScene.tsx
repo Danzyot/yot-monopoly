@@ -18,6 +18,7 @@ import { CardDecks } from './CardDecks.tsx';
 import { JailCell } from './JailCell.tsx';
 import { ParkingPot } from './ParkingPot.tsx';
 import { GoConfetti, celebrateGo } from './GoConfetti.tsx';
+import { DeedPop } from './DeedPop.tsx';
 import { SceneEnv } from './SceneEnv.tsx';
 import { isDirectorActive, pieceObjects, type CameraMode } from './camera.ts';
 import { ASSETS } from './assets.gen.ts';
@@ -443,6 +444,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
             <Pieces game={game} n={theme.spaces.length} reactions={reactions} />
             <MoneyFX game={game} n={theme.spaces.length} currency={theme.currency} />
             <GoConfetti n={theme.spaces.length} />
+            <DeedPop game={game} theme={theme} />
             <Dice dice={game.dice} seq={game.rollSeq} speed={game.speed ?? null} body={theme.palette.die} pip={theme.palette.pip} />
           </>
         )}
