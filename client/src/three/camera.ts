@@ -5,11 +5,12 @@
 import { useCallback, useState } from 'react';
 import type { Object3D } from 'three';
 
-export type CameraMode = 'table' | 'follow' | 'top' | 'free';
+export type CameraMode = 'table' | 'follow' | 'close' | 'top' | 'free';
 
 export const CAMERA_MODES: { id: CameraMode; icon: string; label: string; hint: string }[] = [
   { id: 'table', icon: '🎲', label: 'Table', hint: 'The whole table, from your seat' },
   { id: 'follow', icon: '🏃', label: 'Follow', hint: 'Follows whoever is playing, around the board' },
+  { id: 'close', icon: '🎥', label: 'Close-up', hint: 'Down at board level, just behind whoever is playing' },
   { id: 'top', icon: '🗺️', label: 'Overhead', hint: 'Straight down over the board' },
   { id: 'free', icon: '🕹️', label: 'Free', hint: 'Drag to orbit, pinch or scroll to zoom, right-drag to pan' },
 ];

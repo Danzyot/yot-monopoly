@@ -292,16 +292,24 @@ function CameraRig({ hud, fogNear, fogFar, mode, followId }: {
     if (!controls) return;
     const directing = isDirectorActive();
     controls.enablePan = mode === 'free';
-    controls.maxPolarAngle = mode === 'free' ? Math.PI / 2.05 : Math.PI / 2.4;
-    controls.minDistance = mode === 'free' ? 2.5 : 6;
+    controls.maxPolarAngle = mode === 'free' || mode === 'close' ? Math.PI / 2.05 : Math.PI / 2.4;
+    controls.minDistance = mode === 'free' ? 2.5 : mode === 'close' ? 1 : 6;
     if (directing) return;
     controls.enabled = mode === 'table' || mode === 'free';
     const dt = Math.min(delta, 0.1);
-    if (mode === 'follow' || mode === 'top') {
+    if (mode === 'follow' || mode === 'close' || mode === 'top') {
       glide.current = null;
       let pos: Vector3, target: Vector3;
       const piece = followId ? pieceObjects.get(followId) : undefined;
-      if (mode === 'follow' && piece) {
+      if (mode === 'close' && piece) {
+        // Low over the board edge behind the piece, looking past it across the board.
+        const p = piece.position;
+        const out = tmpOut.set(p.x, 0, p.z);
+        if (out.lengthSq() < 0.01) out.set(0, 0, 1);
+        out.normalize();
+        pos = tmpPos.set(p.x + out.x * 2.3, 1.35 + p.y * 0.5, p.z + out.z * 2.3);
+        target = tmpTarget.set(p.x - out.x * 0.5, 0.35, p.z - out.z * 0.5);
+      } else if (mode === 'follow' && piece) {
         // Behind the piece, outside the board edge, looking past it into the board.
         const p = piece.position;
         const out = tmpOut.set(p.x, 0, p.z);

@@ -70,7 +70,7 @@ export function CameraDirector({ game, me, n, enabled, mode }: { game: GameView;
   ctl.current = controls;
   // Views that steer themselves (follow, overhead) take the camera back from
   // wherever the shot ends; the others glide home to where the player left it.
-  const selfSteering = mode === 'follow' || mode === 'top';
+  const selfSteering = mode === 'follow' || mode === 'close' || mode === 'top';
   const steer = useRef(selfSteering);
   steer.current = selfSteering;
 
