@@ -13,7 +13,8 @@ mini-games, music, and a full operator dashboard.
   - **Classic** — 40 spaces, the standard game, in a cosy lounge. With the Classic edition
     it's a modelled, light-baked study (fireplace, moonlit window, bookshelf, Chesterfield).
   - **Speedway** — 32 spaces, two-street colour sets, two arcades; ~30-minute games at a racetrack.
-  - **Metropolis** — 48 spaces, ten colour sets, two arcades; built for 5–8 players, on a night rooftop.
+  - **Metropolis** — 48 spaces, ten colour sets, two arcades; built for 5–8 players, on a
+    modelled, light-baked penthouse roof (string lights, fire pit, a lit city all around).
 - **Editions** (skins that work on any map): Classic, **Chog** (built from the Chog
   Poker design system: purple room, Chog pink, Outfit font, the Chog character on the
   board) and **Takeprofit TV** (from the takeprofit-tv site: ink black, amber, colour-bar sets, Big Shoulders + Space Mono, the TPTV logo on the board). Card text always names the board's own spaces.
@@ -27,9 +28,12 @@ mini-games, music, and a full operator dashboard.
 - **Game feel**: the dice land, then the piece walks, then the result shows; coins fly
   from payer to payee with the amount floating over each piece; Chance and Community
   Chest are real piles on the board and a drawn card flies off its pile to the screen;
-  houses and hotels drop onto their lots; jailed pieces sit behind bars (the door swings
-  open when they get out); the Free Parking jackpot piles up as gold coins; a cinematic
-  camera swoops in for buys, builds, hotels, jail and bankruptcies (🎬 to turn it off);
+  houses and hotels drop onto their lots; a bought deed's title card pops up and flies to
+  its new owner; confetti off GO; jailed pieces sit behind bars (the door swings open when
+  they get out); the Free Parking jackpot piles up as gold coins; pieces blink and turn
+  their heads to watch whoever is playing; bots chime in with the odd emoji and wait for
+  the board to finish animating before they move; a cinematic camera swoops in for buys,
+  builds, hotels, big rent, jail, bankruptcies and the winner's dance (🎬 to turn it off);
   a "Your turn!" splash; End turn right from a property you don't want.
 - **Camera views** (the camera button, or C): Table, Follow (trails whoever is playing),
   Close-up (at board level just behind them),
