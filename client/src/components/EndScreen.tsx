@@ -7,6 +7,8 @@ import type { GameView, PlayerState, PlayerStats, RoomView } from '../../../shar
 import { call } from '../net.ts';
 import { characterEmoji } from '../format.ts';
 import { toastError } from '../toast.tsx';
+import { ordinal } from '../gameHelpers.ts';
+import { Modal } from './Modal.tsx';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
@@ -69,6 +71,8 @@ export default function EndScreen({ room, game, me, onLeave }: {
   const isHost = room.hostId === me;
   const host = room.seats.find(s => s.id === room.hostId);
   const ended = game.endedAt ?? room.now;
+  const myPlace = order.findIndex(p => p.id === me) + 1;
+  const iWon = !!winner && winner.id === me;
 
   const rematch = () => {
     setBusy(true);
@@ -82,12 +86,14 @@ export default function EndScreen({ room, game, me, onLeave }: {
   }
 
   return (
-    <div className="modal-back">
-      <div className="modal end-screen" role="dialog" aria-label="Game summary">
-        <div className="trophy">🏆</div>
+    <Modal onClose={() => setHidden(true)} dismissable={false} labelledBy="end-title" className="end-screen" backClassName="end-back">
+        {winner && <Confetti colors={[winner.color, '#ffd23f', '#ffffff', '#5be35b', '#3b8cff']} />}
+        <div className="trophy" aria-hidden>{iWon ? '🏆' : myPlace > 0 ? (MEDALS[myPlace - 1] ?? '🎲') : '🏆'}</div>
         {winner
-          ? <h2 style={{ color: winner.color }}>{winner.name} wins!</h2>
-          : <h2>Game over!</h2>}
+          ? <h2 id="end-title" className="end-title">{iWon ? 'You win!' : <><span style={{ color: winner.color }}>{winner.name}</span> wins!</>}</h2>
+          : <h2 id="end-title" className="end-title">Game over!</h2>}
+        {myPlace > 0 && !iWon && <p className="end-you">You finished <b>{ordinal(myPlace)}</b> of {order.length}</p>}
+        {iWon && <p className="end-you">Property tycoon! 🎉</p>}
         <p className="muted small end-meta">
           {game.turnNumber} turns · {duration(ended - game.startedAt)} · {theme.name}
         </p>
@@ -119,14 +125,29 @@ export default function EndScreen({ room, game, me, onLeave }: {
 
         <div className="end-actions">
           {isHost
-            ? <button className="btn primary" disabled={busy} onClick={rematch}>🔁 Rematch!</button>
+            ? <button className="btn primary chunky" disabled={busy} onClick={rematch}>🔁 Rematch!</button>
             : <span className="muted small">Waiting for {host?.name ?? 'the host'} to start a rematch…</span>}
           <div className="row">
             <button className="btn ghost small" onClick={() => setHidden(true)}>View board</button>
             <button className="btn small" onClick={onLeave}>Leave</button>
           </div>
         </div>
-      </div>
+    </Modal>
+  );
+}
+
+/** A burst of paper confetti behind the winner's card (CSS only; still under reduced motion). */
+function Confetti({ colors }: { colors: string[] }) {
+  const bits = Array.from({ length: 36 }, (_, i) => i);
+  return (
+    <div className="confetti" aria-hidden>
+      {bits.map(i => (
+        <i key={i} style={{
+          left: `${(i * 37) % 100}%`, background: colors[i % colors.length],
+          animationDelay: `${(i % 9) * 0.12}s`, animationDuration: `${2.4 + (i % 5) * 0.35}s`,
+          ['--drift' as string]: `${((i * 53) % 120) - 60}px`, ['--spin' as string]: `${360 + (i % 4) * 180}deg`,
+        }} />
+      ))}
     </div>
   );
 }
