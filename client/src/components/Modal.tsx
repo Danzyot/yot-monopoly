@@ -28,6 +28,9 @@ export function Modal({ onClose, label, labelledBy, className = '', backClassNam
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
+  // Only a press that starts on the backdrop closes: a drag (selecting text)
+  // that begins inside and lets go outside lands its click on the backdrop too.
+  const downOutside = useRef(false);
 
   useEffect(() => {
     const el = ref.current;
@@ -59,7 +62,9 @@ export function Modal({ onClose, label, labelledBy, className = '', backClassNam
   };
 
   return (
-    <div className={`modal-back ${backClassName}`} onClick={() => dismissable && close.current?.()}>
+    <div className={`modal-back ${backClassName}`}
+      onPointerDown={e => { downOutside.current = !ref.current?.contains(e.target as Node); }}
+      onClick={() => dismissable && downOutside.current && close.current?.()}>
       {behind}
       <div ref={ref} className={`modal ${className}`} role="dialog" aria-modal="true" aria-label={labelledBy ? undefined : label}
         aria-labelledby={labelledBy} tabIndex={-1} onKeyDown={onKey} onClick={e => e.stopPropagation()}>
