@@ -14,6 +14,7 @@ export const SHORTCUTS: [string, string][] = [
   ['E', 'End your turn'],
   ['P', 'Pay your debt'],
   ['T', 'Trade… (opens portfolios)'],
+  ['C', 'Change camera view'],
   ['Esc', 'Close dialogs'],
   ['?', 'Show this list'],
 ];
@@ -52,6 +53,8 @@ export function useShortcuts(game: GameView, me: string, h: {
   onEscape: () => void;
   onTrade: () => void;
   onHelp: () => void;
+  /** Next camera view. */
+  onCamera?: () => void;
 }): void {
   // Handlers read the latest props without re-binding the listener every state.
   const ref = useRef({ game, me, h });
@@ -68,6 +71,7 @@ export function useShortcuts(game: GameView, me: string, h: {
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       if (key === '?') { e.preventDefault(); h.onHelp(); return; }
       if (key === 't') { e.preventDefault(); h.onTrade(); return; }
+      if (key === 'c' && h.onCamera) { e.preventDefault(); h.onCamera(); return; }
       // Space on a focused button already clicks it: don't double up.
       if (key === ' ' && (e.target as HTMLElement | null)?.tagName === 'BUTTON') return;
       const a = actionForKey(key, game, me);

@@ -15,6 +15,7 @@ import { Vector3 } from 'three';
 import type { GameView } from '../../../shared/types.ts';
 import { tile } from './layout.ts';
 import { useSceneBusy } from './sequence.ts';
+import { setDirectorActive } from './camera.ts';
 
 interface Shot { pos: Vector3; target: Vector3; hold: number }
 
@@ -131,6 +132,7 @@ export function CameraDirector({ game, me, n, enabled }: { game: GameView; me?: 
         stage: 'in', stageAt: now, outPos: new Vector3(), outTarget: new Vector3(),
       };
       controls.enabled = false;
+      setDirectorActive(true);
     }
     const t = now - p.stageAt;
     if (p.stage === 'in') {
@@ -152,6 +154,7 @@ export function CameraDirector({ game, me, n, enabled }: { game: GameView; me?: 
         camera.position.copy(p.homePos);
         controls.target.copy(p.homeTarget);
         playing.current = null;
+        setDirectorActive(false);
         lastEnd.current = now;
         controls.enabled = true;
       }

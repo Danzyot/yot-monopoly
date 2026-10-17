@@ -1,7 +1,7 @@
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { OrbitControls, PerformanceMonitor } from '@react-three/drei';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { MeshStandardMaterial, type Group, type Mesh } from 'three';
+import { MeshStandardMaterial, Vector3, type Group, type Mesh } from 'three';
 import { resolveTheme, type Theme } from '../../../shared/themes.ts';
 import { getMap } from '../../../shared/maps.ts';
 import type { GameView } from '../../../shared/types.ts';
@@ -13,6 +13,9 @@ import { Environment, FLOOR, TABLE_R, envLook } from './environments/index.tsx';
 import { Dice } from './Dice.tsx';
 import { CameraDirector } from './CameraDirector.tsx';
 import { MoneyFX } from './MoneyFX.tsx';
+import { SceneEnv } from './SceneEnv.tsx';
+import { isDirectorActive, pieceObjects, type CameraMode } from './camera.ts';
+import { ASSETS } from './assets.gen.ts';
 import { ModelBuildings, ModelTable, WithModel, preloadModels, type BuildingSpot } from './models.tsx';
 
 preloadModels();
@@ -215,26 +218,99 @@ function DrawnBuildings({ spots, house, hotel }: { spots: BuildingSpot[]; house:
   );
 }
 
-/** Pull the camera back on narrow screens so the whole board stays in view. */
-function CameraFit({ hud, fogNear, fogFar }: { hud: boolean; fogNear: number; fogFar: number }) {
-  const { camera, size, scene } = useThree();
+/**
+ * The camera. "Table" frames the whole table from the player's side (pulled
+ * back on narrow screens); "Follow" trails whoever is playing round the board;
+ * "Overhead" looks straight down; "Free" leaves it all to the player. Changes
+ * of view glide rather than cut, and a cinematic shot (CameraDirector) owns
+ * the camera while it plays.
+ */
+function CameraRig({ hud, fogNear, fogFar, mode, followId }: {
+  hud: boolean; fogNear: number; fogFar: number; mode: CameraMode; followId?: string;
+}) {
+  const { camera, size, scene, controls } = useThree() as unknown as {
+    camera: import('three').PerspectiveCamera; size: { width: number; height: number }; scene: import('three').Scene;
+    controls: { target: Vector3; enabled: boolean; enablePan: boolean; maxPolarAngle: number; minDistance: number; maxDistance: number; update: () => void } | null;
+  };
+  const aspect = size.width / size.height;
+  // HUD panels eat the sides on desktop, so frame a little wider there.
+  const need = hud && size.width > 760 ? 1.45 : 1.1;
+  const k = Math.max(1, need / aspect) * (hud ? 1.05 : 1);
+  const tablePos = useMemo(() => (aspect < 1 ? new Vector3(0, 15.5 * k, 5 * k) : new Vector3(0, 13 * k, 11.5 * k)), [aspect, k]);
+  const glide = useRef<{ from: Vector3; fromT: Vector3; to: Vector3; toT: Vector3; t0: number } | null>(null);
+  const first = useRef(true);
+
   useEffect(() => {
-    const aspect = size.width / size.height;
-    // HUD panels eat the sides on desktop, so frame a little wider there.
-    const need = hud && size.width > 760 ? 1.45 : 1.1;
-    const k = Math.max(1, need / aspect) * (hud ? 1.05 : 1);
-    // Portrait screens look down more steeply so the board fills the height.
-    if (aspect < 1) camera.position.set(0, 15.5 * k, 5 * k);
-    else camera.position.set(0, 13 * k, 11.5 * k);
-    camera.lookAt(0, 0, 0);
     // Keep the fog behind the board however far back the camera sits.
     if (scene.fog && 'near' in scene.fog) {
-      scene.fog.near = fogNear * k;
-      scene.fog.far = fogFar * k;
+      scene.fog.near = fogNear * k * (mode === 'top' ? 1.4 : 1);
+      scene.fog.far = fogFar * k * (mode === 'top' ? 1.4 : 1);
     }
-  }, [camera, scene, size.width, size.height, hud, fogNear, fogFar]);
+  }, [scene, k, fogNear, fogFar, mode]);
+
+  // Table/free: glide to the framed table view when chosen (or on resize); the first time, just be there.
+  useEffect(() => {
+    if (mode !== 'table' && mode !== 'free') return;
+    if (first.current) {
+      first.current = false;
+      camera.position.copy(tablePos);
+      camera.lookAt(0, 0, 0);
+      return;
+    }
+    if (mode === 'free') return; // free keeps wherever the player left it
+    glide.current = { from: camera.position.clone(), fromT: controls?.target.clone() ?? new Vector3(), to: tablePos.clone(), toT: new Vector3(), t0: performance.now() };
+  }, [mode, tablePos, camera, controls]);
+
+  useFrame((_, delta) => {
+    if (!controls) return;
+    const directing = isDirectorActive();
+    controls.enablePan = mode === 'free';
+    controls.maxPolarAngle = mode === 'free' ? Math.PI / 2.05 : Math.PI / 2.4;
+    controls.minDistance = mode === 'free' ? 2.5 : 6;
+    if (directing) return;
+    controls.enabled = mode === 'table' || mode === 'free';
+    const dt = Math.min(delta, 0.1);
+    if (mode === 'follow' || mode === 'top') {
+      glide.current = null;
+      let pos: Vector3, target: Vector3;
+      const piece = followId ? pieceObjects.get(followId) : undefined;
+      if (mode === 'follow' && piece) {
+        // Behind the piece, outside the board edge, looking past it into the board.
+        const p = piece.position;
+        const out = tmpOut.set(p.x, 0, p.z);
+        if (out.lengthSq() < 0.01) out.set(0, 0, 1);
+        out.normalize();
+        pos = tmpPos.set(p.x + out.x * 4.6, 3.6 + p.y * 0.3, p.z + out.z * 4.6);
+        target = tmpTarget.set(p.x * 0.45, 0.35, p.z * 0.45);
+      } else {
+        // Nearly straight down; the slight tilt keeps the board square to the screen (straight down has no 'up').
+        pos = tmpPos.set(0, 17.5 * Math.max(1, 1 / aspect), 1.6);
+        target = tmpTarget.set(0, 0, 0);
+      }
+      const f = 1 - Math.exp(-3.2 * dt);
+      camera.position.lerp(pos, f);
+      controls.target.lerp(target, f);
+      camera.lookAt(controls.target);
+      controls.update();
+      return;
+    }
+    const g = glide.current;
+    if (g) {
+      const t = Math.min(1, (performance.now() - g.t0) / 900);
+      const e = t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+      camera.position.lerpVectors(g.from, g.to, e);
+      controls.target.lerpVectors(g.fromT, g.toT, e);
+      camera.lookAt(controls.target);
+      controls.update();
+      if (t >= 1) glide.current = null;
+    }
+  });
   return null;
 }
+
+const tmpOut = new Vector3();
+const tmpPos = new Vector3();
+const tmpTarget = new Vector3();
 
 function Spinner({ children, spin }: { children: React.ReactNode; spin?: boolean }) {
   const ref = useRef<Group>(null);
@@ -242,7 +318,7 @@ function Spinner({ children, spin }: { children: React.ReactNode; spin?: boolean
   return <group ref={ref}>{children}</group>;
 }
 
-export default function BoardScene({ themeId, mapId, game, selected, onSelect, spin, tableStyle, reactions, me, cinematic = false }: {
+export default function BoardScene({ themeId, mapId, game, selected, onSelect, spin, tableStyle, reactions, me, cinematic = false, cameraMode = 'table' }: {
   themeId: string;
   mapId: string;
   game: GameView | null;
@@ -257,6 +333,8 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
   me?: string;
   /** Swoop the camera down for the big moments (CameraDirector). */
   cinematic?: boolean;
+  /** The viewer's chosen view (table, follow, overhead, free). */
+  cameraMode?: CameraMode;
 }) {
   const theme = resolveTheme(themeId, mapId);
   // Re-checked here as well as on the server: this string ends up in CSS.
@@ -296,6 +374,12 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
       {backdrop
         ? <hemisphereLight args={['#ffffff', theme.palette.table, 0.9]} />
         : <Environment kind={env} theme={theme} />}
+      {/* Reflections for everything lit live. The Classic room reflects itself
+          (a Blender panorama, centred on the back wall; three's equirect is
+          centred on +x, hence the quarter turn). */}
+      {env === 'lounge' && theme.id === 'classic' && !backdrop
+        ? <SceneEnv url={ASSETS.classicEnv.url} intensity={0.6} rotation={-Math.PI / 2} />
+        : <SceneEnv intensity={0.45} />}
       <directionalLight castShadow position={[6, 12, 5]} intensity={look.keyIntensity} color={look.keyColor}
         shadow-mapSize={[lowPower ? 1024 : 2048, lowPower ? 1024 : 2048]} shadow-camera-left={-8} shadow-camera-right={8}
         shadow-camera-top={8} shadow-camera-bottom={-8} shadow-bias={-0.0004} />
@@ -320,10 +404,11 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
         onDecline={() => { setDpr(1); setLowPower(true); }}
         onIncline={() => setDpr(Math.min(1.5, window.devicePixelRatio || 1))}
         flipflops={3} onFallback={() => { setDpr(1); setLowPower(true); }} />
-      <CameraFit hud={!!game} fogNear={look.fogNear} fogFar={look.fogFar} />
+      <CameraRig hud={!!game} fogNear={look.fogNear} fogFar={look.fogFar} mode={spin ? 'table' : cameraMode} followId={game?.current} />
       {game && !spin && <CameraDirector game={game} me={me} n={theme.spaces.length} enabled={cinematic} />}
       <OrbitControls makeDefault enablePan={false} enabled={!spin}
         minDistance={6} maxDistance={60} minPolarAngle={0.05} maxPolarAngle={Math.PI / 2.4}
+        enableDamping dampingFactor={0.12}
         target={[0, 0, 0]} />
     </Canvas>
   );

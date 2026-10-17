@@ -8,6 +8,7 @@ import { useMemo, useRef } from 'react';
 import type { Group } from 'three';
 import { getCharacter, type CharacterId } from '../../../../shared/characters.ts';
 import { CharacterFigure, newRig, poseRig, useCharacterMaterials } from './Figure.tsx';
+import { SceneEnv } from '../SceneEnv.tsx';
 
 let webglOk: boolean | null = null;
 function hasWebGL(): boolean {
@@ -55,7 +56,8 @@ export default function CharacterPreview({ character, color }: { character: Char
     <Canvas className="char-preview-canvas" dpr={[1, 2]} gl={{ alpha: true, antialias: true }}
       camera={{ position: [0, 0.34, 1.2], fov: 30 }}
       onCreated={({ camera }) => camera.lookAt(0, 0.24, 0)}>
-      <hemisphereLight args={['#ffffff', '#443355', 1.1]} />
+      <SceneEnv intensity={0.7} />
+      <hemisphereLight args={['#ffffff', '#443355', 0.8]} />
       <directionalLight position={[1.5, 2.5, 2]} intensity={2.2} />
       <directionalLight position={[-2, 1, -1.5]} intensity={0.9} color={color} />
       {/* Remount per pick/colour so the "picked!" hop replays. */}

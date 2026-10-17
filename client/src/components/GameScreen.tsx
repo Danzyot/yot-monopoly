@@ -6,7 +6,7 @@ import type { GameView, RoomView } from '../../../shared/types.ts';
 import { act, call, useConnected, type ChatMsg } from '../net.ts';
 import { useAuth } from '../auth.tsx';
 import { characterEmoji } from '../format.ts';
-import { toastError } from '../toast.tsx';
+import { toast, toastError } from '../toast.tsx';
 import { themeStyle } from '../themeStyle.ts';
 import BoardScene from '../three/BoardScene.tsx';
 import Chat from './Chat.tsx';
@@ -15,6 +15,7 @@ import MusicPlayer from './MusicPlayer.tsx';
 import { useGameSounds } from '../useGameSounds.ts';
 import { useSceneBusy } from '../three/sequence.ts';
 import { useCinematicPref } from '../three/cinematic.ts';
+import { CAMERA_MODES, useCameraMode } from '../three/camera.ts';
 import PlayerMenu from './PlayerMenu.tsx';
 import { TradeModal, TradeOffers, counterDraft, type CounterDraft } from './Trade.tsx';
 import MinigamePanel from './MinigamePanel.tsx';
@@ -64,6 +65,13 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   const reactionsOn = config.features.reactions !== false && config.features.chat;
   const [notify, toggleNotify] = useNotifyPref();
   const [cinematic, toggleCinematic] = useCinematicPref();
+  const [cameraMode, , nextCameraMode] = useCameraMode();
+  const camInfo = CAMERA_MODES.find(m => m.id === cameraMode)!;
+  const cycleCamera = () => {
+    nextCameraMode();
+    const i = (CAMERA_MODES.findIndex(m => m.id === cameraMode) + 1) % CAMERA_MODES.length;
+    toast(`${CAMERA_MODES[i].icon} ${CAMERA_MODES[i].label} view — ${CAMERA_MODES[i].hint}`);
+  };
   useTurnAlerts(game, me, notify, `${room.code} · Yot Monopoly`);
   const over = !!game.winner || room.status === 'finished';
   const closeDialogs = () => {
@@ -74,6 +82,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
     onEscape: closeDialogs,
     onTrade: () => setPortfolio(game.players.find(p => p.id !== me && !p.bankrupt)?.id ?? me),
     onHelp: () => setHelpOpen(o => !o),
+    onCamera: cycleCamera,
   });
   // The poked player's screen gives a little shake.
   const pokedMe = social.poke?.to === me;
@@ -94,7 +103,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
 
   return (
     <div className={`game ${theme.ui ? 'branded' : ''} ${pokedMe ? 'poked' : ''}`} style={themeStyle(theme)}>
-      <div className="scene"><BoardScene themeId={game.themeId} mapId={game.mapId} game={game} selected={selected} onSelect={setSelected} tableStyle={room.style} reactions={pieceReactions} me={me} cinematic={cinematic} /></div>
+      <div className="scene"><BoardScene themeId={game.themeId} mapId={game.mapId} game={game} selected={selected} onSelect={setSelected} tableStyle={room.style} reactions={pieceReactions} me={me} cinematic={cinematic} cameraMode={cameraMode} /></div>
 
       <header className="topbar">
         <div className="tb-left">
@@ -165,6 +174,8 @@ export default function GameScreen({ room, game, me, chat, skew }: {
             title={notify ? 'Turn alerts on — click to turn off' : 'Notify me when it\'s my turn (while this tab is hidden)'}
             aria-pressed={notify}>{notify ? '🔔' : '🔕'}</button>
         )}
+        <button className="dock-btn on cam-btn" onClick={cycleCamera} aria-label={`Camera: ${camInfo.label}. Change view`}
+          title={`Camera: ${camInfo.label} — ${camInfo.hint}. Click (or C) for the next view`}>{camInfo.icon}</button>
         <button className={`dock-btn ${cinematic ? 'on' : ''}`} onClick={toggleCinematic} aria-pressed={cinematic}
           title={cinematic ? 'Cinematic camera on — big moments get a close-up. Click to turn off' : 'Cinematic camera off — click to turn on'}>🎬</button>
         {myPlayer && !over && <ShortcutHelp open={helpOpen} onToggle={() => setHelpOpen(o => !o)} />}

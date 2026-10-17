@@ -13,6 +13,7 @@ import { tileWidth, tokenSpot } from '../layout.ts';
 import { CharacterFigure, Tinter, newRig, poseRig, useCharacterMaterials } from './Figure.tsx';
 import { ReactionBubble } from './ReactionBubble.tsx';
 import { diceSettleAt, holdUntil } from '../sequence.ts';
+import { pieceObjects } from '../camera.ts';
 
 /** An emoji reaction currently showing over a player's character. */
 export interface PieceReaction { emoji: string; seq: number }
@@ -80,6 +81,13 @@ function Piece({ p, slot, count, turn, winner, cheer, n, reaction }: {
   const tinter = useMemo(() => new Tinter(mats), [mats]);
   const anim = useRef<Anim | null>(null);
   const motion = useRef<Motion | null>(null);
+  // The follow camera tracks this piece.
+  useEffect(() => {
+    const g = ref.current;
+    if (!g) return;
+    pieceObjects.set(p.id, g);
+    return () => { if (pieceObjects.get(p.id) === g) pieceObjects.delete(p.id); };
+  }, [p.id]);
 
   // Build the hop path whenever the server position changes.
   const target = tokenSpot(p.position, slot, count, p.inJail, n);

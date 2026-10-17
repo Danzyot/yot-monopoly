@@ -8,6 +8,9 @@ export const ASSETS = {
   "characters": {
     "url": "/models/characters.glb?v=f24fd1c8ee"
   },
+  "classicEnv": {
+    "url": "/models/classic/room-env.webp?v=7283a87788"
+  },
   "classicRoom": {
     "lightmap": "/models/classic/room-light.webp?v=2c302deed5",
     "lightmapIntensity": 27.5562,
