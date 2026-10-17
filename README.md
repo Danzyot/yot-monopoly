@@ -17,10 +17,15 @@ mini-games, music, and a full operator dashboard.
 - **Editions** (skins that work on any map): Classic, **Chog** (built from the Chog
   Poker design system: purple room, Chog pink, Outfit font, the Chog character on the
   board) and **Takeprofit TV** (from the takeprofit-tv site: ink black, amber, colour-bar sets, Big Shoulders + Space Mono, the TPTV logo on the board). Card text always names the board's own spaces.
-- **3D characters** instead of tokens — ten chibi figures (Spiky, Robo, Whiskers,
-  Sir Deed, Merlot, Cosmo, Captain Cash, Shade, Chef Gusto, Zorp), modelled in Blender
-  and tinted in each player's colour. They hop tile by tile, cheer when they buy or earn, slump in jail,
+- **3D characters** instead of tokens — twelve detailed figures modelled in Blender
+  (Snacky, Mr. Stare, Spiky, Robo, Whiskers, Sir Deed, Merlot, Cosmo, Captain Cash,
+  Shade, Chef Gusto, Zorp), with arms that follow every move, tinted in each player's
+  colour. They hop tile by tile, cheer when they buy or earn, slump in jail,
   fall over when bankrupt and dance when they win.
+- **Game feel**: the dice land, then the piece walks, then the result shows; coins fly
+  from payer to payee with the amount floating over each piece; a cinematic camera
+  swoops in for buys, builds, hotels, jail and bankruptcies (🎬 to turn it off); a
+  "Your turn!" splash; End turn right from a property you don't want.
 - **Full rules**: rent (sets, houses, railroads, utilities), doubles and jail, all
   Chance/Community Chest cards, auctions, even building, the 32/12 building supply,
   mortgages, debts, bankruptcy to a player or to the bank (the bank auctions the estate),

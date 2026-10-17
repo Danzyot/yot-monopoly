@@ -152,6 +152,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
       <AuctionPanel game={game} me={me} skew={skew} />
       <MinigamePanel game={game} me={me} skew={skew} />
       <CardPopup game={game} />
+      {myPlayer && <TurnBanner game={game} me={me} />}
       <TurnClock game={game} me={me} skew={skew} />
       <PausedBanner game={game} />
       {theme.logoUrl && <img className="corner-mark" src={theme.logoUrl} alt={theme.name} />}
@@ -388,6 +389,24 @@ function AuctionPanel({ game, me, skew }: { game: GameView; me: string; skew: nu
       </div>
     </div>
   );
+}
+
+/** A big "Your turn!" splash when the turn comes round to you (after the last move has played out). */
+function TurnBanner({ game, me }: { game: GameView; me: string }) {
+  const busy = useSceneBusy();
+  const mine = game.current === me && game.phase === 'roll' && !game.winner && !game.paused;
+  const key = `${game.turnNumber}:${game.current}`;
+  const seen = useRef<string | null>(mine ? key : null);
+  const [show, setShow] = useState<string | null>(null);
+  useEffect(() => {
+    if (!mine || busy || seen.current === key) return;
+    seen.current = key;
+    setShow(key);
+    const t = setTimeout(() => setShow(null), 1500);
+    return () => clearTimeout(t);
+  }, [mine, busy, key]);
+  if (!show) return null;
+  return <div className="turn-banner" aria-hidden><span>Your turn!</span></div>;
 }
 
 function CardPopup({ game }: { game: GameView }) {

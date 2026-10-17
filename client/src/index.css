@@ -1342,3 +1342,21 @@ button.edition:hover:not(:disabled) { transform: translateY(-2px); }
   100% { transform: translateY(-48px) scale(0.95); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .fx-money { animation-duration: 0.01s; animation-delay: 1.2s; } }
+
+/* "Your turn!" splash. */
+.turn-banner { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 9; }
+.turn-banner span {
+  font: 400 clamp(44px, 9vw, 92px)/1 var(--display); color: #fff; letter-spacing: 0.01em;
+  -webkit-text-stroke: 6px #0b2a72; paint-order: stroke fill;
+  text-shadow: 0 8px 0 #0b2a72, 0 18px 40px rgba(0, 0, 0, 0.45);
+  animation: turnBanner 1.5s cubic-bezier(.2, .9, .3, 1) forwards;
+}
+@keyframes turnBanner {
+  0% { transform: scale(0.3) rotate(-8deg); opacity: 0; }
+  18% { transform: scale(1.12) rotate(-3deg); opacity: 1; }
+  30% { transform: scale(0.96) rotate(-2deg); }
+  40% { transform: scale(1) rotate(-2deg); }
+  80% { transform: scale(1) rotate(-2deg); opacity: 1; }
+  100% { transform: scale(1.25) rotate(-2deg); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .turn-banner span { animation-duration: 0.01s; animation-delay: 0.9s; } }
