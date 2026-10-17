@@ -2,7 +2,8 @@
 // the player's colour. Movement is a queue of tile-by-tile hops built from
 // server position changes (teleports — jail, long card jumps — fly straight);
 // on top of that each figure breathes, turns to face where it's going,
-// squashes and stretches through hops, cheers when it buys or earns, slumps
+// squashes and stretches through hops, steps foot over foot, cheers when it
+// buys or earns, sulks when it pays, stamps when it's jailed, fidgets when idle, slumps
 // in jail, lies down and fades when bankrupt, and dances when it wins.
 
 import { useFrame } from '@react-three/fiber';
@@ -21,6 +22,13 @@ export interface PieceReaction { emoji: string; seq: number }
 const HOP_MS = 190;
 const LAND_MS = 150;
 const CHEER_MS = 1000;
+
+/** One-off reactions, with how long each plays. */
+export type EmoteKind = 'cheer' | 'pump' | 'sad' | 'stomp' | 'wave' | 'look';
+const EMOTE_MS: Record<EmoteKind, number> = { cheer: CHEER_MS, pump: 1200, sad: 1600, stomp: 1300, wave: 1800, look: 2400 };
+export interface Emote { kind: EmoteKind; seq: number }
+/** Fade an emote in and out over its run (c = 0–1). */
+const envelope = (c: number) => Math.max(0, Math.min(1, c * 5, (1 - c) * 5));
 /**
  * Figures are modelled ~0.45 tall. From the table camera that is a speck, so
  * they are drawn bigger — as big as the tile allows: full size alone on a
@@ -47,9 +55,12 @@ interface Motion {
   yaw: number;
   phase: number;
   landAt: number;
-  cheerPending: boolean;
-  cheerAt: number;
-  lastCheer: number;
+  pending: EmoteKind | null;
+  emote: EmoteKind | null;
+  emoteAt: number;
+  lastEmote: number;
+  nextIdle: number;
+  hops: number;
   slump: number;
   lie: number;
   grey: number;
@@ -67,8 +78,8 @@ function turnToward(from: number, to: number, rate: number, dt: number): number 
   return from + d * (1 - Math.exp(-rate * dt));
 }
 
-function Piece({ p, slot, count, turn, winner, cheer, n, reaction }: {
-  p: PlayerState; slot: number; count: number; turn: boolean; winner: boolean; cheer: number; n: number;
+function Piece({ p, slot, count, turn, winner, emote, n, reaction }: {
+  p: PlayerState; slot: number; count: number; turn: boolean; winner: boolean; emote?: Emote; n: number;
   reaction?: PieceReaction;
 }) {
   const ref = useRef<Group>(null);
@@ -108,13 +119,14 @@ function Piece({ p, slot, count, turn, winner, cheer, n, reaction }: {
     // Someone already out when we arrive (reload mid-game) is simply not drawn.
     const out = p.bankrupt ? 1 : 0;
     motion.current = {
-      yaw: 0, phase: Math.random() * Math.PI * 2, landAt: 0, cheerPending: false, cheerAt: 0,
-      lastCheer: cheer, slump: p.inJail ? 1 : 0, lie: out, grey: 0, opacity: 1 - out, marker: 0,
+      yaw: 0, phase: Math.random() * Math.PI * 2, landAt: 0, pending: null, emote: null, emoteAt: 0,
+      lastEmote: emote?.seq ?? 0, nextIdle: performance.now() + 5000 + Math.random() * 8000, hops: 0,
+      slump: p.inJail ? 1 : 0, lie: out, grey: 0, opacity: 1 - out, marker: 0,
       scale: figureScale(n, count),
     };
-  } else if (cheer !== motion.current.lastCheer) {
-    motion.current.lastCheer = cheer;
-    motion.current.cheerPending = true;
+  } else if (emote && emote.seq !== motion.current.lastEmote) {
+    motion.current.lastEmote = emote.seq;
+    motion.current.pending = emote.kind;
   }
 
   useFrame((state, delta) => {
@@ -139,6 +151,7 @@ function Piece({ p, slot, count, turn, winner, cheer, n, reaction }: {
       const prevEnd = a.t0 + a.dur;
       const chained = a.t0 > 0 && now - prevEnd < 400;
       const next = a.queue.shift()!;
+      m.hops++;
       const final = a.queue.length === 0;
       a.from = chained ? a.to : [g.position.x, g.position.z];
       a.to = final ? tokenSpot(next, slot, count, p.inJail, n) : tokenSpot(next, 0, 1, false, n);
@@ -155,6 +168,8 @@ function Piece({ p, slot, count, turn, winner, cheer, n, reaction }: {
     let spin = 0;
     let lift = 0;
     let faceYaw: number;
+    let walk: number | undefined;
+    let pump = 0, sad = 0, stomp = 0, wave = 0, look = 0;
 
     if (hopping) {
       const e = k * k * (3 - 2 * k);
@@ -163,7 +178,7 @@ function Piece({ p, slot, count, turn, winner, cheer, n, reaction }: {
       lift = Math.sin(Math.PI * k) * (long ? 1.6 : 0.3);
       // Stretch in the air, a quick squash on take-off.
       squash = 1 + Math.sin(Math.PI * k) * 0.2 - Math.max(0, 1 - k / 0.15) * 0.18;
-      if (long) { handsUp = Math.sin(Math.PI * k); spin = k * Math.PI * 2; }
+      if (long) { handsUp = Math.sin(Math.PI * k); spin = k * Math.PI * 2; } else walk = k;
       faceYaw = Math.atan2(a.to[0] - a.from[0], a.to[1] - a.from[1]);
       m.landAt = now + a.dur * (1 - k);
       holdUntil(m.landAt + LAND_MS + 250);
@@ -179,7 +194,16 @@ function Piece({ p, slot, count, turn, winner, cheer, n, reaction }: {
       const land = (now - m.landAt) / LAND_MS;
       if (m.landAt && land < 1) squash = 1 - Math.sin(Math.PI * land) * 0.22;
 
-      if (m.cheerPending && !p.bankrupt) { m.cheerPending = false; m.cheerAt = now; }
+      // Reactions start once the piece has landed; idle fidgets fill the quiet.
+      if (m.pending && !p.bankrupt) { m.emote = m.pending; m.pending = null; m.emoteAt = now; }
+      const running = m.emote && now - m.emoteAt < EMOTE_MS[m.emote];
+      if (!running) m.emote = null;
+      if (!running && !winner && !p.bankrupt && !p.inJail && now > m.nextIdle) {
+        m.emote = Math.random() < 0.6 ? 'look' : 'wave';
+        m.emoteAt = now;
+        m.nextIdle = now + 9000 + Math.random() * 12000;
+      }
+      const c = m.emote ? (now - m.emoteAt) / EMOTE_MS[m.emote] : 0;
       if (winner && !p.bankrupt) {
         // Endless victory dance: bouncing, arms up, twirling.
         const c = (time % 0.9) / 0.9;
@@ -187,13 +211,26 @@ function Piece({ p, slot, count, turn, winner, cheer, n, reaction }: {
         squash = 1 + lift * 0.7 - Math.max(0, 1 - Math.min(c, 1 - c) / 0.08) * 0.15;
         handsUp = 1;
         spin = time * 2.5;
-      } else if (m.cheerAt && now - m.cheerAt < CHEER_MS) {
+      } else if (m.emote === 'cheer') {
         // Two happy jumps with a twirl.
-        const c = (now - m.cheerAt) / CHEER_MS;
         lift = Math.abs(Math.sin(Math.PI * 2 * c)) * 0.22 * (1 - c * 0.3);
         squash = 1 + lift * 0.8;
         handsUp = Math.sin(Math.PI * c);
         spin = Math.PI * 2 * (c * c * (3 - 2 * c));
+      } else if (m.emote === 'pump') {
+        // "Yes!": fist pumps and little bounces.
+        pump = envelope(c);
+        lift = Math.abs(Math.sin(Math.PI * 4 * c)) * 0.06 * pump;
+        squash = 1 + lift * 0.9;
+      } else if (m.emote === 'sad') {
+        sad = envelope(c);
+        squash = 1 - 0.05 * sad;
+      } else if (m.emote === 'stomp') {
+        stomp = c;
+      } else if (m.emote === 'wave') {
+        wave = envelope(c);
+      } else if (m.emote === 'look') {
+        look = Math.sin(c * Math.PI * 2) * 0.75 * envelope(c * 1.2);
       }
     }
     g.position.y = lift;
@@ -213,7 +250,10 @@ function Piece({ p, slot, count, turn, winner, cheer, n, reaction }: {
     m.scale = approach(m.scale, figureScale(n, count), 6, dt);
     scaleRef.current?.scale.setScalar(m.scale);
 
-    poseRig(rig, { time, phase: m.phase, slump: m.slump, lie: m.lie, handsUp, squash });
+    poseRig(rig, {
+      time, phase: m.phase, slump: m.slump, lie: m.lie, handsUp, squash,
+      walk, stride: m.hops % 2 ? 1 : -1, look, wave, pump, sad, stomp,
+    });
 
     // Whose turn: a bobbing, spinning arrow above the head and a ground ring.
     m.marker = approach(m.marker, turn && !winner && !p.bankrupt ? 1 : 0, 8, dt);
@@ -300,25 +340,32 @@ export function Pieces({ game, n, reactions }: {
     return m;
   }, [players]);
 
-  // Happy moments come from diffing consecutive views: a deed that is newly
-  // theirs (bought, won at auction, traded for) or cash that went up (rent
-  // received, GO, a lucky card). Each bumps that player's cheer counter.
-  const prev = useRef<{ cash: Map<string, number>; owner: Map<number, string> } | null>(null);
-  const [cheers, setCheers] = useState<Record<string, number>>({});
+  // Reactions come from diffing consecutive views: a deed newly theirs or
+  // cash coming in → a cheer (or a fist pump); cash going out → a sad slump;
+  // just sent to jail → a stomping tantrum.
+  const prev = useRef<{ cash: Map<string, number>; owner: Map<number, string>; jail: Set<string> } | null>(null);
+  const [emotes, setEmotes] = useState<Record<string, Emote>>({});
   useEffect(() => {
     const cash = new Map(players.map(p => [p.id, p.cash]));
     const owner = new Map(Object.entries(owned).map(([k, o]) => [Number(k), o.owner]));
+    const jail = new Set(players.filter(p => p.inJail).map(p => p.id));
     const was = prev.current;
-    prev.current = { cash, owner };
+    prev.current = { cash, owner, jail };
     if (!was) return;
-    const happy = players.filter(p => !p.bankrupt && (
-      p.cash > (was.cash.get(p.id) ?? p.cash)
-      || [...owner].some(([i, o]) => o === p.id && was.owner.get(i) !== p.id)
-    ));
-    if (!happy.length) return;
-    setCheers(c => {
-      const next = { ...c };
-      for (const p of happy) next[p.id] = (next[p.id] ?? 0) + 1;
+    const picks: [string, EmoteKind][] = [];
+    for (const p of players) {
+      if (p.bankrupt) continue;
+      const before = was.cash.get(p.id) ?? p.cash;
+      const bought = [...owner].some(([i, o]) => o === p.id && was.owner.get(i) !== p.id);
+      if (p.inJail && !was.jail.has(p.id)) picks.push([p.id, 'stomp']);
+      else if (bought) picks.push([p.id, 'cheer']);
+      else if (p.cash > before) picks.push([p.id, p.cash - before >= 150 ? 'cheer' : 'pump']);
+      else if (p.cash < before) picks.push([p.id, 'sad']);
+    }
+    if (!picks.length) return;
+    setEmotes(e => {
+      const next = { ...e };
+      for (const [id, kind] of picks) next[id] = { kind, seq: (e[id]?.seq ?? 0) + 1 };
       return next;
     });
   }, [players, owned]);
@@ -329,7 +376,7 @@ export function Pieces({ game, n, reactions }: {
         const s = slots.get(p.id) ?? { slot: 0, count: 1 };
         return (
           <Piece key={p.id} p={p} slot={s.slot} count={s.count} n={n}
-            turn={p.id === current && !winner} winner={p.id === winner} cheer={cheers[p.id] ?? 0}
+            turn={p.id === current && !winner} winner={p.id === winner} emote={emotes[p.id]}
             reaction={reactions?.[p.id]} />
         );
       })}

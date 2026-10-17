@@ -18,9 +18,11 @@ export interface Rig {
   head: Group | null;
   handL: Group | null;
   handR: Group | null;
+  footL: Group | null;
+  footR: Group | null;
 }
 
-export const newRig = (): Rig => ({ pose: null, head: null, handL: null, handR: null });
+export const newRig = (): Rig => ({ pose: null, head: null, handL: null, handR: null, footL: null, footR: null });
 
 /** Per-figure materials in the player's colour, freed when the figure goes. */
 export function useCharacterMaterials(id: CharacterId, color: string): Mats {
@@ -32,6 +34,10 @@ export function useCharacterMaterials(id: CharacterId, color: string): Mats {
 const HAND_REST: [number, number, number] = [0.11, 0.115, 0.015];
 const HAND_UP: [number, number, number] = [0.125, 0.37, 0.02];
 const HAND_DROOP: [number, number, number] = [0.085, 0.07, 0.035];
+/** Where each foot rests (its pivot is the middle of the sole). */
+const FOOT_REST: [number, number, number] = [0.042, 0, 0.012];
+/** Leg ends this far above the foot pivot. */
+const ANKLE = 0.03;
 
 /**
  * A character on the rig. The modelled version (tools/blender/characters.py)
@@ -46,35 +52,52 @@ export function CharacterFigure(props: { id: CharacterId; mats: Mats; rig: Rig }
   );
 }
 
-const PART_NAMES = ['Body', 'Head', 'HandL', 'HandR'] as const;
+const PART_NAMES = ['Body', 'Head', 'HandL', 'HandR', 'FootL', 'FootR'] as const;
 
-// ---- arms ------------------------------------------------------------------
-// Characters with `arms` get a limb from each shoulder to its hand. The hands
-// are animated by poseRig; each frame the limbs are re-aimed at them.
+// ---- limbs -----------------------------------------------------------------
+// Characters with `arms` / `legs` get a limb from each shoulder to its hand and
+// from each hip to its foot. Hands and feet are animated by poseRig; each
+// frame the limbs are re-aimed at them, so they follow every move.
 
-const ARM_GEO = new CylinderGeometry(1, 0.85, 1, 10, 1, true);
+const LIMB_GEO = new CylinderGeometry(1, 0.85, 1, 10, 1, true);
 const UP = new Vector3(0, 1, 0);
 const tmpDir = new Vector3();
 const tmpQ = new Quaternion();
 
-function ArmLinks({ arms, mats, rig }: { arms: NonNullable<Look['arms']>; mats: Mats; rig: Rig }) {
-  const left = useRef<Mesh>(null);
-  const right = useRef<Mesh>(null);
+function aim(mesh: Mesh, ax: number, ay: number, az: number, bx: number, by: number, bz: number, radius: number) {
+  tmpDir.set(bx - ax, by - ay, bz - az);
+  const len = Math.max(0.001, tmpDir.length());
+  mesh.position.set(ax + tmpDir.x / 2, ay + tmpDir.y / 2, az + tmpDir.z / 2);
+  mesh.quaternion.copy(tmpQ.setFromUnitVectors(UP, tmpDir.divideScalar(len)));
+  mesh.scale.set(radius, len, radius);
+}
+
+function Limbs({ look, mats, rig }: { look: Look; mats: Mats; rig: Rig }) {
+  const armL = useRef<Mesh>(null);
+  const armR = useRef<Mesh>(null);
+  const legL = useRef<Mesh>(null);
+  const legR = useRef<Mesh>(null);
   useFrame(() => {
-    for (const [mesh, hand, side] of [[left.current, rig.handL, 1], [right.current, rig.handR, -1]] as const) {
-      if (!mesh || !hand) continue;
-      const sx = arms.shoulder[0] * side, sy = arms.shoulder[1], sz = arms.shoulder[2];
-      tmpDir.set(hand.position.x - sx, hand.position.y - sy, hand.position.z - sz);
-      const len = Math.max(0.001, tmpDir.length());
-      mesh.position.set(sx + tmpDir.x / 2, sy + tmpDir.y / 2, sz + tmpDir.z / 2);
-      mesh.quaternion.copy(tmpQ.setFromUnitVectors(UP, tmpDir.divideScalar(len)));
-      mesh.scale.set(arms.radius, len, arms.radius);
+    const { arms, legs } = look;
+    if (arms) {
+      for (const [mesh, hand, side] of [[armL.current, rig.handL, 1], [armR.current, rig.handR, -1]] as const) {
+        if (!mesh || !hand) continue;
+        aim(mesh, arms.shoulder[0] * side, arms.shoulder[1], arms.shoulder[2], hand.position.x, hand.position.y, hand.position.z, arms.radius);
+      }
+    }
+    if (legs) {
+      for (const [mesh, foot, side] of [[legL.current, rig.footL, 1], [legR.current, rig.footR, -1]] as const) {
+        if (!mesh || !foot) continue;
+        aim(mesh, legs.hip[0] * side, legs.hip[1], legs.hip[2], foot.position.x, foot.position.y + ANKLE, foot.position.z - 0.006, legs.radius);
+      }
     }
   });
   return (
     <>
-      <mesh ref={left} geometry={ARM_GEO} material={mats[arms.mat]} castShadow />
-      <mesh ref={right} geometry={ARM_GEO} material={mats[arms.mat]} castShadow />
+      {look.arms && <mesh ref={armL} geometry={LIMB_GEO} material={mats[look.arms.mat]} castShadow />}
+      {look.arms && <mesh ref={armR} geometry={LIMB_GEO} material={mats[look.arms.mat]} castShadow />}
+      {look.legs && <mesh ref={legL} geometry={LIMB_GEO} material={mats[look.legs.mat]} castShadow />}
+      {look.legs && <mesh ref={legR} geometry={LIMB_GEO} material={mats[look.legs.mat]} castShadow />}
     </>
   );
 }
@@ -103,7 +126,13 @@ function ModelFigure({ id, mats, rig }: { id: CharacterId; mats: Mats; rig: Rig 
   return (
     <group ref={g => { rig.pose = g; }}>
       <primitive object={parts.Body} />
-      {look.arms && <ArmLinks arms={look.arms} mats={mats} rig={rig} />}
+      <Limbs look={look} mats={mats} rig={rig} />
+      <group ref={g => { rig.footL = g; }} position={[FOOT_REST[0], FOOT_REST[1], FOOT_REST[2]]}>
+        <primitive object={parts.FootL} />
+      </group>
+      <group ref={g => { rig.footR = g; }} position={[-FOOT_REST[0], FOOT_REST[1], FOOT_REST[2]]}>
+        <primitive object={parts.FootR} />
+      </group>
       <group ref={g => { rig.handL = g; }} position={[HAND_REST[0], HAND_REST[1], HAND_REST[2]]}>
         <primitive object={parts.HandL} />
       </group>
@@ -123,9 +152,11 @@ function DrawnFigure({ id, mats, rig }: { id: CharacterId; mats: Mats; rig: Rig 
     <group ref={g => { rig.pose = g; }}>
       {look.body ? look.body(mats) : <DefaultBody m={mats} />}
       {look.extras?.(mats)}
-      {look.arms && <ArmLinks arms={look.arms} mats={mats} rig={rig} />}
-      {[-1, 1].map(side => (
-        <Part key={side} g={GEO.sphere} m={mats[look.foot]} p={[side * 0.045, 0.018, 0.018]} s={[0.036, 0.022, 0.052]} cast />
+      <Limbs look={look} mats={mats} rig={rig} />
+      {([[1, 'footL'], [-1, 'footR']] as const).map(([side, key]) => (
+        <group key={side} ref={g => { rig[key] = g; }} position={[side * FOOT_REST[0], FOOT_REST[1], FOOT_REST[2]]}>
+          <Part g={GEO.sphere} m={mats[look.foot]} p={[side * 0.003, 0.018, 0.006]} s={[0.036, 0.022, 0.052]} cast />
+        </group>
       ))}
       <group ref={g => { rig.handL = g; }} position={[HAND_REST[0], HAND_REST[1], HAND_REST[2]]}>
         <Part g={GEO.sphere} m={mats[look.hand]} s={0.029} />
@@ -155,35 +186,103 @@ export interface PoseInput {
   handsUp: number;
   /** Vertical squash-and-stretch factor; width compensates to keep volume. */
   squash: number;
+  /** Mid-step: progress 0–1 through one hop, and which foot leads (1 left, -1 right). */
+  walk?: number;
+  stride?: 1 | -1;
+  /** Head turn (radians, + to its left). */
+  look?: number;
+  /** 0–1: waving with the right hand. */
+  wave?: number;
+  /** 0–1: fist pumps with the left hand. */
+  pump?: number;
+  /** 0–1: dejected (paid out): head down, shoulders in. */
+  sad?: number;
+  /** 0–1 through a stomping tantrum (sent to jail). */
+  stomp?: number;
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 export function poseRig(rig: Rig, o: PoseInput) {
-  const { pose, head, handL, handR } = rig;
+  const { pose, head, handL, handR, footL, footR } = rig;
   if (!pose || !head || !handL || !handR) return;
   const alive = 1 - o.lie;
+  const sad = o.sad ?? 0;
+  const wave = o.wave ?? 0;
+  const pump = o.pump ?? 0;
+  const stomp = o.stomp ?? 0;
+  const walking = o.walk !== undefined;
+  const w = o.walk ?? 0;
+  const stride = o.stride ?? 1;
+  const step = walking ? Math.sin(Math.PI * w) : 0;
   const breathe = Math.sin(o.time * 2.4 + o.phase) * alive * (1 - o.slump * 0.5);
-  const sy = o.squash * (1 + breathe * 0.025);
+  // Stamping shakes the whole body a little on each impact.
+  const stompHit = stomp > 0 ? Math.max(0, Math.sin(stomp * Math.PI * 6)) : 0;
+  const sy = o.squash * (1 + breathe * 0.025) * (1 - stompHit * 0.05);
   const sxz = 1 / Math.sqrt(sy);
   pose.scale.set(sxz, sy, sxz);
   // Lean forward when slumped; fall back flat when out of the game. The pivot
   // is at the feet, so lift a little while lying to keep the body above the board.
-  pose.rotation.x = o.slump * 0.32 - o.lie * (Math.PI / 2);
+  pose.rotation.x = o.slump * 0.32 + sad * 0.16 - o.lie * (Math.PI / 2) + step * 0.08;
+  // A waddle from side to side while walking.
+  pose.rotation.z = step * 0.07 * stride + Math.sin(stomp * Math.PI * 6) * 0.04 * (stomp > 0 ? 1 : 0);
   pose.position.y = o.lie * 0.075;
   pose.position.z = o.lie * 0.2;
 
-  head.position.y = HEAD_Y - o.slump * 0.025 + breathe * 0.004;
-  head.rotation.x = o.slump * 0.45 + Math.sin(o.time * 1.3 + o.phase) * 0.04 * alive;
-  head.rotation.z = Math.sin(o.time * 0.9 + o.phase * 2) * 0.05 * alive * (1 - o.handsUp);
+  head.position.y = HEAD_Y - o.slump * 0.025 - sad * 0.012 + breathe * 0.004;
+  head.rotation.x = o.slump * 0.45 + sad * 0.42 + Math.sin(o.time * 1.3 + o.phase) * 0.04 * alive - step * 0.05;
+  head.rotation.y = (o.look ?? 0) * alive + (sad > 0 ? Math.sin(o.time * 7) * 0.12 * sad : 0);
+  head.rotation.z = Math.sin(o.time * 0.9 + o.phase * 2) * 0.05 * alive * (1 - o.handsUp) - step * 0.05 * stride;
 
   const swing = Math.sin(o.time * 2.4 + o.phase) * 0.012 * alive;
-  const wave = Math.sin(o.time * 18) * 0.02 * o.handsUp;
+  const flap = Math.sin(o.time * 18) * 0.02 * o.handsUp;
   for (const [hand, side] of [[handL, 1], [handR, -1]] as const) {
-    const base = HAND_REST.map((v, k) => lerp(v, HAND_DROOP[k], o.slump));
+    const droop = Math.min(1, o.slump + sad * 0.8);
+    const base = HAND_REST.map((v, k) => lerp(v, HAND_DROOP[k], droop));
     const p = base.map((v, k) => lerp(v, HAND_UP[k], o.handsUp));
-    hand.position.set(side * p[0] + side * wave, p[1] + swing * side, p[2]);
-    hand.rotation.z = side * o.handsUp * 0.6;
+    let x = side * p[0] + side * flap;
+    let y = p[1] + swing * side;
+    // Arms swing against the legs while walking.
+    let z = p[2] - step * 0.035 * stride * side;
+    let rz = side * o.handsUp * 0.6;
+    if (side === -1 && wave > 0) {
+      x = lerp(x, -0.135 + Math.sin(o.time * 14) * 0.03, wave);
+      y = lerp(y, 0.33, wave);
+      z = lerp(z, 0.05, wave);
+      rz = lerp(rz, -0.5 + Math.sin(o.time * 14) * 0.4, wave);
+    }
+    if (side === 1 && pump > 0) {
+      const beat = Math.abs(Math.sin(o.time * 11));
+      x = lerp(x, 0.1, pump);
+      y = lerp(y, 0.26 + beat * 0.09, pump);
+      z = lerp(z, 0.03, pump);
+    }
+    if (stomp > 0) {
+      // Fists down and in, shaking.
+      x = lerp(x, side * 0.095, Math.min(1, stomp * 4));
+      y = lerp(y, 0.09 + stompHit * 0.015, Math.min(1, stomp * 4));
+    }
+    hand.position.set(x, y, z);
+    hand.rotation.z = rz;
+  }
+
+  for (const [foot, side] of [[footL, 1], [footR, -1]] as const) {
+    if (!foot) continue;
+    let x = side * FOOT_REST[0], y = FOOT_REST[1], z = FOOT_REST[2];
+    if (walking) {
+      // The leading foot reaches forward and lifts; the other pushes off behind.
+      const lead = side === stride;
+      y += step * (lead ? 0.034 : 0.012);
+      z += step * (lead ? 0.038 : -0.024);
+      foot.rotation.x = step * (lead ? -0.35 : 0.3);
+    } else {
+      foot.rotation.x = 0;
+    }
+    if (side === -1 && stomp > 0) {
+      // Right foot stamps three times.
+      y += Math.max(0, Math.sin(stomp * Math.PI * 6 + Math.PI)) * 0.045;
+    }
+    foot.position.set(x, y, z);
   }
 }
 

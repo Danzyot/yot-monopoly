@@ -10,6 +10,7 @@ export default function Header() {
     <header className="site-header">
       <Link to="/" className="brand"><span className="brand-hat">🎩</span> {BRAND.name}</Link>
       <nav className="row">
+        <Link className="navlink hide-sm" to="/characters">Characters</Link>
         {config.features.leaderboard && <Link className="navlink" to="/leaderboard">Leaderboard</Link>}
         {config.inviteUrl && <a className="navlink" href={config.inviteUrl} target="_blank" rel="noreferrer">Discord</a>}
         {profile?.isAdmin && <Link className="navlink accent" to="/admin">Dashboard</Link>}

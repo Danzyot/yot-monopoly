@@ -280,8 +280,10 @@ function CameraRig({ hud, fogNear, fogFar, mode, followId }: {
         const out = tmpOut.set(p.x, 0, p.z);
         if (out.lengthSq() < 0.01) out.set(0, 0, 1);
         out.normalize();
-        pos = tmpPos.set(p.x + out.x * 4.6, 3.6 + p.y * 0.3, p.z + out.z * 4.6);
-        target = tmpTarget.set(p.x * 0.45, 0.35, p.z * 0.45);
+        // Close enough to see the character, high enough to keep the board ahead in view;
+        // the target sits just past the piece so it lands mid-frame, clear of the HUD.
+        pos = tmpPos.set(p.x + out.x * 3.4, 3.1 + p.y * 0.3, p.z + out.z * 3.4);
+        target = tmpTarget.set(p.x * 0.72, 0.1, p.z * 0.72);
       } else {
         // Nearly straight down; the slight tilt keeps the board square to the screen (straight down has no 'up').
         pos = tmpPos.set(0, 17.5 * Math.max(1, 1 / aspect), 1.6);

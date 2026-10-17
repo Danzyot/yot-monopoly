@@ -31,7 +31,13 @@ from mathutils import Matrix  # noqa: E402
 import blib  # noqa: E402
 import detailed  # noqa: E402
 
-PART_PIVOTS = {'Body': (0, 0, 0), 'Head': (0, 0.29, 0), 'HandL': (0.11, 0.115, 0.015), 'HandR': (-0.11, 0.115, 0.015)}
+PART_PIVOTS = {'Body': (0, 0, 0), 'Head': (0, 0.29, 0), 'HandL': (0.11, 0.115, 0.015), 'HandR': (-0.11, 0.115, 0.015),
+               'FootL': (0.042, 0.0, 0.012), 'FootR': (-0.042, 0.0, 0.012)}
+# Body pieces that belong to a foot (they step with it) and to a leg (the game
+# draws legs live, hip to ankle, so the static ones are dropped).
+FOOT_TOKENS = ('Shoe', 'Sole', 'Toe', 'Lace', 'Boot', 'Paw', 'Tabi', 'Foot', 'Slipper', 'Tread', 'Strap', 'Cuff')
+LEG_TOKENS = ('_Leg',)
+LEG_MATS = {'snacky': 'denim', 'starer': 'skin', 'robot': 'metal', 'knight': 'metal', 'astronaut': 'white', 'pirate': 'ink', 'chef': 'c1'}
 FUSE_MATS = {'main', 'skin', 'white', 'metal', 'wood'}
 VOXEL = 0.0024          # remesh resolution (figures are ~0.45 tall)
 MIN_FUSE_THICKNESS = 0.022
@@ -201,7 +207,29 @@ def build_detailed(cid, spec):
     """A hand-built character (detailed.py): fuse what is flagged, per material."""
     mats = materials_for(cid, spec)
     nodes = []
-    for part, objs in detailed.BUILDERS[cid](mats).items():
+    built = detailed.BUILDERS[cid](mats)
+    # Split the feet off the body (left = +x) and drop the static legs.
+    body = built['Body']
+    blib.realize(body)
+    feet = {'FootL': [], 'FootR': []}
+    keep = []
+    for o in body:
+        tail = o.name.split('_', 1)[1] if '_' in o.name else o.name
+        if any(t in o.name for t in LEG_TOKENS):
+            bpy.data.objects.remove(o)
+            continue
+        if any(tail.startswith(t) or t in tail for t in FOOT_TOKENS):
+            cx = sum((o.matrix_world @ v.co).x for v in o.data.vertices) / max(1, len(o.data.vertices))
+            side = 'FootL' if cx > 0 else 'FootR'
+            px, py, pz = PART_PIVOTS[side]
+            # Re-centre on the foot pivot (game -> blender: x, -z, y).
+            o.data.transform(Matrix.Translation((-px, pz, -py)))
+            feet[side].append(o)
+        else:
+            keep.append(o)
+    built['Body'] = keep
+    built.update({k: v for k, v in feet.items() if v})
+    for part, objs in built.items():
         blib.realize(objs)
         groups: dict[str, list] = {}
         loose = []
@@ -257,6 +285,11 @@ def preview(nodes_by_char, path, close=False):
             part = n.name.split('_', 1)[1]
             px, py, pz = PART_PIVOTS[part]
             n.location = blib.V(x + px, py, pz)
+        if cid in detailed.LEGS:
+            (hx, hy, hz), rad = detailed.LEGS[cid]
+            for side, foot in ((1, PART_PIVOTS['FootL']), (-1, PART_PIVOTS['FootR'])):
+                blib.tube(f'PreviewLeg{cid}{side}', [(x + hx * side, hy, hz), (x + foot[0], foot[1] + 0.03, foot[2])], rad,
+                          bpy.data.materials.get(f'{cid}:{LEG_MATS.get(cid, "main")}'), segs=10)
         if cid in detailed.ARMS:
             (sx, sy, sz), rad = detailed.ARMS[cid]
             skin = bpy.data.materials.get(f'{cid}:skin')

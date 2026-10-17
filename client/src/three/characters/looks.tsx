@@ -27,6 +27,8 @@ export interface Look {
   right?: (m: Mats) => ReactNode;
   /** Real arms: a limb from each shoulder (left side, +x; mirrored) to the hand, following the rig. */
   arms?: { shoulder: [number, number, number]; radius: number; mat: MatKey };
+  /** Real legs: hip (left side; mirrored) to the stepping foot. Absent: the body hides them (robes). */
+  legs?: { hip: [number, number, number]; radius: number; mat: MatKey };
 }
 
 const PI = Math.PI;
@@ -53,6 +55,7 @@ const SPIKES: [number, number, number, number, number][] = [
 const spiky: Look = {
   colors: { skin: '#f6dcb4', accent: '#e0262d', c1: '#2f9e4f' },
   arms: { shoulder: [0.08, 0.165, 0], radius: 0.017, mat: 'main' },
+  legs: { hip: [0.034, 0.07, 0], radius: 0.022, mat: 'main' },
   hand: 'white',
   foot: 'accent',
   extras: m => <Part g={GEO.sphere} m={m.skin} p={[0, 0.11, 0.045]} s={[0.058, 0.066, 0.036]} />,
@@ -74,6 +77,7 @@ const spiky: Look = {
 const robot: Look = {
   colors: { glow: '#63f3ff' },
   arms: { shoulder: [0.085, 0.165, 0], radius: 0.012, mat: 'metal' },
+  legs: { hip: [0.034, 0.068, 0], radius: 0.014, mat: 'metal' },
   hand: 'metal',
   foot: 'metal',
   body: m => (
@@ -103,6 +107,7 @@ const robot: Look = {
 const cat: Look = {
   colors: { accent: '#ff8fb3', c1: '#7bc043' },
   arms: { shoulder: [0.08, 0.165, 0], radius: 0.017, mat: 'main' },
+  legs: { hip: [0.034, 0.07, 0], radius: 0.022, mat: 'main' },
   hand: 'main',
   foot: 'white',
   extras: m => (
@@ -133,6 +138,7 @@ const cat: Look = {
 const knight: Look = {
   colors: { accent: '#f4c542', c1: '#d23a2e' },
   arms: { shoulder: [0.08, 0.165, 0], radius: 0.017, mat: 'metal' },
+  legs: { hip: [0.034, 0.07, 0], radius: 0.024, mat: 'metal' },
   hand: 'metal',
   foot: 'metal',
   extras: m => (
@@ -203,6 +209,7 @@ const wizard: Look = {
 const astronaut: Look = {
   colors: { accent: '#ff7a1a', glass: '#141a2e' },
   arms: { shoulder: [0.08, 0.165, 0], radius: 0.018, mat: 'white' },
+  legs: { hip: [0.034, 0.07, 0], radius: 0.026, mat: 'white' },
   hand: 'white',
   foot: 'white',
   body: m => <DefaultBody m={m} mat="white" />,
@@ -229,6 +236,7 @@ const astronaut: Look = {
 const pirate: Look = {
   colors: { accent: '#f4c542', hair: '#5a3a22', c3: '#3b6b8c' },
   arms: { shoulder: [0.08, 0.165, 0], radius: 0.018, mat: 'main' },
+  legs: { hip: [0.034, 0.068, 0], radius: 0.024, mat: 'ink' },
   hand: 'skin',
   foot: 'ink',
   extras: m => (
@@ -262,6 +270,7 @@ const pirate: Look = {
 const ninja: Look = {
   colors: { accent: '#e0262d', c3: '#4a2e1c' },
   arms: { shoulder: [0.08, 0.165, 0], radius: 0.016, mat: 'main' },
+  legs: { hip: [0.034, 0.07, 0], radius: 0.023, mat: 'main' },
   hand: 'main',
   foot: 'ink',
   extras: m => (
@@ -289,6 +298,7 @@ const ninja: Look = {
 const chef: Look = {
   colors: { accent: '#e0262d', c1: '#33333d', c2: '#f19a8e', c3: '#4a7a3a' },
   arms: { shoulder: [0.08, 0.165, 0], radius: 0.018, mat: 'white' },
+  legs: { hip: [0.034, 0.068, 0], radius: 0.024, mat: 'c1' },
   hand: 'skin',
   foot: 'ink',
   extras: m => (
@@ -325,6 +335,7 @@ const chef: Look = {
 const alien: Look = {
   colors: { glow: '#b6ff5c' },
   arms: { shoulder: [0.062, 0.16, 0], radius: 0.013, mat: 'main' },
+  legs: { hip: [0.034, 0.07, 0], radius: 0.018, mat: 'main' },
   hand: 'main',
   foot: 'main',
   body: m => <Part g={GEO.sphere} m={m.main} p={[0, 0.11, 0]} s={[0.07, 0.09, 0.065]} cast />,
@@ -353,6 +364,7 @@ const snacky: Look = {
   hand: 'skin',
   foot: 'main',
   arms: { shoulder: [0.085, 0.165, 0], radius: 0.019, mat: 'skin' },
+  legs: { hip: [0.033, 0.075, 0], radius: 0.025, mat: 'denim' },
   body: m => (
     <>
       <Part g={GEO.sphere} m={m.cloth} p={[0, 0.125, 0]} s={[0.082, 0.085, 0.066]} cast />
@@ -384,6 +396,7 @@ const starer: Look = {
   hand: 'skin',
   foot: 'main',
   arms: { shoulder: [0.072, 0.16, 0], radius: 0.018, mat: 'skin' },
+  legs: { hip: [0.036, 0.062, 0.002], radius: 0.024, mat: 'skin' },
   body: m => (
     <>
       <Part g={GEO.sphere} m={m.skin} p={[0, 0.12, 0]} s={[0.08, 0.095, 0.07]} cast />

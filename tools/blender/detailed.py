@@ -175,11 +175,15 @@ def sneakers(cid, m, out, shoe='main'):
 
 def mitten(cid, part, m, mat, side):
     """A soft hand with a thumb, palm turned in."""
-    return [
+    out = [
         ell(f'{cid}_{part}Palm', (0, 0, 0), (0.024, 0.027, 0.02), m[mat], fuse=True),
         ell(f'{cid}_{part}Thumb', (-side * 0.018, 0.006, 0.012), (0.009, 0.014, 0.009), m[mat], r=(0.3, 0, side * 0.6), fuse=True),
         ell(f'{cid}_{part}Fingers', (0, -0.012, 0.004), (0.022, 0.018, 0.019), m[mat], fuse=True),
     ]
+    # Three finger tips, so the hand reads as a hand and not a ball.
+    for k, dx in enumerate((-0.012, 0.0, 0.012)):
+        out.append(ell(f'{cid}_{part}Tip{k}', (dx, -0.026, 0.006 - abs(dx) * 0.2), (0.0085, 0.012, 0.0095), m[mat], fuse=True))
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -284,9 +288,10 @@ def snacky(m):
     for k in range(16):
         a = math.pi * (0.15 + 0.7 * rng.random()) * (1 if k % 2 else -1) + math.pi / 2  # mostly sides/back
         side = Vector((math.cos(a), 0.0, -abs(math.sin(a)) * 0.9 - 0.1)).normalized()
-        root = Vector((side.x * 0.105, 0.05 + rng.random() * 0.03, side.z * 0.105))
-        mid = root + side * 0.02 + Vector((0, -0.035, -0.008))
-        tip = mid + side * 0.022 + Vector((rng.normal(0, 0.008), -0.03 - rng.random() * 0.02, -0.01))
+        root = Vector((side.x * 0.1, 0.05 + rng.random() * 0.03, side.z * 0.1))
+        # Falling down the back and sides, hugging the head, the tips only just flicking out.
+        mid = root + side * 0.01 + Vector((0, -0.04, 0))
+        tip = mid + side * 0.008 + Vector((rng.normal(0, 0.006), -0.035 - rng.random() * 0.015, 0))
         clumps.append(([root, mid, tip], 0.024 + rng.random() * 0.008))
     for i, (pts, r0) in enumerate(clumps):
         head.append(strand(f'{cid}_Hair{i}', pts, r0, 0.004, m['hair'], fuse=True, ring=10))
@@ -769,3 +774,15 @@ BUILDERS.update({'spiky': spiky, 'robot': robot, 'cat': cat, 'knight': knight, '
                  'astronaut': astronaut, 'pirate': pirate, 'ninja': ninja, 'chef': chef, 'alien': alien})
 ARMS.update({cid: ((0.08, 0.165, 0.0), 0.017) for cid in ('spiky', 'cat', 'knight', 'astronaut', 'pirate', 'ninja', 'chef')})
 ARMS.update({'robot': ((0.085, 0.165, 0.0), 0.012), 'wizard': ((0.065, 0.17, 0.0), 0.02), 'alien': ((0.062, 0.16, 0.0), 0.013)})
+
+
+# Hips and leg radius (mirrors `legs` in looks.tsx): the game draws each leg
+# live from the hip to its stepping foot; used here only for previews.
+LEGS = {
+    'snacky': ((0.033, 0.075, 0.0), 0.025), 'starer': ((0.036, 0.062, 0.002), 0.024),
+    'spiky': ((0.034, 0.07, 0.0), 0.022), 'robot': ((0.034, 0.068, 0.0), 0.014),
+    'cat': ((0.034, 0.07, 0.0), 0.022), 'knight': ((0.034, 0.07, 0.0), 0.024),
+    'astronaut': ((0.034, 0.07, 0.0), 0.026), 'pirate': ((0.034, 0.068, 0.0), 0.024),
+    'ninja': ((0.034, 0.07, 0.0), 0.023), 'chef': ((0.034, 0.068, 0.0), 0.024),
+    'alien': ((0.034, 0.07, 0.0), 0.018),
+}

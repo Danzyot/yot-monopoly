@@ -1,3 +1,4 @@
+import Gallery from './pages/Gallery.tsx';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import Home from './pages/Home.tsx';
 import RoomPage from './pages/RoomPage.tsx';
@@ -20,6 +21,7 @@ function Shell() {
         <Route path="/" element={<Home />} />
         <Route path="/r/:code" element={<RoomPage />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
+        <Route path="/characters" element={<Gallery />} />
         <Route path="/u/:id" element={<Profile />} />
         <Route path="/admin/*" element={<AdminPage />} />
         <Route path="*" element={<Home />} />
