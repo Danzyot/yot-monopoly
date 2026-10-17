@@ -1,4 +1,7 @@
 import { isOwnable, mortgageValue, unmortgageCost } from '../../../shared/board.ts';
+import {
+  buildProblem, manageProblem, mortgageProblem, sellProblem, unmortgageProblem,
+} from '../../../shared/holdings.ts';
 import { resolveTheme } from '../../../shared/themes.ts';
 import type { GameView } from '../../../shared/types.ts';
 import { act } from '../net.ts';
@@ -16,6 +19,15 @@ export default function Deed({ game, index, me, onClose }: {
   const mine = o?.owner === me;
   const run = (type: 'build' | 'sell' | 'mortgage' | 'unmortgage') => act({ type, space: index }).catch(toastError);
   const color = s.group ? theme.groupColors[s.group] : theme.palette.accent;
+  // The engine's own rules (shared/holdings.ts): a greyed-out button says why.
+  const cash = game.players.find(p => p.id === me)?.cash ?? 0;
+  const blocked = game.paused ? 'The game is paused' : manageProblem(game, me, index);
+  const why = {
+    build: blocked ?? buildProblem(game, theme.spaces, me, index, cash),
+    sell: blocked ?? sellProblem(game, theme.spaces, index),
+    mortgage: blocked ?? mortgageProblem(game, theme.spaces, index),
+    unmortgage: blocked ?? unmortgageProblem(game, theme.spaces, index, cash),
+  };
 
   return (
     <div className="deed">
@@ -71,18 +83,20 @@ export default function Deed({ game, index, me, onClose }: {
           <div className="deed-actions">
             {s.kind === 'property' && (
               <>
-                <button className="btn small" disabled={o.mortgaged || o.houses >= 5} onClick={() => run('build')}>
+                <button className="btn small" disabled={!!why.build} title={why.build ?? undefined} onClick={() => run('build')}>
                   {o.houses === 4 ? 'Build hotel' : 'Build house'} · {cur(s.houseCost!)}
                 </button>
-                <button className="btn small" disabled={!o.houses} onClick={() => run('sell')}>
+                <button className="btn small" disabled={!!why.sell} title={why.sell ?? undefined} onClick={() => run('sell')}>
                   Sell · +{cur(Math.floor(s.houseCost! / 2))}
                 </button>
               </>
             )}
             {o.mortgaged ? (
-              <button className="btn small" onClick={() => run('unmortgage')}>Unmortgage · {cur(unmortgageCost(s))}</button>
+              <button className="btn small" disabled={!!why.unmortgage} title={why.unmortgage ?? undefined}
+                onClick={() => run('unmortgage')}>Unmortgage · {cur(unmortgageCost(s))}</button>
             ) : (
-              <button className="btn small" disabled={o.houses > 0} onClick={() => run('mortgage')}>Mortgage · +{cur(mortgageValue(s))}</button>
+              <button className="btn small" disabled={!!why.mortgage} title={why.mortgage ?? undefined}
+                onClick={() => run('mortgage')}>Mortgage · +{cur(mortgageValue(s))}</button>
             )}
           </div>
         )}

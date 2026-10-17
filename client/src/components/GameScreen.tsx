@@ -45,6 +45,11 @@ export default function GameScreen({ room, game, me, chat, skew }: {
     setPanelOpen(open => !(open && t === tab));
     setTab(t);
   };
+  /** "Raise cash" in the debt bar: straight to my deeds, opening the panel if it was folded. */
+  const openDeeds = () => {
+    setTab('mine');
+    setPanelOpen(true);
+  };
   // Chat messages that arrived while the chat tab was not showing.
   const [seenChat, setSeenChat] = useState(chat.length);
   const chatVisible = panelOpen && tab === 'chat';
@@ -139,7 +144,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
         <div className="deed-float"><Deed game={game} index={selected} me={me} onClose={() => setSelected(null)} /></div>
       )}
 
-      <ActionBar game={game} me={me} skew={skew} selected={selected} />
+      <ActionBar game={game} me={me} skew={skew} selected={selected} onRaiseCash={openDeeds} />
       </div>
 
       <AuctionPanel game={game} me={me} skew={skew} />
@@ -226,7 +231,9 @@ function Players({ game, room, me, onTrade, reactions, onPortfolio }: {
   );
 }
 
-function ActionBar({ game, me, skew, selected }: { game: GameView; me: string; skew: number; selected: number | null }) {
+function ActionBar({ game, me, skew, selected, onRaiseCash }: {
+  game: GameView; me: string; skew: number; selected: number | null; onRaiseCash: () => void;
+}) {
   const theme = resolveTheme(game.themeId, game.mapId);
   const cur = (n: number) => `${theme.currency}${n}`;
   const p = game.players.find(x => x.id === me);
@@ -257,6 +264,7 @@ function ActionBar({ game, me, skew, selected }: { game: GameView; me: string; s
         <span className="ab-prompt"><b className="ab-big">Short on cash!</b> You owe <b>{cur(owe)}</b> — mortgage or sell buildings to raise it.</span>
         <DebtClock game={game} id={me} skew={skew} />
         <button className="btn primary" disabled={busy || p.cash < owe} onClick={() => run({ type: 'payDebt' })}>Pay {cur(owe)}</button>
+        {p.cash < owe && <button className="btn" onClick={onRaiseCash} title="Open your deeds to mortgage them or sell buildings">Raise cash</button>}
         <button className="btn ghost" disabled={busy} onClick={() => confirm('Declare bankruptcy? You will be out of the game.') && run({ type: 'bankrupt' })}>Give up</button>
       </div>
     );

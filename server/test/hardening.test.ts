@@ -6,6 +6,9 @@ import assert from 'node:assert/strict';
 import { EngineError, Game, type GameSnapshot } from '../src/engine/game.ts';
 import { botAction } from '../src/engine/bot.ts';
 import { DEFAULT_RULES, resolveTheme } from '../../shared/themes.ts';
+import {
+  buildProblem, manageProblem, mortgageProblem, sellProblem, unmortgageProblem,
+} from '../../shared/holdings.ts';
 import { CREATES_PER_WINDOW, HOST_GRACE_MS, Registry, Room, RoomError, type RoomHooks } from '../src/rooms.ts';
 import type { Action, Trade } from '../../shared/types.ts';
 import { scripted } from './helpers.ts';
@@ -90,6 +93,44 @@ test('a snapshot holding a malformed offer still restores, without it', () => {
   const g2 = Game.restore({ theme: CLASSIC, rules: { ...DEFAULT_RULES } }, snap);
   assert.deepEqual(g2.trades.map(t => t.id), ['t2']);
   assert.doesNotThrow(() => botAction(g2, 'p1'));
+});
+
+// ---- shared property rules (deed card buttons) ------------------------------------
+
+test('the deed card checks are the engine rules, on a GameView as on the Game', () => {
+  const { g, act } = scripted();
+  g.owned[1] = { owner: 'p0', houses: 0, mortgaged: false };
+  g.owned[3] = { owner: 'p0', houses: 0, mortgaged: false };
+  g.owned[6] = { owner: 'p0', houses: 0, mortgaged: false };
+  const sp = g.spaces;
+  const check = () => {
+    const v = g.view();
+    const cash = v.players[0].cash;
+    return {
+      build1: buildProblem(v, sp, 'p0', 1, cash), build6: buildProblem(v, sp, 'p0', 6, cash),
+      sell1: sellProblem(v, sp, 1), sell3: sellProblem(v, sp, 3),
+      mortgage3: mortgageProblem(v, sp, 3), mortgage6: mortgageProblem(v, sp, 6),
+      unmortgage6: unmortgageProblem(v, sp, 6, cash), manage1: manageProblem(v, 'p1', 1),
+    };
+  };
+  assert.deepEqual(check(), {
+    build1: null, build6: 'You need the whole colour group', sell1: 'Nothing to sell', sell3: 'Nothing to sell',
+    mortgage3: null, mortgage6: null, unmortgage6: 'Not mortgaged', manage1: 'You do not own that',
+  });
+  act('p0', { type: 'build', space: 1 });
+  const after = check();
+  assert.equal(after.build1, 'Build evenly across the group');
+  assert.equal(after.sell1, null);
+  assert.equal(after.sell3, 'Nothing to sell');
+  assert.equal(after.mortgage3, 'Sell the buildings in this group first');
+  // …and the engine refuses exactly what the card greys out, with the same words.
+  assert.throws(() => act('p0', { type: 'build', space: 1 }), /Build evenly across the group/);
+  assert.throws(() => act('p0', { type: 'mortgage', space: 3 }), /Sell the buildings in this group first/);
+  g.player('p0').cash = 10;
+  assert.equal(check().build1, 'Build evenly across the group');
+  assert.equal(buildProblem(g.view(), sp, 'p0', 3, 10), 'Not enough cash');
+  g.phase = 'auction';
+  assert.equal(manageProblem(g.view(), 'p0', 3), 'Wait for the auction to finish');
 });
 
 // ---- room timers and automated moves ----------------------------------------

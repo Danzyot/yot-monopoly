@@ -6,6 +6,9 @@ import {
   groupIndices, isOwnable, mortgageValue, unmortgageCost, type SpaceDef,
 } from '../../../shared/board.ts';
 import type { CardEffect, DeckId } from '../../../shared/cards.ts';
+import {
+  buildProblem, manageProblem, mortgageProblem, sellProblem, unmortgageProblem,
+} from '../../../shared/holdings.ts';
 import type { RuleConfig, Theme } from '../../../shared/themes.ts';
 import {
   MINIGAME_INFO, MINIGAME_KINDS, type MinigameKind, type MinigameMove, type MinigamePayout,
@@ -905,30 +908,16 @@ export class Game {
     this.say(`${p.name} used a Get Out of Jail Free card.`, p.id);
   }
 
+  // The property checks live in shared/holdings.ts, so the deed card's
+  // buttons follow exactly the rules enforced here.
   private requireOwn(p: PlayerState, space: number): { s: SpaceDef; o: OwnedSpace } {
-    const o = this.owned[space];
-    if (!o || o.owner !== p.id) fail('You do not own that');
-    if (this.phase === 'auction') fail('Wait for the auction to finish');
-    if (this.phase === 'minigame') fail('Wait for the mini-game to finish');
-    return { s: this.spaces[space], o };
+    const why = manageProblem(this, p.id, space);
+    if (why) fail(why);
+    return { s: this.spaces[space], o: this.owned[space] };
   }
 
   canBuild(id: string, space: number): string | null {
-    const s = this.spaces[space];
-    const o = this.owned[space];
-    if (!o || o.owner !== id) return 'You do not own that';
-    if (s.kind !== 'property') return 'Only coloured properties take houses';
-    if (!this.ownsGroup(id, s.group!)) return 'You need the whole colour group';
-    const grp = groupIndices(this.spaces, s.group!);
-    if (grp.some(i => this.owned[i].mortgaged)) return 'Lift the mortgages in this group first';
-    if (o.houses >= 5) return 'Already has a hotel';
-    if (this.rules.evenBuild && o.houses > Math.min(...grp.map(i => this.owned[i].houses))) return 'Build evenly across the group';
-    if (this.player(id).cash < s.houseCost!) return 'Not enough cash';
-    if (this.rules.limitedBuildings) {
-      if (o.houses === 4 && this.hotelsLeft === 0) return 'The bank is out of hotels';
-      if (o.houses < 4 && this.housesLeft === 0) return 'The bank is out of houses';
-    }
-    return null;
+    return buildProblem(this, this.spaces, id, space, this.player(id).cash);
   }
 
   private build(p: PlayerState, space: number) {
@@ -948,9 +937,8 @@ export class Game {
 
   private sell(p: PlayerState, space: number) {
     const { s, o } = this.requireOwn(p, space);
-    if (o.houses === 0) fail('Nothing to sell');
-    const grp = groupIndices(this.spaces, s.group!);
-    if (this.rules.evenBuild && o.houses < Math.max(...grp.map(i => this.owned[i].houses))) fail('Sell evenly across the group');
+    const why = sellProblem(this, this.spaces, space);
+    if (why) fail(why);
     this.sellOne(p, s, o);
   }
 
@@ -975,8 +963,8 @@ export class Game {
 
   private mortgage(p: PlayerState, space: number) {
     const { s, o } = this.requireOwn(p, space);
-    if (o.mortgaged) fail('Already mortgaged');
-    if (this.groupHasBuildings(s.group)) fail('Sell the buildings in this group first');
+    const why = mortgageProblem(this, this.spaces, space);
+    if (why) fail(why);
     this.mortgageOne(p, s, o);
   }
 
@@ -988,9 +976,9 @@ export class Game {
 
   private unmortgage(p: PlayerState, space: number) {
     const { s, o } = this.requireOwn(p, space);
-    if (!o.mortgaged) fail('Not mortgaged');
+    const why = unmortgageProblem(this, this.spaces, space, p.cash);
+    if (why) fail(why);
     const cost = unmortgageCost(s);
-    if (p.cash < cost) fail('Not enough cash');
     p.cash -= cost;
     o.mortgaged = false;
     this.say(`${p.name} lifted the mortgage on ${s.name} for ${this.money(cost)}.`, p.id);
