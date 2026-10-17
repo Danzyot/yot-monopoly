@@ -2,8 +2,10 @@
 // regression test per rule the engine once got wrong or left out.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { botAction } from '../src/engine/bot.ts';
 import { resolveTheme } from '../../shared/themes.ts';
 import { scripted } from './helpers.ts';
+import { simulate } from './sim.ts';
 
 const CLASSIC = resolveTheme('classic', 'classic');
 const own = (owner: string, houses = 0, mortgaged = false) => ({ owner, houses, mortgaged });
@@ -172,4 +174,81 @@ test('selling a hotel: four houses back from the bank; in a shortage the group s
   e.g.housesLeft = 0;
   e.act('p0', { type: 'sell', space: 39 });
   assert.equal(e.g.owned[39].houses, 4);
+});
+
+// ---- bots ---------------------------------------------------------------------
+
+test('bot: a pointless swap within one colour group is declined; a fair set-for-set swap is taken', () => {
+  const { g, act } = scripted(2);
+  const side = (cash: number, spaces: number[] = []) => ({ cash, spaces, jailCards: 0 });
+  // p0 holds Mediterranean, p1 Baltic: swapping them completes nothing for anyone.
+  g.owned[1] = own('p0'); g.owned[3] = own('p1');
+  act('p0', { type: 'proposeTrade', to: 'p1', give: side(0, [1]), get: side(0, [3]) });
+  assert.deepEqual(botAction(g, 'p1'), { type: 'rejectTrade', id: g.trades[0].id });
+  act('p1', { type: 'rejectTrade', id: g.trades[0].id });
+  // Each needs one lot the other has: Boardwalk for Ventnor (+ the difference).
+  g.owned[26] = own('p0'); g.owned[27] = own('p1'); g.owned[29] = own('p0');
+  g.owned[37] = own('p1'); g.owned[39] = own('p0');
+  act('p0', { type: 'proposeTrade', to: 'p1', give: side(140, [39]), get: side(0, [27]) });
+  assert.deepEqual(botAction(g, 'p1'), { type: 'acceptTrade', id: g.trades[0].id });
+  // …but a cheap set for Boardwalk is not fair.
+  g.trades = [];
+  g.owned[1] = own('p1'); g.owned[3] = own('p0');
+  act('p0', { type: 'proposeTrade', to: 'p1', give: side(0, [3]), get: side(0, [37]) });
+  assert.deepEqual(botAction(g, 'p1'), { type: 'rejectTrade', id: g.trades[0].id });
+});
+
+test('bot: proposes the swap that completes both sets', () => {
+  const { g } = scripted(2);
+  g.owned[26] = own('p0'); g.owned[27] = own('p1'); g.owned[29] = own('p0');
+  g.owned[37] = own('p1'); g.owned[39] = own('p0');
+  g.phase = 'done';
+  const a = botAction(g, 'p0');
+  assert.equal(a?.type, 'proposeTrade');
+  if (a?.type !== 'proposeTrade') return;
+  assert.deepEqual(a.get.spaces, [27]);
+  assert.deepEqual(a.give.spaces, [39]);
+  assert.equal(a.give.cash, 0, 'Boardwalk is dearer than Ventnor: no top-up');
+});
+
+test('bot: jail — out early (card first), sits tight late once the board is built up', () => {
+  const { g } = scripted(2);
+  const p = g.player('p0');
+  p.inJail = true; p.position = 10;
+  assert.deepEqual(botAction(g, 'p0'), { type: 'payJail' });
+  p.jailCards = ['chance'];
+  assert.deepEqual(botAction(g, 'p0'), { type: 'useJailCard' });
+  // Late game: nearly everything owned and the opponent has houses.
+  g.spaces.forEach((s, i) => { if (s.price && i !== 1 && i !== 3) g.owned[i] = own('p1'); });
+  g.owned[37].houses = 3; g.owned[39].houses = 3;
+  assert.deepEqual(botAction(g, 'p0'), { type: 'roll' });
+});
+
+test('bot: resigns at once when even selling everything cannot cover a debt; otherwise raises it', () => {
+  const { g } = scripted(2);
+  g.owned[1] = own('p0');
+  g.player('p0').cash = 10;
+  g.debts.push({ from: 'p0', to: 'p1', amount: 5000, reason: 'test' });
+  assert.deepEqual(botAction(g, 'p0'), { type: 'bankrupt' });
+  g.debts[0].amount = 30;
+  assert.deepEqual(botAction(g, 'p0'), { type: 'mortgage', space: 1 });
+});
+
+test('bot: in a housing shortage, frees houses from its weakest set for its strongest', () => {
+  const { g } = scripted(2);
+  // p0: browns with 2 houses each, dark blues with 2 each; the bank is out.
+  g.owned[1] = own('p0', 2); g.owned[3] = own('p0', 2);
+  g.owned[37] = own('p0', 2); g.owned[39] = own('p0', 2);
+  g.housesLeft = 0;
+  g.player('p0').cash = 5000;
+  g.phase = 'done';
+  assert.deepEqual(botAction(g, 'p0'), { type: 'sell', space: 1 }, 'a brown house, not a dark blue one');
+  g.apply('p0', { type: 'sell', space: 1 });
+  assert.deepEqual(botAction(g, 'p0'), { type: 'build', space: 39 }, 'the freed house goes to the stronger set');
+});
+
+test('seeded bot games with every rule toggle finish and keep every invariant', () => {
+  const st = simulate(120, 1);
+  assert.equal(st.finished, st.games, `unfinished seeds: ${st.unfinished}`);
+  assert.ok(st.trades > 0 && st.hotels > 0 && st.auctions > 0, JSON.stringify(st));
 });
