@@ -32,13 +32,17 @@ function meshes(root: Object3D): Mesh[] {
   return out;
 }
 
+/** A light-baked scene from tools/blender: its model, lightmap and lightmap strength (blib.bake_lightmap). */
+export interface BakedAsset { url: string; lightmap: string; lightmapIntensity: number }
+
 /**
- * The Classic room: every surface is unlit and multiplied by the baked
- * lightmap (uv1), so it costs no live lights. Glowing parts (fire, lamp
- * shade, the night outside) show their own colour at full strength.
+ * A light-baked room or set: every surface is unlit and multiplied by the
+ * baked lightmap (uv1), so it costs no live lights. Meshes named `RoomGlow…`
+ * (fire, lamp shade, the night outside, neon) show their own colour at full
+ * strength.
  */
-export function ClassicRoom() {
-  const { url, lightmap, lightmapIntensity } = ASSETS.classicRoom;
+export function BakedScene({ asset }: { asset: BakedAsset }) {
+  const { url, lightmap, lightmapIntensity } = asset;
   const gltf = useGLTF(url);
   const light = useTexture(lightmap);
   const scene = useMemo(() => {
@@ -75,6 +79,9 @@ export function ClassicRoom() {
   }, [gltf.scene, light, lightmapIntensity]);
   return <primitive object={scene} />;
 }
+
+/** The Classic room (tools/blender/classic_room.py). */
+export const ClassicRoom = () => <BakedScene asset={ASSETS.classicRoom} />;
 
 /** The round game table, its finish recoloured to the room's table style. */
 export function ModelTable({ color, roughness, metalness }: { color: string; roughness: number; metalness: number }) {
