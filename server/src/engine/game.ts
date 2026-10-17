@@ -62,6 +62,12 @@ export interface GameInit {
   onLog?: (text: string) => void;
   /** Site-wide mini-game switch, read live so flipping it affects running games. Default on. */
   minigamesEnabled?: () => boolean;
+  /**
+   * Every movement of money between a player and the bank (positive: the bank
+   * pays out). Player-to-player payments and the Free Parking pot are not bank
+   * money. Lets tests prove cash is never created or lost by accident.
+   */
+  onBank?: (amount: number, reason: string) => void;
 }
 
 /** A running arcade round. `data` belongs to the module named by `kind` (and may hold secrets). */
@@ -202,6 +208,7 @@ export class Game {
   private cardSeq = 0;
   private tradeSeq = 0;
   private onLog?: (text: string) => void;
+  private onBank?: (amount: number, reason: string) => void;
   private rng: Rng;
   private now: () => number;
 
@@ -216,6 +223,7 @@ export class Game {
     this.rng = init.rng ?? (n => Math.floor(Math.random() * n));
     this.now = init.now ?? Date.now;
     this.onLog = init.onLog;
+    this.onBank = init.onBank;
     this.minigamesEnabled = init.minigamesEnabled ?? (() => true);
     this.startedAt = this.now();
     this.players = init.players.map(p => ({
@@ -313,12 +321,26 @@ export class Game {
 
   // ---- money ----------------------------------------------------------------
 
+  /** The bank pays `p` (a negative amount: `p` pays the bank). All bank money goes through here. */
+  private bankPays(p: PlayerState, amount: number, reason: string) {
+    if (!amount) return;
+    p.cash += amount;
+    this.onBank?.(amount, reason);
+  }
+
   /** Pay now if possible; otherwise record a debt the payer must settle. */
   private charge(from: PlayerState, to: PlayerState | null, amount: number, reason: string, toPot = false) {
     if (amount <= 0) return;
     if (from.cash >= amount) {
-      from.cash -= amount;
-      if (to) to.cash += amount;
+      if (to) {
+        from.cash -= amount;
+        to.cash += amount;
+      } else if (toPot && this.rules.freeParkingPot) {
+        from.cash -= amount;
+        this.pot += amount;
+      } else {
+        this.bankPays(from, -amount, reason);
+      }
       // Counted when the money moves (now, or later via payDebt with the same
       // reason), so rent that ended in bankruptcy is not credited.
       if (to && reason.startsWith(RENT_REASON)) {
@@ -326,7 +348,6 @@ export class Game {
         const payer = this.stat(from.id);
         payer.biggestRentPaid = Math.max(payer.biggestRentPaid, amount);
       }
-      else if (toPot && this.rules.freeParkingPot) this.pot += amount;
       this.say(`${from.name} paid ${this.money(amount)}${to ? ` to ${to.name}` : ''} (${reason}).`, from.id);
     } else {
       this.debts.push({ from: from.id, to: to?.id ?? null, amount, reason, toPot });
@@ -341,7 +362,7 @@ export class Game {
     if (target >= this.size) {
       const landedOnGo = target % this.size === 0;
       const pay = this.rules.goSalary * (landedOnGo && this.rules.doubleOnGo ? 2 : 1);
-      p.cash += pay;
+      this.bankPays(p, pay, 'salary');
       p.passedGo = true;
       this.say(`${p.name} ${landedOnGo ? 'landed on' : 'passed'} ${this.spaces[0].name} and collected ${this.money(pay)}.`, p.id);
     }
@@ -459,7 +480,7 @@ export class Game {
       case 'jailFree':
         break;
       case 'collect':
-        p.cash += e.amount;
+        this.bankPays(p, e.amount, 'card');
         break;
       case 'pay':
         this.charge(p, null, e.amount, 'card', true);
@@ -753,7 +774,7 @@ export class Game {
     const s = this.spaces[p.position];
     const price = s.price ?? 0;
     if (p.cash < price) fail('Not enough cash — auction it or raise funds');
-    p.cash -= price;
+    this.bankPays(p, -price, 'purchase');
     this.owned[p.position] = { owner: p.id, houses: 0, mortgaged: false };
     this.stat(p.id).propertiesBought++;
     this.say(`${p.name} bought ${s.name} for ${this.money(price)}.`, p.id);
@@ -840,7 +861,7 @@ export class Game {
       // Bids are capped at cash, but cash can move during the auction (a debt
       // paid, an operator fix): whatever is missing becomes an ordinary debt.
       const paid = Math.max(0, Math.min(a.highBid, w.cash));
-      w.cash -= paid;
+      this.bankPays(w, -paid, 'auction');
       this.owned[a.space] = { owner: w.id, houses: 0, mortgaged: false };
       this.stat(w.id).propertiesBought++;
       this.say(`${w.name} won ${s.name} for ${this.money(a.highBid)}.`, w.id);
@@ -924,7 +945,7 @@ export class Game {
     const { s, o } = this.requireOwn(p, space);
     const why = this.canBuild(p.id, space);
     if (why) fail(why);
-    p.cash -= s.houseCost!;
+    this.bankPays(p, -s.houseCost!, 'building');
     if (o.houses === 4) {
       this.hotelsLeft--;
       this.housesLeft += 4;
@@ -957,7 +978,7 @@ export class Game {
     }
     const refund = Math.floor(s.houseCost! / 2) * (o.houses - newLevel);
     o.houses = newLevel;
-    p.cash += refund;
+    this.bankPays(p, refund, 'building sold');
     this.say(`${p.name} sold a building on ${s.name} for ${this.money(refund)}.`, p.id);
   }
 
@@ -970,7 +991,7 @@ export class Game {
 
   private mortgageOne(p: PlayerState, s: SpaceDef, o: OwnedSpace) {
     o.mortgaged = true;
-    p.cash += mortgageValue(s);
+    this.bankPays(p, mortgageValue(s), 'mortgage');
     this.say(`${p.name} mortgaged ${s.name} for ${this.money(mortgageValue(s))}.`, p.id);
   }
 
@@ -979,7 +1000,7 @@ export class Game {
     const why = unmortgageProblem(this, this.spaces, space, p.cash);
     if (why) fail(why);
     const cost = unmortgageCost(s);
-    p.cash -= cost;
+    this.bankPays(p, -cost, 'mortgage lifted');
     o.mortgaged = false;
     this.say(`${p.name} lifted the mortgage on ${s.name} for ${this.money(cost)}.`, p.id);
   }
@@ -1005,19 +1026,10 @@ export class Game {
     this.trades = this.trades.filter(t => t.from !== p.id && t.to !== p.id);
 
     // Buildings go back to the bank at half price either way.
-    let buildingCash = 0;
-    for (const i of this.ownedBy(p.id)) {
-      const o = this.owned[i];
-      if (o.houses > 0) {
-        buildingCash += Math.floor(this.spaces[i].houseCost! / 2) * o.houses;
-        if (o.houses === 5) this.hotelsLeft++;
-        else this.housesLeft += o.houses;
-        o.houses = 0;
-      }
-    }
+    for (const i of this.ownedBy(p.id)) if (this.owned[i].houses > 0) this.clearBuildings(i);
 
     if (creditor) {
-      creditor.cash += p.cash + buildingCash;
+      creditor.cash += p.cash;
       for (const i of this.ownedBy(p.id)) this.owned[i].owner = creditor.id;
       creditor.jailCards.push(...p.jailCards);
       this.say(`${p.name} went bankrupt — everything goes to ${creditor.name}.`, p.id);
@@ -1026,6 +1038,7 @@ export class Game {
       // Official rule: the bank auctions the estate, each deed unmortgaged.
       for (const i of estate) delete this.owned[i];
       if (this.rules.auctions) this.estateQueue.push(...estate);
+      this.bankPays(p, -p.cash, 'bankruptcy');
       for (const deck of p.jailCards) this.returnJailCard(deck);
       this.say(`${p.name} went bankrupt — their property returns to the bank${estate.length && this.rules.auctions ? ' to be auctioned' : ''}.`, p.id);
     }
@@ -1245,7 +1258,7 @@ export class Game {
         po.amount = 50;
       }
       if (po.amount > 0) {
-        p.cash += po.amount;
+        this.bankPays(p, po.amount, title);
         this.say(`${p.name} won ${this.money(po.amount)} from the bank (${title}).`, p.id);
       } else if (po.amount < 0) {
         this.charge(p, null, -po.amount, title, true);
@@ -1527,7 +1540,7 @@ export class Game {
     const p = this.livePlayer(id);
     if (!Number.isInteger(cash) || cash < 0 || cash > 1_000_000) fail('Cash must be a whole number from 0 to 1,000,000');
     const was = p.cash;
-    p.cash = cash;
+    this.bankPays(p, cash - was, 'operator');
     this.say(`🛠 An operator set ${p.name}'s cash to ${this.money(cash)} (was ${this.money(was)}).`, p.id);
     this.settle();
   }
@@ -1562,7 +1575,7 @@ export class Game {
     if (o.houses === 5) this.hotelsLeft++;
     else this.housesLeft += o.houses;
     o.houses = 0;
-    this.player(o.owner).cash += refund;
+    this.bankPays(this.player(o.owner), refund, 'buildings sold');
   }
 
   adminJailCard(id: string, give: boolean) {
