@@ -124,3 +124,52 @@ test('bankruptcy: debts are met in order; the first that cannot be met takes eve
   assert.equal(b.g.owned[39].houses, 0);
   assert.deepEqual(b.g.debts, [{ from: 'p1', to: 'p2', amount: 30, reason: 'card' }]);
 });
+
+test('selling a hotel: four houses back from the bank; in a shortage the group sells down further, evenly', () => {
+  // Plenty of houses: the hotel becomes four houses.
+  const a = scripted(2);
+  a.g.owned[37] = own('p0', 5); a.g.owned[39] = own('p0', 5);
+  a.g.housesLeft = 32; a.g.hotelsLeft = 10;
+  a.act('p0', { type: 'sell', space: 39 });
+  assert.equal(a.g.owned[39].houses, 4);
+  assert.equal(a.g.housesLeft, 28);
+  assert.equal(a.g.hotelsLeft, 11);
+  assert.equal(a.g.player('p0').cash, 1600);
+
+  // Two houses left in the bank: no even arrangement keeps the other hotel
+  // (it would need 4 houses beside it), so both lots come down to one house.
+  const b = scripted(2);
+  b.g.owned[37] = own('p0', 5); b.g.owned[39] = own('p0', 5);
+  b.g.housesLeft = 2; b.g.hotelsLeft = 10;
+  b.act('p0', { type: 'sell', space: 39 });
+  assert.equal(b.g.owned[37].houses, 1);
+  assert.equal(b.g.owned[39].houses, 1);
+  assert.equal(b.g.housesLeft, 0);
+  assert.equal(b.g.hotelsLeft, 12);
+  assert.equal(b.g.player('p0').cash, 1500 + 800, 'eight levels sold at $100');
+
+  // A lot with houses already: (5, 4) with none in the bank → the hotel breaks
+  // into the houses the group already has, spread evenly (2 + 2).
+  const c = scripted(2);
+  c.g.owned[37] = own('p0', 4); c.g.owned[39] = own('p0', 5);
+  c.g.housesLeft = 0; c.g.hotelsLeft = 11;
+  c.act('p0', { type: 'sell', space: 39 });
+  assert.deepEqual([c.g.owned[37].houses, c.g.owned[39].houses].sort(), [2, 2]);
+  assert.equal(c.g.housesLeft, 0);
+  assert.equal(c.g.player('p0').cash, 1500 + 500);
+
+  // Without even building only the hotel's lot drops, to what the bank has.
+  const d = scripted(2, { evenBuild: false });
+  d.g.owned[37] = own('p0', 5); d.g.owned[39] = own('p0', 5);
+  d.g.housesLeft = 3; d.g.hotelsLeft = 10;
+  d.act('p0', { type: 'sell', space: 39 });
+  assert.deepEqual([d.g.owned[37].houses, d.g.owned[39].houses], [5, 3]);
+  assert.equal(d.g.housesLeft, 0);
+
+  // Unlimited buildings: always four houses.
+  const e = scripted(2, { limitedBuildings: false });
+  e.g.owned[37] = own('p0', 5); e.g.owned[39] = own('p0', 5);
+  e.g.housesLeft = 0;
+  e.act('p0', { type: 'sell', space: 39 });
+  assert.equal(e.g.owned[39].houses, 4);
+});

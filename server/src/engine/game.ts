@@ -961,29 +961,77 @@ export class Game {
   }
 
   private sell(p: PlayerState, space: number) {
-    const { s, o } = this.requireOwn(p, space);
+    this.requireOwn(p, space);
     const why = sellProblem(this, this.spaces, space);
     if (why) fail(why);
-    this.sellOne(p, s, o);
+    this.sellOne(p, space);
   }
 
   /** Sell one building back to the bank (checks done by the caller). */
-  private sellOne(p: PlayerState, s: SpaceDef, o: OwnedSpace) {
-    let newLevel = o.houses - 1;
-    if (o.houses === 5) {
-      this.hotelsLeft++;
-      // Breaking a hotel needs four houses back from the bank; with fewer, the
-      // property drops to whatever the bank can supply.
-      const back = this.rules.limitedBuildings ? Math.min(4, this.housesLeft) : 4;
-      newLevel = back;
-      this.housesLeft -= back;
-    } else {
+  private sellOne(p: PlayerState, space: number) {
+    const s = this.spaces[space];
+    const o = this.owned[space];
+    if (o.houses < 5) {
+      o.houses--;
       this.housesLeft++;
+      const refund = Math.floor(s.houseCost! / 2);
+      this.bankPays(p, refund, 'building sold');
+      this.say(`${p.name} sold a house on ${s.name} for ${this.money(refund)}.`, p.id);
+      return;
     }
-    const refund = Math.floor(s.houseCost! / 2) * (o.houses - newLevel);
-    o.houses = newLevel;
+    // A hotel is broken back into four houses, which come from the bank.
+    let refund = 0;
+    const changed: string[] = [];
+    for (const [i, level] of this.hotelBreak(space)) {
+      const lot = this.owned[i];
+      if (level === lot.houses) continue;
+      if (lot.houses === 5) this.hotelsLeft++;
+      else this.housesLeft += lot.houses;
+      this.housesLeft -= level; // never a hotel: lots only come down
+      refund += Math.floor(this.spaces[i].houseCost! / 2) * (lot.houses - level);
+      lot.houses = level;
+      changed.push(`${this.spaces[i].name} → ${level === 0 ? 'no houses' : `${level} house${level === 1 ? '' : 's'}`}`);
+    }
     this.bankPays(p, refund, 'building sold');
-    this.say(`${p.name} sold a building on ${s.name} for ${this.money(refund)}.`, p.id);
+    if (changed.length === 1 && o.houses === 4) {
+      this.say(`${p.name} sold the hotel on ${s.name} for ${this.money(refund)}.`, p.id);
+    } else {
+      this.say(`${p.name} sold the hotel on ${s.name}, but the bank was short of houses to replace it: ${changed.join(', ')} (${this.money(refund)}).`, p.id);
+    }
+  }
+
+  /**
+   * New house counts when the hotel on `space` is sold: four houses, if the
+   * bank has them. In a housing shortage the lot can only drop to what the
+   * bank can supply, and with even building on, the rest of the group must
+   * come down with it (official rule: sell down further). Of every even
+   * arrangement the bank can supply, the one that sells the least.
+   */
+  private hotelBreak(space: number): Map<number, number> {
+    const bank = this.rules.limitedBuildings ? Math.max(0, this.housesLeft) : Infinity;
+    if (bank >= 4) return new Map([[space, 4]]);
+    if (!this.rules.evenBuild) return new Map([[space, bank]]);
+    const grp = groupIndices(this.spaces, this.spaces[space].group!);
+    const now = grp.map(i => this.owned[i].houses);
+    const housesNow = now.reduce((a, h) => a + (h < 5 ? h : 0), 0);
+    const pick = grp.map(() => 0);
+    let best = pick.map(() => 0);
+    let bestSum = -1;
+    const visit = (k: number) => {
+      if (k === grp.length) {
+        if (Math.max(...pick) - Math.min(...pick) > 1) return;
+        const need = pick.reduce((a, h) => a + (h < 5 ? h : 0), 0) - housesNow;
+        const sum = pick.reduce((a, h) => a + h, 0);
+        if (need <= bank && sum > bestSum) { best = [...pick]; bestSum = sum; }
+        return;
+      }
+      for (let v = grp[k] === space ? Math.min(4, now[k]) : now[k]; v >= 0; v--) {
+        pick[k] = v;
+        visit(k + 1);
+      }
+    };
+    visit(0);
+    return new Map(grp.map((i, k) => [i, best[k]]));
   }
 
   private mortgage(p: PlayerState, space: number) {
@@ -1512,7 +1560,7 @@ export class Game {
       // Always the most built-up deed, which keeps the group even.
       const built = mine.filter(i => this.owned[i].houses > 0).sort((a, b) => this.owned[b].houses - this.owned[a].houses)[0];
       if (built === undefined) break;
-      this.sellOne(p, this.spaces[built], this.owned[built]);
+      this.sellOne(p, built);
     }
     return p.cash >= need;
   }
