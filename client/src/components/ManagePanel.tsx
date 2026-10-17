@@ -59,6 +59,9 @@ export default function ManagePanel({ game, me, mode, onClose, onPick }: {
   groups.sort((a, b) => rank(a.key) - rank(b.key));
 
   const need = Math.max(0, owe - cash);
+  // Raising cash to buy the deed I'm standing on (no debt involved).
+  const buyTarget = raising && owe === 0 && game.phase === 'buy' && game.current === me ? spaces[p.position] : null;
+  const buyPrice = buyTarget?.price ?? 0;
   const max = raisable(game, spaces, me);
   const title = raising ? 'Raise cash' : 'Build & manage';
 
@@ -85,6 +88,16 @@ export default function ManagePanel({ game, me, mode, onClose, onPick }: {
             <p className="small manage-warn">Even selling everything raises only {cur(max)}. You can keep trying a trade, or give up.</p>
           )}
           {need > 0 && max >= owe && <p className="small muted manage-tip">Sell houses first (half their cost back), then mortgage deeds (half their price).</p>}
+        </div>
+      )}
+
+      {buyTarget && (
+        <div className={`manage-debt goal ${cash >= buyPrice ? 'ok' : ''}`} role="status">
+          <div className="row between">
+            <span>To buy <b>{buyTarget.name}</b>: <b>{cur(buyPrice)}</b>{cash < buyPrice ? <> · need <b>{cur(buyPrice - cash)}</b> more</> : <> · you have enough!</>}</span>
+            {cash >= buyPrice && <button className="btn small primary" disabled={busy} onClick={() => run([{ type: 'buy' }]).then(onClose)}>Buy it</button>}
+          </div>
+          <div className="meter" aria-hidden><i style={{ width: `${Math.min(100, (cash / Math.max(1, buyPrice)) * 100)}%` }} /></div>
         </div>
       )}
 
@@ -202,7 +215,7 @@ function DeedRow({ game, me, i, full, raising, busy, cur, run, onPick }: {
         </div>
       )}
       <div className="bp-mort">
-        {o.mortgaged ? (
+        {o.mortgaged ? raising ? null : (
           <button className="btn tiny" disabled={busy || !!why.unmortgage} title={why.unmortgage ?? undefined}
             onClick={() => run([{ type: 'unmortgage', space: i }])}>Unmortgage −{cur(unmortgageCost(s))}</button>
         ) : (

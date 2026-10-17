@@ -62,9 +62,15 @@ export function CoachHint({ game, me, busy, onHelp, onBuild, onRaise }: {
   const mine = game.current === me;
   const calm = game.phase === 'done' || game.phase === 'roll';
 
+  const price = game.phase === 'buy' && mine ? theme.spaces[p.position].price ?? 0 : 0;
+  const cantAfford = price > p.cash && ownedBy(game, me).some(i => !game.owned[i].mortgaged);
   let hint: { id: HintId; icon: string; text: string; action?: [string, () => void] } | null = null;
-  if (debtOf(game, me) > p.cash && !seen.has('raise')) {
-    hint = { id: 'raise', icon: '💸', text: 'Short on cash? Raise cash lets you sell houses and mortgage deeds to pay what you owe.', action: ['Raise cash', onRaise] };
+  if ((debtOf(game, me) > p.cash || cantAfford) && !seen.has('raise')) {
+    hint = {
+      id: 'raise', icon: '💸', action: ['Raise cash', onRaise],
+      text: cantAfford ? "Can't afford it? Mortgage a deed for quick cash — or let it go to auction."
+        : 'Short on cash? Raise cash lets you sell houses and mortgage deeds to pay what you owe.',
+    };
   } else if (calm && canBuildAnywhere(game, theme.spaces, me) && !seen.has('build')) {
     hint = { id: 'build', icon: '🏗️', text: 'You own a full colour set! Build houses on it — rent shoots way up.', action: ['Build', onBuild] };
   } else if (mine && game.phase === 'done' && !seen.has('trade') && tradeChance(game, me)) {
