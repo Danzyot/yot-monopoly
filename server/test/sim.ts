@@ -95,13 +95,16 @@ export function simulate(games: number, seed0 = 1): SimStats {
     let clock = 0;
     let bank = 0;
     const n = 2 + (seed % 5);
-    const g = new Game({
+    const init = {
       theme: resolveTheme(seed % 3 === 0 ? 'chog' : 'classic', map.id),
       rules,
-      players: Array.from({ length: n }, (_, i) => ({ id: `b${i}`, name: `Bot${i}`, character: 'spiky' as const, color: '#fff', isBot: !(seed % 4 === 0 && i === 0) })),
       rng: seeded(seed),
       now: () => clock,
-      onBank: x => { bank += x; },
+      onBank: (x: number) => { bank += x; },
+    };
+    let g = new Game({
+      ...init,
+      players: Array.from({ length: n }, (_, i) => ({ id: `b${i}`, name: `Bot${i}`, character: 'spiky' as const, color: '#fff', isBot: !(seed % 4 === 0 && i === 0) })),
     });
     const start = g.players.reduce((s, p) => s + p.cash, 0);
     let step = 0;
@@ -138,6 +141,11 @@ export function simulate(games: number, seed0 = 1): SimStats {
       } else idle = 0;
       if ((g.clockDeadline() ?? Infinity) <= clock) g.clockTimeout();
       checkInvariants(g, start, bank, `seed ${seed} step ${step}`);
+      // Now and then, a server restart: the game must carry on from its snapshot.
+      if (step % 397 === 396) {
+        g = Game.restore(init, JSON.parse(JSON.stringify(g.snapshot())));
+        checkInvariants(g, start, bank, `restored, seed ${seed} step ${step}`);
+      }
     }
     st.maxSteps = Math.max(st.maxSteps, step);
     if (g.phase === 'over') st.finished++;
