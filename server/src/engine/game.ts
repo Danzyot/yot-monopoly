@@ -675,7 +675,7 @@ export class Game {
           return;
         }
         this.say(`${p.name} must pay the ${this.money(this.rules.jailFine)} fine after three tries.`, p.id);
-        this.charge(p, null, this.rules.jailFine, 'jail fine', true);
+        this.charge(p, null, this.rules.jailFine, 'jail fine');
         p.inJail = false;
         p.jailTurns = 0;
       }
@@ -916,7 +916,7 @@ export class Game {
     this.requireTurn(p, 'roll');
     if (!p.inJail) fail('You are not in jail');
     if (p.cash < this.rules.jailFine) fail('Not enough cash');
-    this.charge(p, null, this.rules.jailFine, 'jail fine', true);
+    this.charge(p, null, this.rules.jailFine, 'jail fine');
     this.leaveJail(p);
   }
 

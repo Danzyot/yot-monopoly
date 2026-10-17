@@ -11,7 +11,11 @@ export interface RuleConfig {
   goSalary: number;
   /** House rule: landing exactly on GO pays double. */
   doubleOnGo: boolean;
-  /** House rule: taxes and card fines go into a pot won by landing on Free Parking. */
+  /**
+   * House rule: taxes, card fines (incl. repairs) and arcade losses go into a
+   * pot won by landing on Free Parking. Jail fines, purchases, buildings,
+   * mortgages and rent never do.
+   */
   freeParkingPot: boolean;
   /** Unbought properties go to auction (official rule). */
   auctions: boolean;
