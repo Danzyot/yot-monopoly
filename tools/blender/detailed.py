@@ -143,6 +143,49 @@ def strand(name, points, r0, r1, mat, parent=None, fuse=False, ring=10, round_ti
     return _finish(name, bm, mat, fuse)
 
 
+def loop(name, points, r, mat, axis=(0, 1, 0), ring=8, n=6):
+    """A closed tube through the points (a rim or piping); `axis` is roughly the loop's normal."""
+    pts = [Vector(q) for q in points]
+    N = len(pts)
+    path = []
+    for i in range(N):
+        p0, p1, p2, p3 = pts[i - 1], pts[i], pts[(i + 1) % N], pts[(i + 2) % N]
+        for k in range(n):
+            t = k / n
+            path.append(0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (-p0 + 3 * p1 - 3 * p2 + p3) * t ** 3))
+    bm = bmesh.new()
+    ax = Vector(axis)
+    rings = []
+    L = len(path)
+    for i, c in enumerate(path):
+        d = (path[(i + 1) % L] - path[i - 1]).normalized()
+        side = d.cross(ax).normalized()
+        nrm = side.cross(d).normalized()
+        rings.append([bm.verts.new(c + (side * math.cos(a) + nrm * math.sin(a)) * r) for a in (2 * math.pi * j / ring for j in range(ring))])
+    for i in range(L):
+        a, b = rings[i], rings[(i + 1) % L]
+        for j in range(ring):
+            bm.faces.new((a[j], a[(j + 1) % ring], b[(j + 1) % ring], b[j]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return _finish(name, bm, mat, False)
+
+
+def on_ell(e, x, y, lift=0.0, back=False):
+    """A frame on the front (or back) of ellipsoid e = (centre, radii) at (x, y): local z along the surface normal."""
+    (cx, cy, cz), (a, b, c) = e
+    u, v = (x - cx) / a, (y - cy) / b
+    w = math.sqrt(max(0.0, 1 - u * u - v * v)) * (-1 if back else 1)
+    n = Vector((u / a, v / b, w / c)).normalized()
+    p = Vector((x, y, cz + c * w)) + n * lift
+    return M(tuple(p), (math.atan2(-n.y, n.z), math.asin(max(-1, min(1, n.x))), 0))
+
+
+def ell_z(e, x, y, back=False):
+    (cx, cy, cz), (a, b, c) = e
+    w = math.sqrt(max(0.0, 1 - ((x - cx) / a) ** 2 - ((y - cy) / b) ** 2))
+    return cz + (-c if back else c) * w
+
+
 def cut_above(y0):
     return lambda v: Vector((v.x, min(v.y, y0), v.z))
 
@@ -488,32 +531,74 @@ def robot(m):
     cid = 'robot'
     body, head = [], []
     body.append(rbox(f'{cid}_Chest', (0, 0.128, 0), (0.15, 0.12, 0.11), m['main'], bevel=0.022))
+    # Chest screen in a metal bezel: a round gauge on the left, two status lights on the right.
+    body.append(rbox(f'{cid}_Bezel', (0, 0.137, 0.0545), (0.096, 0.064, 0.005), m['metal'], bevel=0.005))
     body.append(rbox(f'{cid}_Panel', (0, 0.137, 0.056), (0.086, 0.054, 0.006), m['glass'], bevel=0.006))
-    for k, (x, key) in enumerate([(-0.026, 'glow'), (0.0, 'accent'), (0.026, 'glow')]):
-        body.append(ell(f'{cid}_Light{k}', (x, 0.14, 0.06), (0.008, 0.008, 0.004), m[key], seg=(12, 8)))
+    gx, gy = -0.017, 0.136
+    body.append(torus(f'{cid}_Gauge', (gx, gy, 0.0595), 0.0145, 0.0022, m['metal'], seg=24, mseg=6))
+    body.append(strand(f'{cid}_GaugeArc', [(gx + 0.0098 * math.sin(t), gy + 0.0098 * math.cos(t), 0.0596) for t in (-2.0, -1.0, 0.0, 1.0, 2.0)],
+                       0.0016, 0.0016, m['glow'], ring=5))
+    na = -0.75
+    body.append(rbox(f'{cid}_Needle', (gx - math.sin(na) * 0.005, gy + math.cos(na) * 0.005, 0.0602), (0.0022, 0.012, 0.0014), m['accent'],
+                     r=(0, 0, na), bevel=0.0006, segs=1))
+    body.append(ell(f'{cid}_GaugeHub', (gx, gy, 0.0605), (0.003, 0.003, 0.0016), m['accent'], seg=(10, 6)))
+    for k, (y, key) in enumerate([(0.149, 'glow'), (0.125, 'accent')]):
+        body.append(ell(f'{cid}_Light{k}', (0.021, y, 0.0598), (0.0075, 0.0075, 0.0032), m[key], seg=(12, 8)))
+        body.append(rbox(f'{cid}_Readout{k}', (0.036, y, 0.0592), (0.008, 0.0028, 0.0012), m['glow'], bevel=0.0005, segs=1))
+    # Belly plate with vent slots, four corner rivets, seams round the sides and a hatch on the back.
+    body.append(rbox(f'{cid}_BellyPlate', (0, 0.0915, 0.0545), (0.096, 0.022, 0.004), m['metal'], bevel=0.003))
     for k in range(3):
-        body.append(rbox(f'{cid}_Vent{k}', (0, 0.096 - k * 0.009, 0.056), (0.06, 0.003, 0.003), m['ink'], bevel=0.001, segs=1))
+        body.append(rbox(f'{cid}_Vent{k}', (0, 0.0975 - k * 0.006, 0.0568), (0.06, 0.0028, 0.002), m['ink'], bevel=0.0008, segs=1))
+    for sx in (-1, 1):
+        for k, y in enumerate((0.168, 0.09)):
+            body.append(ell(f'{cid}_Rivet{sx}{k}', (sx * 0.0615, y, 0.054), (0.0045, 0.0045, 0.0035), m['metal'], seg=(10, 6)))
+        body.append(rbox(f'{cid}_SideSeam{sx}', (sx * 0.0752, 0.128, 0), (0.002, 0.0024, 0.07), m['ink'], bevel=0.0006, segs=1))
+    body.append(rbox(f'{cid}_Hatch', (0, 0.135, -0.0555), (0.084, 0.064, 0.004), m['metal'], bevel=0.004))
+    for k in range(2):
+        body.append(rbox(f'{cid}_HatchVent{k}', (0, 0.143 - k * 0.012, -0.0578), (0.05, 0.0035, 0.002), m['ink'], bevel=0.0008, segs=1))
     body.append(cyl(f'{cid}_Neck', (0, 0.2, 0), 0.025, 0.04, m['metal']))
+    body.append(torus(f'{cid}_NeckRing', (0, 0.197, 0), 0.025, 0.003, m['ink'], r=(math.pi / 2, 0, 0), seg=20, mseg=6))
     body.append(cyl(f'{cid}_Waist', (0, 0.064, 0), 0.05, 0.03, m['metal']))
+    body.append(torus(f'{cid}_WaistRing', (0, 0.058, 0), 0.05, 0.0028, m['ink'], r=(math.pi / 2, 0, 0), seg=24, mseg=6))
     for side in (-1, 1):
         body.append(ell(f'{cid}_ShoulderJoint{side}', (side * 0.08, 0.165, 0), (0.024, 0.024, 0.024), m['metal']))
+        body.append(torus(f'{cid}_ShoulderRing{side}', (side * 0.091, 0.165, 0), 0.017, 0.0042, m['main'], r=(0, math.pi / 2, 0), seg=20, mseg=6))
+        body.append(cyl(f'{cid}_ShoulderNut{side}', (side * 0.102, 0.165, 0), 0.008, 0.005, m['metal'], r=(0, 0, math.pi / 2), seg=6))
         body.append(cyl(f'{cid}_Leg{side}', (side * 0.034, 0.045, 0), 0.016, 0.04, m['metal']))
         body.append(rbox(f'{cid}_Foot{side}', (side * 0.042, 0.018, 0.012), (0.054, 0.034, 0.08), m['main'], bevel=0.012))
         body.append(rbox(f'{cid}_Tread{side}', (side * 0.042, 0.004, 0.012), (0.058, 0.008, 0.084), m['ink'], bevel=0.003))
+        body.append(rbox(f'{cid}_ToeCap{side}', (side * 0.042, 0.016, 0.0485), (0.05, 0.02, 0.014), m['metal'], bevel=0.006))
+        body.append(cyl(f'{cid}_FootAnkle{side}', (side * 0.042, 0.038, 0.006), 0.018, 0.01, m['metal'], seg=16))
     head.append(rbox(f'{cid}_Head', (0, 0, 0), (0.2, 0.16, 0.17), m['metal'], bevel=0.03))
+    # A frame in the player's colour round the visor, a mouth grille, rivets and side seams.
+    head.append(rbox(f'{cid}_VisorFrame', (0, 0.006, 0.0815), (0.18, 0.09, 0.008), m['main'], bevel=0.01))
     head.append(rbox(f'{cid}_Visor', (0, 0.006, 0.084), (0.168, 0.078, 0.012), m['glass'], bevel=0.012))
     for side in (-1, 1):
         head.append(ell(f'{cid}_Eye{side}', (side * 0.038, 0.01, 0.091), (0.022, 0.017, 0.005), m['glow'], seg=(18, 10)))
-        head.append(cyl(f'{cid}_Bolt{side}', (side * 0.106, 0, 0), 0.032, 0.022, m['main'], r=(0, 0, math.pi / 2)))
-        head.append(cyl(f'{cid}_BoltCap{side}', (side * 0.119, 0, 0), 0.016, 0.01, m['metal'], r=(0, 0, math.pi / 2)))
-    for k in range(4):
-        head.append(rbox(f'{cid}_Grille{k}', (-0.024 + k * 0.016, -0.054, 0.086), (0.008, 0.016, 0.004), m['ink'], bevel=0.002, segs=1))
+        head.append(ell(f'{cid}_EyeShine{side}', (side * 0.038 - 0.008, 0.016, 0.0948), (0.005, 0.0035, 0.0015), m['white'], seg=(10, 6)))
+        # Ear bolts: a flared collar, a ring, a hex nut and a domed cap.
+        head.append(cyl(f'{cid}_Bolt{side}', (side * 0.107, 0, 0), 0.034, 0.018, m['main'], r=(0, 0, -side * math.pi / 2), r_top=0.027, seg=24))
+        head.append(torus(f'{cid}_BoltRing{side}', (side * 0.117, 0, 0), 0.022, 0.0035, m['metal'], r=(0, math.pi / 2, 0), seg=24, mseg=6))
+        head.append(cyl(f'{cid}_BoltNut{side}', (side * 0.121, 0, 0), 0.016, 0.012, m['metal'], r=(0, 0, math.pi / 2), seg=6))
+        head.append(ell(f'{cid}_BoltCap{side}', (side * 0.1275, 0, 0), (0.004, 0.009, 0.009), m['accent'], seg=(12, 8)))
+        head.append(rbox(f'{cid}_HeadSeam{side}', (side * 0.1004, 0.046, 0), (0.002, 0.0024, 0.11), m['ink'], bevel=0.0006, segs=1))
+        for k, y in enumerate((0.066, -0.064)):
+            head.append(ell(f'{cid}_HeadRivet{side}{k}', (side * 0.077, y, 0.0795), (0.0045, 0.0045, 0.0035), m['metal'], seg=(10, 6)))
+    head.append(rbox(f'{cid}_MouthPlate', (0, -0.055, 0.0845), (0.072, 0.026, 0.004), m['ink'], bevel=0.003))
+    for k in range(5):
+        head.append(rbox(f'{cid}_Grille{k}', (-0.024 + k * 0.012, -0.055, 0.0865), (0.005, 0.017, 0.002), m['metal'], bevel=0.001, segs=1))
     head.append(rbox(f'{cid}_TopPlate', (0, 0.083, 0), (0.12, 0.012, 0.11), m['main'], bevel=0.005))
-    head.append(cyl(f'{cid}_Antenna', (0, 0.12, 0), 0.006, 0.07, m['metal'], seg=10))
-    head.append(ell(f'{cid}_AntennaBall', (0, 0.162, 0), (0.02, 0.02, 0.02), m['glow'], seg=(16, 10)))
+    # Antenna: a dome, a rod with two collars, a glowing bulb in an orbit ring.
+    head.append(ell(f'{cid}_AntennaBase', (0, 0.089, 0), (0.024, 0.012, 0.024), m['main'], seg=(18, 10)))
+    head.append(cyl(f'{cid}_Antenna', (0, 0.125, 0), 0.005, 0.06, m['metal'], seg=10))
+    for k, y in enumerate((0.104, 0.13)):
+        head.append(torus(f'{cid}_AntennaCollar{k}', (0, y, 0), 0.0065, 0.0025, m['ink'], r=(math.pi / 2, 0, 0), seg=12, mseg=6))
+    head.append(ell(f'{cid}_AntennaBall', (0, 0.165, 0), (0.017, 0.017, 0.017), m['glow'], seg=(16, 10)))
+    head.append(torus(f'{cid}_AntennaOrbit', (0, 0.165, 0), 0.026, 0.0025, m['accent'], r=(math.pi / 2 - 0.4, 0, 0.3), seg=28, mseg=6))
 
     def claw(part, side):
         return [ell(f'{cid}_{part}Palm', (0, 0, 0), (0.024, 0.022, 0.022), m['metal']),
+                torus(f'{cid}_{part}Wrist', (0, 0.018, 0), 0.02, 0.005, m['main'], r=(math.pi / 2, 0, 0), seg=20, mseg=6),
                 rbox(f'{cid}_{part}FingerA', (0.008, -0.022, 0.008), (0.01, 0.024, 0.01), m['main'], r=(0.2, 0, 0.2), bevel=0.003),
                 rbox(f'{cid}_{part}FingerB', (-0.008, -0.022, 0.008), (0.01, 0.024, 0.01), m['main'], r=(0.2, 0, -0.2), bevel=0.003)]
     return {'Body': body, 'Head': head, 'HandL': claw('HandL', 1), 'HandR': claw('HandR', -1)}
@@ -633,23 +718,84 @@ def wizard(m):
 def astronaut(m):
     cid = 'astronaut'
     body, head = [], []
-    body.append(ell(f'{cid}_Suit', (0, 0.12, 0), (0.078, 0.078, 0.064), m['white'], fuse=True))
-    body.append(rbox(f'{cid}_ChestPack', (0, 0.135, 0.058), (0.064, 0.044, 0.016), m['main'], r=(-0.15, 0, 0), bevel=0.006))
+    SUIT = ((0, 0.12, 0), (0.078, 0.078, 0.064))
+    body.append(ell(f'{cid}_Suit', SUIT[0], SUIT[1], m['white'], fuse=True))
+    # Chest control pack: a little screen, a dial and three buttons.
+    PK = M((0, 0.135, 0.058), (-0.15, 0, 0))
+    body.append(rbox(f'{cid}_ChestPack', (0, 0, 0), (0.064, 0.044, 0.016), m['main'], parent=PK, bevel=0.006))
+    body.append(rbox(f'{cid}_PackScreen', (-0.01, 0.008, 0.0085), (0.032, 0.014, 0.003), m['glass'], parent=PK, bevel=0.0015, segs=1))
+    body.append(rbox(f'{cid}_PackTrace', (-0.012, 0.008, 0.0102), (0.02, 0.0022, 0.001), m['glow'], parent=PK, bevel=0.0004, segs=1))
+    body.append(torus(f'{cid}_PackDial', (-0.014, -0.01, 0.0085), 0.0062, 0.0018, m['metal'], parent=PK, seg=16, mseg=6))
+    body.append(ell(f'{cid}_PackKnob', (-0.014, -0.01, 0.009), (0.0038, 0.0038, 0.0025), m['accent'], parent=PK, seg=(10, 6)))
     for k, key in enumerate(('accent', 'glow', 'c1')):
-        body.append(ell(f'{cid}_Button{k}', (-0.018 + k * 0.018, 0.137, 0.068), (0.006, 0.006, 0.003), m[key], seg=(10, 6)))
+        body.append(ell(f'{cid}_Button{k}', (0.02, 0.012 - k * 0.0115, 0.0085), (0.0048, 0.0048, 0.0028), m[key], parent=PK, seg=(10, 6)))
+    # Life-support pack: a coloured lid with vents, twin tanks, hoses round to the chest pack.
     body.append(rbox(f'{cid}_Backpack', (0, 0.135, -0.065), (0.11, 0.1, 0.04), m['white'], bevel=0.012))
-    body.append(torus(f'{cid}_Belt', (0, 0.088, 0), 0.075, 0.007, m['main'], r=(math.pi / 2, 0, 0)))
+    body.append(rbox(f'{cid}_PackLid', (0, 0.166, -0.0865), (0.094, 0.03, 0.006), m['main'], bevel=0.003))
+    for k in range(3):
+        body.append(rbox(f'{cid}_PackVent{k}', (-0.02 + k * 0.02, 0.166, -0.0895), (0.012, 0.016, 0.002), m['ink'], bevel=0.0008, segs=1))
+    for side in (-1, 1):
+        body.append(cyl(f'{cid}_Tank{side}', (side * 0.028, 0.118, -0.092), 0.013, 0.05, m['metal'], seg=16))
+        for k, y in enumerate((0.093, 0.143)):
+            body.append(ell(f'{cid}_TankCap{side}{k}', (side * 0.028, y, -0.092), (0.013, 0.006, 0.013), m['main'], seg=(16, 8)))
+        hose = [(side * 0.052, 0.112, -0.07), (side * 0.08, 0.106, -0.02), (side * 0.07, 0.112, 0.034), (side * 0.035, 0.124, 0.058)]
+        body.append(strand(f'{cid}_Hose{side}', hose, 0.0055, 0.0055, m['accent' if side > 0 else 'metal'], ring=8))
+        for k, q in enumerate((hose[0], hose[-1])):
+            body.append(ell(f'{cid}_HoseEnd{side}{k}', q, (0.0085, 0.0085, 0.0085), m['metal'], seg=(12, 8)))
+    # Mission patch (just shapes, no flag) and a name tab.
+    G = on_ell(SUIT, -0.05, 0.11, lift=0.0005)
+    body.append(ell(f'{cid}_Patch', (0, 0, 0), (0.0135, 0.0135, 0.0025), m['main'], parent=G, seg=(18, 6)))
+    body.append(ell(f'{cid}_PatchIn', (0, 0, 0.0012), (0.0095, 0.0095, 0.0022), m['c1'], parent=G, seg=(16, 6)))
+    body.append(ell(f'{cid}_PatchStar', (0, 0, 0.0028), (0.0055, 0.0055, 0.0016), m['white'], parent=G, r=(0, 0, 0.6), seg=(4, 2)))
+    G = on_ell(SUIT, 0.05, 0.112, lift=0.0005)
+    body.append(rbox(f'{cid}_NameTab', (0, 0, 0), (0.024, 0.012, 0.003), m['accent'], parent=G, bevel=0.0012, segs=1))
+    body.append(rbox(f'{cid}_NameLine', (0, 0, 0.0018), (0.016, 0.0022, 0.001), m['white'], parent=G, bevel=0.0004, segs=1))
+    # Suit seams: a yoke ring across the chest and a belt hugging the suit, with a buckle.
+    body.append(torus(f'{cid}_Yoke', (0, 0.158, 0), 0.069, 0.0024, m['main'], r=(math.pi / 2, 0, 0), parent=M(s=(1, 1, 0.82)), seg=36, mseg=6))
+    body.append(torus(f'{cid}_Belt', (0, 0.088, 0), 0.072, 0.007, m['main'], r=(math.pi / 2, 0, 0), parent=M(s=(1, 1, 0.82)), seg=32))
+    body.append(rbox(f'{cid}_Buckle', (0, 0.088, 0.064), (0.022, 0.014, 0.005), m['metal'], bevel=0.002))
     for side in (-1, 1):
         body.append(torus(f'{cid}_Joint{side}', (side * 0.09, 0.155, 0), 0.02, 0.006, m['main'], r=(0, math.pi / 2, 0)))
     legs(cid, m, body, 'white', top=0.07, r=0.027)
     boots(cid, m, body, 'white', cuff='main')
-    head.append(ell(f'{cid}_Helmet', (0, 0.0, 0), (0.125, 0.122, 0.12), m['white'], seg=(34, 24)))
-    head.append(ell(f'{cid}_Visor', (0, 0.0, 0.058), (0.094, 0.078, 0.07), m['glass'], seg=(30, 20)))
-    head.append(ell(f'{cid}_VisorGlint', (-0.04, 0.032, 0.124), (0.02, 0.01, 0.004), m['white'], r=(0, 0, 0.5), seg=(12, 8)))
+    for side in (-1, 1):
+        x = side * 0.042
+        body.append(torus(f'{cid}_BootRing{side}', (x, 0.056, 0.004), 0.025, 0.0035, m['metal'], r=(math.pi / 2, 0, 0), seg=20, mseg=6))
+        body.append(ell(f'{cid}_BootToe{side}', (x, 0.02, 0.046), (0.028, 0.018, 0.022), m['main'], seg=(16, 10)))
+    HELM = ((0, 0, 0), (0.125, 0.122, 0.12))
+    VIS = ((0, 0, 0.058), (0.094, 0.078, 0.07))
+    head.append(ell(f'{cid}_Helmet', HELM[0], HELM[1], m['white'], seg=(34, 24)))
+    head.append(ell(f'{cid}_Visor', VIS[0], VIS[1], m['glass'], seg=(30, 20)))
+    # The visor rim: a tube along where the visor meets the helmet.
+    rim = []
+    for i in range(20):
+        a = 2 * math.pi * i / 20
+        lo, hi = 0.0, 1.0
+        for _ in range(24):
+            s = (lo + hi) / 2
+            q = Vector((0.125 * s * math.cos(a), 0.122 * s * math.sin(a), 0.12 * math.sqrt(1 - s * s)))
+            f = (q.x / 0.094) ** 2 + (q.y / 0.078) ** 2 + ((q.z - 0.058) / 0.07) ** 2
+            lo, hi = (s, hi) if f < 1 else (lo, s)
+        nrm = Vector((q.x / 0.125 ** 2, q.y / 0.122 ** 2, q.z / 0.12 ** 2)).normalized()
+        rim.append(q + nrm * 0.002)
+    head.append(loop(f'{cid}_VisorRim', rim, 0.0075, m['main'], axis=(0, 0, 1), ring=8, n=3))
+    # Reflections: a curved streak and two dots on the glass.
+    vz = lambda x, y: ell_z(VIS, x, y) + 0.0012
+    head.append(strand(f'{cid}_VisorStreak', [(x, y, vz(x, y)) for x, y in ((-0.068, -0.004), (-0.06, 0.022), (-0.04, 0.04), (-0.018, 0.046))],
+                       0.0045, 0.002, m['white'], ring=6))
+    for k, (x, y, r) in enumerate(((-0.07, -0.022, 0.004), (0.05, -0.035, 0.0028))):
+        head.append(ell(f'{cid}_VisorGlint{k}', (x, y, vz(x, y)), (r, r, 0.0015), m['white'], seg=(10, 6)))
     head.append(torus(f'{cid}_Collar', (0, -0.105, 0), 0.07, 0.014, m['main'], r=(math.pi / 2, 0, 0)))
+    head.append(torus(f'{cid}_CollarRing', (0, -0.119, 0), 0.066, 0.006, m['metal'], r=(math.pi / 2, 0, 0)))
     for side in (-1, 1):
         head.append(cyl(f'{cid}_EarLight{side}', (side * 0.122, 0.0, 0), 0.026, 0.02, m['main'], r=(0, 0, math.pi / 2)))
+        head.append(torus(f'{cid}_EarRing{side}', (side * 0.1315, 0.0, 0), 0.018, 0.003, m['metal'], r=(0, math.pi / 2, 0), seg=20, mseg=6))
         head.append(cyl(f'{cid}_EarLamp{side}', (side * 0.132, 0.0, 0), 0.014, 0.008, m['accent'], r=(0, 0, math.pi / 2)))
+    # Head lamp over the visor.
+    G = on_ell(HELM, 0.0, 0.098, lift=0.002)
+    head.append(rbox(f'{cid}_HeadLamp', (0, 0, 0), (0.036, 0.016, 0.012), m['main'], parent=G, bevel=0.004))
+    head.append(ell(f'{cid}_HeadLens', (0, 0, 0.006), (0.011, 0.0055, 0.003), m['glow'], parent=G, seg=(12, 8)))
+    head.append(ell(f'{cid}_AntennaBase', (0.047, 0.108, -0.02), (0.012, 0.006, 0.012), m['main'], r=(0, 0, -0.3), seg=(14, 8)))
     head.append(cyl(f'{cid}_Antenna', (0.055, 0.13, -0.02), 0.004, 0.06, m['metal'], r=(0, 0, -0.3), seg=8))
     head.append(ell(f'{cid}_AntennaTip', (0.066, 0.16, -0.02), (0.01, 0.01, 0.01), m['accent'], seg=(12, 8)))
     return {'Body': body, 'Head': head, 'HandL': mitten(cid, 'HandL', m, 'main', 1), 'HandR': mitten(cid, 'HandR', m, 'main', -1)}
@@ -707,23 +853,57 @@ def pirate(m):
 def ninja(m):
     cid = 'ninja'
     body, head = [], []
-    body.append(ell(f'{cid}_Suit', (0, 0.12, 0), (0.074, 0.076, 0.062), m['main'], fuse=True))
-    body.append(strand(f'{cid}_Lapel', [(-0.03, 0.18, 0.05), (0.0, 0.14, 0.064), (0.03, 0.105, 0.06)], 0.006, 0.006, m['ink'], ring=6))
-    body.append(torus(f'{cid}_Sash', (0, 0.09, 0), 0.071, 0.012, m['accent'], r=(math.pi / 2, 0, 0)))
-    body.append(ell(f'{cid}_Knot', (0.03, 0.09, 0.066), (0.014, 0.012, 0.008), m['accent'], seg=(12, 8)))
+    SUIT = ((0, 0.12, 0), (0.074, 0.076, 0.062))
+    body.append(ell(f'{cid}_Suit', SUIT[0], SUIT[1], m['main'], fuse=True))
+    # A crossed kimono collar lying on the chest, left over right.
+    sp = lambda x, y, lift=0.004: (x, y, ell_z(SUIT, x, y) + lift)
+    body.append(strand(f'{cid}_Lapel', [sp(-0.034, 0.182), sp(-0.014, 0.152), sp(0.012, 0.122), sp(0.026, 0.104)], 0.0055, 0.0055, m['ink'], ring=6))
+    body.append(strand(f'{cid}_LapelUnder', [sp(0.034, 0.182), sp(0.016, 0.16), sp(0.002, 0.146, 0.002)], 0.0045, 0.0045, m['ink'], ring=6))
+    # Obi: a wide sash hugging the waist, a cord above it, and a proper knot with loops and tails.
+    body.append(torus(f'{cid}_Sash', (0, 0.09, 0), 0.07, 0.012, m['accent'], r=(math.pi / 2, 0, 0), parent=M(s=(1, 1, 0.84)), seg=32))
+    body.append(torus(f'{cid}_Cord', (0, 0.105, 0), 0.0715, 0.003, m['ink'], r=(math.pi / 2, 0, 0), parent=M(s=(1, 1, 0.85)), seg=32, mseg=6))
+    kx, kz = 0.03, 0.066
+    body.append(ell(f'{cid}_Knot', (kx, 0.09, kz), (0.012, 0.011, 0.008), m['accent'], seg=(12, 8)))
     for side in (-1, 1):
-        body.append(strand(f'{cid}_SashTail{side}', [(0.03, 0.088, 0.07), (0.034 + side * 0.008, 0.06, 0.074), (0.036 + side * 0.014, 0.035, 0.07)],
-                           0.007, 0.004, m['accent'], ring=6))
-    # Katana across the back.
+        body.append(torus(f'{cid}_KnotLoop{side}', (kx + side * 0.014, 0.093, kz - 0.002), 0.0085, 0.0042, m['accent'], r=(0, side * 0.35, side * 0.5),
+                          seg=16, mseg=6))
+        body.append(strand(f'{cid}_SashTail{side}', [(kx, 0.086, kz + 0.002), (kx + side * 0.007, 0.064, kz + 0.007), (kx + side * 0.01, 0.045, kz + 0.005),
+                                                      (kx + side * 0.016, 0.03, kz + 0.002)], 0.0065, 0.0058, m['accent'], ring=6))
+    # Shoulder wraps: cloth bands hugging the top of each shoulder, front to back.
+    for side in (-1, 1):
+        for k, x in enumerate((0.05, 0.062)):
+            f = math.sqrt(1 - (x / 0.074) ** 2)
+            pts = [(side * x, 0.12 + (0.076 * f + 0.003) * math.sin(a), (0.062 * f + 0.003) * math.cos(a)) for a in (0.45, 1.0, 1.57, 2.14, 2.69)]
+            body.append(strand(f'{cid}_ShoulderWrap{side}{k}', pts, 0.0042, 0.0042, m['ink'], ring=6))
+    # Katana across the back: sheath with mouth and end fittings, a cord band, a wrapped hilt.
     KT = M((0, 0.14, -0.07), (0, 0, 0.75))
     body += [rbox(f'{cid}_Sheath', (0, 0, 0), (0.016, 0.2, 0.012), m['ink'], parent=KT, bevel=0.004),
-             rbox(f'{cid}_Tsuba', (0, 0.104, 0), (0.03, 0.006, 0.026), m['accent'], parent=KT, bevel=0.002),
-             rbox(f'{cid}_Hilt', (0, 0.135, 0), (0.012, 0.055, 0.011), m['c2'], parent=KT, bevel=0.003)]
+             rbox(f'{cid}_SheathMouth', (0, 0.094, 0), (0.019, 0.01, 0.015), m['gold'], parent=KT, bevel=0.002),
+             rbox(f'{cid}_SheathEnd', (0, -0.094, 0), (0.019, 0.014, 0.015), m['gold'], parent=KT, bevel=0.003),
+             rbox(f'{cid}_SheathBand', (0, 0.055, 0), (0.019, 0.008, 0.015), m['accent'], parent=KT, bevel=0.002),
+             rbox(f'{cid}_Tsuba', (0, 0.104, 0), (0.03, 0.006, 0.026), m['gold'], parent=KT, bevel=0.002),
+             rbox(f'{cid}_Hilt', (0, 0.135, 0), (0.012, 0.055, 0.011), m['c2'], parent=KT, bevel=0.003),
+             rbox(f'{cid}_Pommel', (0, 0.164, 0), (0.0145, 0.008, 0.0135), m['gold'], parent=KT, bevel=0.002)]
+    for k in range(4):
+        for face in (-1, 1):
+            body.append(rbox(f'{cid}_HiltWrap{k}{face}', (0, 0.115 + k * 0.013, face * 0.0056), (0.0065, 0.0065, 0.0016), m['ink'], parent=KT,
+                             r=(0, 0, math.pi / 4), bevel=0.0005, segs=1))
     legs(cid, m, body, 'main', top=0.07)
     for side in (-1, 1):
         body.append(ell(f'{cid}_Tabi{side}', (side * 0.042, 0.02, 0.014), (0.03, 0.02, 0.046), m['ink'], seg=(18, 10)))
-    head.append(ell(f'{cid}_Hood', (0, 0, 0), (0.11, 0.106, 0.104), m['main'], seg=(32, 22), fuse=True))
-    head.append(ell(f'{cid}_Mask', (0, -0.04, 0.03), (0.098, 0.06, 0.084), m['main'], fuse=True))
+        body.append(torus(f'{cid}_TabiWrap{side}', (side * 0.042, 0.042, 0.008), 0.0235, 0.0045, m['white'], r=(math.pi / 2, 0, 0), seg=20, mseg=6))
+    HOOD =((0, 0, 0), (0.11, 0.106, 0.104))
+    MASK = ((0, -0.04, 0.03), (0.098, 0.06, 0.084))
+    head.append(ell(f'{cid}_Hood', HOOD[0], HOOD[1], m['main'], seg=(32, 22), fuse=True))
+    head.append(ell(f'{cid}_Mask', MASK[0], MASK[1], m['main'], fuse=True))
+    # Cloth folds across the mask: soft sagging ridges in the same cloth.
+    mz = lambda x, y: max(ell_z(HOOD, x, y), ell_z(MASK, x, y))
+    for k, (y0, w, sag) in enumerate(((-0.036, 0.062, 0.006), (-0.058, 0.055, 0.008), (-0.078, 0.04, 0.006))):
+        pts = []
+        for t in (-1, -0.5, 0, 0.5, 1):
+            x, y = t * w, y0 - sag * (1 - t * t)
+            pts.append((x, y, mz(x, y) - 0.0004))
+        head.append(strand(f'{cid}_MaskFold{k}', pts, 0.003, 0.0022, m['main'], ring=6))
     head.append(ell(f'{cid}_EyeBand', (0, 0.012, 0.074), (0.074, 0.026, 0.034), m['skin'], seg=(24, 12)))
     eyes(cid, head, m, y=0.012, gap=0.033, z=0.098, size=(0.017, 0.013), iris='c3', yaw=0.34, lids=False)
     for side in (-1, 1):
@@ -731,10 +911,20 @@ def ninja(m):
                            0.0045, 0.003, m['ink'], ring=6))
     head.append(torus(f'{cid}_Band', (0, 0.045, 0), 0.108, 0.011, m['accent'], r=(math.pi / 2 - 0.12, 0, 0), seg=36))
     head.append(ell(f'{cid}_BandPlate', (0, 0.05, 0.107), (0.03, 0.016, 0.006), m['metal'], r=(-0.12, 0, 0), seg=(16, 8)))
+    head.append(rbox(f'{cid}_BandMark', (0, 0.0507, 0.1125), (0.026, 0.0028, 0.002), m['ink'], r=(-0.12, 0, 0.3), bevel=0.0006, segs=1))
     for side in (-1, 1):
-        head.append(strand(f'{cid}_BandTail{side}', [(0, 0.04, -0.105), (side * 0.03, 0.02, -0.13), (side * 0.05, -0.02, -0.15), (side * 0.07, -0.05, -0.14)],
-                           0.009, 0.006, m['accent'], ring=6))
-    return {'Body': body, 'Head': head, 'HandL': mitten(cid, 'HandL', m, 'main', 1), 'HandR': mitten(cid, 'HandR', m, 'main', -1)}
+        head.append(ell(f'{cid}_BandStud{side}', (side * 0.022, 0.0505, 0.1112), (0.0028, 0.0028, 0.0018), m['ink'], r=(-0.12, 0, 0), seg=(8, 6)))
+    # Headband knot at the back: a knot, two loops and long tails that flutter out.
+    head.append(ell(f'{cid}_BandKnot', (0, 0.033, -0.112), (0.014, 0.013, 0.01), m['accent'], seg=(14, 10)))
+    for side in (-1, 1):
+        head.append(torus(f'{cid}_BandLoop{side}', (side * 0.017, 0.037, -0.11), 0.009, 0.0048, m['accent'], r=(0.2, side * 0.3, side * 0.45),
+                          seg=16, mseg=6))
+        head.append(strand(f'{cid}_BandTail{side}', [(side * 0.004, 0.03, -0.114), (side * 0.022, 0.008, -0.13), (side * 0.036, -0.022, -0.146),
+                                                      (side * 0.05, -0.05, -0.142), (side * 0.068, -0.07, -0.15)],
+                           0.0085, 0.006, m['accent'], ring=6))
+    wrap = lambda part, side: [torus(f'{cid}_{part}Wrap', (0, 0.02, 0), 0.0215, 0.0055, m['ink'], r=(math.pi / 2, side * 0.45, 0), seg=18, mseg=6)]
+    return {'Body': body, 'Head': head, 'HandL': mitten(cid, 'HandL', m, 'main', 1) + wrap('HandL', 1),
+            'HandR': mitten(cid, 'HandR', m, 'main', -1) + wrap('HandR', -1)}
 
 
 def chef(m):
@@ -774,28 +964,66 @@ def chef(m):
 def alien(m):
     cid = 'alien'
     body, head = [], []
-    body.append(ell(f'{cid}_Trunk', (0, 0.115, 0), (0.06, 0.08, 0.052), m['main'], fuse=True))
+    TRUNK = ((0, 0.115, 0), (0.06, 0.08, 0.052))
+    body.append(ell(f'{cid}_Trunk', TRUNK[0], TRUNK[1], m['main'], fuse=True))
     body.append(ell(f'{cid}_SuitBand', (0, 0.12, 0.0), (0.062, 0.03, 0.054), m['metal'], seg=(24, 10)))
+    # Glowing piping either side of the band, a V of piping up to a collar, a ringed badge.
+    for k, y in enumerate((0.111, 0.129)):
+        body.append(torus(f'{cid}_Piping{k}', (0, y, 0), 0.0605, 0.0019, m['glow'], r=(math.pi / 2, 0, 0), parent=M(s=(1, 1, 0.87)), seg=32, mseg=5))
+    tp = lambda x, y: (x, y, ell_z(TRUNK, x, y) + 0.0008)
+    for side in (-1, 1):
+        body.append(strand(f'{cid}_VTrim{side}', [tp(side * 0.026, 0.181), tp(side * 0.014, 0.158), tp(side * 0.004, 0.14)], 0.0019, 0.0019, m['glow'], ring=5))
+    body.append(torus(f'{cid}_Collar', (0, 0.184, 0), 0.03, 0.006, m['metal'], r=(math.pi / 2, 0, 0), parent=M(s=(1, 1, 0.87)), seg=24, mseg=6))
+    body.append(torus(f'{cid}_BadgeRing', (0, 0.124, 0.0548), 0.0125, 0.0024, m['gold'], seg=18, mseg=6))
     body.append(ell(f'{cid}_Badge', (0, 0.124, 0.053), (0.012, 0.012, 0.004), m['glow'], seg=(12, 8)))
+    for side in (-1, 1):
+        body.append(ell(f'{cid}_ShoulderPad{side}', (side * 0.046, 0.172, 0), (0.024, 0.011, 0.03), m['metal'], r=(0, 0, -side * 0.5), seg=(16, 10)))
+        body.append(ell(f'{cid}_PadGlow{side}', (side * 0.052, 0.178, 0.022), (0.004, 0.004, 0.003), m['glow'], seg=(8, 6)))
+    # Belt with a gadget on the hip: a box with a glowing lens and two buttons.
+    body.append(torus(f'{cid}_Belt', (0, 0.086, 0), 0.057, 0.005, m['ink'], r=(math.pi / 2, 0, 0), parent=M(s=(1, 1, 0.86)), seg=28, mseg=6))
+    G = on_ell(TRUNK, 0.038, 0.082, lift=0.006)
+    body.append(rbox(f'{cid}_Gadget', (0, 0, 0), (0.024, 0.026, 0.012), m['metal'], parent=G, bevel=0.004))
+    body.append(cyl(f'{cid}_GadgetLens', (0, 0.004, 0.006), 0.0065, 0.004, m['ink'], r=(math.pi / 2, 0, 0), parent=G, seg=14))
+    body.append(ell(f'{cid}_GadgetGlow', (0, 0.004, 0.0085), (0.0048, 0.0048, 0.0018), m['glow'], parent=G, seg=(12, 6)))
+    for k, x in enumerate((-0.005, 0.005)):
+        body.append(ell(f'{cid}_GadgetKey{k}', (x, -0.008, 0.006), (0.0025, 0.002, 0.0015), m['accent'], parent=G, seg=(8, 6)))
     legs(cid, m, body, 'main', top=0.07, r=0.02)
     for side in (-1, 1):
         body.append(ell(f'{cid}_Foot{side}', (side * 0.04, 0.016, 0.016), (0.028, 0.016, 0.045), m['main'], seg=(18, 10)))
+        body.append(ell(f'{cid}_FootSole{side}', (side * 0.04, 0.006, 0.016), (0.03, 0.008, 0.047), m['metal'], seg=(18, 8), deform=cut_above(0.008)))
+        body.append(ell(f'{cid}_FootGlow{side}', (side * 0.04, 0.02, 0.058), (0.005, 0.004, 0.003), m['glow'], seg=(8, 6)))
     def chin(v):
         if v.y < 0:
             t = min(1.0, -v.y / 0.11)
             v.x *= 1 - 0.38 * t
             v.z *= 1 - 0.12 * t
         return v
-    head.append(ell(f'{cid}_Skull', (0, 0.01, 0), (0.125, 0.12, 0.11), m['main'], seg=(34, 24), deform=chin, fuse=True))
+    skull = ell(f'{cid}_Skull', (0, 0.01, 0), (0.125, 0.12, 0.11), m['main'], seg=(40, 28), deform=chin, fuse=True)
+    skull['budget'] = 3200
+    head.append(skull)
+    # Subtle cranial ridges, sunk into the skull so the fuse melts them into soft bumps.
+    for k, (phi, rr) in enumerate(((0.0, 0.0075), (-0.42, 0.0055), (0.42, 0.0055))):
+        pts = []
+        for th in (0.7, 0.3, -0.1, -0.5, -0.85):
+            u = Vector((math.sin(phi), math.cos(phi) * math.cos(th), math.cos(phi) * math.sin(th)))
+            q = Vector((0.125 * u.x, 0.01 + 0.12 * u.y, 0.11 * u.z))
+            nrm = Vector((u.x / 0.125, u.y / 0.12, u.z / 0.11)).normalized()
+            pts.append(q - nrm * (rr - 0.0024))
+        head.append(strand(f'{cid}_Ridge{k}', pts, rr, rr, m['main'], fuse=True, ring=8))
     for side in (-1, 1):
         G = M((side * 0.047, 0.004, 0.097), (0, side * 0.42, -side * 0.38))
         head.append(ell(f'{cid}_Eye{side}', (0, 0, 0), (0.034, 0.022, 0.016), m['ink'], parent=G, seg=(22, 14)))
         blink_lid(cid, head, m, G, side, (0.034, 0.022, 0.016))
         head.append(ell(f'{cid}_EyeGlint{side}', (-0.012, 0.008, 0.014), (0.007, 0.005, 0.002), m['white'], parent=G, seg=(10, 6)))
         head.append(ell(f'{cid}_EyeGlint2{side}', (0.012, -0.006, 0.014), (0.003, 0.003, 0.0015), m['white'], parent=G, seg=(8, 6)))
-        head.append(strand(f'{cid}_Antenna{side}', [(side * 0.04, 0.11, 0.0), (side * 0.06, 0.15, -0.01), (side * 0.08, 0.19, 0.0)],
-                           0.007, 0.004, m['main'], ring=8))
-        head.append(ell(f'{cid}_AntennaBall{side}', (side * 0.082, 0.198, 0.002), (0.016, 0.016, 0.016), m['glow'], seg=(14, 10)))
+        # Antennae: a curved stalk from a ringed socket, ending in a glowing bulb in a little cup.
+        head.append(strand(f'{cid}_Antenna{side}', [(side * 0.04, 0.11, 0.0), (side * 0.05, 0.145, -0.012), (side * 0.068, 0.172, -0.008),
+                                                    (side * 0.08, 0.188, 0.0)], 0.0075, 0.0038, m['main'], ring=8))
+        head.append(torus(f'{cid}_AntennaSocket{side}', (side * 0.043, 0.1225, -0.002), 0.0095, 0.0032, m['metal'], r=(math.pi / 2, side * 0.34, 0),
+                          seg=16, mseg=6))
+        head.append(ell(f'{cid}_AntennaCup{side}', (side * 0.083, 0.192, 0.002), (0.011, 0.0065, 0.011), m['metal'], r=(0.3, 0, -side * 0.6), seg=(14, 8)))
+        head.append(ell(f'{cid}_AntennaBall{side}', (side * 0.088, 0.202, 0.004), (0.0155, 0.0155, 0.0155), m['glow'], seg=(16, 12)))
+        head.append(ell(f'{cid}_AntennaGlint{side}', (side * 0.088 - 0.006, 0.21, 0.015), (0.0042, 0.0042, 0.002), m['white'], r=(-0.5, 0, 0), seg=(8, 6)))
     head.append(strand(f'{cid}_Mouth', [(-0.012, -0.074, 0.084), (0, -0.079, 0.088), (0.012, -0.074, 0.084)], 0.0025, 0.0025, m['ink'], ring=5))
 
     def three_fingers(part, side):
@@ -803,6 +1031,7 @@ def alien(m):
         for k, a in enumerate((-0.4, 0.0, 0.4)):
             out.append(strand(f'{cid}_{part}Finger{k}', [(math.sin(a) * 0.012, -0.012, 0.004), (math.sin(a) * 0.02, -0.03, 0.008)],
                               0.0065, 0.005, m['main'], fuse=True, ring=8))
+        out.append(torus(f'{cid}_{part}Wrist', (0, 0.017, 0), 0.0175, 0.0042, m['metal'], r=(math.pi / 2, 0, 0), seg=18, mseg=6))
         return out
     return {'Body': body, 'Head': head, 'HandL': three_fingers('HandL', 1), 'HandR': three_fingers('HandR', -1)}
 
