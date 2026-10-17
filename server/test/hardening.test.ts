@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { EngineError, Game, type GameSnapshot } from '../src/engine/game.ts';
 import { botAction } from '../src/engine/bot.ts';
 import { DEFAULT_RULES, resolveTheme } from '../../shared/themes.ts';
-import { Registry, Room, type RoomHooks } from '../src/rooms.ts';
+import { CREATES_PER_WINDOW, Registry, Room, RoomError, type RoomHooks } from '../src/rooms.ts';
 import type { Action, Trade } from '../../shared/types.ts';
 import { scripted } from './helpers.ts';
 
@@ -301,4 +301,55 @@ test('a running game with no humans for 30 minutes ends on net worth, then is sw
   r.spectators = 0;
   sweep();
   assert.equal(reg.get(r.code), undefined, 'then swept as usual');
+});
+
+// ---- room limits and kicks -------------------------------------------------------
+
+test('a lobby closes the moment its last human leaves (bots do not count)', () => {
+  const reg = new Registry(quietHooks(), 1e9);
+  const r = reg.create('a');
+  r.join({ id: 'a', name: 'A', avatar: '' });
+  r.join({ id: 'b', name: 'B', avatar: '' });
+  r.addBot('a', false);
+  r.leave('a');
+  assert.equal(reg.get(r.code), r, 'b is still seated');
+  r.leave('b');
+  assert.equal(reg.get(r.code), undefined, 'only a bot left: closed at once');
+
+  // An operator removing the last human closes it too.
+  const r2 = reg.create('c');
+  r2.join({ id: 'c', name: 'C', avatar: '' });
+  r2.kick('op', 'c', true);
+  assert.equal(reg.get(r2.code), undefined);
+});
+
+test('room creation is rate limited per account; operators are exempt', () => {
+  const reg = new Registry(quietHooks(), 1e9);
+  for (let i = 0; i < CREATES_PER_WINDOW; i++) reg.create('spammer');
+  assert.throws(() => reg.create('spammer'), RoomError);
+  assert.doesNotThrow(() => reg.create('someone-else'));
+  for (let i = 0; i < CREATES_PER_WINDOW + 3; i++) reg.create('operator', true);
+  for (const code of [...reg.rooms.keys()]) reg.delete(code);
+  assert.throws(() => reg.create('spammer'), /a lot of rooms/, 'closing rooms does not reset the limit');
+});
+
+test('a kicked player cannot take a lobby seat again (even after a restart), but may watch', async () => {
+  const { takeSeat } = await import('../src/seating.ts');
+  const reg = new Registry(quietHooks(), 1e9);
+  const r = reg.create('a');
+  r.join({ id: 'a', name: 'A', avatar: '' });
+  r.join({ id: 'b', name: 'B', avatar: '' });
+  r.kick('a', 'b', false);
+  assert.throws(() => r.join({ id: 'b', name: 'B', avatar: '' }), /removed/);
+  const prof = { id: 'b', name: 'B', avatar: '', provider: 'demo' as const };
+  assert.deepEqual(await takeSeat(r, prof, false), { seated: false, blocked: null }, 'reloading the page: watching');
+  assert.equal(r.seat('b'), undefined);
+
+  const reg2 = new Registry(quietHooks(), 1e9);
+  reg2.restore(JSON.parse(JSON.stringify(reg.snapshot())));
+  const r2 = reg2.get(r.code)!;
+  assert.throws(() => r2.join({ id: 'b', name: 'B', avatar: '' }), /removed/);
+  assert.doesNotThrow(() => r2.join({ id: 'c', name: 'C', avatar: '' }));
+  r.dispose();
+  r2.dispose();
 });

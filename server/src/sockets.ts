@@ -217,7 +217,7 @@ export function attachSockets(io: Server): SocketLayer {
       if (registry.roomsOf(m.id).filter(r => r.hostId === m.id && r.status === 'lobby').length >= 3) {
         throw new RoomError('You already have 3 open lobbies — start or leave one first');
       }
-      const room = registry.create(m.id);
+      const room = registry.create(m.id, isAdmin());
       room.join(m);
       enter(room, true);
       return { code: room.code };

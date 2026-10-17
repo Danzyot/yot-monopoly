@@ -37,6 +37,9 @@ const FINISHED_ROOM_MS = 10 * 60_000;
 /** …or longer while someone is still at the table deciding on a rematch, up to this. */
 const FINISHED_ROOM_MAX_MS = 3 * 60 * 60_000;
 export const MAX_ROOMS = 500;
+/** Each account may open this many rooms per CREATE_WINDOW_MS (operators exempt). */
+export const CREATES_PER_WINDOW = 5;
+const CREATE_WINDOW_MS = 10 * 60_000;
 const BOT_NAMES = ['Rich Uncle', 'Tycoon', 'Landlord', 'Baron', 'Mogul', 'Magnate', 'Banker', 'Heiress'];
 
 export interface Member {
@@ -56,6 +59,8 @@ export interface RoomHooks {
   onEvent(room: Room, text: string): void;
   /** The game just ended. */
   onFinished(room: Room): void;
+  /** The last human left the lobby (bots don't count): the registry closes it. */
+  onEmpty?(room: Room): void;
 }
 
 export class RoomError extends Error {}
@@ -82,6 +87,8 @@ export interface RoomSnapshot {
   requirements?: JoinRequirements | null;
   /** Players who left the running game (never host again). Absent in older snapshots. */
   departed?: string[];
+  /** Players the host removed: they may watch but not sit down again. Absent in older snapshots. */
+  kicked?: string[];
 }
 
 export class Room {
@@ -120,6 +127,8 @@ export class Room {
   private failedMoves = new Map<string, string>();
   /** Players who left a running game for good; they keep their seat but can't host. */
   private departed = new Set<string>();
+  /** Players removed by the host or an operator: never seated here again (watching is fine). */
+  private kicked = new Set<string>();
 
   constructor(readonly code: string, public hostId: string, private hooks: RoomHooks) {}
 
@@ -146,6 +155,7 @@ export class Room {
       return existing;
     }
     if (this.status !== 'lobby') fail('This game has already started — you can watch');
+    if (this.kicked.has(m.id)) fail('You were removed from this room — you can watch');
     if (this.seats.length >= this.rules.maxPlayers) fail('The room is full — you can watch');
     const s: Seat = {
       id: m.id, name: m.name, avatar: m.avatar, isBot: false, connected: true, disconnectedAt: null,
@@ -173,6 +183,7 @@ export class Room {
       if (this.hostId === id) this.passHost(id, 'left');
       this.seats = this.seats.filter(x => x.id !== id);
       this.hooks.onEvent(this, `${s.name} left`);
+      this.closeIfEmpty();
     } else {
       this.departed.add(id);
       // Hand over first: the forfeit below can end the game.
@@ -185,6 +196,11 @@ export class Room {
     // Gone from the table for good: a finished room must not wait on them
     // (see the sweep), and a rematch will not keep their seat.
     if (this.status !== 'lobby') this.setConnected(id, false);
+  }
+
+  /** A lobby nobody human sits in is closed at once rather than lingering for the idle sweep. */
+  private closeIfEmpty() {
+    if (this.status === 'lobby' && !this.seats.some(s => !s.isBot)) this.hooks.onEmpty?.(this);
   }
 
   // ---- host -------------------------------------------------------------------
@@ -349,7 +365,13 @@ export class Room {
     if (target === byId) fail('Use leave instead');
     const s = this.seat(target) ?? fail('Not in this room');
     this.hooks.onEvent(this, `${s.name} was removed by ${this.seat(byId)?.name ?? 'an operator'}`);
+    // No reloading back into the seat (bots never come back anyway).
+    if (!s.isBot) this.kicked.add(target);
     this.remove(target);
+  }
+
+  wasKicked(id: string): boolean {
+    return this.kicked.has(id);
   }
 
   /** Remove a player regardless of who asks (bans, kicks). */
@@ -357,6 +379,7 @@ export class Room {
     if (this.status === 'lobby') {
       if (this.hostId === target) this.passHost(target, 'was removed');
       this.seats = this.seats.filter(s => s.id !== target);
+      this.closeIfEmpty();
     } else {
       if (this.seat(target)) this.departed.add(target);
       if (this.hostId === target) this.passHost(target, 'was removed');
@@ -730,6 +753,7 @@ export class Room {
       style: { ...this.style },
       requirements: this.requirements ? { ...this.requirements } : null,
       departed: [...this.departed],
+      kicked: [...this.kicked],
     };
   }
 
@@ -743,6 +767,7 @@ export class Room {
       requirements: sanitizeRequirements(s.requirements),
     });
     if (Array.isArray(s.departed)) r.departed = new Set(s.departed.filter(x => typeof x === 'string'));
+    if (Array.isArray(s.kicked)) r.kicked = new Set(s.kicked.filter(x => typeof x === 'string'));
     // Everyone starts disconnected: they reclaim their seats on reconnect, and
     // autopilot covers anyone who never comes back.
     const now = Date.now();
@@ -812,13 +837,25 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 export class Registry {
   rooms = new Map<string, Room>();
+  private hooks: RoomHooks;
+  /** When each account opened its recent rooms (see CREATES_PER_WINDOW). */
+  private created = new Map<string, number[]>();
 
-  constructor(private hooks: RoomHooks, sweepEveryMs = 60_000) {
+  constructor(hooks: RoomHooks, sweepEveryMs = 60_000) {
+    this.hooks = { ...hooks, onEmpty: r => { if (this.rooms.get(r.code) === r) this.delete(r.code); } };
     setInterval(() => this.sweep(), sweepEveryMs).unref();
   }
 
-  create(hostId: string): Room {
+  /** `exempt`: operators open as many rooms as they like. */
+  create(hostId: string, exempt = false): Room {
     if (this.rooms.size >= MAX_ROOMS) throw new RoomError('The server is at its room limit — try again later');
+    if (!exempt) {
+      const now = Date.now();
+      const recent = (this.created.get(hostId) ?? []).filter(t => now - t < CREATE_WINDOW_MS);
+      if (recent.length >= CREATES_PER_WINDOW) throw new RoomError('You have opened a lot of rooms — try again in a few minutes');
+      recent.push(now);
+      this.created.set(hostId, recent);
+    }
     let code: string;
     do code = Array.from({ length: 5 }, () => CODE_CHARS[randomInt(CODE_CHARS.length)]).join('');
     while (this.rooms.has(code));
@@ -871,6 +908,9 @@ export class Registry {
 
   private sweep() {
     const now = Date.now();
+    for (const [id, times] of this.created) {
+      if (times.every(t => now - t >= CREATE_WINDOW_MS)) this.created.delete(id);
+    }
     for (const [code, r] of this.rooms) {
       try {
         this.sweepOne(code, r, now);
