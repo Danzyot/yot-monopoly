@@ -7,6 +7,8 @@ import { useEffect, useState } from 'react';
 
 /** How long the dice tumble before they settle (Dice.tsx). */
 export const DICE_MS = 1100;
+/** How long a drawn card takes to fly from its pile to the camera (CardDecks). */
+export const CARD_FLIGHT_MS = 800;
 /** Never hold the HUD longer than this, whatever the scene reports. */
 const MAX_HOLD_MS = 7000;
 

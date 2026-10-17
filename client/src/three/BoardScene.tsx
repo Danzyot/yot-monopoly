@@ -13,6 +13,7 @@ import { Environment, FLOOR, TABLE_R, envLook } from './environments/index.tsx';
 import { Dice } from './Dice.tsx';
 import { CameraDirector } from './CameraDirector.tsx';
 import { MoneyFX } from './MoneyFX.tsx';
+import { CardDecks } from './CardDecks.tsx';
 import { SceneEnv } from './SceneEnv.tsx';
 import { isDirectorActive, pieceObjects, type CameraMode } from './camera.ts';
 import { ASSETS } from './assets.gen.ts';
@@ -281,9 +282,10 @@ function CameraRig({ hud, fogNear, fogFar, mode, followId }: {
         if (out.lengthSq() < 0.01) out.set(0, 0, 1);
         out.normalize();
         // Close enough to see the character, high enough to keep the board ahead in view;
-        // the target sits just past the piece so it lands mid-frame, clear of the HUD.
-        pos = tmpPos.set(p.x + out.x * 3.4, 3.1 + p.y * 0.3, p.z + out.z * 3.4);
-        target = tmpTarget.set(p.x * 0.72, 0.1, p.z * 0.72);
+        // the target sits just past the piece, which puts it a little below the middle of
+        // the frame, clear of the action bar.
+        pos = tmpPos.set(p.x + out.x * 3.0, 2.6 + p.y * 0.3, p.z + out.z * 3.0);
+        target = tmpTarget.set(p.x - out.x * 0.5, 0.2, p.z - out.z * 0.5);
       } else {
         // Nearly straight down; the slight tilt keeps the board square to the screen (straight down has no 'up').
         pos = tmpPos.set(0, 17.5 * Math.max(1, 1 / aspect), 1.6);
@@ -389,6 +391,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
       <Spinner spin={spin}>
         <Table theme={theme} presetId={tableStyle?.table} />
         <Board theme={theme} customLogo={customLogo} onPick={onSelect} onHover={onSelect ? setHover : undefined} />
+        <CardDecks theme={theme} withLogo={!!(customLogo || theme.logoUrl)} lastCard={game?.lastCard ?? null} />
         <TileHighlight index={hover} color="#ffffff" n={theme.spaces.length} />
         <TileHighlight index={selected ?? null} color={theme.palette.accent} pulse n={theme.spaces.length} />
         {game && (

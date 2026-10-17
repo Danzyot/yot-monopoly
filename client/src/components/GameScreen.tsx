@@ -13,7 +13,7 @@ import Chat from './Chat.tsx';
 import Deed from './Deed.tsx';
 import MusicPlayer from './MusicPlayer.tsx';
 import { useGameSounds } from '../useGameSounds.ts';
-import { useSceneBusy } from '../three/sequence.ts';
+import { CARD_FLIGHT_MS, useSceneBusy } from '../three/sequence.ts';
 import { useCinematicPref } from '../three/cinematic.ts';
 import { CAMERA_MODES, useCameraMode } from '../three/camera.ts';
 import PlayerMenu from './PlayerMenu.tsx';
@@ -432,8 +432,12 @@ function CardPopup({ game }: { game: GameView }) {
   const pending = card && card.seq > firstSeq.current ? card.seq : null;
   useEffect(() => {
     if (pending === null || busy) return;
-    firstSeq.current = pending;
-    setShown(pending);
+    // The 3D card flies off its pile first (CardDecks); its text takes over as it arrives.
+    const t = setTimeout(() => {
+      firstSeq.current = pending;
+      setShown(pending);
+    }, CARD_FLIGHT_MS - 60);
+    return () => clearTimeout(t);
   }, [pending, busy]);
   useEffect(() => {
     if (shown === null) return;
