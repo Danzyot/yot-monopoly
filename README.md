@@ -19,13 +19,25 @@ mini-games, music, and a full operator dashboard.
   board) and **Takeprofit TV** (from the takeprofit-tv site: ink black, amber, colour-bar sets, Big Shoulders + Space Mono, the TPTV logo on the board). Card text always names the board's own spaces.
 - **3D characters** instead of tokens — twelve detailed figures modelled in Blender
   (Snacky, Mr. Stare, Spiky, Robo, Whiskers, Sir Deed, Merlot, Cosmo, Captain Cash,
-  Shade, Chef Gusto, Zorp), with arms that follow every move, tinted in each player's
-  colour. They hop tile by tile, cheer when they buy or earn, slump in jail,
-  fall over when bankrupt and dance when they win.
+  Shade, Chef Gusto, Zorp) in glossy vinyl, with arms and legs that follow every move,
+  tinted in each player's colour. They walk tile by tile, cheer or fist-pump when they
+  buy or earn, sulk when they pay, stamp when they're jailed, look around and wave when
+  idle, slump in jail, fall over when bankrupt and dance when they win. Every character
+  and move can be previewed at `/characters`.
 - **Game feel**: the dice land, then the piece walks, then the result shows; coins fly
-  from payer to payee with the amount floating over each piece; a cinematic camera
-  swoops in for buys, builds, hotels, jail and bankruptcies (🎬 to turn it off); a
-  "Your turn!" splash; End turn right from a property you don't want.
+  from payer to payee with the amount floating over each piece; Chance and Community
+  Chest are real piles on the board and a drawn card flies off its pile to the screen;
+  houses and hotels drop onto their lots; jailed pieces sit behind bars (the door swings
+  open when they get out); the Free Parking jackpot piles up as gold coins; a cinematic
+  camera swoops in for buys, builds, hotels, jail and bankruptcies (🎬 to turn it off);
+  a "Your turn!" splash; End turn right from a property you don't want.
+- **Camera views** (the camera button, or C): Table, Follow (trails whoever is playing),
+  Overhead and Free (orbit, zoom, pan).
+- **Helping hands**: a seven-step How to play, one-time tips (you own a set → Build;
+  one trade from a set → Trade; short of cash → Raise cash), a Build & manage panel with
+  rent before/after and the even-building rules, a trade builder that says why an offer
+  can't be sent yet, quick-bid auctions with a SOLD card, a raise-cash flow for debts,
+  and short notices for what matters to you (rent in or out, trade answers, jail).
 - **Full rules**: rent (sets, houses, railroads, utilities), doubles and jail, all
   Chance/Community Chest cards, auctions, even building and selling, the 32/12 building
   supply (a hotel sold in a housing shortage sells the set down evenly), mortgages,
@@ -60,7 +72,8 @@ mini-games, music, and a full operator dashboard.
   host **rematch** that returns the table to the lobby with the same seats and settings.
 - **Turn alerts**: the tab title flashes when the game is waiting on you, plus optional
   browser notifications (the 🔔 button). **Keyboard shortcuts**: Space/R roll, B buy,
-  A auction, E end turn, P pay debt, T trade/portfolios, Esc close, ? help.
+  A auction, E end turn, P pay debt, H build & manage, T trade, C camera view, Esc close,
+  ? help.
 
 **Community**
 - **Host transfer** — the host (or an operator) can make another seated player the host,
