@@ -3,11 +3,11 @@
 // Rooms own pacing (auction deadlines, bots); this file owns the rules.
 
 import {
-  groupIndices, isOwnable, mortgageValue, unmortgageCost, type SpaceDef,
+  groupIndices, isOwnable, mortgageValue, type SpaceDef,
 } from '../../../shared/board.ts';
 import type { CardEffect, DeckId } from '../../../shared/cards.ts';
 import {
-  buildProblem, manageProblem, mortgageProblem, sellProblem, unmortgageProblem,
+  buildProblem, liftCost, manageProblem, mortgageProblem, sellProblem, unmortgageProblem,
 } from '../../../shared/holdings.ts';
 import type { RuleConfig, Theme } from '../../../shared/themes.ts';
 import {
@@ -531,6 +531,8 @@ export class Game {
 
   private nextTurn() {
     if (this.checkWinner()) return;
+    // "Lift the mortgage at once for the principal" lasts until the turn ends.
+    for (const o of Object.values(this.owned)) delete o.interestPaid;
     this.doublesCount = 0;
     this.extraRoll = false;
     this.speedPending = null;
@@ -1001,9 +1003,10 @@ export class Game {
     const { s, o } = this.requireOwn(p, space);
     const why = unmortgageProblem(this, this.spaces, space, p.cash);
     if (why) fail(why);
-    const cost = unmortgageCost(s);
+    const cost = liftCost(this.spaces, space, o);
     this.bankPays(p, -cost, 'mortgage lifted');
     o.mortgaged = false;
+    delete o.interestPaid;
     this.say(`${p.name} lifted the mortgage on ${s.name} for ${this.money(cost)}.`, p.id);
   }
 
@@ -1016,25 +1019,46 @@ export class Game {
     for (const d of mine) this.charge(p, d.to ? this.player(d.to) : null, d.amount, d.reason, d.toPot);
   }
 
-  /** Voluntary resignation or failure to pay. */
+  /**
+   * Voluntary resignation or failure to pay. Buildings go back to the bank at
+   * half price first. Then debts are met in the order they arose, each in full
+   * while the cash lasts, as they would be across the table; the first one that
+   * cannot be met is who `p` goes bankrupt to. A player creditor takes
+   * everything left (cash, deeds as they are, Get Out of Jail Free cards, and
+   * what others owe `p`), paying the 10% on mortgaged deeds; the bank auctions
+   * the deeds unmortgaged and puts the jail cards back under their decks.
+   */
   private goBankrupt(p: PlayerState) {
     const mine = this.debts.filter(d => d.from === p.id);
-    const creditors = new Set(mine.map(d => d.to));
-    const creditorId = creditors.size === 1 ? [...creditors][0] : null;
-    const creditor = creditorId ? this.player(creditorId) : null;
-    this.debts = this.debts
-      .filter(d => d.from !== p.id)
-      .map(d => (d.to === p.id ? { ...d, to: null } : d));
+    this.debts = this.debts.filter(d => d.from !== p.id);
     this.trades = this.trades.filter(t => t.from !== p.id && t.to !== p.id);
 
-    // Buildings go back to the bank at half price either way.
     for (const i of this.ownedBy(p.id)) if (this.owned[i].houses > 0) this.clearBuildings(i);
 
+    let creditor: PlayerState | null = null;
+    for (const d of mine) {
+      const to = d.to ? this.player(d.to) : null;
+      if (p.cash < d.amount) {
+        creditor = to;
+        break;
+      }
+      this.charge(p, to, d.amount, d.reason, d.toPot);
+    }
+
     if (creditor) {
-      creditor.cash += p.cash;
-      for (const i of this.ownedBy(p.id)) this.owned[i].owner = creditor.id;
-      creditor.jailCards.push(...p.jailCards);
-      this.say(`${p.name} went bankrupt — everything goes to ${creditor.name}.`, p.id);
+      const c = creditor;
+      const deeds = this.ownedBy(p.id).sort((a, b) => a - b);
+      if (p.cash) this.say(`${c.name} receives ${p.name}'s remaining ${this.money(p.cash)}.`, c.id);
+      c.cash += p.cash;
+      p.cash = 0;
+      for (const i of deeds) this.owned[i].owner = c.id;
+      c.jailCards.push(...p.jailCards);
+      // Money others owed p is now owed to the creditor (and cancelled if it is their own).
+      this.debts = this.debts
+        .map(d => (d.to === p.id ? { ...d, to: c.id } : d))
+        .filter(d => d.from !== d.to);
+      this.say(`${p.name} went bankrupt — everything goes to ${c.name}.`, p.id);
+      this.mortgageInterest(c, deeds);
     } else {
       const estate = this.ownedBy(p.id).sort((a, b) => a - b);
       // Official rule: the bank auctions the estate, each deed unmortgaged.
@@ -1042,6 +1066,7 @@ export class Game {
       if (this.rules.auctions) this.estateQueue.push(...estate);
       this.bankPays(p, -p.cash, 'bankruptcy');
       for (const deck of p.jailCards) this.returnJailCard(deck);
+      this.debts = this.debts.map(d => (d.to === p.id ? { ...d, to: null } : d));
       this.say(`${p.name} went bankrupt — their property returns to the bank${estate.length && this.rules.auctions ? ' to be auctioned' : ''}.`, p.id);
     }
     delete this.debtEndsAt[p.id];
@@ -1153,11 +1178,19 @@ export class Game {
     for (let k = 0; k < side.jailCards; k++) b.jailCards.push(a.jailCards.pop()!);
   }
 
+  /**
+   * Official rule for a mortgaged deed changing hands (trade or bankruptcy):
+   * the new owner pays the bank 10% interest at once, and may lift the
+   * mortgage straight away for the principal alone (interestPaid, until the
+   * turn ends); lifting it later costs principal plus 10% again.
+   */
   private mortgageInterest(p: PlayerState, spaces: number[]) {
     for (const i of spaces) {
-      if (!this.owned[i]?.mortgaged) continue;
+      const o = this.owned[i];
+      if (!o?.mortgaged) continue;
       const fee = Math.ceil(mortgageValue(this.spaces[i]) / 10);
       this.charge(p, null, fee, `10% interest on mortgaged ${this.spaces[i].name}`);
+      o.interestPaid = true;
     }
   }
 
