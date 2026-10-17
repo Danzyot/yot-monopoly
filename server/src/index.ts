@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Server } from 'socket.io';
-import { adminModeConfigured, demoMode } from './auth.ts';
+import { adminModeConfigured, demoMode, isProduction } from './auth.ts';
 import { loadBans } from './bans.ts';
 import { loadMutes } from './chat.ts';
 import { loadAccounts } from './connections.ts';
@@ -170,6 +170,10 @@ http.listen(PORT, () => {
   if (demoMode()) console.warn('⚠️  DEMO_MODE=1 — anyone can sign in with just a name. Turn it off for real events.');
   if (devFakeDiscord()) console.warn('⚠️  DEV_FAKE_DISCORD=1 — Discord requirements use a fake server (demo names decide membership).');
   if (!discordEnabled() && !demoMode()) console.warn('⚠️  No Discord app configured and DEMO_MODE is off — nobody can sign in.');
-  if (!adminModeConfigured()) console.warn('⚠️  ADMIN_DISCORD_IDS is unset — every signed-in account is an operator.');
+  if (!adminModeConfigured()) {
+    console.warn(isProduction()
+      ? '⚠️  ADMIN_DISCORD_IDS is unset — nobody is an operator (NODE_ENV=production fails closed).'
+      : '⚠️  ADMIN_DISCORD_IDS is unset — every signed-in account is an operator.');
+  }
   if (!process.env.DATA_DIR) console.warn('⚠️  DATA_DIR is unset — bans, results and live games are stored in server/data (lost on redeploy without a volume).');
 });

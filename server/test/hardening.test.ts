@@ -408,3 +408,24 @@ test('a kicked player cannot take a lobby seat again (even after a restart), but
   r.dispose();
   r2.dispose();
 });
+
+// ---- operators -------------------------------------------------------------------
+
+test('no ADMIN_DISCORD_IDS: everyone is an operator in dev, nobody in production', async () => {
+  const { withAdminFlag } = await import('../src/auth.ts');
+  const saved = { env: process.env.NODE_ENV, ids: process.env.ADMIN_DISCORD_IDS };
+  const p = { id: 'dc_1', name: 'X', avatar: '', provider: 'discord' as const, discord: { id: '1', username: 'x' } };
+  try {
+    delete process.env.ADMIN_DISCORD_IDS;
+    process.env.NODE_ENV = 'development';
+    assert.equal(withAdminFlag(p).isAdmin, true);
+    process.env.NODE_ENV = 'production';
+    assert.equal(withAdminFlag(p).isAdmin, false, 'fails closed');
+    process.env.ADMIN_DISCORD_IDS = '1';
+    assert.equal(withAdminFlag(p).isAdmin, true, 'listed operators still are');
+    assert.equal(withAdminFlag({ ...p, discord: { id: '2', username: 'y' } }).isAdmin, false);
+  } finally {
+    if (saved.env === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = saved.env;
+    if (saved.ids === undefined) delete process.env.ADMIN_DISCORD_IDS; else process.env.ADMIN_DISCORD_IDS = saved.ids;
+  }
+});
