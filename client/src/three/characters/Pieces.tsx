@@ -14,6 +14,7 @@ import { tileWidth, tokenSpot } from '../layout.ts';
 import { CharacterFigure, Tinter, newRig, poseRig, useCharacterMaterials } from './Figure.tsx';
 import { ReactionBubble } from './ReactionBubble.tsx';
 import { diceSettleAt, holdUntil } from '../sequence.ts';
+import { celebrateGo } from '../GoConfetti.tsx';
 import { pieceObjects } from '../camera.ts';
 
 /** An emoji reaction currently showing over a player's character. */
@@ -162,6 +163,8 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId }: {
       a.dur = Math.hypot(a.to[0] - a.from[0], a.to[1] - a.from[1]) > 2 ? 750 : HOP_MS;
       a.shown = next;
       a.t0 = chained ? prevEnd : now;
+      // Onto or over GO: confetti as the hop lands.
+      if (next === 0 && !p.inJail) celebrateGo(a.t0 + a.dur);
       k = (now - a.t0) / a.dur;
     }
     const hopping = k < 1;

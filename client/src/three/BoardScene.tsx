@@ -17,6 +17,7 @@ import { MoneyFX } from './MoneyFX.tsx';
 import { CardDecks } from './CardDecks.tsx';
 import { JailCell } from './JailCell.tsx';
 import { ParkingPot } from './ParkingPot.tsx';
+import { GoConfetti, celebrateGo } from './GoConfetti.tsx';
 import { SceneEnv } from './SceneEnv.tsx';
 import { isDirectorActive, pieceObjects, type CameraMode } from './camera.ts';
 import { ASSETS } from './assets.gen.ts';
@@ -405,7 +406,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
     <Canvas shadows dpr={dpr} frameloop={hidden ? 'never' : 'always'} camera={{ position: [0, 11.5, 10.5], fov: 45 }}
       onPointerMissed={() => onSelect?.(null)}
       // ?perf: expose the renderer and pieces so draw calls, triangles and positions can be read from the console.
-      onCreated={({ gl }) => { if (location.search.includes('perf')) Object.assign(window, { __yotGl: gl, __yotPieces: pieceObjects }); }}
+      onCreated={({ gl }) => { if (location.search.includes('perf')) Object.assign(window, { __yotGl: gl, __yotPieces: pieceObjects, __yotGo: celebrateGo }); }}
       // A custom backdrop replaces the map's 3D surroundings: it is painted
       // behind a transparent canvas, keeps its aspect ratio on any screen and
       // needs no CORS, so any https image works.
@@ -441,6 +442,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
               <ParkingPot pot={game.pot} n={theme.spaces.length} />}
             <Pieces game={game} n={theme.spaces.length} reactions={reactions} />
             <MoneyFX game={game} n={theme.spaces.length} currency={theme.currency} />
+            <GoConfetti n={theme.spaces.length} />
             <Dice dice={game.dice} seq={game.rollSeq} speed={game.speed ?? null} body={theme.palette.die} pip={theme.palette.pip} />
           </>
         )}
