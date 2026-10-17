@@ -6,7 +6,8 @@ import type { EnvironmentId } from '../../../../shared/maps.ts';
 import type { Theme } from '../../../../shared/themes.ts';
 import { FLOOR, mix } from './common.tsx';
 import { Lounge } from './Lounge.tsx';
-import { ClassicRoom, WithModel } from '../models.tsx';
+import { BakedScene, ClassicRoom, WithModel } from '../models.tsx';
+import { ASSETS } from '../assets.gen.ts';
 import { Skyline } from './Skyline.tsx';
 import { Speedway } from './Speedway.tsx';
 
@@ -27,7 +28,8 @@ export function envLook(kind: EnvironmentId, theme: Theme): EnvLook {
   const { sky } = theme.palette;
   switch (kind) {
     case 'speedway':
-      return { background: mix(sky, '#1e2a45', 0.55), fogNear: 30, fogFar: 85, keyColor: '#ffffff', keyIntensity: 2.1 };
+      // The baked track at dusk: fog fades the far hills into the hazy horizon of its sky.
+      return { background: '#cfa59c', fogNear: 60, fogFar: 340, keyColor: '#ffd9b5', keyIntensity: 2.0 };
     case 'skyline':
       return { background: mix(sky, '#060b1c', 0.45), fogNear: 40, fogFar: 170, keyColor: '#e6ebff', keyIntensity: 1.9 };
     case 'lounge':
@@ -38,7 +40,15 @@ export function envLook(kind: EnvironmentId, theme: Theme): EnvLook {
 
 export function Environment({ kind, theme }: { kind: EnvironmentId; theme: Theme }) {
   switch (kind) {
-    case 'speedway': return <Speedway theme={theme} />;
+    case 'speedway':
+      // A modelled, light-baked race track for every edition; the drawn one
+      // shows while it loads (and stays if it cannot).
+      return (
+        <WithModel fallback={<Speedway theme={theme} />}>
+          <BakedScene asset={ASSETS.speedwaySet} />
+          <SpeedwayLights />
+        </WithModel>
+      );
     case 'skyline': return <Skyline theme={theme} />;
     case 'lounge':
     default:
@@ -63,6 +73,17 @@ function RoomLights() {
       <hemisphereLight args={['#ffe2bd', '#2a1a10', 0.6]} />
       <pointLight position={[13.6, FLOOR + 9.4, -10.5]} color="#ffb46b" intensity={260} decay={2} />
       <pointLight position={[-18, FLOOR + 2, 0]} color="#ff7a2e" intensity={220} decay={2} />
+    </>
+  );
+}
+
+/** Live light matching the baked track: dusk sky above, grass below, the floodlights from behind. */
+function SpeedwayLights() {
+  return (
+    <>
+      <hemisphereLight args={['#c3c9ee', '#56683a', 0.55]} />
+      <pointLight position={[-24, FLOOR + 19, -13]} color="#e6eeff" intensity={520} decay={2} />
+      <pointLight position={[21, FLOOR + 19, -17.5]} color="#e6eeff" intensity={360} decay={2} />
     </>
   );
 }

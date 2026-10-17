@@ -16,6 +16,14 @@ export const ASSETS = {
     "lightmapIntensity": 27.5562,
     "url": "/models/classic/room.glb?v=750098563e"
   },
+  "speedwayEnv": {
+    "url": "/models/speedway/set-env.webp?v=19edd13b16"
+  },
+  "speedwaySet": {
+    "lightmap": "/models/speedway/set-light.webp?v=92f72b805c",
+    "lightmapIntensity": 7.3796,
+    "url": "/models/speedway/set.glb?v=c9d2e261c4"
+  },
   "table": {
     "url": "/models/table.glb?v=948e42f7ea"
   }

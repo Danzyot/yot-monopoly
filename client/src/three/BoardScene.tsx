@@ -384,12 +384,15 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
       {backdrop
         ? <hemisphereLight args={['#ffffff', theme.palette.table, 0.9]} />
         : <Environment kind={env} theme={theme} />}
-      {/* Reflections for everything lit live. The Classic room reflects itself
-          (a Blender panorama, centred on the back wall; three's equirect is
-          centred on +x, hence the quarter turn). */}
+      {/* Reflections for everything lit live. The Classic room and the
+          Speedway track reflect themselves (Blender panoramas, centred on the
+          back of the set; three's equirect is centred on +x, hence the quarter
+          turn). */}
       {env === 'lounge' && theme.id === 'classic' && !backdrop
         ? <SceneEnv url={ASSETS.classicEnv.url} intensity={0.6} rotation={-Math.PI / 2} />
-        : <SceneEnv intensity={0.45} />}
+        : env === 'speedway' && !backdrop
+          ? <SceneEnv url={ASSETS.speedwayEnv.url} intensity={0.55} rotation={-Math.PI / 2} />
+          : <SceneEnv intensity={0.45} />}
       <directionalLight castShadow position={[6, 12, 5]} intensity={look.keyIntensity} color={look.keyColor}
         shadow-mapSize={[lowPower ? 1024 : 2048, lowPower ? 1024 : 2048]} shadow-camera-left={-8} shadow-camera-right={8}
         shadow-camera-top={8} shadow-camera-bottom={-8} shadow-bias={-0.0004} />
