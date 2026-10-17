@@ -1,0 +1,440 @@
+// Regressions from the security / robustness audit: untrusted client input,
+// timers that must never take the process down, automated moves that must
+// never bankrupt anyone, and rooms that must not live (or multiply) forever.
+import { mock, test } from 'node:test';
+import assert from 'node:assert/strict';
+import { EngineError, Game, type GameSnapshot } from '../src/engine/game.ts';
+import { botAction } from '../src/engine/bot.ts';
+import { DEFAULT_RULES, resolveTheme } from '../../shared/themes.ts';
+import {
+  buildProblem, manageProblem, mortgageProblem, sellProblem, unmortgageProblem,
+} from '../../shared/holdings.ts';
+import { CREATES_PER_WINDOW, HOST_GRACE_MS, Registry, Room, RoomError, type RoomHooks } from '../src/rooms.ts';
+import type { Action, Trade } from '../../shared/types.ts';
+import { scripted } from './helpers.ts';
+
+const CLASSIC = resolveTheme('classic', 'classic');
+
+// ---- untrusted actions -------------------------------------------------------
+
+test('malformed trade offers are refused and nothing is stored', () => {
+  const { g, act } = scripted();
+  g.owned[1] = { owner: 'p0', houses: 0, mortgaged: false };
+  const ok = { cash: 0, spaces: [1], jailCards: 0 };
+  const bad: unknown[] = [
+    'spaces', null, 42, [], [1, 2],
+    { cash: 0, spaces: '1', jailCards: 0 },
+    { cash: 0, spaces: { 0: 1, length: 1 }, jailCards: 0 },
+    { cash: 0, spaces: [{ i: 1 }], jailCards: 0 },
+    { cash: 0, spaces: [1.5], jailCards: 0 },
+    { cash: 0, spaces: [-1], jailCards: 0 },
+    { cash: 0, spaces: [40], jailCards: 0 },
+    { cash: 0, spaces: ['1'], jailCards: 0 },
+    { cash: 0, spaces: [1, 1], jailCards: 0 },
+    { cash: 0, spaces: Array.from({ length: 100_000 }, () => 1), jailCards: 0 },
+    { cash: NaN, spaces: [1], jailCards: 0 },
+    { cash: -5, spaces: [1], jailCards: 0 },
+    { cash: '5', spaces: [1], jailCards: 0 },
+    { cash: { valueOf: 5 }, spaces: [1], jailCards: 0 },
+    { cash: 0, spaces: [1], jailCards: 0.5 },
+    { cash: 0, spaces: [1], jailCards: 1 }, // has none
+    { cash: 1e12, spaces: [1], jailCards: 0 },
+  ];
+  for (const give of bad) {
+    assert.throws(() => act('p0', { type: 'proposeTrade', to: 'p1', give, get: ok } as unknown as Action), EngineError, JSON.stringify(give)?.slice(0, 60));
+  }
+  for (const to of [null, 5, { id: 'p1' }, ['p1'], 'x'.repeat(500), '']) {
+    assert.throws(() => act('p0', { type: 'proposeTrade', to, give: ok, get: { cash: 0, spaces: [], jailCards: 0 } } as unknown as Action), EngineError);
+  }
+  assert.throws(() => act('p0', { type: 'proposeTrade', to: 'p1', give: ok, get: { cash: 0, spaces: [], jailCards: 0 }, counterOf: { id: 't1' } } as unknown as Action), EngineError);
+  assert.equal(g.trades.length, 0, 'nothing malformed was stored');
+
+  // Extra fields are dropped: what is stored is rebuilt from checked values.
+  act('p0', { type: 'proposeTrade', to: 'p1', give: { ...ok, evil: { deep: true } }, get: { cash: 0, spaces: [], jailCards: 0, x: 1 } } as unknown as Action);
+  assert.deepEqual(g.trades[0].give, ok);
+  assert.deepEqual(Object.keys(g.trades[0].get).sort(), ['cash', 'jailCards', 'spaces']);
+  // …and bots can read every stored offer.
+  assert.doesNotThrow(() => botAction(g, 'p1'));
+});
+
+test('malformed spaces, bids, ids and unknown actions are EngineErrors', () => {
+  const { g, dice, act } = scripted(3);
+  g.owned[1] = { owner: 'p0', houses: 0, mortgaged: false };
+  for (const type of ['build', 'sell', 'mortgage', 'unmortgage']) {
+    for (const space of [null, '1', 1.5, -1, 40, NaN, '__proto__', 'constructor', [1], { space: 1 }]) {
+      assert.throws(() => act('p0', { type, space } as unknown as Action), EngineError, `${type} ${String(space)}`);
+    }
+  }
+  for (const id of [null, 1, { id: 't1' }, ['t1']]) {
+    assert.throws(() => act('p1', { type: 'acceptTrade', id } as unknown as Action), EngineError);
+    assert.throws(() => act('p1', { type: 'rejectTrade', id } as unknown as Action), EngineError);
+  }
+  for (const a of [{ type: 'teleport' }, { type: 'toString' }, { type: '__proto__' }, { type: 5 }, null, 'roll']) {
+    assert.throws(() => act('p0', a as unknown as Action), EngineError, JSON.stringify(a));
+  }
+  dice(1, 2);
+  act('p0', { type: 'roll' });
+  act('p0', { type: 'decline' });
+  for (const amount of [NaN, '50', 10.5, -1, 0, null, { amount: 5 }, 1e9]) {
+    assert.throws(() => act('p1', { type: 'bid', amount } as unknown as Action), EngineError, String(amount));
+  }
+  assert.equal(g.auction!.highBid, 0);
+  assert.equal(g.auction!.highBidder, null);
+});
+
+test('a snapshot holding a malformed offer still restores, without it', () => {
+  const { g } = scripted();
+  g.owned[1] = { owner: 'p0', houses: 0, mortgaged: false };
+  const snap = JSON.parse(JSON.stringify(g.snapshot())) as GameSnapshot;
+  snap.trades = [
+    { id: 't1', from: 'p0', to: 'p1', give: { cash: 0, spaces: '1' as unknown as number[], jailCards: 0 }, get: { cash: 0, spaces: [], jailCards: 0 } },
+    { id: 't2', from: 'p0', to: 'p1', give: { cash: 0, spaces: [1], jailCards: 0 }, get: { cash: 10, spaces: [], jailCards: 0 } },
+  ];
+  const g2 = Game.restore({ theme: CLASSIC, rules: { ...DEFAULT_RULES } }, snap);
+  assert.deepEqual(g2.trades.map(t => t.id), ['t2']);
+  assert.doesNotThrow(() => botAction(g2, 'p1'));
+});
+
+// ---- shared property rules (deed card buttons) ------------------------------------
+
+test('the deed card checks are the engine rules, on a GameView as on the Game', () => {
+  const { g, act } = scripted();
+  g.owned[1] = { owner: 'p0', houses: 0, mortgaged: false };
+  g.owned[3] = { owner: 'p0', houses: 0, mortgaged: false };
+  g.owned[6] = { owner: 'p0', houses: 0, mortgaged: false };
+  const sp = g.spaces;
+  const check = () => {
+    const v = g.view();
+    const cash = v.players[0].cash;
+    return {
+      build1: buildProblem(v, sp, 'p0', 1, cash), build6: buildProblem(v, sp, 'p0', 6, cash),
+      sell1: sellProblem(v, sp, 1), sell3: sellProblem(v, sp, 3),
+      mortgage3: mortgageProblem(v, sp, 3), mortgage6: mortgageProblem(v, sp, 6),
+      unmortgage6: unmortgageProblem(v, sp, 6, cash), manage1: manageProblem(v, 'p1', 1),
+    };
+  };
+  assert.deepEqual(check(), {
+    build1: null, build6: 'You need the whole colour group', sell1: 'Nothing to sell', sell3: 'Nothing to sell',
+    mortgage3: null, mortgage6: null, unmortgage6: 'Not mortgaged', manage1: 'You do not own that',
+  });
+  act('p0', { type: 'build', space: 1 });
+  const after = check();
+  assert.equal(after.build1, 'Build evenly across the group');
+  assert.equal(after.sell1, null);
+  assert.equal(after.sell3, 'Nothing to sell');
+  assert.equal(after.mortgage3, 'Sell the buildings in this group first');
+  // …and the engine refuses exactly what the card greys out, with the same words.
+  assert.throws(() => act('p0', { type: 'build', space: 1 }), /Build evenly across the group/);
+  assert.throws(() => act('p0', { type: 'mortgage', space: 3 }), /Sell the buildings in this group first/);
+  g.player('p0').cash = 10;
+  assert.equal(check().build1, 'Build evenly across the group');
+  assert.equal(buildProblem(g.view(), sp, 'p0', 3, 10), 'Not enough cash');
+  g.phase = 'auction';
+  assert.equal(manageProblem(g.view(), 'p0', 3), 'Wait for the auction to finish');
+});
+
+// ---- room timers and automated moves ----------------------------------------
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+const quietHooks = (): RoomHooks => ({ onChange() {}, onEvent() {}, onFinished() {} });
+
+/** A started room with one human ('a') and one bot; timers stopped so tests drive it. */
+function botRoom(code: string) {
+  const r = new Room(code, 'a', quietHooks());
+  r.join({ id: 'a', name: 'A', avatar: '' });
+  r.addBot('a', false);
+  r.start('a', false);
+  r.dispose();
+  const bot = r.seats.find(s => s.isBot)!.id;
+  return { r, g: r.game!, bot };
+}
+
+/** Capture console.error for the duration of `fn`. */
+async function capturingErrors(fn: (logged: string[]) => Promise<void> | void) {
+  const logged: string[] = [];
+  const orig = console.error;
+  console.error = (...a: unknown[]) => { logged.push(a.map(x => (x instanceof Error ? x.message : String(x))).join(' ')); };
+  try { await fn(logged); } finally { console.error = orig; }
+}
+
+test('a timer body that throws is logged with the room code and re-armed, not fatal', async () => {
+  const { r, g, bot } = botRoom('BOOM1');
+  g.currentIdx = g.players.findIndex(p => p.id === bot);
+  const apply = g.apply;
+  g.apply = () => { throw new TypeError('engine bug'); };
+  await capturingErrors(async logged => {
+    r.setConnected('a', true); // re-arms the timers: the bot moves in ~1 s
+    await sleep(1_200);
+    assert.ok(logged.some(l => l.includes('[room BOOM1]') && l.includes('engine bug')), logged.join('\n'));
+    const retry = (r as unknown as { retryTimer: NodeJS.Timeout | null }).retryTimer;
+    assert.ok(retry, 'the timers are re-armed after a pause');
+  });
+  g.apply = apply;
+  assert.equal(r.status, 'playing');
+  r.dispose();
+});
+
+test('the automated-move picker skips a seat whose bot code throws', async () => {
+  const { r, g, bot } = botRoom('BOOM2');
+  g.currentIdx = g.players.findIndex(p => p.id === bot);
+  // Something no validated path can store any more, standing in for any bot bug.
+  g.trades.push({ id: 'tx', from: 'a', to: bot, give: null, get: null } as unknown as Trade);
+  await capturingErrors(logged => {
+    const next = (r as unknown as { nextAutomatedAction(now: number): unknown }).nextAutomatedAction(Date.now());
+    assert.equal(next, null);
+    assert.ok(logged.some(l => l.includes('[room BOOM2]')));
+  });
+  r.dispose();
+});
+
+test('a stale trade is rejected, never accepted into a failure (or a bankruptcy)', () => {
+  const { r, g, bot } = botRoom('STALE');
+  g.currentIdx = g.players.findIndex(p => p.id === bot);
+  g.apply('a', { type: 'proposeTrade', to: bot, give: { cash: 1000, spaces: [], jailCards: 0 }, get: { cash: 0, spaces: [], jailCards: 0 } });
+  assert.equal(botAction(g, bot)?.type, 'acceptTrade', 'a gift is worth taking');
+  g.player('a').cash = 10; // …but the cash is spent before the bot gets to it
+  assert.deepEqual(botAction(g, bot), { type: 'rejectTrade', id: g.trades[0].id });
+  // Even if an accept does fail (a race), the fallback declines it instead.
+  (r as unknown as { fallback(id: string, a: Action): void }).fallback(bot, { type: 'acceptTrade', id: g.trades[0].id });
+  assert.equal(g.trades.length, 0);
+  assert.equal(g.player(bot).bankrupt, false);
+  r.dispose();
+});
+
+test('a debt during an auction: the bot waits, and the fallback never resigns for it', () => {
+  const { r, g, bot } = botRoom('DEBT1');
+  g.owned[1] = { owner: bot, houses: 0, mortgaged: false };
+  g.auction = { space: 3, highBid: 50, highBidder: bot, bidders: ['a', bot], endsAt: Date.now() + 60_000 };
+  g.phase = 'auction';
+  g.player(bot).cash = 100;
+  g.debts.push({ from: bot, to: 'a', amount: 5_000, reason: 'test' });
+  assert.equal(botAction(g, bot), null, 'no mortgaging (locked) and no bidding while it owes more than it has');
+  g.auction.highBidder = 'a';
+  assert.deepEqual(botAction(g, bot), { type: 'pass' });
+  g.auction.highBidder = bot;
+  // The old fallback went pass → endTurn → bankrupt; neither applies here.
+  (r as unknown as { fallback(id: string, a: Action): void }).fallback(bot, { type: 'mortgage', space: 1 });
+  assert.equal(g.player(bot).bankrupt, false);
+  assert.equal(g.phase, 'auction');
+  r.dispose();
+});
+
+// ---- auctions ------------------------------------------------------------------
+
+test('auction: a winner short of cash at the end owes the rest as a debt', () => {
+  const { g, dice, act, tick } = scripted(3);
+  dice(1, 2);
+  act('p0', { type: 'roll' });
+  act('p0', { type: 'decline' });
+  const p1 = g.player('p1');
+  p1.cash = 150;
+  act('p1', { type: 'bid', amount: 100 });
+  // A debt arrives and is paid mid-auction: the bid now exceeds the cash.
+  g.debts.push({ from: 'p1', to: 'p2', amount: 100, reason: 'test' });
+  act('p1', { type: 'payDebt' });
+  assert.equal(p1.cash, 50);
+  tick(60_000);
+  assert.equal(g.auctionTimeout(), true);
+  assert.equal(g.owned[3].owner, 'p1');
+  assert.ok(p1.cash >= 0, `cash ${p1.cash}`);
+  assert.equal(p1.cash, 0);
+  assert.equal(g.debtOf('p1'), 50, 'the shortfall is an ordinary debt');
+  assert.deepEqual(g.debts.map(d => d.to), [null], 'owed to the bank');
+});
+
+test('auction: bids are capped at cash less what the bidder already owes', () => {
+  const { g, dice, act } = scripted(3);
+  dice(1, 2);
+  act('p0', { type: 'roll' });
+  act('p0', { type: 'decline' });
+  g.player('p1').cash = 150;
+  g.debts.push({ from: 'p1', to: 'p2', amount: 100, reason: 'test' });
+  assert.throws(() => act('p1', { type: 'bid', amount: 51 }), /owe/);
+  act('p1', { type: 'bid', amount: 50 });
+  assert.equal(g.auction!.highBid, 50);
+});
+
+test('auction: when the high bidder resigns, the best bid still in takes the lead', () => {
+  const { g, dice, act } = scripted(4);
+  dice(1, 2);
+  act('p0', { type: 'roll' });
+  act('p0', { type: 'decline' });
+  act('p1', { type: 'bid', amount: 100 });
+  act('p2', { type: 'bid', amount: 120 });
+  act('p3', { type: 'bid', amount: 200 });
+  act('p2', { type: 'pass' }); // p2's bid leaves with p2
+  act('p3', { type: 'bankrupt' });
+  assert.equal(g.auction!.highBidder, 'p1');
+  assert.equal(g.auction!.highBid, 100, 'not back to nothing (a $1 deed)');
+  assert.throws(() => act('p0', { type: 'bid', amount: 100 }), /more than/);
+  act('p0', { type: 'pass' });
+  assert.equal(g.owned[3].owner, 'p1');
+  assert.equal(g.player('p1').cash, 1400);
+});
+
+// ---- game endings and abandoned rooms ------------------------------------------
+
+test('every ending sets endedAt: time limit, last player standing, operator stop', () => {
+  const t = scripted(2, { timeLimitMin: 30, turnSeconds: 0 });
+  t.tick(30 * 60_000);
+  t.g.clockTimeout();
+  assert.equal(t.g.phase, 'over');
+  assert.equal(t.g.endedAt, t.now(), 'time limit');
+  t.tick(60_000);
+  assert.equal(t.g.view().endedAt, t.now() - 60_000, 'and it stays put');
+
+  const b = scripted(2);
+  b.act('p1', { type: 'bankrupt' });
+  assert.equal(b.g.endedAt, b.now(), 'last player standing');
+
+  const r = new Room('OPEND', 'a', quietHooks());
+  r.join({ id: 'a', name: 'A', avatar: '' });
+  r.join({ id: 'b', name: 'B', avatar: '' });
+  r.start('a', false);
+  r.end('test');
+  assert.ok(r.game!.endedAt !== null, 'operator stop');
+  r.dispose();
+});
+
+test('a running game with no humans for 30 minutes ends on net worth, then is swept', () => {
+  const h = { finished: 0, onChange() {}, onEvent() {}, onFinished() { h.finished++; } };
+  const reg = new Registry(h, 1e9);
+  const r = reg.create('a');
+  r.join({ id: 'a', name: 'A', avatar: '' });
+  r.addBot('a', false);
+  r.start('a', false);
+  r.dispose();
+  const g = r.game!;
+  const bot = r.seats.find(s => s.isBot)!.id;
+  const sweep = () => (reg as unknown as { sweep(): void }).sweep();
+
+  // Automated moves are no sign of life.
+  const before = r.lastActivity = Date.now() - 60_000;
+  g.currentIdx = g.players.findIndex(p => p.id === bot);
+  r.act(bot, { type: 'roll' }, true);
+  assert.equal(r.lastActivity, before, 'a bot move does not count as activity');
+
+  r.setConnected('a', false);
+  r.dispose();
+  r.lastActivity = Date.now() - 29 * 60_000;
+  sweep();
+  assert.equal(r.status, 'playing', 'not yet');
+  r.lastActivity = Date.now() - 31 * 60_000;
+  r.spectators = 1; // someone watching the bots keeps the room, but not the game
+  sweep();
+  assert.equal(r.status, 'finished');
+  assert.equal(g.phase, 'over');
+  assert.ok(g.winner);
+  assert.ok(g.endedAt);
+  assert.equal(h.finished, 1, 'the result is recorded like any ending');
+  assert.equal(reg.get(r.code), r, 'kept while watched');
+  r.spectators = 0;
+  sweep();
+  assert.equal(reg.get(r.code), undefined, 'then swept as usual');
+});
+
+test('a host who drops at the end hands a finished room on, so the rematch can start', () => {
+  mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 7_000_000 });
+  try {
+    const reg = new Registry(quietHooks(), 1e9);
+    const r = reg.create('a');
+    for (const id of ['a', 'b', 'c']) r.join({ id, name: id.toUpperCase(), avatar: '' });
+    r.start('a', false);
+    r.dispose();
+    r.act('c', { type: 'bankrupt' });
+    r.act('b', { type: 'bankrupt' });
+    assert.equal(r.status, 'finished');
+    r.setConnected('a', false);
+    mock.timers.tick(HOST_GRACE_MS + 1_000);
+    assert.equal(r.hostId, 'b', 'a connected human takes over');
+    r.rematch('b', false, id => id !== 'a');
+    assert.equal(r.status, 'lobby');
+    r.dispose();
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+// ---- persistence ---------------------------------------------------------------
+
+test('live snapshots are written only when a room changed, via temp file and rename', async () => {
+  const { saveIfDirty } = await import('../src/persist.ts');
+  const { mkdtempSync, readFileSync, readdirSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'yot-persist-'));
+  try {
+    const reg = new Registry(quietHooks(), 1e9);
+    const r = reg.create('a');
+    r.join({ id: 'a', name: 'A', avatar: '' });
+    assert.equal(await saveIfDirty(reg, dir), true, 'first save writes');
+    assert.deepEqual(readdirSync(dir), ['live.json'], 'no temp file left behind');
+    assert.equal(JSON.parse(readFileSync(join(dir, 'live.json'), 'utf8'))[0].code, r.code);
+    assert.equal(await saveIfDirty(reg, dir), false, 'nothing changed: nothing written');
+
+    r.addBot('a', false);
+    assert.equal(await saveIfDirty(reg, dir), true, 'a lobby change is saved');
+    r.start('a', false);
+    r.dispose();
+    assert.equal(await saveIfDirty(reg, dir), true);
+    assert.equal(await saveIfDirty(reg, dir), false);
+    r.act(r.game!.current.id, { type: 'roll' }, true);
+    assert.equal(await saveIfDirty(reg, dir), true, 'a game move is saved');
+    reg.delete(r.code);
+    assert.equal(await saveIfDirty(reg, dir), true, 'a closed room is dropped from the file');
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, 'live.json'), 'utf8')), []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---- room limits and kicks -------------------------------------------------------
+
+test('a lobby closes the moment its last human leaves (bots do not count)', () => {
+  const reg = new Registry(quietHooks(), 1e9);
+  const r = reg.create('a');
+  r.join({ id: 'a', name: 'A', avatar: '' });
+  r.join({ id: 'b', name: 'B', avatar: '' });
+  r.addBot('a', false);
+  r.leave('a');
+  assert.equal(reg.get(r.code), r, 'b is still seated');
+  r.leave('b');
+  assert.equal(reg.get(r.code), undefined, 'only a bot left: closed at once');
+
+  // An operator removing the last human closes it too.
+  const r2 = reg.create('c');
+  r2.join({ id: 'c', name: 'C', avatar: '' });
+  r2.kick('op', 'c', true);
+  assert.equal(reg.get(r2.code), undefined);
+});
+
+test('room creation is rate limited per account; operators are exempt', () => {
+  const reg = new Registry(quietHooks(), 1e9);
+  for (let i = 0; i < CREATES_PER_WINDOW; i++) reg.create('spammer');
+  assert.throws(() => reg.create('spammer'), RoomError);
+  assert.doesNotThrow(() => reg.create('someone-else'));
+  for (let i = 0; i < CREATES_PER_WINDOW + 3; i++) reg.create('operator', true);
+  for (const code of [...reg.rooms.keys()]) reg.delete(code);
+  assert.throws(() => reg.create('spammer'), /a lot of rooms/, 'closing rooms does not reset the limit');
+});
+
+test('a kicked player cannot take a lobby seat again (even after a restart), but may watch', async () => {
+  const { takeSeat } = await import('../src/seating.ts');
+  const reg = new Registry(quietHooks(), 1e9);
+  const r = reg.create('a');
+  r.join({ id: 'a', name: 'A', avatar: '' });
+  r.join({ id: 'b', name: 'B', avatar: '' });
+  r.kick('a', 'b', false);
+  assert.throws(() => r.join({ id: 'b', name: 'B', avatar: '' }), /removed/);
+  const prof = { id: 'b', name: 'B', avatar: '', provider: 'demo' as const };
+  assert.deepEqual(await takeSeat(r, prof, false), { seated: false, blocked: null }, 'reloading the page: watching');
+  assert.equal(r.seat('b'), undefined);
+
+  const reg2 = new Registry(quietHooks(), 1e9);
+  reg2.restore(JSON.parse(JSON.stringify(reg.snapshot())));
+  const r2 = reg2.get(r.code)!;
+  assert.throws(() => r2.join({ id: 'b', name: 'B', avatar: '' }), /removed/);
+  assert.doesNotThrow(() => r2.join({ id: 'c', name: 'C', avatar: '' }));
+  r.dispose();
+  r2.dispose();
+});

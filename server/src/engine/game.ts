@@ -6,6 +6,9 @@ import {
   groupIndices, isOwnable, mortgageValue, unmortgageCost, type SpaceDef,
 } from '../../../shared/board.ts';
 import type { CardEffect, DeckId } from '../../../shared/cards.ts';
+import {
+  buildProblem, manageProblem, mortgageProblem, sellProblem, unmortgageProblem,
+} from '../../../shared/holdings.ts';
 import type { RuleConfig, Theme } from '../../../shared/themes.ts';
 import {
   MINIGAME_INFO, MINIGAME_KINDS, type MinigameKind, type MinigameMove, type MinigamePayout,
@@ -33,6 +36,8 @@ export const AFK_AFTER = 2;
 const STEP_PHASES: TurnPhase[] = ['roll', 'buy', 'done', 'choose'];
 const MAX_LOG = 250;
 const MAX_OPEN_TRADES = 5;
+/** Longest player or offer id a client may name (ids are short; anything longer is junk). */
+const MAX_ID_LEN = 64;
 /** Debt/charge reasons that start with this are rent (for the summary stats). */
 const RENT_REASON = 'rent on ';
 const NO_STATS: PlayerStats = { rentCollected: 0, biggestRentPaid: 0, propertiesBought: 0, jailed: 0, minigamesWon: 0 };
@@ -127,6 +132,12 @@ interface LandingOpts {
 
 function fail(msg: string): never {
   throw new EngineError(msg);
+}
+
+/** A player or offer id from a client. */
+function idArg(v: unknown): string {
+  if (typeof v !== 'string' || !v || v.length > MAX_ID_LEN) fail('Unknown player or offer');
+  return v;
 }
 
 function speedName(f: SpeedFace): string {
@@ -531,6 +542,7 @@ export class Game {
    * (autopilot): those must not count as the player being back.
    */
   apply(playerId: string, a: Action, opts: { auto?: boolean } = {}): void {
+    if (!a || typeof a !== 'object' || typeof a.type !== 'string') fail('Bad action');
     if (this.phase === 'over') fail('The game is over');
     const p = this.player(playerId);
     if (p.bankrupt) fail('You are out of the game');
@@ -547,6 +559,10 @@ export class Game {
     this.settle();
   }
 
+  /**
+   * Actions come straight from clients: every field is checked here (or by the
+   * handler) and only rebuilt, validated values reach the state.
+   */
   private dispatch(p: PlayerState, a: Action): void {
     switch (a.type) {
       case 'roll': return this.roll(p);
@@ -557,19 +573,43 @@ export class Game {
       case 'endTurn': return this.endTurn(p);
       case 'payJail': return this.payJail(p);
       case 'useJailCard': return this.useJailCard(p);
-      case 'build': return this.build(p, a.space);
-      case 'sell': return this.sell(p, a.space);
-      case 'mortgage': return this.mortgage(p, a.space);
-      case 'unmortgage': return this.unmortgage(p, a.space);
+      case 'build': return this.build(p, this.spaceArg(a.space));
+      case 'sell': return this.sell(p, this.spaceArg(a.space));
+      case 'mortgage': return this.mortgage(p, this.spaceArg(a.space));
+      case 'unmortgage': return this.unmortgage(p, this.spaceArg(a.space));
       case 'payDebt': return this.payDebt(p);
       case 'bankrupt': return this.goBankrupt(p);
-      case 'proposeTrade': return this.proposeTrade(p, a.to, a.give, a.get, a.counterOf);
-      case 'acceptTrade': return this.acceptTrade(p, a.id);
-      case 'rejectTrade': return this.rejectTrade(p, a.id);
+      case 'proposeTrade':
+        return this.proposeTrade(p, idArg(a.to), this.readSide(a.give), this.readSide(a.get),
+          a.counterOf === undefined ? undefined : idArg(a.counterOf));
+      case 'acceptTrade': return this.acceptTrade(p, idArg(a.id));
+      case 'rejectTrade': return this.rejectTrade(p, idArg(a.id));
       case 'minigame': return this.minigameMove(p, a.move);
       case 'choose': return this.choose(p, a.value);
       default: fail('Unknown action');
     }
+  }
+
+  /** A board index from a client: a whole number on this board. */
+  private spaceArg(v: unknown): number {
+    if (!Number.isInteger(v) || (v as number) < 0 || (v as number) >= this.size) fail('No such space');
+    return v as number;
+  }
+
+  /**
+   * Rebuild one side of an offer from its validated fields only, so nothing
+   * else a client sent is ever stored. Ownership and cash are checked later
+   * (validateSide), against the moment of proposing and again of accepting.
+   */
+  private readSide(raw: unknown): TradeSide {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail('Bad trade');
+    const { cash = 0, spaces = [], jailCards = 0 } = raw as Record<string, unknown>;
+    if (!Number.isInteger(cash) || (cash as number) < 0) fail('Bad cash amount');
+    if (!Number.isInteger(jailCards) || (jailCards as number) < 0) fail('Bad jail card count');
+    if (!Array.isArray(spaces) || spaces.length > this.size) fail('Bad property list');
+    const list = spaces.map(i => this.spaceArg(i));
+    if (new Set(list).size !== list.length) fail('Duplicate property');
+    return { cash: cash as number, spaces: list, jailCards: jailCards as number };
   }
 
   private requireTurn(p: PlayerState, phase: TurnPhase) {
@@ -736,6 +776,7 @@ export class Game {
       highBidder: null,
       bidders: this.active().map(x => x.id),
       endsAt: this.now() + AUCTION_MS,
+      bids: [],
     };
     this.phase = 'auction';
     this.say(`${s.name} is up for auction!`);
@@ -745,10 +786,13 @@ export class Game {
     const a = this.auction;
     if (this.phase !== 'auction' || !a) fail('No auction running');
     if (!a.bidders.includes(p.id)) fail('You have left this auction');
-    if (!Number.isInteger(amount) || amount <= a.highBid) fail(`Bid more than ${this.money(a.highBid)}`);
-    if (amount > p.cash) fail('You cannot bid more than your cash');
+    if (typeof amount !== 'number' || !Number.isInteger(amount) || amount <= a.highBid) fail(`Bid more than ${this.money(a.highBid)}`);
+    // What they already owe is spoken for: the winner must be able to pay.
+    const owe = this.debtOf(p.id);
+    if (amount > p.cash - owe) fail(owe ? `You cannot bid more than your cash less the ${this.money(owe)} you owe` : 'You cannot bid more than your cash');
     a.highBid = amount;
     a.highBidder = p.id;
+    a.bids = [...(a.bids ?? []).filter(b => b.id !== p.id), { id: p.id, amount }];
     a.endsAt = Math.max(a.endsAt, this.now() + AUCTION_EXTEND_MS);
     this.say(`${p.name} bid ${this.money(amount)}.`, p.id);
     if (a.bidders.length === 1) this.finishAuction();
@@ -767,8 +811,12 @@ export class Game {
     if (!a) return;
     a.bidders = a.bidders.filter(b => b !== id);
     if (a.highBidder === id) {
-      a.highBidder = null;
-      a.highBid = 0;
+      // The lead goes back to the best bid from someone still in, not to nothing.
+      const best = (a.bids ?? [])
+        .filter(b => b.id !== id && a.bidders.includes(b.id))
+        .sort((x, y) => y.amount - x.amount)[0];
+      a.highBidder = best?.id ?? null;
+      a.highBid = best?.amount ?? 0;
     }
     if (a.bidders.length === 0 || (a.bidders.length === 1 && a.highBidder === a.bidders[0])) {
       this.finishAuction();
@@ -789,10 +837,14 @@ export class Game {
     this.auction = null;
     if (a.highBidder) {
       const w = this.player(a.highBidder);
-      w.cash -= a.highBid;
+      // Bids are capped at cash, but cash can move during the auction (a debt
+      // paid, an operator fix): whatever is missing becomes an ordinary debt.
+      const paid = Math.max(0, Math.min(a.highBid, w.cash));
+      w.cash -= paid;
       this.owned[a.space] = { owner: w.id, houses: 0, mortgaged: false };
       this.stat(w.id).propertiesBought++;
       this.say(`${w.name} won ${s.name} for ${this.money(a.highBid)}.`, w.id);
+      if (paid < a.highBid) this.charge(w, null, a.highBid - paid, `the rest of the ${s.name} auction`);
     } else {
       this.say(`Nobody bid on ${s.name}${a.bank ? ' — it stays with the bank' : ''}.`);
     }
@@ -820,7 +872,7 @@ export class Game {
       this.resumePhase = this.phase;
       this.auction = {
         space, highBid: 0, highBidder: null, bidders: this.active().map(x => x.id),
-        endsAt: this.now() + AUCTION_MS, bank: true,
+        endsAt: this.now() + AUCTION_MS, bank: true, bids: [],
       };
       this.phase = 'auction';
       this.say(`The bank is auctioning ${this.spaces[space].name}.`);
@@ -856,30 +908,16 @@ export class Game {
     this.say(`${p.name} used a Get Out of Jail Free card.`, p.id);
   }
 
+  // The property checks live in shared/holdings.ts, so the deed card's
+  // buttons follow exactly the rules enforced here.
   private requireOwn(p: PlayerState, space: number): { s: SpaceDef; o: OwnedSpace } {
-    const o = this.owned[space];
-    if (!o || o.owner !== p.id) fail('You do not own that');
-    if (this.phase === 'auction') fail('Wait for the auction to finish');
-    if (this.phase === 'minigame') fail('Wait for the mini-game to finish');
-    return { s: this.spaces[space], o };
+    const why = manageProblem(this, p.id, space);
+    if (why) fail(why);
+    return { s: this.spaces[space], o: this.owned[space] };
   }
 
   canBuild(id: string, space: number): string | null {
-    const s = this.spaces[space];
-    const o = this.owned[space];
-    if (!o || o.owner !== id) return 'You do not own that';
-    if (s.kind !== 'property') return 'Only coloured properties take houses';
-    if (!this.ownsGroup(id, s.group!)) return 'You need the whole colour group';
-    const grp = groupIndices(this.spaces, s.group!);
-    if (grp.some(i => this.owned[i].mortgaged)) return 'Lift the mortgages in this group first';
-    if (o.houses >= 5) return 'Already has a hotel';
-    if (this.rules.evenBuild && o.houses > Math.min(...grp.map(i => this.owned[i].houses))) return 'Build evenly across the group';
-    if (this.player(id).cash < s.houseCost!) return 'Not enough cash';
-    if (this.rules.limitedBuildings) {
-      if (o.houses === 4 && this.hotelsLeft === 0) return 'The bank is out of hotels';
-      if (o.houses < 4 && this.housesLeft === 0) return 'The bank is out of houses';
-    }
-    return null;
+    return buildProblem(this, this.spaces, id, space, this.player(id).cash);
   }
 
   private build(p: PlayerState, space: number) {
@@ -899,9 +937,8 @@ export class Game {
 
   private sell(p: PlayerState, space: number) {
     const { s, o } = this.requireOwn(p, space);
-    if (o.houses === 0) fail('Nothing to sell');
-    const grp = groupIndices(this.spaces, s.group!);
-    if (this.rules.evenBuild && o.houses < Math.max(...grp.map(i => this.owned[i].houses))) fail('Sell evenly across the group');
+    const why = sellProblem(this, this.spaces, space);
+    if (why) fail(why);
     this.sellOne(p, s, o);
   }
 
@@ -926,8 +963,8 @@ export class Game {
 
   private mortgage(p: PlayerState, space: number) {
     const { s, o } = this.requireOwn(p, space);
-    if (o.mortgaged) fail('Already mortgaged');
-    if (this.groupHasBuildings(s.group)) fail('Sell the buildings in this group first');
+    const why = mortgageProblem(this, this.spaces, space);
+    if (why) fail(why);
     this.mortgageOne(p, s, o);
   }
 
@@ -939,9 +976,9 @@ export class Game {
 
   private unmortgage(p: PlayerState, space: number) {
     const { s, o } = this.requireOwn(p, space);
-    if (!o.mortgaged) fail('Not mortgaged');
+    const why = unmortgageProblem(this, this.spaces, space, p.cash);
+    if (why) fail(why);
     const cost = unmortgageCost(s);
-    if (p.cash < cost) fail('Not enough cash');
     p.cash -= cost;
     o.mortgaged = false;
     this.say(`${p.name} lifted the mortgage on ${s.name} for ${this.money(cost)}.`, p.id);
@@ -1047,6 +1084,18 @@ export class Game {
     const t: Trade = { id: `t${++this.tradeSeq}`, from: p.id, to: to.id, give, get };
     this.trades.push(t);
     this.say(original ? `${p.name} countered ${to.name}'s offer.` : `${p.name} offered ${to.name} a trade.`, p.id);
+  }
+
+  /** Why an open offer could not go through right now (null: it still could). */
+  tradeProblem(t: Trade): string | null {
+    try {
+      this.validateSide(this.player(t.from), t.give);
+      this.validateSide(this.player(t.to), t.get);
+      return null;
+    } catch (e) {
+      if (e instanceof EngineError) return e.message;
+      throw e;
+    }
   }
 
   private acceptTrade(p: PlayerState, id: string) {
@@ -1442,6 +1491,7 @@ export class Game {
     const st = this.standings();
     this.winner = st[0].id;
     this.phase = 'over';
+    this.endedAt = this.now();
     this.auction = null;
     this.minigame = null;
     this.choice = null;
@@ -1450,6 +1500,15 @@ export class Game {
     const w = this.player(this.winner);
     this.say(`🏁 ${w.name} wins with the highest net worth (${this.money(st[0].netWorth)})!`, w.id);
     this.say(`Final ranking: ${st.map((x, i) => `${i + 1}. ${this.player(x.id).name} ${this.money(x.netWorth)}`).join(' · ')}`);
+  }
+
+  /** The room gave up on the table (nobody has been at it for a long while): end it as the time limit would. */
+  abandon() {
+    if (this.phase === 'over') return;
+    this.paused = null;
+    this.say('🏁 Nobody has been at the table for a long while — the game ends here.');
+    this.finishByTime();
+    this.syncClocks();
   }
 
   // ---- operator fixes -------------------------------------------------------
@@ -1590,6 +1649,15 @@ export class Game {
     g.estateQueue = snap.estateQueue ?? [];
     g.resumePhase = snap.resumePhase ?? null;
     g.stats ??= {};
+    // Offers saved before every field was validated may be malformed: rebuild
+    // each one from checked fields, and drop any that cannot be.
+    g.trades = (Array.isArray(g.trades) ? g.trades : []).flatMap(t => {
+      try {
+        return [{ id: idArg(t.id), from: idArg(t.from), to: idArg(t.to), give: g.readSide(t.give), get: g.readSide(t.get) }];
+      } catch {
+        return [];
+      }
+    });
     // Older snapshots: the game began at some unknown time; "now" is the honest floor.
     g.startedAt ??= g.now();
     g.endedAt ??= null;

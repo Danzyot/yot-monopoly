@@ -21,17 +21,25 @@ const BOT_DELAY_MS = 900;
 const MINIGAME_BOT_DELAY_MS = 60;
 /** How often to look in on bots waiting to make a mini-game move. */
 const MINIGAME_POLL_MS = 150;
+/** After a timer body throws, the room's timers are re-armed this much later (no tight error loops). */
+const TIMER_RETRY_MS = 5_000;
 /** A disconnected player's turn is auto-played after this long. */
 export const AUTOPILOT_GRACE_MS = 45_000;
 /** A host away this long hands the room to someone who is here. */
 export const HOST_GRACE_MS = 2 * 60_000;
-/** Rooms with no connected humans are removed after this long. */
+/**
+ * Rooms with no connected humans are removed after this long; a running game
+ * nobody is at (bots and autopilot only) is ended on net worth first.
+ */
 const IDLE_ROOM_MS = 30 * 60_000;
 /** Finished rooms linger this long so people can read the result. */
 const FINISHED_ROOM_MS = 10 * 60_000;
 /** …or longer while someone is still at the table deciding on a rematch, up to this. */
 const FINISHED_ROOM_MAX_MS = 3 * 60 * 60_000;
 export const MAX_ROOMS = 500;
+/** Each account may open this many rooms per CREATE_WINDOW_MS (operators exempt). */
+export const CREATES_PER_WINDOW = 5;
+const CREATE_WINDOW_MS = 10 * 60_000;
 const BOT_NAMES = ['Rich Uncle', 'Tycoon', 'Landlord', 'Baron', 'Mogul', 'Magnate', 'Banker', 'Heiress'];
 
 export interface Member {
@@ -51,6 +59,8 @@ export interface RoomHooks {
   onEvent(room: Room, text: string): void;
   /** The game just ended. */
   onFinished(room: Room): void;
+  /** The last human left the lobby (bots don't count): the registry closes it. */
+  onEmpty?(room: Room): void;
 }
 
 export class RoomError extends Error {}
@@ -77,6 +87,8 @@ export interface RoomSnapshot {
   requirements?: JoinRequirements | null;
   /** Players who left the running game (never host again). Absent in older snapshots. */
   departed?: string[];
+  /** Players the host removed: they may watch but not sit down again. Absent in older snapshots. */
+  kicked?: string[];
 }
 
 export class Room {
@@ -94,9 +106,12 @@ export class Room {
   readonly createdAt = Date.now();
   startedAt: number | null = null;
   finishedAt: number | null = null;
+  /** Last human sign of life: a connection, a disconnection or their own move (never bots or autopilot). */
   lastActivity = Date.now();
   /** Sockets watching without a seat; maintained by the socket layer. */
   spectators = 0;
+  /** Changed since the last live snapshot was written (persist.ts); every mutation sets it. */
+  dirty = true;
   private botTimer: NodeJS.Timeout | null = null;
   private auctionTimer: NodeJS.Timeout | null = null;
   private minigameTimer: NodeJS.Timeout | null = null;
@@ -105,8 +120,17 @@ export class Room {
   private clockTimer: NodeJS.Timeout | null = null;
   /** Separate from the game timers: host handover must not depend on schedule(). */
   private hostTimer: NodeJS.Timeout | null = null;
+  /** Re-arms everything after a timer body threw (see guarded). */
+  private retryTimer: NodeJS.Timeout | null = null;
+  /**
+   * Per seat, the automated move that just failed: not tried again until the
+   * game changes, so a move the engine refuses cannot loop every BOT_DELAY_MS.
+   */
+  private failedMoves = new Map<string, string>();
   /** Players who left a running game for good; they keep their seat but can't host. */
   private departed = new Set<string>();
+  /** Players removed by the host or an operator: never seated here again (watching is fine). */
+  private kicked = new Set<string>();
 
   constructor(readonly code: string, public hostId: string, private hooks: RoomHooks) {}
 
@@ -122,6 +146,7 @@ export class Room {
 
   /** Take a seat (lobby) or reclaim one (any time). Throws when neither is possible. */
   join(m: Member): Seat {
+    this.dirty = true;
     this.lastActivity = Date.now();
     const existing = this.seat(m.id);
     if (existing) {
@@ -133,6 +158,7 @@ export class Room {
       return existing;
     }
     if (this.status !== 'lobby') fail('This game has already started — you can watch');
+    if (this.kicked.has(m.id)) fail('You were removed from this room — you can watch');
     if (this.seats.length >= this.rules.maxPlayers) fail('The room is full — you can watch');
     const s: Seat = {
       id: m.id, name: m.name, avatar: m.avatar, isBot: false, connected: true, disconnectedAt: null,
@@ -154,12 +180,14 @@ export class Room {
 
   /** Leave for good: lobby frees the seat; in a game it forfeits. */
   leave(id: string) {
+    this.dirty = true;
     const s = this.seat(id);
     if (!s) return;
     if (this.status === 'lobby') {
       if (this.hostId === id) this.passHost(id, 'left');
       this.seats = this.seats.filter(x => x.id !== id);
       this.hooks.onEvent(this, `${s.name} left`);
+      this.closeIfEmpty();
     } else {
       this.departed.add(id);
       // Hand over first: the forfeit below can end the game.
@@ -174,10 +202,16 @@ export class Room {
     if (this.status !== 'lobby') this.setConnected(id, false);
   }
 
+  /** A lobby nobody human sits in is closed at once rather than lingering for the idle sweep. */
+  private closeIfEmpty() {
+    if (this.status === 'lobby' && !this.seats.some(s => !s.isBot)) this.hooks.onEmpty?.(this);
+  }
+
   // ---- host -------------------------------------------------------------------
 
   /** The host (or an operator) makes another seated human the host — lobby or mid-game. */
   transferHost(byId: string, target: string, isAdmin: boolean) {
+    this.dirty = true;
     this.requireHost(byId, isAdmin);
     const s = this.seat(target) ?? fail('Not in this room');
     if (s.isBot) fail('A bot cannot be the host');
@@ -211,6 +245,7 @@ export class Room {
       return false;
     }
     const was = this.seat(from)?.name;
+    this.dirty = true;
     this.hostId = next.id;
     this.hooks.onEvent(this, `${next.name} is now the host (${was ?? 'the host'} ${why})`);
     return true;
@@ -220,18 +255,18 @@ export class Room {
    * Hand the room on when its host is gone: left a running game, or away for
    * HOST_GRACE_MS. Called whenever someone connects or drops, so a room whose
    * host vanished while nobody else was around recovers the moment someone
-   * returns.
+   * returns. Finished rooms too: someone still at the table must be able to
+   * start the rematch.
    */
   private watchHost() {
     if (this.hostTimer) clearTimeout(this.hostTimer);
     this.hostTimer = null;
-    if (this.status === 'finished') return;
     const h = this.seat(this.hostId);
     let gone = !h || this.departed.has(this.hostId);
     if (h && !gone && h.disconnectedAt !== null) {
       const due = h.disconnectedAt + HOST_GRACE_MS - Date.now();
       if (due > 0) {
-        this.hostTimer = setTimeout(() => this.watchHost(), due + 50);
+        this.hostTimer = setTimeout(() => this.guarded('host', () => this.watchHost(), false), due + 50);
         this.hostTimer.unref?.();
         return;
       }
@@ -244,6 +279,7 @@ export class Room {
 
   /** Host (or operator) sets who may take a seat. Validation happens in requirements.ts. */
   setRequirements(id: string, isAdmin: boolean, req: JoinRequirements | null) {
+    this.dirty = true;
     this.requireHost(id, isAdmin);
     this.requireLobby();
     this.requirements = req;
@@ -253,10 +289,12 @@ export class Room {
   }
 
   setConnected(id: string, connected: boolean) {
+    this.dirty = true;
     const s = this.seat(id);
     if (!s || s.isBot) return;
     s.connected = connected;
     s.disconnectedAt = connected ? null : Date.now();
+    this.lastActivity = Date.now();
     this.schedule();
     this.watchHost();
   }
@@ -270,6 +308,7 @@ export class Room {
   }
 
   configure(id: string, isAdmin: boolean, p: { themeId?: string; mapId?: string; rules?: Partial<RuleConfig>; private?: boolean }) {
+    this.dirty = true;
     this.requireHost(id, isAdmin);
     this.requireLobby();
     if (p.mapId) {
@@ -296,12 +335,14 @@ export class Room {
 
   /** Host (or operator) picks the table look. Always sanitised: every viewer loads these URLs. */
   setStyle(id: string, isAdmin: boolean, raw: unknown) {
+    this.dirty = true;
     this.requireHost(id, isAdmin);
     this.requireLobby();
     this.style = sanitizeTableStyle(raw);
   }
 
   pickCharacter(id: string, character: CharacterId) {
+    this.dirty = true;
     this.requireLobby();
     if (!CHARACTERS.includes(character)) fail('Unknown character');
     const s = this.seat(id) ?? fail('You are not seated');
@@ -310,6 +351,7 @@ export class Room {
   }
 
   pickColor(id: string, color: string) {
+    this.dirty = true;
     this.requireLobby();
     if (!PLAYER_COLORS.includes(color)) fail('Unknown colour');
     const s = this.seat(id) ?? fail('You are not seated');
@@ -318,6 +360,7 @@ export class Room {
   }
 
   addBot(id: string, isAdmin: boolean) {
+    this.dirty = true;
     this.requireHost(id, isAdmin);
     this.requireLobby();
     if (this.seats.length >= this.rules.maxPlayers) fail('The room is full');
@@ -335,14 +378,22 @@ export class Room {
     if (target === byId) fail('Use leave instead');
     const s = this.seat(target) ?? fail('Not in this room');
     this.hooks.onEvent(this, `${s.name} was removed by ${this.seat(byId)?.name ?? 'an operator'}`);
+    // No reloading back into the seat (bots never come back anyway).
+    if (!s.isBot) this.kicked.add(target);
     this.remove(target);
+  }
+
+  wasKicked(id: string): boolean {
+    return this.kicked.has(id);
   }
 
   /** Remove a player regardless of who asks (bans, kicks). */
   remove(target: string) {
+    this.dirty = true;
     if (this.status === 'lobby') {
       if (this.hostId === target) this.passHost(target, 'was removed');
       this.seats = this.seats.filter(s => s.id !== target);
+      this.closeIfEmpty();
     } else {
       if (this.seat(target)) this.departed.add(target);
       if (this.hostId === target) this.passHost(target, 'was removed');
@@ -353,6 +404,7 @@ export class Room {
   }
 
   start(id: string, isAdmin: boolean) {
+    this.dirty = true;
     this.requireHost(id, isAdmin);
     this.requireLobby();
     if (this.seats.length < 2) fail('Need at least 2 players (add a bot?)');
@@ -383,6 +435,7 @@ export class Room {
    * character and colour.
    */
   rematch(byId: string, isAdmin: boolean, present: (id: string) => boolean) {
+    this.dirty = true;
     this.requireHost(byId, isAdmin);
     if (this.status !== 'finished') fail('The game is not over yet');
     this.clearTimers();
@@ -400,10 +453,25 @@ export class Room {
 
   /** Operator stops a game outright. */
   end(reason: string) {
+    this.dirty = true;
     this.clearTimers();
     this.hooks.onEvent(this, `Game ended by an operator: ${reason}`);
     this.status = 'finished';
     this.finishedAt = Date.now();
+    if (this.game && this.game.endedAt === null) this.game.endedAt = this.finishedAt;
+  }
+
+  /**
+   * Nobody has been at a running table for IDLE_ROOM_MS: end the game on net
+   * worth, like the time limit (so results are recorded as usual), and let
+   * the sweep clear the finished room.
+   */
+  abandon() {
+    const g = this.runningGame();
+    g.abandon();
+    this.hooks.onEvent(this, 'Game ended: nobody has been at the table for 30 minutes');
+    this.afterChange();
+    this.hooks.onChange(this);
   }
 
   // ---- play -----------------------------------------------------------------
@@ -412,7 +480,8 @@ export class Room {
   act(id: string, a: Action, auto = false) {
     if (!this.game) fail('The game has not started');
     if (this.status === 'finished') fail('The game is over');
-    this.lastActivity = Date.now();
+    // Bots and autopilot moving is no sign anyone is still here (see the sweep).
+    if (!auto) this.lastActivity = Date.now();
     this.game.apply(id, a, { auto });
     const s = this.seat(id);
     if (!auto && s?.autopilot) {
@@ -425,6 +494,7 @@ export class Room {
 
   /** Host or operator freezes every clock in the game (chat keeps working). */
   pause(id: string, isAdmin: boolean, byName: string) {
+    this.dirty = true;
     this.requireHost(id, isAdmin);
     const g = this.runningGame();
     g.pause(byName);
@@ -442,6 +512,7 @@ export class Room {
 
   /** Host or operator hands a (connected but absent) player to autopilot, or takes them off it. */
   setAutopilot(byId: string, target: string, on: boolean, isAdmin: boolean) {
+    this.dirty = true;
     this.requireHost(byId, isAdmin);
     const g = this.runningGame();
     const s = this.seat(target) ?? fail('Not in this room');
@@ -470,6 +541,8 @@ export class Room {
   }
 
   private afterChange() {
+    this.dirty = true;
+    this.failedMoves.clear();
     if (this.game?.phase === 'over' && this.status !== 'finished') {
       this.status = 'finished';
       this.finishedAt = Date.now();
@@ -497,26 +570,26 @@ export class Room {
 
     const clockDue = g.clockDeadline();
     if (clockDue !== null) {
-      this.clockTimer = setTimeout(() => {
+      this.clockTimer = setTimeout(() => this.guarded('clock', () => {
         if (this.game?.clockTimeout()) {
           this.afterChange();
           this.hooks.onChange(this);
         } else {
           this.schedule();
         }
-      }, Math.max(0, clockDue - Date.now()) + 50);
+      }), Math.max(0, clockDue - Date.now()) + 50);
     }
 
     if (g.auction) {
       const wait = Math.max(0, g.auction.endsAt - Date.now()) + 50;
-      this.auctionTimer = setTimeout(() => {
+      this.auctionTimer = setTimeout(() => this.guarded('auction', () => {
         if (this.game?.auctionTimeout()) {
           this.afterChange();
           this.hooks.onChange(this);
         } else {
           this.schedule();
         }
-      }, wait);
+      }), wait);
     }
 
     const now = Date.now();
@@ -527,33 +600,41 @@ export class Room {
       const botWaiting = g.minigame?.stage === 'play'
         && this.seats.some(s => this.automated(s, now) === 'bot' && !g.player(s.id).bankrupt);
       const wait = Math.max(0, mgDue - now) + 20;
-      this.minigameTimer = setTimeout(() => {
+      this.minigameTimer = setTimeout(() => this.guarded('mini-game', () => {
         if (this.game?.minigameTimeout()) {
           this.afterChange();
           this.hooks.onChange(this);
         } else {
           this.schedule();
         }
-      }, botWaiting ? Math.min(wait, MINIGAME_POLL_MS) : wait);
+      }), botWaiting ? Math.min(wait, MINIGAME_POLL_MS) : wait);
     }
 
     const next = this.nextAutomatedAction(now);
     if (next) {
-      this.botTimer = setTimeout(() => {
+      this.botTimer = setTimeout(() => this.guarded('bot', () => {
         const next = this.nextAutomatedAction(Date.now());
-        if (!next) return;
+        if (!next) {
+          this.schedule();
+          return;
+        }
         try {
           this.act(next.id, next.action, true);
         } catch (e) {
-          // A bot choosing an illegal move is a bug, but it must never wedge
-          // the room: log it and fall back to something always legal.
+          // A bot choosing an illegal move is a bug, or the move went stale (a
+          // trade whose cash was spent meanwhile), but it must never wedge the
+          // room: log it and fall back to something harmless.
           console.error(`[room ${this.code}] automated ${next.action.type} failed:`, (e as Error).message);
           // A mini-game move can go stale (the round moved on); that's never worth a fallback.
-          if (next.action.type !== 'minigame') this.fallback(next.id);
-          else this.schedule();
+          if (next.action.type !== 'minigame') {
+            this.failedMoves.set(next.id, JSON.stringify(next.action));
+            this.fallback(next.id, next.action);
+          } else {
+            this.schedule();
+          }
         }
         this.hooks.onChange(this);
-      }, next.action.type === 'minigame' ? MINIGAME_BOT_DELAY_MS : BOT_DELAY_MS);
+      }), next.action.type === 'minigame' ? MINIGAME_BOT_DELAY_MS : BOT_DELAY_MS);
       return;
     }
 
@@ -562,7 +643,7 @@ export class Room {
       .map(s => s.disconnectedAt! + AUTOPILOT_GRACE_MS - now)
       .filter(ms => ms > 0);
     if (pending.length) {
-      this.autopilotTimer = setTimeout(() => { this.schedule(); this.hooks.onChange(this); }, Math.min(...pending) + 50);
+      this.autopilotTimer = setTimeout(() => this.guarded('autopilot', () => { this.schedule(); this.hooks.onChange(this); }), Math.min(...pending) + 50);
     }
   }
 
@@ -574,7 +655,14 @@ export class Room {
       const s = this.seat(id);
       const mode = s ? this.automated(s, now) : null;
       if (!mode) continue;
-      let action = botAction(g, id);
+      let action: Action | null;
+      try {
+        action = botAction(g, id);
+      } catch (e) {
+        // A bug in the bot for this seat must not stop everyone else's moves.
+        console.error(`[room ${this.code}] bot for ${id} failed:`, e);
+        continue;
+      }
       if (!action) continue;
       // Autopilot keeps an absent player's game moving but never spends their
       // money on a whim or makes deals in their name.
@@ -587,20 +675,51 @@ export class Room {
           action = g.phase === 'done' ? { type: 'endTurn' } : { type: 'roll' };
         } else if (action.type === 'buy') action = { type: 'decline' };
       }
+      if (this.failedMoves.get(id) === JSON.stringify(action)) continue;
       return { id, action };
     }
     return null;
   }
 
-  private fallback(id: string) {
-    for (const a of [{ type: 'pass' }, { type: 'endTurn' }, { type: 'bankrupt' }] as Action[]) {
+  /**
+   * An automated move failed: try something harmless instead. Never
+   * bankruptcy — a stale trade or a debt during an auction is no reason to
+   * resign for anyone; the debt clock decides that. With nothing harmless to
+   * do, the seat waits (its failed move is not retried until the game moves).
+   */
+  private fallback(id: string, failed: Action) {
+    const tries: Action[] = [];
+    if (failed.type === 'acceptTrade') tries.push({ type: 'rejectTrade', id: failed.id });
+    tries.push({ type: 'pass' }, { type: 'endTurn' });
+    for (const a of tries) {
       try { this.act(id, a, true); return; } catch (e) { if (!(e instanceof EngineError)) throw e; }
+    }
+    this.schedule();
+  }
+
+  /**
+   * Every timer body runs through here: a bug in the engine, the bot or a hook
+   * is logged with the room code and, unless `rearm` is false, the room's
+   * timers are re-armed a little later. It must never take the server (and
+   * every other table) down with it.
+   */
+  private guarded(what: string, fn: () => void, rearm = true) {
+    try {
+      fn();
+    } catch (e) {
+      console.error(`[room ${this.code}] ${what} timer failed:`, e);
+      if (!rearm) return;
+      this.clearTimers();
+      this.retryTimer = setTimeout(() => this.guarded('retry', () => {
+        this.schedule();
+        this.hooks.onChange(this);
+      }), TIMER_RETRY_MS);
     }
   }
 
   private clearTimers() {
-    for (const t of [this.botTimer, this.auctionTimer, this.minigameTimer, this.autopilotTimer, this.clockTimer]) if (t) clearTimeout(t);
-    this.botTimer = this.auctionTimer = this.minigameTimer = this.autopilotTimer = this.clockTimer = null;
+    for (const t of [this.botTimer, this.auctionTimer, this.minigameTimer, this.autopilotTimer, this.clockTimer, this.retryTimer]) if (t) clearTimeout(t);
+    this.botTimer = this.auctionTimer = this.minigameTimer = this.autopilotTimer = this.clockTimer = this.retryTimer = null;
   }
 
   dispose() {
@@ -654,6 +773,7 @@ export class Room {
       style: { ...this.style },
       requirements: this.requirements ? { ...this.requirements } : null,
       departed: [...this.departed],
+      kicked: [...this.kicked],
     };
   }
 
@@ -667,6 +787,7 @@ export class Room {
       requirements: sanitizeRequirements(s.requirements),
     });
     if (Array.isArray(s.departed)) r.departed = new Set(s.departed.filter(x => typeof x === 'string'));
+    if (Array.isArray(s.kicked)) r.kicked = new Set(s.kicked.filter(x => typeof x === 'string'));
     // Everyone starts disconnected: they reclaim their seats on reconnect, and
     // autopilot covers anyone who never comes back.
     const now = Date.now();
@@ -685,9 +806,15 @@ export class Room {
       }, game);
     }
     if (r.status === 'finished') r.finishedAt = now;
-    r.schedule();
-    // The host is disconnected like everyone else: start their 2-minute clock.
-    r.watchHost();
+    try {
+      r.schedule();
+      // The host is disconnected like everyone else: start their 2-minute clock.
+      r.watchHost();
+    } catch (e) {
+      // Not restored after all: leave no timers running for a room nobody can reach.
+      r.dispose();
+      throw e;
+    }
     return r;
   }
 }
@@ -730,18 +857,33 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 export class Registry {
   rooms = new Map<string, Room>();
+  private hooks: RoomHooks;
+  /** When each account opened its recent rooms (see CREATES_PER_WINDOW). */
+  private created = new Map<string, number[]>();
+  /** Rooms added or removed since the last live snapshot (each room tracks its own changes). */
+  private dirty = true;
 
-  constructor(private hooks: RoomHooks, sweepEveryMs = 60_000) {
+  constructor(hooks: RoomHooks, sweepEveryMs = 60_000) {
+    this.hooks = { ...hooks, onEmpty: r => { if (this.rooms.get(r.code) === r) this.delete(r.code); } };
     setInterval(() => this.sweep(), sweepEveryMs).unref();
   }
 
-  create(hostId: string): Room {
+  /** `exempt`: operators open as many rooms as they like. */
+  create(hostId: string, exempt = false): Room {
     if (this.rooms.size >= MAX_ROOMS) throw new RoomError('The server is at its room limit — try again later');
+    if (!exempt) {
+      const now = Date.now();
+      const recent = (this.created.get(hostId) ?? []).filter(t => now - t < CREATE_WINDOW_MS);
+      if (recent.length >= CREATES_PER_WINDOW) throw new RoomError('You have opened a lot of rooms — try again in a few minutes');
+      recent.push(now);
+      this.created.set(hostId, recent);
+    }
     let code: string;
     do code = Array.from({ length: 5 }, () => CODE_CHARS[randomInt(CODE_CHARS.length)]).join('');
     while (this.rooms.has(code));
     const room = new Room(code, hostId, this.hooks);
     this.rooms.set(code, room);
+    this.dirty = true;
     return room;
   }
 
@@ -762,6 +904,7 @@ export class Registry {
     if (!r) return false;
     r.dispose();
     this.rooms.delete(code);
+    this.dirty = true;
     return true;
   }
 
@@ -772,6 +915,22 @@ export class Registry {
 
   snapshot(): RoomSnapshot[] {
     return [...this.rooms.values()].filter(r => r.status !== 'finished').map(r => r.snapshot());
+  }
+
+  /** Has anything changed since the last call? Clears the flags: call it just before snapshot(). */
+  takeDirty(): boolean {
+    let dirty = this.dirty;
+    this.dirty = false;
+    for (const r of this.rooms.values()) {
+      if (r.dirty) dirty = true;
+      r.dirty = false;
+    }
+    return dirty;
+  }
+
+  /** A snapshot could not be written: try again next time. */
+  markDirty() {
+    this.dirty = true;
   }
 
   restore(snaps: RoomSnapshot[]): number {
@@ -789,15 +948,29 @@ export class Registry {
 
   private sweep() {
     const now = Date.now();
+    for (const [id, times] of this.created) {
+      if (times.every(t => now - t >= CREATE_WINDOW_MS)) this.created.delete(id);
+    }
     for (const [code, r] of this.rooms) {
-      const idle = !r.hasConnectedHumans() && r.spectators === 0 && now - r.lastActivity > IDLE_ROOM_MS;
-      // A finished table stays while people are still at it (reading the
-      // summary, waiting on the host's rematch), within a hard cap.
-      const since = now - (r.finishedAt ?? now);
-      const occupied = r.hasConnectedHumans() || r.spectators > 0;
-      const done = r.status === 'finished' && since > FINISHED_ROOM_MS && (!occupied || since > FINISHED_ROOM_MAX_MS);
-      if (idle || done) this.delete(code);
+      try {
+        this.sweepOne(code, r, now);
+      } catch (e) {
+        console.error(`[room ${code}] sweep failed:`, e);
+      }
     }
   }
-}
 
+  private sweepOne(code: string, r: Room, now: number) {
+    const away = !r.hasConnectedHumans() && now - r.lastActivity > IDLE_ROOM_MS;
+    // Bots and autopilot would play an abandoned game forever: end it (it is
+    // swept below once finished, like any other).
+    if (away && r.status === 'playing' && r.game && r.game.phase !== 'over') r.abandon();
+    const idle = away && r.spectators === 0;
+    // A finished table stays while people are still at it (reading the
+    // summary, waiting on the host's rematch), within a hard cap.
+    const since = now - (r.finishedAt ?? now);
+    const occupied = r.hasConnectedHumans() || r.spectators > 0;
+    const done = r.status === 'finished' && since > FINISHED_ROOM_MS && (!occupied || since > FINISHED_ROOM_MAX_MS);
+    if (idle || done) this.delete(code);
+  }
+}

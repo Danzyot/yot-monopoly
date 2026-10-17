@@ -64,7 +64,7 @@ Discord Developer Portal → **New Application**.
 | `DATA_DIR` | **yes** | `/data` (the volume mount) |
 | `DISCORD_CLIENT_ID` | **yes** | Application ID |
 | `DISCORD_CLIENT_SECRET` | **yes** | OAuth2 client secret (same app) |
-| `ADMIN_DISCORD_IDS` | **yes** | comma-separated Discord user ids of operators. **Unset = everyone is an operator.** |
+| `ADMIN_DISCORD_IDS` | **yes** | comma-separated Discord user ids of operators. **Unset = nobody is an operator when `NODE_ENV=production` (as in the Dockerfile); everyone is in local dev.** |
 | `PUBLIC_URL` | recommended | `https://your-domain` (used in the Verify panel) |
 | `DISCORD_BOT_TOKEN` | for code sign-in, DMs, announcements | bot token (same app) |
 | `DISCORD_PUBLIC_KEY` | for the Verify button | Public Key (same app) |

@@ -121,8 +121,16 @@ export function adminModeConfigured(): boolean {
   return adminDiscordIds().size > 0;
 }
 
-/** With no operators configured (local dev) everyone is an operator. */
+/** In production the operator list must be set explicitly (an unset one fails closed). */
+export function isProduction(): boolean {
+  return process.env.NODE_ENV === 'production';
+}
+
+/**
+ * With no operators configured, local dev makes everyone an operator; in
+ * production that fails closed and nobody is.
+ */
 export function withAdminFlag(p: PlayerProfile): PlayerProfile {
-  if (!adminModeConfigured()) return { ...p, isAdmin: true };
+  if (!adminModeConfigured()) return { ...p, isAdmin: !isProduction() };
   return { ...p, isAdmin: !!p.discord && adminDiscordIds().has(p.discord.id) };
 }

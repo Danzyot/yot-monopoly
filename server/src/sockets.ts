@@ -133,6 +133,7 @@ export function attachSockets(io: Server): SocketLayer {
       socket.on(event, (payload: T, ack?: Ack) => {
         const reply: Ack = typeof ack === 'function' ? ack : () => {};
         if (limited && !take(data)) return reply({ ok: false, error: 'Slow down' });
+        if (!plainPayload(payload)) return reply({ ok: false, error: 'Bad request' });
         try {
           const room = data.room ? registry.get(data.room) ?? null : null;
           const extra = fn((payload ?? {}) as T, room) ?? {};
@@ -155,6 +156,7 @@ export function attachSockets(io: Server): SocketLayer {
       socket.on(event, async (payload: T, ack?: Ack) => {
         const reply: Ack = typeof ack === 'function' ? ack : () => {};
         if (!take(data)) return reply({ ok: false, error: 'Slow down' });
+        if (!plainPayload(payload)) return reply({ ok: false, error: 'Bad request' });
         try {
           const room = data.room ? registry.get(data.room) ?? null : null;
           const extra = (await fn((payload ?? {}) as T, room)) ?? {};
@@ -215,7 +217,7 @@ export function attachSockets(io: Server): SocketLayer {
       if (registry.roomsOf(m.id).filter(r => r.hostId === m.id && r.status === 'lobby').length >= 3) {
         throw new RoomError('You already have 3 open lobbies — start or leave one first');
       }
-      const room = registry.create(m.id);
+      const room = registry.create(m.id, isAdmin());
       room.join(m);
       enter(room, true);
       return { code: room.code };
@@ -277,6 +279,15 @@ export function attachSockets(io: Server): SocketLayer {
     });
 
     on('room:leave', () => { leaveCurrent(true); });
+
+    // Navigating away from the room page (back button, a link) without
+    // leaving for good: the seat is kept but shows as disconnected, so
+    // autopilot takes over after the usual grace. Opening the room again
+    // (room:join) reconnects it. `code` guards against a late message from a
+    // page that has already moved on to another room.
+    on<{ code?: string }>('room:away', p => {
+      if (data.room && data.room === String(p.code ?? '').toUpperCase()) leaveCurrent(false);
+    }, false);
 
     on<{ themeId?: string; mapId?: string; rules?: Partial<RuleConfig>; private?: boolean }>('room:configure', (p, room) => {
       const r = inRoom(room);
@@ -452,6 +463,14 @@ export function attachSockets(io: Server): SocketLayer {
       return { id: d.profile?.id ?? '(guest)', name: d.profile?.name ?? '(not signed in)', ip: d.ip, room: d.room };
     }),
   };
+}
+
+/** Every event takes a plain JSON object (or nothing): strings, arrays and binary are refused. */
+export function plainPayload(p: unknown): boolean {
+  if (p === undefined || p === null) return true;
+  if (typeof p !== 'object' || Array.isArray(p)) return false;
+  const proto = Object.getPrototypeOf(p);
+  return proto === Object.prototype || proto === null;
 }
 
 function take(d: SocketData): boolean {

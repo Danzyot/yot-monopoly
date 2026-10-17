@@ -19,7 +19,7 @@ export async function takeSeat(room: Room, profile: PlayerProfile | null, watch:
   if (!profile) return { seated: false, blocked: null };
   const mine = room.seat(profile.id);
   if (watch && !mine) return { seated: false, blocked: null };
-  if (!mine && room.status === 'lobby' && room.requirements && room.seats.length < room.rules.maxPlayers) {
+  if (!mine && room.status === 'lobby' && room.requirements && room.seats.length < room.rules.maxPlayers && !room.wasKicked(profile.id)) {
     const blocked = await checkRequirements(profile, room.requirements);
     if (blocked) return { seated: false, blocked };
   }
