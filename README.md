@@ -27,15 +27,18 @@ mini-games, music, and a full operator dashboard.
   swoops in for buys, builds, hotels, jail and bankruptcies (🎬 to turn it off); a
   "Your turn!" splash; End turn right from a property you don't want.
 - **Full rules**: rent (sets, houses, railroads, utilities), doubles and jail, all
-  Chance/Community Chest cards, auctions, even building, the 32/12 building supply,
-  mortgages, debts, bankruptcy to a player or to the bank (the bank auctions the estate),
-  trading (10% interest on mortgaged deeds received), and the official **Speed Die**
-  variant (Mr. Monopoly, Bus, triples).
+  Chance/Community Chest cards, auctions, even building and selling, the 32/12 building
+  supply (a hotel sold in a housing shortage sells the set down evenly), mortgages,
+  debts (money owed can't be spent), bankruptcy to a player or to the bank (debts are met
+  in order; the first that can't be met takes everything, the bank auctions the estate),
+  trading (10% interest on mortgaged deeds received, or lift the mortgage at once for the
+  principal), and the official **Speed Die** variant (Mr. Monopoly, Bus, triples).
 - **Mini-games** on arcade spaces (and optionally Free Parking on Classic): Dice Duel,
   High or Low, Reaction Race, Quick Math and Wheel Spin. Server-authoritative; bots play
   them too.
-- **House rules** per room: starting cash, Free Parking jackpot, double on GO, auctions,
-  even building, limited buildings, mini-games, Free Parking arcade, no rent in jail.
+- **House rules** per room: starting cash, Free Parking jackpot (taxes, card fines and
+  arcade losses; never jail fines), double on GO, auctions, even building, limited
+  buildings, mini-games, Free Parking arcade, no rent in jail.
 - **Timing**: a turn timer (off/30–120 s; the safe move is made on timeout, and after two
   in a row autopilot takes over until the player acts), a deadline for debts, an optional
   game length (richest player wins when it runs out), and pause/resume for the host.
