@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../api.ts';
 import { toast, toastError } from '../../toast.tsx';
 import type { BanKind, BanScope } from '../../../../shared/types.ts';
+import { askConfirm } from '../Modal.tsx';
 
 export interface Overview {
   uptimeSec: number;
@@ -158,7 +159,7 @@ export async function act(
   fn: () => Promise<unknown>,
   opts: { confirm?: string; ok?: string; after?: () => unknown } = {},
 ): Promise<boolean> {
-  if (opts.confirm && !window.confirm(opts.confirm)) return false;
+  if (opts.confirm && !(await askConfirm({ title: 'Are you sure?', body: opts.confirm, confirm: 'Yes, do it' }))) return false;
   try {
     await fn();
     if (opts.ok) toast(opts.ok);

@@ -10,6 +10,7 @@ import { toast, toastError } from '../toast.tsx';
 import { profilePath } from '../community.tsx';
 import type { PlayerState, RoomView } from '../../../shared/types.ts';
 import BanDialog from './admin/BanDialog.tsx';
+import { askConfirm } from './Modal.tsx';
 
 export default function PlayerMenu({ room, player, me }: { room: RoomView; player: PlayerState; me: string }) {
   const { profile, config } = useAuth();
@@ -63,15 +64,19 @@ export default function PlayerMenu({ room, player, me }: { room: RoomView; playe
       .then(() => toast(onAutopilot ? `${player.name} is off autopilot` : `Autopilot is playing for ${player.name}`), toastError);
   };
 
-  const remove = () => {
+  const remove = async () => {
     setOpen(null);
-    if (!confirm(`Remove ${player.name} from the game? Their property goes back to the bank.`)) return;
+    if (!(await askConfirm({
+      title: `Remove ${player.name}?`, body: 'They leave the game and their property goes back to the bank.', confirm: 'Remove', danger: true,
+    }))) return;
     call('room:kick', { id: player.id }).then(() => toast(`Removed ${player.name}`), toastError);
   };
 
-  const makeHost = () => {
+  const makeHost = async () => {
     setOpen(null);
-    if (room.hostId === me && !confirm(`Make ${player.name} the host? They get the host controls and you lose them.`)) return;
+    if (room.hostId === me && !(await askConfirm({
+      title: `Make ${player.name} the host?`, body: 'They get the host controls and you lose them.', confirm: 'Make host',
+    }))) return;
     call('room:host', { id: player.id }).catch(toastError);
   };
 

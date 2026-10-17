@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { resolveTheme, type Theme } from '../../../shared/themes.ts';
 import type { GameView, PlayerState } from '../../../shared/types.ts';
 import { characterEmoji } from '../format.ts';
+import { CloseX, Modal } from './Modal.tsx';
 
 interface Group {
   key: string;
@@ -136,11 +137,9 @@ function PlayerDeeds({ theme, game, id, onPick }: { theme: Theme; game: GameView
 export function PortfolioModal(props: Parameters<typeof Portfolio>[0] & { onClose: () => void }) {
   const { onClose, ...rest } = props;
   return (
-    <div className="modal-back" onClick={onClose}>
-      <div className="modal wide pf-modal" onClick={e => e.stopPropagation()} role="dialog" aria-label="Portfolios">
-        <div className="row between"><h3 style={{ margin: 0 }}>Portfolios</h3><button className="btn tiny ghost" onClick={onClose} aria-label="Close">✕</button></div>
-        <Portfolio {...rest} onPick={i => { onClose(); rest.onPick(i); }} />
-      </div>
-    </div>
+    <Modal onClose={onClose} labelledBy="pf-title" className="wide pf-modal">
+      <div className="row between"><h3 id="pf-title" style={{ margin: 0 }}>Portfolios</h3><CloseX onClick={onClose} /></div>
+      <Portfolio {...rest} onPick={i => { onClose(); rest.onPick(i); }} />
+    </Modal>
   );
 }
