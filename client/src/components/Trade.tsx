@@ -1,8 +1,9 @@
 // Trading: the offer builder (pick a player, what you give, what you get,
 // a summary with rough values and every reason the offer can't go yet) and
 // the incoming / outgoing offer cards with accept, decline and counter.
-// The checks mirror the engine's (validateSide in the engine): ownership,
-// cash on hand, jail cards, no buildings in a traded deed's colour set.
+// The checks mirror the engine's (validateTrade in the engine): ownership,
+// cash on hand, jail cards, no buildings in a traded deed's colour set, and
+// no paying out cash that is already owed.
 import { useState } from 'react';
 import { groupIndices, mortgageValue, type SpaceDef } from '../../../shared/board.ts';
 import { resolveTheme, type Theme } from '../../../shared/themes.ts';
@@ -10,7 +11,7 @@ import type { GameView, PlayerState, Trade, TradeSide } from '../../../shared/ty
 import { act } from '../net.ts';
 import { toastError } from '../toast.tsx';
 import { characterEmoji } from '../format.ts';
-import { groupLabel, ownedBy } from '../gameHelpers.ts';
+import { debtOf, groupLabel, ownedBy } from '../gameHelpers.ts';
 import { CloseX, Modal } from './Modal.tsx';
 
 const EMPTY: TradeSide = { cash: 0, spaces: [], jailCards: 0 };
@@ -37,6 +38,23 @@ export function sideProblem(game: GameView, spaces: SpaceDef[], owner: PlayerSta
   for (const i of side.spaces) {
     if (game.owned[i]?.owner !== owner.id) return `${owner.name} no longer owns ${spaces[i].name}`;
     if (groupBuilt(game, spaces, i)) return `${spaces[i].name}'s set has buildings — they must be sold first`;
+  }
+  return null;
+}
+
+/**
+ * Why a deal `from` → `to` could not go through right now (the engine's
+ * validateTrade), or null: each side's own checks, then someone who owes may
+ * not pay out, net, more than the cash they have over their debts.
+ */
+export function tradeProblem(game: GameView, spaces: SpaceDef[], from: PlayerState, to: PlayerState, give: TradeSide, get: TradeSide): string | null {
+  const side = sideProblem(game, spaces, from, give) ?? sideProblem(game, spaces, to, get);
+  if (side) return side;
+  for (const [who, out, back] of [[from, give.cash, get.cash], [to, get.cash, give.cash]] as const) {
+    const owe = debtOf(game, who.id);
+    if (owe > 0 && out - back > Math.max(0, who.cash - owe)) {
+      return `${who.name} owes ${resolveTheme(game.themeId, game.mapId).currency}${owe.toLocaleString()} and cannot pay out cash before settling it`;
+    }
   }
   return null;
 }
@@ -172,7 +190,7 @@ export function TradeModal({ game, me, withId, onClose, counter }: {
   const problem = empty(give) && empty(get) ? 'Pick something to give or to get'
     : them.bankrupt ? `${them.name} is out of the game`
       : !counter && openOffers >= MAX_OPEN ? `You already have ${MAX_OPEN} open offers — withdraw one first`
-        : sideProblem(game, spaces, mine, give) ?? sideProblem(game, spaces, them, get);
+        : tradeProblem(game, spaces, mine, them, give, get);
   const giveValue = sideValue(game, spaces, give);
   const getValue = sideValue(game, spaces, get);
   const diff = getValue - giveValue;
@@ -269,7 +287,7 @@ export function TradeOffers({ game, me, onCounter }: {
         const from = player(t.from), to = player(t.to);
         if (!from || !to) return null;
         const incoming = t.to === me;
-        const problem = sideProblem(game, theme.spaces, from, t.give) ?? sideProblem(game, theme.spaces, to, t.get);
+        const problem = tradeProblem(game, theme.spaces, from, to, t.give, t.get);
         return (
           <div key={t.id} className={`offer ${incoming ? 'in' : 'out'}`} style={{ ['--who' as string]: (incoming ? from : to).color }}>
             <div className="of-head">
