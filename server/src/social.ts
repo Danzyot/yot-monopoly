@@ -86,3 +86,48 @@ export class PokeTracker {
     return target.id;
   }
 }
+
+/** What BotBanter needs to know about each player. */
+export interface BanterPlayer { id: string; name: string; cash: number; inJail: boolean; bankrupt: boolean; isBot: boolean }
+
+/** One reaction a bot wants to send. */
+export interface BanterLine { id: string; name: string; emoji: ReactionEmoji }
+
+export const BANTER_QUIET_MS = 20_000;
+const BIG_MONEY = 150;
+
+/**
+ * Bots chime in now and then, like players do: a sob for a big rent bill, a
+ * flame for a big rent cheque, a scowl on the way to jail. Half the time at
+ * most, and never twice within BANTER_QUIET_MS, so the table isn't spammed.
+ * Watches each room's states as they are broadcast, by room code.
+ */
+export class BotBanter {
+  private last = new Map<string, Map<string, BanterPlayer>>();
+  private quietUntil = new Map<string, number>();
+
+  constructor(private rand: () => number = Math.random) {}
+
+  observe(code: string, players: readonly BanterPlayer[] | null, now = Date.now()): BanterLine[] {
+    if (!players) { this.last.delete(code); return []; }
+    const before = this.last.get(code);
+    this.last.set(code, new Map(players.map(p => [p.id, { ...p }])));
+    if (!before) return [];
+    const out: BanterLine[] = [];
+    for (const p of players) {
+      const was = before.get(p.id);
+      if (!p.isBot || !was || (was.bankrupt && p.bankrupt)) continue;
+      let pick: ReactionEmoji[] | null = null;
+      if (p.bankrupt) pick = ['😭'];
+      else if (p.inJail && !was.inJail) pick = ['😡', '😭'];
+      else if (p.cash - was.cash <= -BIG_MONEY) pick = ['😭', '💸', '😮'];
+      else if (p.cash - was.cash >= BIG_MONEY) pick = ['🔥', '😂', '🎉'];
+      if (!pick || now < (this.quietUntil.get(p.id) ?? 0) || this.rand() >= 0.5) continue;
+      this.quietUntil.set(p.id, now + BANTER_QUIET_MS);
+      out.push({ id: p.id, name: p.name, emoji: pick[Math.floor(this.rand() * pick.length)] });
+    }
+    return out;
+  }
+
+  forget(code: string) { this.last.delete(code); }
+}

@@ -22,7 +22,7 @@ import { getMap } from '../../shared/maps.ts';
 import { getTheme } from '../../shared/themes.ts';
 import { DEFAULT_TABLE_STYLE, libraryFileOf, sanitizeTableStyle } from '../../shared/tableStyles.ts';
 import type { Action, CharacterId, PlayerProfile, PokeMsg, ReactionMsg, RequirementFailure } from '../../shared/types.ts';
-import { PokeTracker, ReactionLimiter, isReactionEmoji } from './social.ts';
+import { BotBanter, PokeTracker, ReactionLimiter, isReactionEmoji } from './social.ts';
 import type { RuleConfig } from '../../shared/themes.ts';
 
 type Ack = (res: { ok: true; [k: string]: unknown } | { ok: false; error: string }) => void;
@@ -59,7 +59,19 @@ export function attachSockets(io: Server): SocketLayer {
   let socialSeq = 0;
   // Every state goes out through here, which is also how the poke tracker
   // learns when a turn began.
-  const broadcast = (room: Room) => io.to(`room:${room.code}`).emit('room:state', { ...room.view(), poke: pokes.view(room) });
+  const banter = new BotBanter();
+  const broadcast = (room: Room) => {
+    io.to(`room:${room.code}`).emit('room:state', { ...room.view(), poke: pokes.view(room) });
+    // Bots react to their big moments a beat later, once the board has caught up.
+    const g = room.status === 'playing' ? room.game : null;
+    for (const b of banter.observe(room.code, g ? g.players : null)) {
+      if (!isOn('reactions') || !isOn('chat')) break;
+      setTimeout(() => {
+        const msg: ReactionMsg = { seq: ++socialSeq, id: b.id, name: b.name, emoji: b.emoji, spectator: false };
+        io.to(`room:${room.code}`).emit('reaction', msg);
+      }, 2200 + Math.random() * 1500);
+    }
+  };
   const lobbyChanged = () => io.to('lobby').emit('rooms', registry.list());
 
   const registry: Registry = new Registry({

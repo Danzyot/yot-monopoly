@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Registry, type Room, type RoomHooks } from '../src/rooms.ts';
-import { PokeTracker, REACTION_BURST, REACTION_EVERY_MS, ReactionLimiter, isReactionEmoji } from '../src/social.ts';
+import { BANTER_QUIET_MS, BotBanter, PokeTracker, REACTION_BURST, REACTION_EVERY_MS, ReactionLimiter, isReactionEmoji } from '../src/social.ts';
 import { Game } from '../src/engine/game.ts';
 import { POKE_AFTER_MS } from '../../shared/types.ts';
 import { resolveTheme } from '../../shared/themes.ts';
@@ -236,4 +236,26 @@ test('chat refusals are ChatErrors so the sender reads the reason, not "Server e
   assert.throws(() => checkChat('chat-t1', '   '), ChatError);
   checkChat('chat-t1', 'hello');
   assert.throws(() => checkChat('chat-t1', 'again'), (e: unknown) => e instanceof ChatError && /Slow down/.test((e as Error).message));
+});
+
+test('bots react to their big moments, not every time, and not too often', () => {
+  const bot = { id: 'b', name: 'Tycoon', cash: 1500, inJail: false, bankrupt: false, isBot: true };
+  const me = { id: 'a', name: 'Dan', cash: 1500, inJail: false, bankrupt: false, isBot: false };
+  let roll = 0;
+  const banter = new BotBanter(() => roll);
+  assert.deepEqual(banter.observe('R', [me, bot], 0), [], 'the first state is just remembered');
+  // A big rent bill: a sob (or similar).
+  const lines = banter.observe('R', [{ ...me, cash: 1700 }, { ...bot, cash: 1300 }], 1000);
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].id, 'b');
+  assert.ok(['😭', '💸', '😮'].includes(lines[0].emoji));
+  assert.equal(banter.observe('R', [me, { ...bot, cash: 1300, inJail: true }], 2000).length, 0, 'still quiet after reacting');
+  assert.equal(banter.observe('R', [me, { ...bot, cash: 1400, inJail: false }], 3000 + BANTER_QUIET_MS).length, 0, 'a small change says nothing');
+  assert.equal(banter.observe('R', [{ ...me, cash: 1000 }, { ...bot, cash: 1300 }], 4000 + BANTER_QUIET_MS).length, 0,
+    'people never react through banter');
+  roll = 0.9;
+  assert.equal(banter.observe('R', [me, { ...bot, inJail: true }], 9000 + BANTER_QUIET_MS).length, 0, 'half the time it lets it pass');
+  roll = 0;
+  assert.equal(banter.observe('R', null).length, 0, 'the game ending resets the room');
+  assert.equal(banter.observe('R', [me, { ...bot, inJail: true }], 10_000 + BANTER_QUIET_MS).length, 0, '…so its next state is a fresh start');
 });
