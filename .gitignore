@@ -8,3 +8,4 @@ data/
 .claude/worktrees/
 tools/blender/.venv/
 tools/blender/.cache/
+__pycache__/
