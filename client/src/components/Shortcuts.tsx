@@ -2,6 +2,7 @@
 // that button would be there, so a stray key press never sends a move the
 // server would refuse. Keys are ignored while typing (chat, bids, trades).
 import { useEffect, useRef } from 'react';
+import { resolveTheme } from '../../../shared/themes.ts';
 import type { Action, GameView } from '../../../shared/types.ts';
 import { act } from '../net.ts';
 import { toastError } from '../toast.tsx';
@@ -34,8 +35,11 @@ export function actionForKey(key: string, game: GameView, me: string): Action | 
   switch (key) {
     case ' ': case 'r':
       return mine && game.phase === 'roll' && owe === 0 ? { type: 'roll' } : null;
-    case 'b':
-      return mine && game.phase === 'buy' ? { type: 'buy' } : null;
+    case 'b': {
+      // Only when the Buy button is live: money already owed is not there to spend.
+      const price = resolveTheme(game.themeId, game.mapId).spaces[p.position]?.price ?? 0;
+      return mine && game.phase === 'buy' && p.cash - owe >= price ? { type: 'buy' } : null;
+    }
     case 'a':
       return mine && game.phase === 'buy' ? { type: 'decline' } : null;
     case 'e':
@@ -68,7 +72,8 @@ export function useShortcuts(game: GameView, me: string, h: {
       const { game, me, h } = ref.current;
       if (e.key === 'Escape') { h.onEscape(); return; }
       if (typing(e.target)) return;
-      if (h.dialogOpen) return;
+      // Any dialog, the game's own or one it doesn't track (askConfirm, a ban), holds the keys.
+      if (h.dialogOpen || (e.target as Element | null)?.closest?.('[aria-modal="true"]')) return;
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       if (key === '?') { e.preventDefault(); h.onHelp(); return; }
       if (key === 't') { e.preventDefault(); h.onTrade(); return; }

@@ -37,7 +37,7 @@ export function ParkingPot({ pot, n }: { pot: number; n: number }) {
     if (target > b.length) {
       // Already there on arrival: no drop. Afterwards new coins rain in one by one.
       const t0 = first.current ? 0 : now;
-      for (let i = b.length; i < target; i++) b.push(t0 ? t0 + (i - b.length) * STAGGER_MS : 0);
+      for (let i = b.length, k = 0; i < target; i++, k++) b.push(t0 ? t0 + k * STAGGER_MS : 0);
       goneAt.current = 0;
     } else if (target < b.length) {
       goneAt.current = now;

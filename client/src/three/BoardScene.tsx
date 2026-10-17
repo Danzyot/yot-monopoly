@@ -193,7 +193,7 @@ function Buildings({ game, theme }: { game: GameView; theme: Theme }) {
       key: o.houses === 5 ? `${i}-h` : `${i}-${n}`, x, z, rotY, hotel: o.houses === 5,
     }));
   });
-  if (!spots.length) return null;
+  // Kept mounted with none built, so the first house is seen as new and drops in.
   return (
     <WithModel fallback={<DrawnBuildings spots={spots} house={house} hotel={hotel} />}>
       <ModelBuildings spots={spots} house={house} hotel={hotel} />

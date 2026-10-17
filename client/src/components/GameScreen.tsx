@@ -92,7 +92,8 @@ export default function GameScreen({ room, game, me, chat, skew }: {
     setTradeWith(null); setCounter(null); setPortfolio(undefined); setHelpOpen(false); setSelected(null); setManage(null);
   };
   const amIn = !!myPlayer && !myPlayer.bankrupt && !over;
-  const dialogOpen = !!tradeWith || !!counter || portfolio !== undefined || over || !!manage || helpOpen;
+  // Trade and manage dialogs only show while I'm still playing (see below).
+  const dialogOpen = (amIn && (!!tradeWith || !!counter || !!manage)) || portfolio !== undefined || over || helpOpen;
   useShortcuts(game, me, {
     dialogOpen,
     onEscape: closeDialogs,
