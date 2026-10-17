@@ -1,5 +1,5 @@
 import { useFrame } from '@react-three/fiber';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { CanvasTexture, Euler, MeshStandardMaterial, Quaternion, SRGBColorSpace, type Mesh } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { SpeedFace } from '../../../shared/types.ts';
@@ -9,6 +9,11 @@ const SIZE = 0.5;
 const ROLL_MS = DICE_MS;
 // Rounded edges like a real die; keeps BoxGeometry's face groups and UVs.
 const DIE_GEO = new RoundedBoxGeometry(SIZE, SIZE, SIZE, 4, 0.07);
+// Scratch objects for the frame loop (nothing is allocated per frame).
+const qTarget = new Quaternion();
+const qFace = new Quaternion();
+const qTumble = new Quaternion();
+const eTmp = new Euler();
 
 // BoxGeometry face order: +x, -x, +y, -y, +z, -z. Opposite faces sum to 7.
 const FACE_VALUES = [3, 4, 1, 6, 2, 5];
@@ -120,7 +125,9 @@ function Die({ top, seq, home, delay, materials, rollOnMount = false }: {
   rollOnMount?: boolean;
 }) {
   const ref = useRef<Mesh>(null);
-  const st = useRef({ seq: -1, t0: 0, yaw: 0, spin: new Euler(), from: [0, 0] as [number, number] });
+  const st = useRef({ seq: -1, t0: 0, yaw: 0, spin: new Euler(), from: [0, 0] as [number, number], settled: false });
+
+  useEffect(() => { st.current.settled = false; }, [top]);
 
   useFrame(() => {
     const m = ref.current;
@@ -134,13 +141,16 @@ function Die({ top, seq, home, delay, materials, rollOnMount = false }: {
       s.yaw = Math.random() * Math.PI * 2;
       s.spin.set(6 + Math.random() * 8, 4 + Math.random() * 6, 5 + Math.random() * 8);
       s.from = [home[0] + 2.2, home[1] + 2.2];
+      s.settled = false;
     }
-    const target = new Quaternion().setFromEuler(new Euler(0, s.yaw, 0))
-      .multiply(new Quaternion().setFromEuler(new Euler(...FACE_UP[top])));
+    if (s.settled) return;
+    const target = qTarget.setFromEuler(eTmp.set(0, s.yaw, 0)).multiply(qFace.setFromEuler(eTmp.set(...FACE_UP[top])));
     const k = s.t0 ? Math.min(1, Math.max(0, (now - s.t0) / ROLL_MS)) : 1;
     if (k >= 1) {
       m.quaternion.slerp(target, 0.25);
       m.position.set(home[0], SIZE / 2, home[1]);
+      // Resting: stop touching it once it has turned the last little way.
+      if (m.quaternion.angleTo(target) < 0.001) { m.quaternion.copy(target); s.settled = true; }
       return;
     }
     const e = 1 - (1 - k) ** 3;
@@ -148,8 +158,7 @@ function Die({ top, seq, home, delay, materials, rollOnMount = false }: {
     m.position.z = s.from[1] + (home[1] - s.from[1]) * e;
     // Two diminishing bounces.
     m.position.y = SIZE / 2 + Math.abs(Math.sin(k * Math.PI * 2.5)) * (1 - k) * 1.4;
-    const tumble = new Quaternion().setFromEuler(new Euler(s.spin.x * (1 - e), s.spin.y * (1 - e), s.spin.z * (1 - e)));
-    m.quaternion.copy(target).multiply(tumble);
+    m.quaternion.copy(target).multiply(qTumble.setFromEuler(eTmp.set(s.spin.x * (1 - e), s.spin.y * (1 - e), s.spin.z * (1 - e))));
   });
 
   return (
@@ -175,6 +184,9 @@ export function Dice({ dice, seq, pip = '#111', body = '#fbfbf7', speed = null }
     () => SPEED_LAYOUT.map(f => new MeshStandardMaterial({ map: speedTexture(f), roughness: 0.3 })),
     [],
   );
+  // Free the canvas textures and materials with the dice (scene changes, edition swaps).
+  useEffect(() => () => { for (const m of pipMaterials) { m.map?.dispose(); m.dispose(); } }, [pipMaterials]);
+  useEffect(() => () => { for (const m of speedMaterials) { m.map?.dispose(); m.dispose(); } }, [speedMaterials]);
   return (
     <group>
       <Die top={FACE_VALUES.indexOf(a)} seq={seq} home={[-0.45, 1.4]} delay={0} materials={pipMaterials} />

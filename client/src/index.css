@@ -1310,3 +1310,18 @@ button.edition:hover:not(:disabled) { transform: translateY(-2px); }
 }
 /* Outfit (Chog) runs heavier than Nunito: long text steps down a weight. */
 .branded .log, .branded .chat-line, .branded .muted { font-weight: 500; }
+
+/* Layering: popups sit above the HUD chrome (turn clock 4, bottom stack 5, dock 6). */
+.auction { z-index: 7; }
+@media (max-width: 760px) {
+  /* The auction drops below the player strip and fits the screen. */
+  .auction { top: 112px; width: min(320px, calc(100vw - 24px)); }
+  /* The deed card lives in the bottom stack, which is positioned itself: pin
+     the card to the screen instead so it opens fully in view. */
+  .hud-bottom .deed-float {
+    position: fixed; top: 112px; bottom: auto; left: 50%; transform: translateX(-50%);
+    width: min(300px, calc(100vw - 24px)); max-height: calc(100vh - 240px); overflow-y: auto; z-index: 8;
+  }
+  /* The card is trapped in the stack's layer: lift the whole stack above the dock while it's open. */
+  .hud-bottom:has(.deed-float) { z-index: 9; }
+}

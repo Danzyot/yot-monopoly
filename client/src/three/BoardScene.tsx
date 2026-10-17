@@ -1,5 +1,5 @@
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
-import { ContactShadows, OrbitControls, PerformanceMonitor } from '@react-three/drei';
+import { OrbitControls, PerformanceMonitor } from '@react-three/drei';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MeshStandardMaterial, type Group, type Mesh } from 'three';
 import { resolveTheme, type Theme } from '../../../shared/themes.ts';
@@ -66,6 +66,7 @@ function Board({ theme, customLogo, onPick, onHover }: {
     const top = new MeshStandardMaterial({ map: tex, roughness: 0.75 });
     return [side, side, top, side, side, side];
   }, [tex, theme]);
+  useEffect(() => () => { materials[0].dispose(); materials[2].dispose(); }, [materials]);
 
   const pick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
@@ -266,6 +267,15 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
   // Adaptive resolution: start sharp, drop to 1× device pixels as soon as the
   // frame rate sags (phones, integrated GPUs), climb back when there is headroom.
   const [dpr, setDpr] = useState(() => Math.min(1.5, window.devicePixelRatio || 1));
+  // Once a device has shown it struggles, keep the cheaper shadows for the session.
+  const [lowPower, setLowPower] = useState(false);
+  // Stop rendering entirely while the tab is in the background.
+  const [hidden, setHidden] = useState(() => document.hidden);
+  useEffect(() => {
+    const on = () => setHidden(document.hidden);
+    document.addEventListener('visibilitychange', on);
+    return () => document.removeEventListener('visibilitychange', on);
+  }, []);
 
   useEffect(() => {
     document.body.style.cursor = hover !== null && onSelect ? 'pointer' : '';
@@ -273,7 +283,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
   }, [hover, onSelect]);
 
   return (
-    <Canvas shadows dpr={dpr} camera={{ position: [0, 11.5, 10.5], fov: 45 }}
+    <Canvas shadows dpr={dpr} frameloop={hidden ? 'never' : 'always'} camera={{ position: [0, 11.5, 10.5], fov: 45 }}
       onPointerMissed={() => onSelect?.(null)}
       // A custom backdrop replaces the map's 3D surroundings: it is painted
       // behind a transparent canvas, keeps its aspect ratio on any screen and
@@ -286,7 +296,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
         ? <hemisphereLight args={['#ffffff', theme.palette.table, 0.9]} />
         : <Environment kind={env} theme={theme} />}
       <directionalLight castShadow position={[6, 12, 5]} intensity={look.keyIntensity} color={look.keyColor}
-        shadow-mapSize={[2048, 2048]} shadow-camera-left={-8} shadow-camera-right={8}
+        shadow-mapSize={[lowPower ? 1024 : 2048, lowPower ? 1024 : 2048]} shadow-camera-left={-8} shadow-camera-right={8}
         shadow-camera-top={8} shadow-camera-bottom={-8} shadow-bias={-0.0004} />
 
       <Spinner spin={spin}>
@@ -303,12 +313,11 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
         )}
         {!game && <Dice dice={[6, 6]} seq={0} body={theme.palette.die} pip={theme.palette.pip} />}
       </Spinner>
-      <ContactShadows position={[0, 0.001, 0]} scale={W} opacity={0.35} blur={2.2} far={1} />
 
       <PerformanceMonitor
-        onDecline={() => setDpr(1)}
+        onDecline={() => { setDpr(1); setLowPower(true); }}
         onIncline={() => setDpr(Math.min(1.5, window.devicePixelRatio || 1))}
-        flipflops={3} onFallback={() => setDpr(1)} />
+        flipflops={3} onFallback={() => { setDpr(1); setLowPower(true); }} />
       <CameraFit hud={!!game} fogNear={look.fogNear} fogFar={look.fogFar} />
       {game && !spin && <CameraDirector game={game} me={me} n={theme.spaces.length} enabled={cinematic} />}
       <OrbitControls makeDefault enablePan={false} enabled={!spin}

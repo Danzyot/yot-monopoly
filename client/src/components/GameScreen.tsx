@@ -72,11 +72,13 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   });
   // The poked player's screen gives a little shake.
   const pokedMe = social.poke?.to === me;
+  // Memoised on who is playing (not on the players array, which is new with every update).
+  const playerIds = game.players.map(p => p.id).join(',');
   // Memoised: a new object every render would re-render every character in the scene.
   const pieceReactions = useMemo(() => Object.fromEntries(game.players
     .map(p => [p.id, latestReaction(social.reactions, p.id)] as const)
     .filter((e): e is readonly [string, ReactionMsg] => !!e[1])
-    .map(([id, r]) => [id, { emoji: r.emoji, seq: r.seq }])), [social.reactions, game.players]);
+    .map(([id, r]) => [id, { emoji: r.emoji, seq: r.seq }])), [social.reactions, playerIds]);
 
   const leave = async () => {
     if (myPlayer && !myPlayer.bankrupt && game.phase !== 'over' && room.status !== 'finished'
