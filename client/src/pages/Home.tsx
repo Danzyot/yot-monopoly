@@ -8,6 +8,7 @@ import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { requirementBadge, requirementSentence } from '../community.tsx';
 import BoardScene from '../three/BoardScene.tsx';
+import { HowToPlayButton } from '../components/HowToPlay.tsx';
 
 export default function Home() {
   const nav = useNavigate();
@@ -61,6 +62,7 @@ export default function Home() {
             <button className="btn gold" type="submit">Join!</button>
           </form>
         </div>
+        <div className="hero-howto"><HowToPlayButton className="btn small ghost" label="❓ New here? How to play" /></div>
         <p className="hero-status muted small">
           {!connected ? 'Connecting to server…'
             : rooms.length === 0 ? 'No tables open yet — start one and invite your friends!'

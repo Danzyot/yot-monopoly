@@ -17,6 +17,8 @@ import CharacterPreview from '../three/characters/CharacterPreview.tsx';
 import { themeStyle } from '../themeStyle.ts';
 import RequirementsPicker from './RequirementsPicker.tsx';
 import { ProfileLink } from '../community.tsx';
+import { askConfirm } from './Modal.tsx';
+import { HowToPlayButton } from './HowToPlay.tsx';
 
 const TOGGLES: [keyof RuleConfig, string, string][] = [
   ['auctions', 'Auctions', 'Unbought property goes to auction'],
@@ -76,9 +78,9 @@ export default function Lobby({ room, me, spectating, chat }: {
   const configure = (p: { themeId?: string; mapId?: string; rules?: Partial<RuleConfig>; private?: boolean }) =>
     call('room:configure', p).catch(toastError);
   const leave = async () => { await call('room:leave').catch(() => {}); nav('/'); };
-  const makeHost = (id: string, name: string) => {
+  const makeHost = async (id: string, name: string) => {
     const mine = room.hostId === me;
-    if (mine && !confirm(`Make ${name} the host? You will no longer control the room.`)) return;
+    if (mine && !(await askConfirm({ title: `Make ${name} the host?`, body: 'You will no longer control the room.', confirm: 'Make host' }))) return;
     // RoomPage's host notice announces the change to everyone, us included.
     call('room:host', { id }).catch(toastError);
   };
@@ -165,6 +167,7 @@ export default function Lobby({ room, me, spectating, chat }: {
             </>
           )}
 
+          <div className="lobby-howto"><HowToPlayButton rules={room.rules} /></div>
           {isHost ? (
             <button className="btn primary big" disabled={room.seats.length < 2} onClick={() => call('room:start').catch(toastError)}>
               {room.seats.length < 2 ? 'Need 2+ players' : 'Start Game!'}
