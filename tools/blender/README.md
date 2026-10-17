@@ -9,6 +9,10 @@ tools/blender/run.sh table.py                 # the game table (all maps)
 tools/blender/run.sh props.py                 # houses and hotels
 tools/blender/run.sh classic_room.py --draft  # Classic room, quick bake (~3 min)
 tools/blender/run.sh classic_room.py          # Classic room, final bake (~40 min on 4 cores)
+tools/blender/run.sh skyline_set.py --preview # Metropolis roof: Cycles renders of the game views, no bake
+tools/blender/run.sh skyline_set.py --draft   # Metropolis roof, quick bake
+tools/blender/run.sh skyline_set.py           # Metropolis roof, final bake
+tools/blender/run.sh skyline_env.py           # Metropolis roof's reflection panorama
 ```
 
 The first run creates `tools/blender/.venv` with `bpy` 5.0 and Pillow
@@ -28,6 +32,8 @@ hash, so browsers never keep a stale model after a rebuild.
 | `table.py` | The round table; its finish is recoloured live from the room's table style |
 | `props.py` | Houses and hotels; body and roof take the edition's colours live |
 | `classic_room.py` | The Classic edition's room, light-baked |
+| `skyline_set.py` | The Metropolis map's penthouse roof (every edition), light-baked, with the city round it |
+| `skyline_env.py` | A 360° panorama of the Metropolis roof, its environment map |
 
 ## How a baked room works
 
