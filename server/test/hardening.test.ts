@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { EngineError, Game, type GameSnapshot } from '../src/engine/game.ts';
 import { botAction } from '../src/engine/bot.ts';
 import { DEFAULT_RULES, resolveTheme } from '../../shared/themes.ts';
-import { Room, type RoomHooks } from '../src/rooms.ts';
+import { Registry, Room, type RoomHooks } from '../src/rooms.ts';
 import type { Action, Trade } from '../../shared/types.ts';
 import { scripted } from './helpers.ts';
 
@@ -240,4 +240,65 @@ test('auction: when the high bidder resigns, the best bid still in takes the lea
   act('p0', { type: 'pass' });
   assert.equal(g.owned[3].owner, 'p1');
   assert.equal(g.player('p1').cash, 1400);
+});
+
+// ---- game endings and abandoned rooms ------------------------------------------
+
+test('every ending sets endedAt: time limit, last player standing, operator stop', () => {
+  const t = scripted(2, { timeLimitMin: 30, turnSeconds: 0 });
+  t.tick(30 * 60_000);
+  t.g.clockTimeout();
+  assert.equal(t.g.phase, 'over');
+  assert.equal(t.g.endedAt, t.now(), 'time limit');
+  t.tick(60_000);
+  assert.equal(t.g.view().endedAt, t.now() - 60_000, 'and it stays put');
+
+  const b = scripted(2);
+  b.act('p1', { type: 'bankrupt' });
+  assert.equal(b.g.endedAt, b.now(), 'last player standing');
+
+  const r = new Room('OPEND', 'a', quietHooks());
+  r.join({ id: 'a', name: 'A', avatar: '' });
+  r.join({ id: 'b', name: 'B', avatar: '' });
+  r.start('a', false);
+  r.end('test');
+  assert.ok(r.game!.endedAt !== null, 'operator stop');
+  r.dispose();
+});
+
+test('a running game with no humans for 30 minutes ends on net worth, then is swept', () => {
+  const h = { finished: 0, onChange() {}, onEvent() {}, onFinished() { h.finished++; } };
+  const reg = new Registry(h, 1e9);
+  const r = reg.create('a');
+  r.join({ id: 'a', name: 'A', avatar: '' });
+  r.addBot('a', false);
+  r.start('a', false);
+  r.dispose();
+  const g = r.game!;
+  const bot = r.seats.find(s => s.isBot)!.id;
+  const sweep = () => (reg as unknown as { sweep(): void }).sweep();
+
+  // Automated moves are no sign of life.
+  const before = r.lastActivity = Date.now() - 60_000;
+  g.currentIdx = g.players.findIndex(p => p.id === bot);
+  r.act(bot, { type: 'roll' }, true);
+  assert.equal(r.lastActivity, before, 'a bot move does not count as activity');
+
+  r.setConnected('a', false);
+  r.dispose();
+  r.lastActivity = Date.now() - 29 * 60_000;
+  sweep();
+  assert.equal(r.status, 'playing', 'not yet');
+  r.lastActivity = Date.now() - 31 * 60_000;
+  r.spectators = 1; // someone watching the bots keeps the room, but not the game
+  sweep();
+  assert.equal(r.status, 'finished');
+  assert.equal(g.phase, 'over');
+  assert.ok(g.winner);
+  assert.ok(g.endedAt);
+  assert.equal(h.finished, 1, 'the result is recorded like any ending');
+  assert.equal(reg.get(r.code), r, 'kept while watched');
+  r.spectators = 0;
+  sweep();
+  assert.equal(reg.get(r.code), undefined, 'then swept as usual');
 });

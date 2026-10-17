@@ -27,7 +27,10 @@ const TIMER_RETRY_MS = 5_000;
 export const AUTOPILOT_GRACE_MS = 45_000;
 /** A host away this long hands the room to someone who is here. */
 export const HOST_GRACE_MS = 2 * 60_000;
-/** Rooms with no connected humans are removed after this long. */
+/**
+ * Rooms with no connected humans are removed after this long; a running game
+ * nobody is at (bots and autopilot only) is ended on net worth first.
+ */
 const IDLE_ROOM_MS = 30 * 60_000;
 /** Finished rooms linger this long so people can read the result. */
 const FINISHED_ROOM_MS = 10 * 60_000;
@@ -96,6 +99,7 @@ export class Room {
   readonly createdAt = Date.now();
   startedAt: number | null = null;
   finishedAt: number | null = null;
+  /** Last human sign of life: a connection, a disconnection or their own move (never bots or autopilot). */
   lastActivity = Date.now();
   /** Sockets watching without a seat; maintained by the socket layer. */
   spectators = 0;
@@ -266,6 +270,7 @@ export class Room {
     if (!s || s.isBot) return;
     s.connected = connected;
     s.disconnectedAt = connected ? null : Date.now();
+    this.lastActivity = Date.now();
     this.schedule();
     this.watchHost();
   }
@@ -413,6 +418,20 @@ export class Room {
     this.hooks.onEvent(this, `Game ended by an operator: ${reason}`);
     this.status = 'finished';
     this.finishedAt = Date.now();
+    if (this.game && this.game.endedAt === null) this.game.endedAt = this.finishedAt;
+  }
+
+  /**
+   * Nobody has been at a running table for IDLE_ROOM_MS: end the game on net
+   * worth, like the time limit (so results are recorded as usual), and let
+   * the sweep clear the finished room.
+   */
+  abandon() {
+    const g = this.runningGame();
+    g.abandon();
+    this.hooks.onEvent(this, 'Game ended: nobody has been at the table for 30 minutes');
+    this.afterChange();
+    this.hooks.onChange(this);
   }
 
   // ---- play -----------------------------------------------------------------
@@ -421,7 +440,8 @@ export class Room {
   act(id: string, a: Action, auto = false) {
     if (!this.game) fail('The game has not started');
     if (this.status === 'finished') fail('The game is over');
-    this.lastActivity = Date.now();
+    // Bots and autopilot moving is no sign anyone is still here (see the sweep).
+    if (!auto) this.lastActivity = Date.now();
     this.game.apply(id, a, { auto });
     const s = this.seat(id);
     if (!auto && s?.autopilot) {
@@ -861,7 +881,11 @@ export class Registry {
   }
 
   private sweepOne(code: string, r: Room, now: number) {
-    const idle = !r.hasConnectedHumans() && r.spectators === 0 && now - r.lastActivity > IDLE_ROOM_MS;
+    const away = !r.hasConnectedHumans() && now - r.lastActivity > IDLE_ROOM_MS;
+    // Bots and autopilot would play an abandoned game forever: end it (it is
+    // swept below once finished, like any other).
+    if (away && r.status === 'playing' && r.game && r.game.phase !== 'over') r.abandon();
+    const idle = away && r.spectators === 0;
     // A finished table stays while people are still at it (reading the
     // summary, waiting on the host's rematch), within a hard cap.
     const since = now - (r.finishedAt ?? now);

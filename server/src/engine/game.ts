@@ -1503,6 +1503,7 @@ export class Game {
     const st = this.standings();
     this.winner = st[0].id;
     this.phase = 'over';
+    this.endedAt = this.now();
     this.auction = null;
     this.minigame = null;
     this.choice = null;
@@ -1511,6 +1512,15 @@ export class Game {
     const w = this.player(this.winner);
     this.say(`🏁 ${w.name} wins with the highest net worth (${this.money(st[0].netWorth)})!`, w.id);
     this.say(`Final ranking: ${st.map((x, i) => `${i + 1}. ${this.player(x.id).name} ${this.money(x.netWorth)}`).join(' · ')}`);
+  }
+
+  /** The room gave up on the table (nobody has been at it for a long while): end it as the time limit would. */
+  abandon() {
+    if (this.phase === 'over') return;
+    this.paused = null;
+    this.say('🏁 Nobody has been at the table for a long while — the game ends here.');
+    this.finishByTime();
+    this.syncClocks();
   }
 
   // ---- operator fixes -------------------------------------------------------
