@@ -37,6 +37,11 @@ export interface OwnedSpace {
   /** 0–4 houses, 5 = hotel. */
   houses: number;
   mortgaged: boolean;
+  /**
+   * Received mortgaged this turn and the 10% interest is already paid: lifting
+   * the mortgage before the turn ends costs only the principal. Absent: no.
+   */
+  interestPaid?: boolean;
 }
 
 export type TurnPhase =

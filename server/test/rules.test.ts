@@ -30,3 +30,35 @@ test('free parking pot: jail fines go to the bank, not the pot (paid or forced)'
   act('p1', { type: 'roll' });
   assert.equal(g.pot, 15);
 });
+
+test('money owed is not there to spend: no buying, building, lifting mortgages or paying out in trades', () => {
+  const { g, dice, act } = scripted(2);
+  g.owned[1] = own('p0'); g.owned[3] = own('p0'); g.owned[5] = own('p0', 0, true);
+  g.owned[39] = own('p1');
+  const p = g.player('p0');
+  g.debts.push({ from: 'p0', to: 'p1', amount: 1450, reason: 'test' }); // 50 spare
+  assert.throws(() => act('p0', { type: 'build', space: 1 }), /Settle your debts first/);
+  assert.throws(() => act('p0', { type: 'unmortgage', space: 5 }), /Settle your debts first/);
+  // Paying out cash in a trade: refused; selling a deed for cash: fine.
+  const side = (cash: number, spaces: number[] = []) => ({ cash, spaces, jailCards: 0 });
+  assert.throws(() => act('p0', { type: 'proposeTrade', to: 'p1', give: side(100), get: side(0, [39]) }), /cannot pay out cash/);
+  act('p0', { type: 'proposeTrade', to: 'p1', give: side(40), get: side(0, [39]) }); // within the 50 spare
+  act('p0', { type: 'proposeTrade', to: 'p1', give: side(0, [1]), get: side(300) });
+  // The offer that pays out is re-checked at accept time.
+  g.debts[0].amount = 1500;
+  assert.throws(() => act('p1', { type: 'acceptTrade', id: 't1' }), /cannot pay out cash/);
+  act('p1', { type: 'acceptTrade', id: 't2' });
+  assert.equal(p.cash, 1800);
+  // Buying: only with what is left over the debt.
+  g.debts = [];
+  dice(3, 3); // 0 → 6
+  act('p0', { type: 'roll' });
+  assert.equal(g.phase, 'buy');
+  g.debts.push({ from: 'p0', to: 'p1', amount: 1730, reason: 'test' }); // 70 spare, Oriental costs 100
+  assert.throws(() => act('p0', { type: 'buy' }), /Settle your debts first/);
+  act('p0', { type: 'payDebt' });
+  assert.equal(p.cash, 70);
+  act('p0', { type: 'mortgage', space: 3 });
+  act('p0', { type: 'buy' });
+  assert.equal(g.owned[6].owner, 'p0');
+});

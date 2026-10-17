@@ -773,7 +773,9 @@ export class Game {
     this.requireTurn(p, 'buy');
     const s = this.spaces[p.position];
     const price = s.price ?? 0;
-    if (p.cash < price) fail('Not enough cash — auction it or raise funds');
+    // Money already owed is not there to spend.
+    const owe = this.debtOf(p.id);
+    if (p.cash - owe < price) fail(owe ? 'Settle your debts first — or auction it' : 'Not enough cash — auction it or raise funds');
     this.bankPays(p, -price, 'purchase');
     this.owned[p.position] = { owner: p.id, houses: 0, mortgaged: false };
     this.stat(p.id).propertiesBought++;
@@ -1074,6 +1076,22 @@ export class Game {
   }
 
   /**
+   * Both sides of an offer between `from` and `to`, as it stands right now.
+   * Players may not lend or give each other money (official rule), so someone
+   * who owes may not pay out, net, more than the cash they have over their debts.
+   */
+  private validateTrade(from: PlayerState, to: PlayerState, give: TradeSide, get: TradeSide) {
+    this.validateSide(from, give);
+    this.validateSide(to, get);
+    for (const [who, out, back] of [[from, give.cash, get.cash], [to, get.cash, give.cash]] as const) {
+      const owe = this.debtOf(who.id);
+      if (owe > 0 && out - back > Math.max(0, who.cash - owe)) {
+        fail(`${who.name} owes ${this.money(owe)} and cannot pay out cash before settling it`);
+      }
+    }
+  }
+
+  /**
    * `counterOf` names an offer made *to* p by `toId`; the new offer replaces
    * it in one step, so the original is never left dangling (or accepted)
    * while the counter is on its way. Everything is validated before either
@@ -1091,8 +1109,7 @@ export class Game {
     if (this.trades.filter(t => t.from === p.id).length >= MAX_OPEN_TRADES) fail('Too many open offers');
     const empty = (s: TradeSide) => !s.cash && !s.spaces.length && !s.jailCards;
     if (empty(give) && empty(get)) fail('Empty trade');
-    this.validateSide(p, give);
-    this.validateSide(to, get);
+    this.validateTrade(p, to, give, get);
     if (original) this.trades = this.trades.filter(t => t !== original);
     const t: Trade = { id: `t${++this.tradeSeq}`, from: p.id, to: to.id, give, get };
     this.trades.push(t);
@@ -1102,8 +1119,7 @@ export class Game {
   /** Why an open offer could not go through right now (null: it still could). */
   tradeProblem(t: Trade): string | null {
     try {
-      this.validateSide(this.player(t.from), t.give);
-      this.validateSide(this.player(t.to), t.get);
+      this.validateTrade(this.player(t.from), this.player(t.to), t.give, t.get);
       return null;
     } catch (e) {
       if (e instanceof EngineError) return e.message;
@@ -1117,8 +1133,7 @@ export class Game {
     if (this.phase === 'auction') fail('Wait for the auction to finish');
     if (this.phase === 'minigame') fail('Wait for the mini-game to finish');
     const from = this.player(t.from);
-    this.validateSide(from, t.give);
-    this.validateSide(p, t.get);
+    this.validateTrade(from, p, t.give, t.get);
     this.trades = this.trades.filter(x => x.id !== id);
     this.transfer(from, p, t.give);
     this.transfer(p, from, t.get);
