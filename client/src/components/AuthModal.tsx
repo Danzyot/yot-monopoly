@@ -5,6 +5,7 @@ import { useAuth } from '../auth.tsx';
 import { toast, toastError } from '../toast.tsx';
 import { BRAND } from '../../../shared/brand.ts';
 import type { PlayerProfile } from '../../../shared/types.ts';
+import { Modal } from './Modal.tsx';
 
 export const DiscordMark = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -101,7 +102,7 @@ function AuthModal({ onClose }: { onClose: () => void }) {
         }}>
           {config.discordEnabled && <div className="or">or</div>}
           <p className="tag warn">Demo mode — pick a name, nothing is verified.</p>
-          <input autoFocus value={demoName} maxLength={20} placeholder="Your name" onChange={e => setDemoName(e.target.value)} />
+          <input autoFocus data-autofocus value={demoName} maxLength={20} placeholder="Your name" onChange={e => setDemoName(e.target.value)} />
           <button className="btn primary big" disabled={busy || demoName.trim().length < 2}>{busy ? 'Joining…' : 'Play!'}</button>
         </form>
       )}
@@ -113,9 +114,7 @@ function AuthModal({ onClose }: { onClose: () => void }) {
   );
 
   return createPortal(
-    <div className="modal-back" onClick={onClose}>
-      <div className="modal auth" onClick={e => e.stopPropagation()}>{body}</div>
-    </div>,
+    <Modal onClose={onClose} label="Sign in" className="auth">{body}</Modal>,
     document.body,
   );
 }

@@ -155,7 +155,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
               Chat{unread > 0 && <span className="tab-badge" aria-label={`${unread} unread`}>{unread > 9 ? '9+' : unread}</span>}
             </button>
           )}
-          {myPlayer && <button role="tab" aria-selected={tab === 'mine' && panelOpen} className={tab === 'mine' && panelOpen ? 'on' : ''} onClick={() => pickTab('mine')}>Deeds</button>}
+          {myPlayer && !myPlayer.bankrupt && <button role="tab" aria-selected={tab === 'mine' && panelOpen} className={tab === 'mine' && panelOpen ? 'on' : ''} onClick={() => pickTab('mine')}>Deeds</button>}
           <button role="tab" aria-selected={tab === 'table' && panelOpen} className={tab === 'table' && panelOpen ? 'on' : ''} onClick={() => pickTab('table')}>Players</button>
         </div>
         <div className="tab-body">
@@ -476,7 +476,7 @@ function CardPopup({ game }: { game: GameView }) {
   if (!card || shown !== card.seq) return null;
   const who = game.players.find(p => p.id === card.player);
   return (
-    <div className={`card-pop ${card.deck} ${theme.ui ? 'branded' : ''}`} onClick={() => setShown(null)}>
+    <div className={`card-pop ${card.deck} ${theme.ui ? 'branded' : ''}`} onClick={() => setShown(null)} role="status" aria-live="polite">
       {theme.logoUrl && <img className="card-logo" src={theme.logoUrl} alt="" />}
       <small>{theme.deckNames[card.deck].toUpperCase()}</small>
       <p>{card.text}</p>

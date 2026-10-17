@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { BAN_REASONS, banMessageFor, type BanKind, type BanScope } from '../../../../shared/types.ts';
 import { act, post } from './adminApi.ts';
+import { Modal } from '../Modal.tsx';
 
 export interface BanTarget {
   kind?: BanKind;
@@ -76,8 +77,8 @@ export default function BanDialog({ target, onClose, onDone }: {
   };
 
   return createPortal(
-    <div className="modal-back" onClick={onClose}>
-      <form className="modal adm-ban" onClick={e => e.stopPropagation()} onSubmit={e => { e.preventDefault(); void submit(); }}>
+    <Modal onClose={onClose} label="Ban" className="adm-ban">
+      <form className="adm-ban-form" onSubmit={e => { e.preventDefault(); void submit(); }}>
         <h2>Ban {target.name || (kind === 'ip' ? 'an address' : 'an account')}</h2>
 
         <div className="adm-field">
@@ -141,7 +142,7 @@ export default function BanDialog({ target, onClose, onDone }: {
           </button>
         </div>
       </form>
-    </div>,
+    </Modal>,
     document.body,
   );
 }

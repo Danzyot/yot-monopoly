@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth.tsx';
 import { toast, toastError } from '../toast.tsx';
 import type { RequirementFailure } from '../../../shared/types.ts';
+import { Modal } from './Modal.tsx';
 
 /** The server refuses to re-ask Discord more often than this. */
 const RECHECK_GAP_MS = 3_000;
@@ -63,8 +64,7 @@ export default function RequirementsModal({ failure, onRecheck, onClose }: {
   const offerDiscordLogin = config.discordEnabled && (m === 'discord' || m === 'unverifiable');
 
   return (
-    <div className="modal-back" onClick={onClose}>
-      <div className="modal req-modal" role="dialog" aria-labelledby="req-title" onClick={e => e.stopPropagation()}>
+    <Modal onClose={onClose} labelledBy="req-title" className="req-modal">
         <h2 id="req-title">This table needs Discord</h2>
         <p className="muted small">The host only seats {req.roleId ? <>players with the <b>{req.roleName ?? 'required'}</b> role in</> : 'members of'} our Discord server. You can still watch.</p>
 
@@ -95,7 +95,6 @@ export default function RequirementsModal({ failure, onRecheck, onClose }: {
             {checking ? <><span className="spinner" /> Checking…</> : 'Check again'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

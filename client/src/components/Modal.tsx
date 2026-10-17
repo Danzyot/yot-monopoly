@@ -12,7 +12,7 @@ function focusables(root: HTMLElement): HTMLElement[] {
   return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(el => el.offsetParent !== null || el === document.activeElement);
 }
 
-export function Modal({ onClose, label, labelledBy, className = '', backClassName = '', children, dismissable = true }: {
+export function Modal({ onClose, label, labelledBy, className = '', backClassName = '', children, dismissable = true, behind }: {
   /** Escape, the backdrop and close buttons call this (absent: the dialog can't be dismissed). */
   onClose?: () => void;
   label?: string;
@@ -22,6 +22,8 @@ export function Modal({ onClose, label, labelledBy, className = '', backClassNam
   children: ReactNode;
   /** false: a backdrop click does not close (Escape still does when onClose is set). */
   dismissable?: boolean;
+  /** Decoration drawn on the backdrop, behind the dialog (confetti). */
+  behind?: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
@@ -31,11 +33,10 @@ export function Modal({ onClose, label, labelledBy, className = '', backClassNam
     const el = ref.current;
     if (!el) return;
     const before = document.activeElement as HTMLElement | null;
-    // Focus what the dialog asks for, else its first button — never a text
-    // field on its own (that would pop the phone keyboard over the dialog).
-    const first = el.querySelector<HTMLElement>('[data-autofocus]')
-      ?? focusables(el).find(f => f.tagName === 'BUTTON' && !f.classList.contains('modal-x'))
-      ?? el;
+    // Focus what the dialog asks for, else the dialog itself (Tab then walks
+    // its controls) — never a text field on its own, which would pop the
+    // phone keyboard over the dialog.
+    const first = el.querySelector<HTMLElement>('[data-autofocus]') ?? el;
     first.focus({ preventScroll: true });
     return () => {
       if (before && document.contains(before)) before.focus({ preventScroll: true });
@@ -59,6 +60,7 @@ export function Modal({ onClose, label, labelledBy, className = '', backClassNam
 
   return (
     <div className={`modal-back ${backClassName}`} onClick={() => dismissable && close.current?.()}>
+      {behind}
       <div ref={ref} className={`modal ${className}`} role="dialog" aria-modal="true" aria-label={labelledBy ? undefined : label}
         aria-labelledby={labelledBy} tabIndex={-1} onKeyDown={onKey} onClick={e => e.stopPropagation()}>
         {children}

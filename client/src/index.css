@@ -1598,7 +1598,7 @@ input.tr-slider { width: 100%; padding: 0; height: 26px; accent-color: var(--hi)
 @media (prefers-reduced-motion: reduce) { .sold-card, .sold-stamp, .auction-lead, .offer.in { animation: none; } }
 
 /* ---- notices (EventFeed.tsx) ---- */
-.feed { position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%); z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 5px; pointer-events: none; width: max-content; max-width: min(520px, calc(100vw - 24px)); }
+.feed { position: absolute; left: 50%; bottom: 150px; transform: translateX(-50%); z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 5px; pointer-events: none; width: max-content; max-width: min(520px, calc(100vw - 24px)); }
 .feed-item {
   display: flex; align-items: center; gap: 8px; padding: 6px 14px 6px 8px; border-radius: 99px; font-weight: 800; font-size: 14px;
   background: linear-gradient(180deg, color-mix(in srgb, var(--panel-solid) 85%, #fff 15%), var(--panel));
@@ -1619,7 +1619,7 @@ input.tr-slider { width: 100%; padding: 0; height: 26px; accent-color: var(--hi)
 
 /* ---- first-time tips (Hints.tsx) ---- */
 .coach {
-  position: absolute; left: 50%; bottom: 150px; transform: translateX(-50%); z-index: 6; width: max-content; max-width: min(460px, calc(100vw - 24px));
+  position: absolute; left: 50%; bottom: 152px; transform: translateX(-50%); z-index: 6; width: max-content; max-width: min(460px, calc(100vw - 24px));
   display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 12px; border-radius: 18px; color: #3a2400;
   background: linear-gradient(180deg, #fff3b0, #ffd23f); border: 3px solid #b87400; box-shadow: 0 4px 0 #8a5600, 0 12px 28px rgba(0,0,0,0.4);
   animation: coachIn 0.5s cubic-bezier(.2,1.5,.4,1);
@@ -1656,14 +1656,18 @@ input.tr-slider { width: 100%; padding: 0; height: 26px; accent-color: var(--hi)
 .end-you { margin: -4px 0 0; font-weight: 800; font-size: 16px; }
 .end-screen .trophy { animation: trophyIn 0.8s cubic-bezier(.2,1.6,.4,1); }
 @keyframes trophyIn { from { transform: scale(0.2) rotate(-30deg); opacity: 0; } }
-.confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: inherit; }
-.confetti i { position: absolute; top: -14px; width: 8px; height: 13px; border-radius: 2px; opacity: 0; animation: confettiFall 2.8s linear infinite; }
+.confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.confetti i { position: absolute; top: -16px; width: 10px; height: 15px; border-radius: 2px; opacity: 0; animation: confettiFall 3.2s linear infinite; }
 @keyframes confettiFall {
   0% { transform: translate(0, 0) rotate(0); opacity: 1; }
-  100% { transform: translate(var(--drift), 640px) rotate(var(--spin)); opacity: 0.2; }
+  100% { transform: translate(var(--drift), 105vh) rotate(var(--spin)); opacity: 0.6; }
 }
 @media (prefers-reduced-motion: reduce) { .confetti { display: none; } .end-screen .trophy { animation: none; } }
 .end-standings, .end-awards, .end-actions, .end-screen h2, .end-screen p, .end-screen .trophy { position: relative; }
+
+/* The ban dialog's form sits inside the shared dialog shell. */
+.adm-ban-form { display: flex; flex-direction: column; gap: 12px; }
+.adm-ban-form h2 { margin: 0; overflow-wrap: anywhere; }
 
 /* Lobby: house-rule checkboxes keep their size next to wrapping labels. */
 .rule.toggle input { flex: none; width: 18px; height: 18px; }
@@ -1699,5 +1703,6 @@ input.tr-slider { width: 100%; padding: 0; height: 26px; accent-color: var(--hi)
   .actionbar.jail .go-btn { margin: 2px 0 4px !important; }
   .actionbar.jail .dice-read { display: none; }
   .modal .end-title { font-size: 28px; }
+  .tag.watch-tag { display: none; }
   .modal.end-screen { padding: 14px 12px; }
 }

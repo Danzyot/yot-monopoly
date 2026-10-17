@@ -68,7 +68,7 @@ export default function HowToPlay({ onClose, rules, shortcuts = false, startOn =
           <tbody>{SHORTCUTS.map(([k, what]) => <tr key={k}><td><kbd>{k}</kbd></td><td>{what}</td></tr>)}</tbody>
         </table>
       )}
-      <button className="btn primary big howto-go" onClick={onClose}>Let's play!</button>
+      <button className="btn primary big howto-go" onClick={onClose} data-autofocus>Let's play!</button>
     </Modal>
   );
 }
