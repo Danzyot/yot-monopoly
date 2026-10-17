@@ -93,7 +93,8 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   };
   const amIn = !!myPlayer && !myPlayer.bankrupt && !over;
   // Trade and manage dialogs only show while I'm still playing (see below).
-  const dialogOpen = (amIn && (!!tradeWith || !!counter || !!manage)) || portfolio !== undefined || over || helpOpen;
+  // The end screen is a modal (Shortcuts skips keys inside it); once dismissed to view the board, C and ? work again.
+  const dialogOpen = (amIn && (!!tradeWith || !!counter || !!manage)) || portfolio !== undefined || helpOpen;
   useShortcuts(game, me, {
     dialogOpen,
     onEscape: closeDialogs,
