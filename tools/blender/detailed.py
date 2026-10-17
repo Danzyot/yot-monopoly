@@ -434,6 +434,21 @@ def spiky(m):
         tip = Vector((ax * 1.6, ay * 0.6 - 0.03, -0.04 - len_))
         mid = root.lerp(tip, 0.5) + Vector((0, 0.02, 0))
         head.append(strand(f'{cid}_Quill{k}', [root, mid, tip], r0, 0.003, m['main'], fuse=True, round_tip=False))
+    # Side spines fanning out past the cheeks and a crest over the crown, so the
+    # spiky outline also reads from the front.
+    for k, (ax, ay, dx, dy, len_, r0) in enumerate([(0.085, 0.045, 1.0, 0.55, 0.09, 0.03), (0.09, -0.005, 1.0, 0.1, 0.085, 0.028),
+                                                    (0.08, -0.05, 0.9, -0.35, 0.07, 0.024)]):
+        for side in (-1, 1):
+            root = Vector((side * ax, ay, -0.03))
+            d = Vector((side * dx, dy, -0.75)).normalized()
+            tip = root + d * len_
+            mid = root.lerp(tip, 0.5) + Vector((0, 0.012, 0))
+            head.append(strand(f'{cid}_SideQuill{k}{side}', [root, mid, tip], r0, 0.003, m['main'], fuse=True, round_tip=False))
+    for k, (ax, tilt) in enumerate([(-0.03, -0.35), (0.0, 0.0), (0.03, 0.35)]):
+        root = Vector((ax, 0.085, -0.01))
+        tip = root + Vector((tilt * 0.06, 0.06, -0.05))
+        head.append(strand(f'{cid}_Crest{k}', [root, root.lerp(tip, 0.5) + Vector((0, 0.008, 0.006)), tip], 0.026, 0.003, m['main'],
+                           fuse=True, round_tip=False))
     for side in (-1, 1):
         head.append(strand(f'{cid}_Ear{side}', [(side * 0.062, 0.07, 0.01), (side * 0.075, 0.1, 0.0), (side * 0.08, 0.125, -0.012)],
                            0.024, 0.004, m['main'], fuse=True, round_tip=False))
