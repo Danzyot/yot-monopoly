@@ -5,9 +5,9 @@
 // building, the bank's stock, mortgages) come from shared/holdings.ts, the
 // very checks the engine runs, so a live button is a move the server accepts.
 import { useState } from 'react';
-import { groupIndices, mortgageValue, unmortgageCost } from '../../../shared/board.ts';
+import { groupIndices, mortgageValue } from '../../../shared/board.ts';
 import {
-  buildProblem, manageProblem, mortgageProblem, sellProblem, unmortgageProblem,
+  buildProblem, liftCost, manageProblem, mortgageProblem, sellProblem, unmortgageProblem,
 } from '../../../shared/holdings.ts';
 import { resolveTheme } from '../../../shared/themes.ts';
 import type { Action, GameView } from '../../../shared/types.ts';
@@ -217,7 +217,7 @@ function DeedRow({ game, me, i, full, raising, busy, cur, run, onPick }: {
       <div className="bp-mort">
         {o.mortgaged ? raising ? null : (
           <button className="btn tiny" disabled={busy || !!why.unmortgage} title={why.unmortgage ?? undefined}
-            onClick={() => run([{ type: 'unmortgage', space: i }])}>Unmortgage −{cur(unmortgageCost(s))}</button>
+            onClick={() => run([{ type: 'unmortgage', space: i }])}>Unmortgage −{cur(liftCost(spaces, i, o))}</button>
         ) : (
           <button className={`btn tiny ${raising ? 'gold' : 'ghost'}`} disabled={busy || !!why.mortgage} title={why.mortgage ?? undefined}
             onClick={() => run([{ type: 'mortgage', space: i }])}>Mortgage +{cur(mortgageValue(s))}</button>
