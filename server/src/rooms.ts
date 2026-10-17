@@ -17,6 +17,17 @@ import {
 } from '../../shared/types.ts';
 
 const BOT_DELAY_MS = 900;
+/**
+ * How long clients take to stage what just happened (client three/sequence.ts,
+ * characters/Pieces.tsx, CardDecks.tsx): the dice tumble, then the piece hops
+ * tile by tile (or flies when it teleports), then a drawn card flies up. Bots
+ * wait for it, so they don't roll again while the last piece is still walking.
+ */
+const SCENE_DICE_MS = 1100;
+const SCENE_HOP_MS = 190;
+const SCENE_FLY_MS = 750;
+const SCENE_CARD_MS = 1600;
+const SCENE_SETTLE_MS = 350;
 /** Mini-game moves bring their own human-like delay (see the modules' bot()); this is just a nudge. */
 const MINIGAME_BOT_DELAY_MS = 60;
 /** How often to look in on bots waiting to make a mini-game move. */
@@ -127,6 +138,9 @@ export class Room {
    * game changes, so a move the engine refuses cannot loop every BOT_DELAY_MS.
    */
   private failedMoves = new Map<string, string>();
+  /** When clients should be done animating the latest roll, walk and card (see SCENE_*). */
+  private sceneUntil = 0;
+  private seen: { roll: number; card: number; at: Map<string, number> } | null = null;
   /** Players who left a running game for good; they keep their seat but can't host. */
   private departed = new Set<string>();
   /** Players removed by the host or an operator: never seated here again (watching is fine). */
@@ -560,11 +574,31 @@ export class Room {
     return null;
   }
 
+  /** Work out how long clients will spend animating what changed since the last look. */
+  private noteScene(g: Game) {
+    const seen = this.seen;
+    this.seen = { roll: g.rollSeq, card: g.lastCard?.seq ?? 0, at: new Map(g.players.map(p => [p.id, p.position])) };
+    if (!seen) return;
+    const n = g.spaces.length;
+    let ms = g.rollSeq !== seen.roll ? SCENE_DICE_MS : 0;
+    let walk = 0;
+    for (const p of g.players) {
+      const was = seen.at.get(p.id);
+      if (was === undefined || was === p.position) continue;
+      const steps = (p.position - was + n) % n;
+      walk = Math.max(walk, !p.inJail && steps <= 12 ? steps * SCENE_HOP_MS : SCENE_FLY_MS);
+    }
+    ms += walk;
+    if ((g.lastCard?.seq ?? 0) !== seen.card) ms += SCENE_CARD_MS;
+    if (ms) this.sceneUntil = Date.now() + ms + SCENE_SETTLE_MS;
+  }
+
   /** Re-arm timers after any change. */
   private schedule() {
     const g = this.game;
     this.clearTimers();
     if (!g || g.phase === 'over' || this.status === 'finished') return;
+    this.noteScene(g);
     // Paused: nothing moves, not even bots, until resume() re-arms everything.
     if (g.paused) return;
 
@@ -634,7 +668,7 @@ export class Room {
           }
         }
         this.hooks.onChange(this);
-      }), next.action.type === 'minigame' ? MINIGAME_BOT_DELAY_MS : BOT_DELAY_MS);
+      }), next.action.type === 'minigame' ? MINIGAME_BOT_DELAY_MS : Math.max(BOT_DELAY_MS, this.sceneUntil - now));
       return;
     }
 
