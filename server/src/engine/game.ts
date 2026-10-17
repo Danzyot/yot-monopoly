@@ -33,6 +33,8 @@ export const AFK_AFTER = 2;
 const STEP_PHASES: TurnPhase[] = ['roll', 'buy', 'done', 'choose'];
 const MAX_LOG = 250;
 const MAX_OPEN_TRADES = 5;
+/** Longest player or offer id a client may name (ids are short; anything longer is junk). */
+const MAX_ID_LEN = 64;
 /** Debt/charge reasons that start with this are rent (for the summary stats). */
 const RENT_REASON = 'rent on ';
 const NO_STATS: PlayerStats = { rentCollected: 0, biggestRentPaid: 0, propertiesBought: 0, jailed: 0, minigamesWon: 0 };
@@ -127,6 +129,12 @@ interface LandingOpts {
 
 function fail(msg: string): never {
   throw new EngineError(msg);
+}
+
+/** A player or offer id from a client. */
+function idArg(v: unknown): string {
+  if (typeof v !== 'string' || !v || v.length > MAX_ID_LEN) fail('Unknown player or offer');
+  return v;
 }
 
 function speedName(f: SpeedFace): string {
@@ -531,6 +539,7 @@ export class Game {
    * (autopilot): those must not count as the player being back.
    */
   apply(playerId: string, a: Action, opts: { auto?: boolean } = {}): void {
+    if (!a || typeof a !== 'object' || typeof a.type !== 'string') fail('Bad action');
     if (this.phase === 'over') fail('The game is over');
     const p = this.player(playerId);
     if (p.bankrupt) fail('You are out of the game');
@@ -547,6 +556,10 @@ export class Game {
     this.settle();
   }
 
+  /**
+   * Actions come straight from clients: every field is checked here (or by the
+   * handler) and only rebuilt, validated values reach the state.
+   */
   private dispatch(p: PlayerState, a: Action): void {
     switch (a.type) {
       case 'roll': return this.roll(p);
@@ -557,19 +570,43 @@ export class Game {
       case 'endTurn': return this.endTurn(p);
       case 'payJail': return this.payJail(p);
       case 'useJailCard': return this.useJailCard(p);
-      case 'build': return this.build(p, a.space);
-      case 'sell': return this.sell(p, a.space);
-      case 'mortgage': return this.mortgage(p, a.space);
-      case 'unmortgage': return this.unmortgage(p, a.space);
+      case 'build': return this.build(p, this.spaceArg(a.space));
+      case 'sell': return this.sell(p, this.spaceArg(a.space));
+      case 'mortgage': return this.mortgage(p, this.spaceArg(a.space));
+      case 'unmortgage': return this.unmortgage(p, this.spaceArg(a.space));
       case 'payDebt': return this.payDebt(p);
       case 'bankrupt': return this.goBankrupt(p);
-      case 'proposeTrade': return this.proposeTrade(p, a.to, a.give, a.get, a.counterOf);
-      case 'acceptTrade': return this.acceptTrade(p, a.id);
-      case 'rejectTrade': return this.rejectTrade(p, a.id);
+      case 'proposeTrade':
+        return this.proposeTrade(p, idArg(a.to), this.readSide(a.give), this.readSide(a.get),
+          a.counterOf === undefined ? undefined : idArg(a.counterOf));
+      case 'acceptTrade': return this.acceptTrade(p, idArg(a.id));
+      case 'rejectTrade': return this.rejectTrade(p, idArg(a.id));
       case 'minigame': return this.minigameMove(p, a.move);
       case 'choose': return this.choose(p, a.value);
       default: fail('Unknown action');
     }
+  }
+
+  /** A board index from a client: a whole number on this board. */
+  private spaceArg(v: unknown): number {
+    if (!Number.isInteger(v) || (v as number) < 0 || (v as number) >= this.size) fail('No such space');
+    return v as number;
+  }
+
+  /**
+   * Rebuild one side of an offer from its validated fields only, so nothing
+   * else a client sent is ever stored. Ownership and cash are checked later
+   * (validateSide), against the moment of proposing and again of accepting.
+   */
+  private readSide(raw: unknown): TradeSide {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail('Bad trade');
+    const { cash = 0, spaces = [], jailCards = 0 } = raw as Record<string, unknown>;
+    if (!Number.isInteger(cash) || (cash as number) < 0) fail('Bad cash amount');
+    if (!Number.isInteger(jailCards) || (jailCards as number) < 0) fail('Bad jail card count');
+    if (!Array.isArray(spaces) || spaces.length > this.size) fail('Bad property list');
+    const list = spaces.map(i => this.spaceArg(i));
+    if (new Set(list).size !== list.length) fail('Duplicate property');
+    return { cash: cash as number, spaces: list, jailCards: jailCards as number };
   }
 
   private requireTurn(p: PlayerState, phase: TurnPhase) {
@@ -745,7 +782,7 @@ export class Game {
     const a = this.auction;
     if (this.phase !== 'auction' || !a) fail('No auction running');
     if (!a.bidders.includes(p.id)) fail('You have left this auction');
-    if (!Number.isInteger(amount) || amount <= a.highBid) fail(`Bid more than ${this.money(a.highBid)}`);
+    if (typeof amount !== 'number' || !Number.isInteger(amount) || amount <= a.highBid) fail(`Bid more than ${this.money(a.highBid)}`);
     if (amount > p.cash) fail('You cannot bid more than your cash');
     a.highBid = amount;
     a.highBidder = p.id;
@@ -1047,6 +1084,18 @@ export class Game {
     const t: Trade = { id: `t${++this.tradeSeq}`, from: p.id, to: to.id, give, get };
     this.trades.push(t);
     this.say(original ? `${p.name} countered ${to.name}'s offer.` : `${p.name} offered ${to.name} a trade.`, p.id);
+  }
+
+  /** Why an open offer could not go through right now (null: it still could). */
+  tradeProblem(t: Trade): string | null {
+    try {
+      this.validateSide(this.player(t.from), t.give);
+      this.validateSide(this.player(t.to), t.get);
+      return null;
+    } catch (e) {
+      if (e instanceof EngineError) return e.message;
+      throw e;
+    }
   }
 
   private acceptTrade(p: PlayerState, id: string) {
@@ -1590,6 +1639,15 @@ export class Game {
     g.estateQueue = snap.estateQueue ?? [];
     g.resumePhase = snap.resumePhase ?? null;
     g.stats ??= {};
+    // Offers saved before every field was validated may be malformed: rebuild
+    // each one from checked fields, and drop any that cannot be.
+    g.trades = (Array.isArray(g.trades) ? g.trades : []).flatMap(t => {
+      try {
+        return [{ id: idArg(t.id), from: idArg(t.from), to: idArg(t.to), give: g.readSide(t.give), get: g.readSide(t.get) }];
+      } catch {
+        return [];
+      }
+    });
     // Older snapshots: the game began at some unknown time; "now" is the honest floor.
     g.startedAt ??= g.now();
     g.endedAt ??= null;

@@ -133,6 +133,7 @@ export function attachSockets(io: Server): SocketLayer {
       socket.on(event, (payload: T, ack?: Ack) => {
         const reply: Ack = typeof ack === 'function' ? ack : () => {};
         if (limited && !take(data)) return reply({ ok: false, error: 'Slow down' });
+        if (!plainPayload(payload)) return reply({ ok: false, error: 'Bad request' });
         try {
           const room = data.room ? registry.get(data.room) ?? null : null;
           const extra = fn((payload ?? {}) as T, room) ?? {};
@@ -155,6 +156,7 @@ export function attachSockets(io: Server): SocketLayer {
       socket.on(event, async (payload: T, ack?: Ack) => {
         const reply: Ack = typeof ack === 'function' ? ack : () => {};
         if (!take(data)) return reply({ ok: false, error: 'Slow down' });
+        if (!plainPayload(payload)) return reply({ ok: false, error: 'Bad request' });
         try {
           const room = data.room ? registry.get(data.room) ?? null : null;
           const extra = (await fn((payload ?? {}) as T, room)) ?? {};
@@ -452,6 +454,14 @@ export function attachSockets(io: Server): SocketLayer {
       return { id: d.profile?.id ?? '(guest)', name: d.profile?.name ?? '(not signed in)', ip: d.ip, room: d.room };
     }),
   };
+}
+
+/** Every event takes a plain JSON object (or nothing): strings, arrays and binary are refused. */
+export function plainPayload(p: unknown): boolean {
+  if (p === undefined || p === null) return true;
+  if (typeof p !== 'object' || Array.isArray(p)) return false;
+  const proto = Object.getPrototypeOf(p);
+  return proto === Object.prototype || proto === null;
 }
 
 function take(d: SocketData): boolean {
