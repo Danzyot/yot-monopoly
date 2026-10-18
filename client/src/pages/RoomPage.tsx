@@ -4,12 +4,16 @@ import { useMyId, useRoom } from '../net.ts';
 import { useAuth } from '../auth.tsx';
 import Lobby from '../components/Lobby.tsx';
 import GameScreen from '../components/GameScreen.tsx';
+import BroadcastScreen from '../components/BroadcastScreen.tsx';
 import RequirementsModal from '../components/RequirementsModal.tsx';
 import { requirementBadge, useHostNotice } from '../community.tsx';
 
 export default function RoomPage() {
   const { code = '' } = useParams();
-  const watch = useSearchParams()[0].get('watch') === '1';
+  const params = useSearchParams()[0];
+  // ?tv=1: the broadcast view (a TV or stream overlay). It only ever watches.
+  const tv = params.get('tv') === '1';
+  const watch = params.get('watch') === '1' || tv;
   const { room, error, spectating, chat, skew, blocked, recheck } = useRoom(code.toUpperCase(), watch);
   const me = useMyId();
   const { profile, ready, openSignIn } = useAuth();
@@ -32,6 +36,7 @@ export default function RoomPage() {
     );
   }
   if (!room) return <div className="center-msg"><p className="muted">Joining {code}…</p></div>;
+  if (tv) return <BroadcastScreen room={room} me={me} />;
 
   const signInBar = !profile && (
     <div className="signin-bar">
