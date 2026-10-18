@@ -23,8 +23,9 @@ export default function RoomPage() {
 
   // Keyed on the code, not every state: turn alerts flash the title in between.
   useEffect(() => {
+    if (tv) return; // the broadcast screen titles its own tab
     document.title = room ? `${room.code} · Yot Monopoly` : 'Yot Monopoly';
-  }, [room?.code]);
+  }, [room?.code, tv]);
 
   if (!ready) return <div className="center-msg"><p className="muted">Loading…</p></div>;
   if (error && !room) {

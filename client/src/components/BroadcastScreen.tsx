@@ -20,7 +20,7 @@ import BoardScene from '../three/BoardScene.tsx';
 import { useGameSounds } from '../useGameSounds.ts';
 import { useAmbience } from '../ambience.ts';
 import { CARD_FLIGHT_MS, useSceneBusy } from '../three/sequence.ts';
-import { CAMERA_MODES, useCameraMode } from '../three/camera.ts';
+import { CAMERA_MODES, type CameraMode } from '../three/camera.ts';
 import { setSfxMuted, sfxState } from '../sound.ts';
 import { setMuted as setMusicMuted } from '../music.ts';
 import { ownedBy } from '../gameHelpers.ts';
@@ -31,7 +31,8 @@ export default function BroadcastScreen({ room, me }: { room: RoomView; me: stri
   const tptv = theme.id === 'tptv';
   const [overlay, setOverlay] = useState(true);
   const [muted, setMutedState] = useState(() => sfxState().muted);
-  const [cameraMode, , nextCameraMode] = useCameraMode();
+  // Always opens on Auto (the saved in-game preference is the player's, not the TV's); C cycles, unsaved.
+  const [cameraMode, setCameraMode] = useState<CameraMode>('auto');
   /** Set (to anything new) when C is pressed; shows the camera's name for a moment. */
   const [camToast, setCamToast] = useState<string | null>(null);
   const connected = useConnected();
@@ -57,7 +58,7 @@ export default function BroadcastScreen({ room, me }: { room: RoomView; me: stri
       const k = e.key.toLowerCase();
       if (k === 'h') setOverlay(v => !v);
       else if (k === 'c') {
-        nextCameraMode();
+        setCameraMode(m => CAMERA_MODES[(CAMERA_MODES.findIndex(x => x.id === m) + 1) % CAMERA_MODES.length].id);
         setCamToast(String(Date.now()));
       } else if (k === 'f') {
         if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
@@ -66,7 +67,7 @@ export default function BroadcastScreen({ room, me }: { room: RoomView; me: stri
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [nextCameraMode, cameraMode]);
+  }, []);
   // A brief label naming the camera just chosen.
   useEffect(() => {
     if (camToast === null) return;
