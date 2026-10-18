@@ -350,6 +350,20 @@ function CameraRig({ hud, fogNear, fogFar, mode, followId }: {
   return null;
 }
 
+/** The procedural studio room: reflections for scenes without a panorama of their own. */
+const STUDIO = { url: undefined, intensity: 0.45, rotation: 0 };
+
+/** Which baked panorama a scene reflects: the set's own when it has one (tools/blender/*_env.py). */
+function reflectionsFor(env: string, themeId: string): { url?: string; intensity: number; rotation: number } {
+  // Each panorama is centred on the back of its set; three's equirect is centred on +x, hence the quarter turn.
+  const baked = (url: string, intensity: number) => ({ url, intensity, rotation: -Math.PI / 2 });
+  if (env === 'lounge' && themeId === 'classic') return baked(ASSETS.classicEnv.url, 0.6);
+  if (env === 'lounge' && themeId === 'tptv') return baked(ASSETS.tptvEnv.url, 0.6);
+  if (env === 'skyline') return baked(ASSETS.skylineEnv.url, 0.7);
+  if (env === 'speedway') return baked(ASSETS.speedwayEnv.url, 0.55);
+  return STUDIO;
+}
+
 const tmpOut = new Vector3();
 const tmpPos = new Vector3();
 const tmpTarget = new Vector3();
@@ -418,19 +432,8 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
       {backdrop
         ? <hemisphereLight args={['#ffffff', theme.palette.table, 0.9]} />
         : <Environment kind={env} theme={theme} />}
-      {/* Reflections for everything lit live. The Classic room, the Metropolis
-          roof and the Speedway track reflect themselves (Blender panoramas,
-          centred on the back of the set; three's equirect is centred on +x, hence
-          the quarter turn). */}
-      {env === 'lounge' && theme.id === 'classic' && !backdrop
-        ? <SceneEnv url={ASSETS.classicEnv.url} intensity={0.6} rotation={-Math.PI / 2} />
-        : env === 'lounge' && theme.id === 'tptv' && !backdrop
-          ? <SceneEnv url={ASSETS.tptvEnv.url} intensity={0.6} rotation={-Math.PI / 2} />
-        : env === 'skyline' && !backdrop
-          ? <SceneEnv url={ASSETS.skylineEnv.url} intensity={0.7} rotation={-Math.PI / 2} />
-          : env === 'speedway' && !backdrop
-            ? <SceneEnv url={ASSETS.speedwayEnv.url} intensity={0.55} rotation={-Math.PI / 2} />
-            : <SceneEnv intensity={0.45} />}
+      {/* Reflections for everything lit live: the baked sets reflect themselves (reflectionsFor). */}
+      <SceneEnv {...(backdrop ? STUDIO : reflectionsFor(env, theme.id))} />
       {/* Devices that struggle drop live shadows (the baked sets keep theirs): it halves the draw calls. */}
       <directionalLight castShadow={!lowPower} position={[6, 12, 5]} intensity={look.keyIntensity} color={look.keyColor}
         shadow-mapSize={[2048, 2048]} shadow-camera-left={-8} shadow-camera-right={8}
