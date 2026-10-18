@@ -457,7 +457,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
             <Ownership game={game} theme={theme} />
             {game.rules.freeParkingPot && theme.spaces[theme.spaces.length / 2]?.kind === 'parking' &&
               <ParkingPot pot={game.pot} n={theme.spaces.length} />}
-            <Pieces game={game} n={theme.spaces.length} reactions={reactions} />
+            <Pieces game={game} n={theme.spaces.length} reactions={reactions} me={me} />
             <MoneyFX game={game} n={theme.spaces.length} currency={theme.currency} />
             <GoConfetti n={theme.spaces.length} />
             <DeedPop game={game} theme={theme} />

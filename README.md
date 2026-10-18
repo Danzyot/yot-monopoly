@@ -27,11 +27,16 @@ mini-games, music, and a full operator dashboard.
   Shade, Chef Gusto, Zorp) in glossy vinyl, with arms and legs that follow every move,
   tinted in each player's colour. Their motion is hand-animated: a crouch before the first
   hop, arms swinging against the legs, a squash on landing and hands that trail and settle
-  a beat late. They cheer or fist-pump when they buy or earn, sulk when they pay, taunt
-  whoever just paid them rent, stamp and fold their arms when they're jailed, shrug,
-  stretch, fidget, look around and wave when idle, slump in jail, fall over when bankrupt
-  and dance when they win. Every character and all fourteen moves can be previewed at
-  `/characters`.
+  a beat late. Every reaction has a wind-up, a snap and a settle, and most pull out a prop
+  with its own sound: a SOLD sign when they buy, a party popper past GO, a coin flip or a
+  money bag when they earn, a cash wad fanned at whoever just paid them rent (or peeled
+  off, bill by bill, to pay it — with a sad trombone when it hurts), a phone to offer a
+  trade and a contract stamped when it goes through, a hard hat and hammer to build, a tin
+  cup on the jail bars, a white flag before they fall over bankrupt and a trophy for the
+  victory dance. They stamp and fold their arms when jailed, and shrug, stretch, fidget,
+  look around and wave when idle; every hop lands with a footfall. Every character and all
+  twenty-two moves can be previewed at `/characters` (`/characters?move=cheer&strip=8` lays a move
+  out as a frame-by-frame filmstrip).
 - **Game feel**: the dice land, then the piece walks, then the result shows; coins fly
   from payer to payee with the amount floating over each piece; Chance and Community
   Chest are real piles on the board and a drawn card flies off its pile to the screen;

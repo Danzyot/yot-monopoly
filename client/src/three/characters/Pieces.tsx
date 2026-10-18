@@ -4,7 +4,9 @@
 // on top of that each figure breathes, turns to face where it's going,
 // squashes and stretches through hops, steps foot over foot, cheers when it
 // buys or earns, sulks when it pays, stamps when it's jailed, fidgets when idle, slumps
-// in jail, lies down and fades when bankrupt, and dances when it wins.
+// in jail, lies down and fades when bankrupt, and dances when it wins. The
+// reactions pull out props (moveFx.ts: a SOLD sign, a cash wad, a hard hat…)
+// and make their own sounds; each hop lands with a footfall.
 
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -15,6 +17,8 @@ import {
   CharacterFigure, EMOTE_MS, EMOTE_OUT, Tinter, emotePose, newRig, poseRig, useCharacterMaterials, type EmoteKind, type PoseInput,
 } from './Figure.tsx';
 import { ReactionBubble } from './ReactionBubble.tsx';
+import { clearMove, hopPose } from './moves.ts';
+import { MoveFX, flightSound, propHandMirrored, stepSound } from './moveFx.ts';
 import { diceSettleAt, holdUntil } from '../sequence.ts';
 import { FLY_MS, HOP_MS, MAX_HOPS } from '../../../../shared/pacing.ts';
 import { celebrateGo } from '../GoConfetti.tsx';
@@ -93,6 +97,8 @@ interface Motion {
   /** Was mid-hop last frame, and which hop was drawn last (each landing jolts the arms). */
   hopping: boolean;
   hopSeen: number;
+  /** When the victory dance began (0: not dancing). */
+  winAt: number;
   /** Reused every frame, so posing allocates nothing. */
   pose: PoseInput;
 }
@@ -106,8 +112,10 @@ function turnToward(from: number, to: number, rate: number, dt: number): number 
   return from + d * (1 - Math.exp(-rate * dt));
 }
 
-function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, waitingToRoll }: {
+function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, waitingToRoll, own = false }: {
   p: PlayerState; slot: number; count: number; turn: boolean; winner: boolean; emote?: Emote; n: number;
+  /** This is the local player's piece (its moves are a little louder, and it fidgets out loud). */
+  own?: boolean;
   reaction?: PieceReaction;
   /** Whose turn it is: everyone else's heads follow that piece round the board. */
   focusId?: string | null;
@@ -122,6 +130,10 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
   const rig = useMemo(newRig, []);
   const mats = useCharacterMaterials(p.character, p.color);
   const tinter = useMemo(() => new Tinter(mats), [mats]);
+  // Props, thrown bits and foley for the moves.
+  const fx = useMemo(() => new MoveFX(), []);
+  useEffect(() => () => fx.dispose(), [fx]);
+  const mirror = propHandMirrored(p.character);
   const anim = useRef<Anim | null>(null);
   const motion = useRef<Motion | null>(null);
   // The follow camera tracks this piece.
@@ -157,7 +169,7 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
       yaw: 0, phase: Math.random() * Math.PI * 2, landAt: 0, pending: null, emote: null, emoteAt: 0,
       lastEmote: emote?.seq ?? 0, nextIdle: performance.now() + 5000 + Math.random() * 8000, hops: 0,
       slump: p.inJail ? 1 : 0, lie: out, grey: 0, opacity: 1 - out, marker: 0,
-      scale: figureScale(n, count), watch: 0, waitSince: 0, tap: 0, hopping: false, hopSeen: 0,
+      scale: figureScale(n, count), watch: 0, waitSince: 0, tap: 0, hopping: false, hopSeen: 0, winAt: 0,
       pose: { time: 0, phase: 0, slump: 0, lie: 0, handsUp: 0, squash: 1 },
     };
   } else if (emote && emote.seq !== motion.current.lastEmote) {
@@ -213,21 +225,24 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
     o.time = time; o.phase = m.phase; o.handsUp = 0; o.squash = 1;
     o.walk = undefined; o.look = 0; o.wave = 0; o.pump = 0; o.sad = 0; o.stomp = 0; o.tap = undefined;
     o.cheer = 0; o.crouch = 0; o.shrug = 0; o.stretch = 0; o.fidget = 0; o.taunt = 0; o.kick = 0; o.dt = dt;
+    clearMove(o);
+    o.mirror = mirror;
     let spin = 0;
     let lift = 0;
     let faceYaw: number;
 
     if (hopping) {
-      const e = k * k * (3 - 2 * k);
+      // A hop carries its speed straight across (the weight is in the arc);
+      // a long flight eases off and in.
+      const e = long ? k * k * (3 - 2 * k) : k;
       g.position.x = a.from[0] + (a.to[0] - a.from[0]) * e;
       g.position.z = a.from[1] + (a.to[1] - a.from[1]) * e;
+      // A gravity arc, squat on take-off and stretched in the air (moves.ts).
       // A leap out of the cell goes high enough to clear the bars (JailCell is 0.42 tall).
-      lift = Math.sin(Math.PI * k) * (long ? 1.6 : a.leap ? 1.1 : 0.3);
-      // Stretch in the air, a quick squash on take-off.
-      o.squash = 1 + Math.sin(Math.PI * k) * 0.2 - Math.max(0, 1 - k / 0.15) * 0.18;
+      lift = hopPose(o, k) * (long ? 1.6 : a.leap ? 1.1 : 0.3);
       if (long) { o.handsUp = Math.sin(Math.PI * k); spin = k * Math.PI * 2; } else o.walk = k;
       // Hop to hop, the arms get a smaller jolt as each foot comes down.
-      if (m.hops !== m.hopSeen) { if (m.hopSeen) o.kick = -0.5; m.hopSeen = m.hops; }
+      if (m.hops !== m.hopSeen) { if (m.hopSeen) o.kick = -0.5; m.hopSeen = m.hops; hopSounds(m.hopping, long || a.leap, own); }
       faceYaw = Math.atan2(a.to[0] - a.from[0], a.to[1] - a.from[1]);
       m.landAt = now + a.dur * (1 - k);
       holdUntil(m.landAt + LAND_MS + 250);
@@ -245,25 +260,30 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
       const land = (now - m.landAt) / LAND_MS;
       if (m.landAt && land < 1) o.squash = 1 - Math.sin(Math.PI * land) * 0.22;
       else if (m.landAt && land < 1 + REBOUND_MS / LAND_MS) o.squash = 1 + Math.sin(Math.PI * (land - 1) * LAND_MS / REBOUND_MS) * 0.06;
-      if (m.hopping) o.kick = -0.9;
+      if (m.hopping) { o.kick = -0.9; stepSound(own ? 1 : 0.7); }
       if (crouchT < 1 && !p.bankrupt) o.crouch = Math.min(1, crouchT * 1.6) * (crouchT >= 0 ? 1 : 0);
 
       // Reactions start once the piece has landed; idle fidgets fill the quiet.
-      if (m.pending && !p.bankrupt) { m.emote = m.pending; m.pending = null; m.emoteAt = now; }
+      if (m.pending && (!p.bankrupt || m.pending === 'surrender')) { m.emote = m.pending; m.pending = null; m.emoteAt = now; }
       const running = m.emote && now - m.emoteAt < EMOTE_MS[m.emote];
       if (!running) m.emote = null;
-      if (!running && !winner && !p.bankrupt && !p.inJail && now > m.nextIdle) {
-        m.emote = pickIdle();
+      if (!running && !winner && !p.bankrupt && now > m.nextIdle) {
+        // Behind bars the only fidget is the tin cup on the bars.
+        m.emote = p.inJail ? 'rattle' : pickIdle();
         m.emoteAt = now;
         m.nextIdle = now + 9000 + Math.random() * 12000;
       }
       if (winner && !p.bankrupt) {
-        emotePose(o, 'win', 0, time);
+        m.winAt ||= now;
+        emotePose(o, 'win', (now - m.winAt) / 1000, time);
         lift = EMOTE_OUT.lift; spin = EMOTE_OUT.spin;
+        fx.cue('win', now - m.winAt, own ? 1 : 0.6, own);
       } else if (m.emote) {
         emotePose(o, m.emote, (now - m.emoteAt) / EMOTE_MS[m.emote], time);
         lift = EMOTE_OUT.lift; spin = EMOTE_OUT.spin;
-      }
+        // Everyone's reactions are heard (others' a little quieter); idle fidgets only your own.
+        fx.cue(m.emote, now - m.emoteAt, own ? 1 : 0.6, own, own);
+      } else fx.cue(null, 0);
     }
     m.hopping = hopping;
     g.position.y = lift;
@@ -272,7 +292,8 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
     yawRef.current.rotation.y = m.yaw + spin;
 
     m.slump = approach(m.slump, p.inJail && !p.bankrupt ? 1 : 0, 4, dt);
-    m.lie = approach(m.lie, p.bankrupt ? 1 : 0, 3, dt);
+    // Bankrupt: the white flag first, then over it goes.
+    m.lie = approach(m.lie, p.bankrupt && m.emote !== 'surrender' && m.pending !== 'surrender' ? 1 : 0, 3, dt);
     m.grey = approach(m.grey, p.bankrupt ? 0.85 : p.inJail ? 0.6 : 0, 3, dt);
     // Fade only once it has fallen over.
     m.opacity = p.bankrupt ? (m.lie > 0.9 ? approach(m.opacity, 0, 1.5, dt) : m.opacity) : approach(m.opacity, 1, 4, dt);
@@ -309,6 +330,7 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
     o.look = (o.look ?? 0) + m.watch * (1 - Math.abs(o.look ?? 0));
     o.tap = m.tap > 0.02 ? m.tap : undefined;
     poseRig(rig, o);
+    fx.update(rig, mirror, -lift / m.scale);
 
     // Whose turn: a bobbing, spinning arrow above the head and a ground ring.
     m.marker = approach(m.marker, turn && !winner && !p.bankrupt ? 1 : 0, 8, dt);
@@ -332,6 +354,7 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
       <group ref={scaleRef}>
         <group ref={yawRef}>
           <CharacterFigure id={p.character} mats={mats} rig={rig} outfit={p.outfit} />
+          <primitive object={fx.fx} />
           {winner && <Crown />}
         </group>
         <group ref={markerRef} visible={false}>
@@ -348,6 +371,13 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
       <ReactionBubble emoji={reaction && !p.bankrupt ? reaction.emoji : undefined} seq={reaction?.seq} />
     </group>
   );
+}
+
+/** A new hop has begun: the footfall of the one before it (when chained), a whoosh when this one flies. */
+function hopSounds(chained: boolean, flies: boolean, mine: boolean) {
+  const v = mine ? 1 : 0.7;
+  if (chained) stepSound(v);
+  if (flies) flightSound(v);
 }
 
 /** Gold crown floating over the winner's head. */
@@ -375,8 +405,10 @@ function Crown() {
   );
 }
 
-export function Pieces({ game, n, reactions }: {
+export function Pieces({ game, n, reactions, me }: {
   game: GameView; n: number;
+  /** The local player (their own piece's moves are a little louder). */
+  me?: string;
   /** Reactions to pop over characters, by player id. */
   reactions?: Record<string, PieceReaction>;
 }) {
@@ -395,38 +427,23 @@ export function Pieces({ game, n, reactions }: {
     return m;
   }, [players]);
 
-  // Reactions come from diffing consecutive views: a deed newly theirs or
-  // cash from the bank → a cheer (a fist pump for small change); a big rent
-  // taken off another player → a taunt; cash going out → a sad slump; just
-  // sent to jail → a stomping tantrum.
-  const prev = useRef<{ cash: Map<string, number>; owner: Map<number, string>; jail: Set<string> } | null>(null);
+  // Reactions come from diffing consecutive views (pickReactions, below).
+  const prev = useRef<ReactionSnapshot | null>(null);
   const [emotes, setEmotes] = useState<Record<string, Emote>>({});
+  const { trades } = game;
   useEffect(() => {
-    const cash = new Map(players.map(p => [p.id, p.cash]));
-    const owner = new Map(Object.entries(owned).map(([k, o]) => [Number(k), o.owner]));
-    const jail = new Set(players.filter(p => p.inJail).map(p => p.id));
+    const now = snapshot(players, owned, trades);
     const was = prev.current;
-    prev.current = { cash, owner, jail };
+    prev.current = now;
     if (!was) return;
-    const picks: [string, EmoteKind][] = [];
-    // Someone paying in the same update means the money came from a player, not the bank.
-    const paid = players.some(q => !q.bankrupt && q.cash < (was.cash.get(q.id) ?? q.cash));
-    for (const p of players) {
-      if (p.bankrupt) continue;
-      const before = was.cash.get(p.id) ?? p.cash;
-      const bought = [...owner].some(([i, o]) => o === p.id && was.owner.get(i) !== p.id);
-      if (p.inJail && !was.jail.has(p.id)) picks.push([p.id, 'stomp']);
-      else if (bought) picks.push([p.id, 'cheer']);
-      else if (p.cash > before) picks.push([p.id, p.cash - before < 150 ? 'pump' : paid ? 'taunt' : 'cheer']);
-      else if (p.cash < before) picks.push([p.id, 'sad']);
-    }
+    const picks = pickReactions(players, was, now, n);
     if (!picks.length) return;
     setEmotes(e => {
       const next = { ...e };
       for (const [id, kind] of picks) next[id] = { kind, seq: (e[id]?.seq ?? 0) + 1 };
       return next;
     });
-  }, [players, owned]);
+  }, [players, owned, trades, n]);
 
   return (
     <>
@@ -435,9 +452,80 @@ export function Pieces({ game, n, reactions }: {
         return (
           <Piece key={p.id} p={p} slot={s.slot} count={s.count} n={n}
             turn={p.id === current && !winner} winner={p.id === winner} emote={emotes[p.id]}
-            reaction={reactions?.[p.id]} focusId={winner ?? current} waitingToRoll={phase === 'roll'} />
+            reaction={reactions?.[p.id]} focusId={winner ?? current} waitingToRoll={phase === 'roll'} own={p.id === me} />
         );
       })}
     </>
   );
+}
+
+// ---- reactions --------------------------------------------------------------
+// What each piece does about the latest update, from diffing two views. In
+// order of precedence: out of the game → the white flag; sent to jail → a
+// stomping tantrum; a trade gone through → the contract; a deed bought → the
+// SOLD sign; a house or hotel up → the hard hat; passed GO → the party
+// popper; cash from the bank → a cheer (a coin flip for small change); rent
+// taken off another player → a taunt with the wad; cash going out → paying up
+// (the money bag and the sad trombone when it hurts); a trade offered → on
+// the phone.
+
+interface ReactionSnapshot {
+  cash: Map<string, number>;
+  pos: Map<string, number>;
+  owner: Map<number, string>;
+  houses: Map<number, number>;
+  jail: Set<string>;
+  out: Set<string>;
+  /** Open trade offers: id → who made it. */
+  trades: Map<string, string>;
+}
+
+function snapshot(players: PlayerState[], owned: GameView['owned'], trades: GameView['trades'] | undefined): ReactionSnapshot {
+  return {
+    cash: new Map(players.map(p => [p.id, p.cash])),
+    pos: new Map(players.map(p => [p.id, p.position])),
+    owner: new Map(Object.entries(owned).map(([k, o]) => [Number(k), o.owner])),
+    houses: new Map(Object.entries(owned).map(([k, o]) => [Number(k), o.houses])),
+    jail: new Set(players.filter(p => p.inJail).map(p => p.id)),
+    out: new Set(players.filter(p => p.bankrupt).map(p => p.id)),
+    trades: new Map((trades ?? []).map(t => [t.id, t.from])),
+  };
+}
+
+/** Paying out this much (or half of everything it had) is a big hit. */
+const BIG_PAY = 250;
+
+function pickReactions(players: PlayerState[], was: ReactionSnapshot, now: ReactionSnapshot, n: number): [string, EmoteKind][] {
+  const picks: [string, EmoteKind][] = [];
+  // Someone paying in the same update means the money came from a player, not the bank.
+  const paid = players.some(q => !q.bankrupt && q.cash < (was.cash.get(q.id) ?? q.cash));
+  // Deeds passing between two players still in the game: a trade.
+  const traded = new Set<string>();
+  for (const [i, o] of now.owner) {
+    const from = was.owner.get(i);
+    if (from && from !== o && !now.out.has(from)) { traded.add(from); traded.add(o); }
+  }
+  const offering = new Set<string>();
+  for (const [id, from] of now.trades) if (!was.trades.has(id)) offering.add(from);
+  for (const p of players) {
+    if (p.bankrupt) {
+      if (!was.out.has(p.id)) picks.push([p.id, 'surrender']);
+      continue;
+    }
+    const before = was.cash.get(p.id) ?? p.cash;
+    const bought = [...now.owner].some(([i, o]) => o === p.id && !was.owner.has(i));
+    const built = [...now.houses].some(([i, h]) => now.owner.get(i) === p.id && was.owner.get(i) === p.id && h > (was.houses.get(i) ?? 0));
+    // Came round the corner on an ordinary move (a trip to jail flies the other way).
+    const from = was.pos.get(p.id) ?? p.position;
+    const steps = (p.position - from + n) % n;
+    const passedGo = !p.inJail && steps > 0 && steps <= 12 && (p.position < from || p.position === 0);
+    if (p.inJail && !was.jail.has(p.id)) picks.push([p.id, 'stomp']);
+    else if (traded.has(p.id)) picks.push([p.id, 'deal']);
+    else if (bought) picks.push([p.id, 'sold']);
+    else if (built) picks.push([p.id, 'build']);
+    else if (p.cash > before) picks.push([p.id, passedGo ? 'popper' : p.cash - before < 150 ? 'pump' : paid ? 'taunt' : 'cheer']);
+    else if (p.cash < before) picks.push([p.id, before - p.cash >= Math.min(BIG_PAY, before / 2) ? 'sad' : 'pay']);
+    else if (offering.has(p.id)) picks.push([p.id, 'phone']);
+  }
+  return picks;
 }

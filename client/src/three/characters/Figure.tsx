@@ -319,6 +319,22 @@ export interface PoseInput {
   dt?: number;
   /** A one-frame vertical jolt (units/s) to the hands' spring — negative on landing, so the arms slap down and rebound. */
   kick?: number;
+  // ---- move accents (moves.ts fills these; see accentRig / reachHand) ----
+  /** Extra body pitch (+ forward), roll (+ leans to its right) and yaw (+ turns to its left), radians. */
+  lean?: number;
+  tilt?: number;
+  twist?: number;
+  /** Extra head pitch (+ chin down) and roll. */
+  nod?: number;
+  cock?: number;
+  /** Foot lifts (units) for a stamp or a shuffle. */
+  liftL?: number;
+  liftR?: number;
+  /** 0–1 blend of the [left, right] hand toward `reachAt` (x, y, z, rx, rz per hand, left then right). */
+  reach?: Float32Array;
+  reachAt?: Float32Array;
+  /** Swap sides: the move's right-hand work is done by the left (the right hand holds the character's own item). */
+  mirror?: boolean;
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -502,6 +518,7 @@ export function poseRig(rig: Rig, o: PoseInput) {
       rz = lerp(rz, side * 1.4, fold);
     }
     hx[i] = x; hy[i] = y; hz[i] = z; hrz[i] = rz; hrx[i] = rx;
+    if (o.reach) reachHand(o, i);
   }
 
   const lag = rig.lag;
@@ -576,81 +593,48 @@ export function poseRig(rig: Rig, o: PoseInput) {
     }
     foot.position.set(x, y, z);
   }
+  accentRig(rig, o);
+}
+
+// ---- move accents ------------------------------------------------------------
+// The choreographed moves (moves.ts) steer the rig through a few generic
+// channels on top of everything above: each hand can be pulled to an exact
+// pose (and still trails on the spring), and the body, head and feet take
+// extra angles and lifts. `mirror` flips the lot left for right.
+
+/** Blend hand `i` (0 left, 1 right) toward its reach pose; runs before the spring. */
+function reachHand(o: PoseInput, i: number) {
+  const src = o.mirror ? 1 - i : i;
+  const w = o.reach![src];
+  if (!(w > 0) || !o.reachAt) return;
+  const a = o.reachAt, b = src * 5, sx = o.mirror ? -1 : 1;
+  hx[i] = lerp(hx[i], a[b] * sx, w);
+  hy[i] = lerp(hy[i], a[b + 1], w);
+  hz[i] = lerp(hz[i], a[b + 2], w);
+  hrx[i] = lerp(hrx[i], a[b + 3], w);
+  hrz[i] = lerp(hrz[i], a[b + 4] * sx, w);
+}
+
+/** Add the move's body, head and foot accents onto the posed rig. */
+function accentRig(rig: Rig, o: PoseInput) {
+  const { pose, head, footL, footR } = rig;
+  if (!pose || !head) return;
+  const sx = o.mirror ? -1 : 1;
+  pose.rotation.x += o.lean ?? 0;
+  pose.rotation.z += (o.tilt ?? 0) * sx;
+  pose.rotation.y += (o.twist ?? 0) * sx;
+  head.rotation.x += o.nod ?? 0;
+  head.rotation.z += (o.cock ?? 0) * sx;
+  const l = o.mirror ? o.liftR : o.liftL, r = o.mirror ? o.liftL : o.liftR;
+  if (footL && l) { footL.position.y += l; footL.rotation.x -= l * 5; }
+  if (footR && r) { footR.position.y += r; footR.rotation.x -= r * 5; }
 }
 
 // ---- emotes ----------------------------------------------------------------
-// One-off reactions, with how long each plays. `emotePose` fills a PoseInput
-// (plus lift and spin) from the emote's progress so the board pieces and the
-// gallery play exactly the same move.
+// One-off reactions live in moves.ts (choreography) and moveFx.ts (props and
+// sound); re-exported here for the board pieces and the gallery.
+export { EMOTE_MS, EMOTE_OUT, emotePose, envelope, type EmoteKind } from './moves.ts';
 
-export type EmoteKind = 'cheer' | 'pump' | 'sad' | 'stomp' | 'wave' | 'look' | 'shrug' | 'stretch' | 'fidget' | 'taunt';
-export const EMOTE_MS: Record<EmoteKind, number> = {
-  cheer: 1000, pump: 1300, sad: 1800, stomp: 1500, wave: 1800, look: 2400, shrug: 1500, stretch: 2600, fidget: 3000, taunt: 2200,
-};
-/** Fade an emote in and out over its run (c = 0–1). */
-export const envelope = (c: number) => Math.max(0, Math.min(1, c * 5, (1 - c) * 5));
-/** Written by emotePose: how high the whole figure is off the ground and how far it has twirled. */
-export const EMOTE_OUT = { lift: 0, spin: 0 };
-
-export function emotePose(o: PoseInput, kind: EmoteKind | 'win', c: number, time: number) {
-  let lift = 0, spin = 0;
-  switch (kind) {
-    case 'win': {
-      // Endless victory dance: bouncing, arms up, twirling.
-      const w = (time % 0.9) / 0.9;
-      lift = Math.abs(Math.sin(Math.PI * w)) * 0.26;
-      o.squash = 1 + lift * 0.7 - Math.max(0, 1 - Math.min(w, 1 - w) / 0.08) * 0.15;
-      o.handsUp = 1;
-      spin = time * 2.5;
-      break;
-    }
-    case 'cheer':
-      // Two happy jumps with a twirl, an arm thrown up on each.
-      lift = Math.abs(Math.sin(Math.PI * 2 * c)) * 0.22 * (1 - c * 0.3);
-      o.squash = 1 + lift * 0.8;
-      o.handsUp = Math.sin(Math.PI * c);
-      o.cheer = c;
-      spin = Math.PI * 2 * smooth(c);
-      break;
-    case 'pump': {
-      // "Yes!": fist pumps and little bounces, then one proper hop on the last pump.
-      o.pump = envelope(c);
-      const last = c > 0.68 ? Math.sin(Math.PI * Math.min(1, (c - 0.68) / 0.26)) : 0;
-      lift = Math.abs(Math.sin(Math.PI * 4 * c)) * 0.06 * o.pump + last * 0.14;
-      o.squash = 1 + lift * 0.9 - Math.max(0, 1 - Math.abs(c - 0.66) / 0.04) * 0.08;
-      break;
-    }
-    case 'sad':
-      o.sad = envelope(c);
-      o.squash = 1 - 0.05 * o.sad;
-      break;
-    case 'stomp':
-      o.stomp = c;
-      break;
-    case 'wave':
-      o.wave = envelope(c);
-      break;
-    case 'look':
-      o.look = Math.sin(c * Math.PI * 2) * 0.75 * envelope(c * 1.2);
-      break;
-    case 'shrug':
-      // Up… hold… and drop.
-      o.shrug = smooth(c * 4) * (1 - smooth((c - 0.6) / 0.3));
-      o.look = Math.sin(c * Math.PI) * 0.2;
-      break;
-    case 'stretch':
-      o.stretch = smooth(c * 2.5) * (1 - smooth((c - 0.7) / 0.28));
-      break;
-    case 'fidget':
-      o.fidget = envelope(c);
-      break;
-    case 'taunt':
-      o.taunt = envelope(c);
-      break;
-  }
-  EMOTE_OUT.lift = lift;
-  EMOTE_OUT.spin = spin;
-}
 const GREY = new Color('#8a8a8a');
 
 /**

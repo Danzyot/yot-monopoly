@@ -1,13 +1,14 @@
 // Turns game-state changes into sound effects. The server only sends whole
 // GameView snapshots, so this diffs each one against the last and works out
-// what just happened: a roll, a hop across the board, a purchase, rent, a
-// card, jail, an auction bid, a new turn, a bankruptcy, a winner.
+// what just happened: a roll, a purchase, rent, a card, jail, an auction bid,
+// a new turn, a bankruptcy, a winner. The pieces voice their own footfalls and
+// reactions (three/characters/moveFx.ts), so nothing here repeats those.
 import { useEffect, useRef } from 'react';
 import { resolveTheme } from '../../shared/themes.ts';
 import type { GameView } from '../../shared/types.ts';
 import {
   playArcadeStart, playBankrupt, playBid, playBuild, playBuy, playBuzz, playCardFlip, playDiceRoll, playDoubles,
-  playGoLight, playHop, playJail, playJailOpen, playPay, playReceive, playWin, playYourTurn,
+  playGoLight, playJail, playJailOpen, playPay, playReceive, playWin, playYourTurn,
 } from './sound.ts';
 import * as PACE from '../../shared/pacing.ts';
 
@@ -46,7 +47,7 @@ export function useGameSounds(game: GameView | null, me: string): void {
         const steps = (p.position - was.position + n) % n;
         const start = rolled ? WALK_S : 0;
         if (!p.inJail && steps > 0 && steps <= MAX_HOPS) {
-          for (let k = 0; k < steps; k++) playHop(start + k * HOP_S + 0.05);
+          // The footfalls come from the piece itself as each hop lands (Pieces.tsx).
           landAt = Math.max(landAt, start + steps * HOP_S + 0.1);
         } else {
           landAt = Math.max(landAt, start + FLY_S);
