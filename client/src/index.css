@@ -2328,3 +2328,16 @@ a:focus-visible, .navlink:focus-visible, .brand:focus-visible, .edition:focus-vi
   .pf-place-badge { font-size: 15px; padding: 3px 5px 2px; }
   .pf-game-map { font-size: 16px; }
 }
+
+/* ---- fixes from the screenshot pass ---- */
+/* The player cell is a row header; browsers centre <th> by default. */
+.lb-table tbody th { text-align: left; }
+/* Signed-in header on phones: the GO skin keeps header and nav on one line
+   (nowrap), so with Dashboard / My profile links the shrunken nav overflowed
+   leftwards over the brand. Let the header itself wrap: the nav drops onto its
+   own line only when it no longer fits beside the brand. */
+@media (max-width: 760px) {
+  .site-header { flex-wrap: wrap; row-gap: 2px; }
+  .site-header .brand { flex: none; }
+  .site-header nav { min-width: 0; }
+}
