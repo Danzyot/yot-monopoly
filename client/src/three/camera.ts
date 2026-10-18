@@ -4,7 +4,7 @@
 // owns the camera at the moment.
 
 import { useCallback, useState } from 'react';
-import type { Object3D } from 'three';
+import { Vector3, type Object3D } from 'three';
 
 export type CameraMode = 'auto' | 'table' | 'follow' | 'close' | 'top' | 'free';
 
@@ -51,3 +51,37 @@ export const pieceObjects = new Map<string, Object3D>();
 let directorActive = false;
 export const setDirectorActive = (v: boolean) => { directorActive = v; };
 export const isDirectorActive = () => directorActive;
+
+/**
+ * Portrait framing: the distance from the board centre, along `dir`, at which
+ * a square board of half-width `half` spans `fill` of the screen's width (and
+ * still fits its height). On a phone held upright the width is what runs out,
+ * so the board is framed edge to edge instead of being scaled by the aspect
+ * ratio, which left it at three quarters of the width with specks for pieces.
+ */
+export function fitBoardDistance(dir: Vector3, aspect: number, fovDeg: number, half: number, fill = 0.96): number {
+  const tanV = Math.tan((fovDeg * Math.PI) / 360);
+  const tanH = tanV * aspect;
+  const f = dir.clone().normalize().negate();
+  const r = new Vector3().crossVectors(f, new Vector3(0, 1, 0)).normalize();
+  const u = new Vector3().crossVectors(r, f);
+  const v = new Vector3();
+  const fits = (d: number) => {
+    for (const x of [-half, half]) {
+      for (const z of [-half, half]) {
+        // Corner relative to a camera at -f * d.
+        v.set(x, 0, z).addScaledVector(f, d);
+        const depth = v.dot(f);
+        if (depth <= 0) return false;
+        if (Math.abs(v.dot(r)) / depth > tanH * fill || Math.abs(v.dot(u)) / depth > tanV * fill) return false;
+      }
+    }
+    return true;
+  };
+  let lo = half, hi = half * 40;
+  for (let i = 0; i < 30; i++) {
+    const mid = (lo + hi) / 2;
+    if (fits(mid)) hi = mid; else lo = mid;
+  }
+  return hi;
+}

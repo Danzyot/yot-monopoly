@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Boards and themes: the lobby's Board → Theme → Table steps
+   Boards and looks: the lobby's Board → Look → Table steps
    (components/BoardPicker.tsx), the painted board previews
    (three/BoardPreview.tsx) and the Takeprofit TV brand marks.
    ========================================================================== */
@@ -14,7 +14,8 @@
 }
 
 /* ---- the two pickers ---- */
-.bp .edition-pick { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.bp .edition-pick { grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr)); gap: 10px; }
+.bp .edition { min-width: 0; overflow-wrap: break-word; }
 .bp .map-card .map-thumb { aspect-ratio: 16 / 10; }
 .bp-facts { font-weight: 800; letter-spacing: 0.01em; }
 
@@ -22,10 +23,6 @@
 .bp-theme .bp-name { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .bp-theme .bp-name b { white-space: normal; line-height: 1.05; }
 .bp-theme .edition-logo { width: 28px; height: 28px; flex: none; }
-.bp-look {
-  align-self: flex-start; padding: 2px 9px 3px; border-radius: 99px; font: 700 11px/1.3 var(--font, Inter), system-ui, sans-serif;
-  letter-spacing: 0.06em; text-transform: uppercase; border: 1.5px solid currentColor; opacity: 0.9;
-}
 .bp-rules { font-style: italic; opacity: 0.85; }
 .bp-summary {
   margin: 10px 0 2px; padding: 8px 12px; border-radius: 10px; line-height: 1.4;
@@ -58,8 +55,14 @@
 }
 
 @media (max-width: 520px) {
-  .bp .edition-pick { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .bp .edition-pick { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .bp-theme .small:not(.bp-rules) { display: none; }
+  .bp-theme .bp-name b { font-size: 15px; }
+}
+@media (max-width: 400px) {
+  .bp-theme .bp-name { gap: 5px; }
+  .bp-theme .bp-name b { font-size: 14px; }
+  .bp-theme .edition-logo { width: 22px; height: 22px; }
 }
 
 /* ---- Takeprofit TV: the mark is shown bare, as on the site (no disc) ---- */

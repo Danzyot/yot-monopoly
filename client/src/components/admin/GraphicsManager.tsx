@@ -82,7 +82,7 @@ function GraphicCard({ g, reload }: { g: GraphicRow; reload: () => unknown }) {
       <div className="row">
         <button className="btn tiny" onClick={copy}>Copy URL</button>
         <button className="btn tiny ghost adm-danger-text" onClick={() => act(() => del(`/api/admin/graphics/${g.id}`), {
-          confirm: `Delete “${g.name}”? Rooms using it go back to their theme's own look.`, ok: 'Deleted', after: reload,
+          confirm: `Delete “${g.name}”? Rooms using it go back to their look's own artwork.`, ok: 'Deleted', after: reload,
         })}>Delete</button>
       </div>
     </div>

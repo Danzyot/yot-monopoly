@@ -48,7 +48,7 @@ export default function TableStylePicker({ style, canEdit }: { style: TableStyle
           </button>
         ))}
       </div>
-      {imagePick('Board logo', 'boardLogoUrl', "None — the theme's own")}
+      {imagePick('Board logo', 'boardLogoUrl', "None — the look's own")}
       {imagePick('Backdrop', 'backgroundUrl', "None — the board's own")}
       {library?.length === 0 && canEdit && (
         <p className="muted small">Operators can add logos and backdrops under Dashboard → Graphics.</p>

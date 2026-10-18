@@ -8,7 +8,7 @@
 //
 // Keys: H hides the overlay, C cycles the camera, F goes fullscreen, M mutes.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { resolveTheme, type Theme } from '../../../shared/themes.ts';
+import { resolveTheme, tableLabel, type Theme } from '../../../shared/themes.ts';
 import { getMap } from '../../../shared/maps.ts';
 import { MINIGAME_INFO } from '../../../shared/minigames.ts';
 import type { GameView, RoomView } from '../../../shared/types.ts';
@@ -100,7 +100,7 @@ export default function BroadcastScreen({ room, me }: { room: RoomView; me: stri
           <div className="bc-top-mid">
             <span className="bc-code mono">{room.code}</span>
             {game && <span className="bc-turn">Turn {game.turnNumber}</span>}
-            {game && <span className="bc-map">{getMap(game.mapId).name}{theme.lookName !== theme.name ? ` · ${theme.lookName}` : ''}</span>}
+            {game && <span className="bc-map">{tableLabel(getMap(game.mapId).name, theme.name)}</span>}
           </div>
           <div className="bc-top-right">
             {!connected && <span className="bc-tag warn">reconnecting…</span>}

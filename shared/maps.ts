@@ -21,7 +21,8 @@ export type BoardArt = 'heritage' | 'rainbow' | 'night' | 'tptv' | 'chog';
  */
 export interface MapLook {
   art: BoardArt;
-  /** Shown in the lobby next to the theme, e.g. "Rainbow Road". */
+  /** The art's name in code and comments, e.g. "Rainbow Road". Players just see
+   *  it as the board's Original look, so it is not shown in the UI. */
   name: string;
   groupColors: Record<string, string>;
   palette: Partial<ThemePalette>;

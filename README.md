@@ -1,7 +1,7 @@
 # 🎩 Yot Monopoly
 
 A multiplayer 3D property-trading board game for the browser, with several boards,
-custom themes (like the poker sites: one codebase, many branded versions),
+custom looks (like the poker sites: one codebase, many branded versions),
 mini-games, music, and a full operator dashboard.
 
 ## Features
@@ -10,26 +10,26 @@ mini-games, music, and a full operator dashboard.
 - **Many games at once** — every table is a room with a 5-letter code and an invite
   link; public or private; 2–8 players (default 6), plus spectators.
 - **Two choices set the table**, made in two lobby steps: the **board** (layout, economy and
-  3D world) and the **theme** (names, colours, money, cards). Any theme plays on any board.
-  In code a board is a *map* (`mapId`, `shared/maps.ts`) and a theme an *edition*
-  (`themeId`, `shared/themes.ts`). Each theme card in the lobby shows that theme painted on the
-  chosen board.
+  3D world) and the **look** (names, colours, money, cards). Any look plays on any board, and
+  the game reads it the same way everywhere: "Classic board · Original look". In code a board
+  is a *map* (`mapId`, `shared/maps.ts`) and a look a *theme* or *edition* (`themeId`,
+  `shared/themes.ts`). Each look card in the lobby shows that look painted on the chosen board.
 - **Three boards**, each with its own 3D surroundings and its own printed look:
-  - **Classic** — 40 spaces, the standard game, in a room that suits the theme, each one
+  - **Classic** — 40 spaces, the standard game, in a room that suits the look, each one
     modelled and light-baked: a study for Original (fireplace, moonlit window, bookshelf,
     Chesterfield), a purple Chog Poker lounge (bar, slots, poker tables, pink neon, the
     Chog portrait) and a Takeprofit TV broadcast studio (video wall of charts, anchor
     desk, studio cameras, ON AIR).
-    Printed in the **Heritage** look: cream stock, warm ink, rich desaturated sets, a banknote
+    Its Original look (the *heritage* art in code): cream stock, warm ink, rich desaturated sets, a banknote
     rosette behind the red banner.
   - **Speedway** — 32 spaces, two-street colour sets, two arcades; ~30-minute games in the infield
-    of a modelled, light-baked race track at dusk (pits, grandstands, floodlights). Printed as
-    **Rainbow Road**: a starfield, a glossy neon rainbow track with chevrons round the inside
+    of a modelled, light-baked race track at dusk (pits, grandstands, floodlights). Its Original
+    look (*Rainbow Road* in code): a starfield, a glossy neon rainbow track with chevrons round the inside
     of the spaces, a chequered start on GO.
   - **Metropolis** — 48 spaces, ten colour sets, two arcades; built for 5–8 players, on a
     modelled, light-baked penthouse roof (string lights, fire pit, a lit city all around).
-    Printed as **Night City**: navy and gold, neon tubes, a moonlit skyline in the middle.
-- **Themes** that work on any board: **Original** (the board's own look above), **Chog**
+    Its Original look (*Night City* in code): navy and gold, neon tubes, a moonlit skyline in the middle.
+- **Looks** that work on any board: **Original** (each board's own look above), **Chog**
   (built from the Chog Poker design system: purple room, Chog pink, Outfit font, the Chog
   character on the board) and **Takeprofit TV** (from the takeprofit-tv site's design system:
   its real logo as a giant studio monitor, ink black, bone and amber, SMPTE colour-bar sets,
@@ -196,7 +196,7 @@ Deploying (Railway + Discord setup, every environment variable): **[DEPLOY.md](D
 
 ## Smoke test in a real browser
 
-`tools/e2e/smoke.mjs` plays bot games on every board and theme in headless Chromium,
+`tools/e2e/smoke.mjs` plays bot games on every board and look in headless Chromium,
 cycles the camera views, screenshots each, and fails on any page or console error:
 
 ```bash
@@ -205,16 +205,16 @@ DEMO_MODE=1 DATA_DIR=$(mktemp -d) PORT=8090 node --import tsx server/src/index.t
 node tools/e2e/smoke.mjs --rounds 12 --out /tmp/yot-smoke        # add --phone for 390×844
 ```
 
-## Adding a theme
+## Adding a look
 
-Everything a theme (an *edition* in code) changes lives in [`shared/themes.ts`](shared/themes.ts) — copy the
+Everything a look (a theme or *edition* in code) changes lives in [`shared/themes.ts`](shared/themes.ts) — copy the
 `CHOG` or `TPTV` block: name, centre title, currency, deck names, set colours, palette
 (board, table, sky, dice, houses, rim), optional UI skin and font, optional logo
 (`client/public/editions/<id>/`), default house rules, and `names` to rename spaces
 (per map via `mapNames`). Give it an `art` id and a case in
 [`client/src/three/boardTexture.ts`](client/src/three/boardTexture.ts) (`skinFor`) and
 `boardCentres.ts` for a board face of its own; without one it prints like Original.
-The engine never branches on the theme.
+The engine never branches on the look.
 
 ## Adding a map
 
@@ -222,9 +222,9 @@ Maps live in [`shared/maps.ts`](shared/maps.ts): a square board (multiple of 4 s
 GO, jail, Free Parking and Go To Jail on the corners), its spaces (prices/rents can use
 the helpers that scale the classic curve), decks (`standardDecks()` builds sensible
 Chance/Community Chest cards for any layout) and an `environment` for the 3D scene
-(`client/src/three/environments/`), plus a `look` — the printed face the Original theme gets
+(`client/src/three/environments/`), plus a `look` — the printed face the Original look gets
 on it (set colours, palette, and an `art` id painted by `client/src/three/boardTexture.ts`).
-`validateMap()` and the test suite check every map × theme combination, and bots play complete
+`validateMap()` and the test suite check every board × look combination, and bots play complete
 games on every map in the tests. Lobby pictures of each board's 3D setting are
 `client/public/maps/<id>.webp` (480 × 300 captures of the lobby's board).
 
@@ -233,7 +233,7 @@ games on every map in the tests. Lobby pictures of each board's 3D setting are
 ```
 shared/                  types and data used by both sides
   board.ts, cards.ts     spaces and card effects as data
-  maps.ts, themes.ts     boards (structure/economy/own look) and themes (skins)
+  maps.ts, themes.ts     boards (structure/economy/own look) and looks (skins)
   characters.ts, minigames.ts, tableStyles.ts
 server/src/
   engine/game.ts         pure rules state machine (injected RNG + clock, snapshot/restore)

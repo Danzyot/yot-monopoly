@@ -52,7 +52,7 @@ export default function RoomsTab() {
         </div>
         <label className="adm-search grow">
           <span className="sr-only">Search rooms by code, host or map</span>
-          <input type="search" value={q} placeholder="Search code, host, board or theme…" onChange={e => search(e.target.value)} />
+          <input type="search" value={q} placeholder="Search code, host, board or look…" onChange={e => search(e.target.value)} />
           {needle && <span className="muted small nowrap">{rooms.length} match{rooms.length === 1 ? '' : 'es'}</span>}
         </label>
       </div>
@@ -108,7 +108,7 @@ function RoomCard({ room: r, reload, onBan }: { room: AdminRoom; reload: () => u
           </div>
           <div className="row wrap small adm-room-meta">
             <span className="adm-chip map" title="Board">{r.map}</span>
-            <span className="adm-chip edition" title="Theme">{r.edition}</span>
+            <span className="adm-chip edition" title="Look">{r.edition}</span>
             {r.status === 'playing' && r.phase && <span className="adm-chip phase" title="Current phase">{PHASE[r.phase] ?? r.phase}</span>}
           </div>
         </div>

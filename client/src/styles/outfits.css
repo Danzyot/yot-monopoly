@@ -1,6 +1,6 @@
 /* ---- outfit picker (lobby seat editor + /characters) ---- */
 .outfit-picker { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
-.outfit-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.outfit-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
 .outfit-tab {
   display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; min-height: 32px;
   background: rgba(0, 0, 0, 0.3); color: var(--muted); border: 2px solid transparent; border-radius: 8px;
@@ -9,7 +9,7 @@
 .outfit-tab:hover { color: var(--text); background: rgba(255, 255, 255, 0.08); }
 .outfit-tab.on { color: var(--text); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, rgba(0, 0, 0, 0.3)); }
 .outfit-tab-empty { font-size: 14px; opacity: 0.55; filter: grayscale(0.6); }
-.outfit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 4px; }
+.outfit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(72px, 100%), 1fr)); gap: 4px; }
 .outfit-item {
   position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 0;
   background: rgba(0, 0, 0, 0.3); color: var(--text); border: 2px solid transparent; border-radius: 10px;
@@ -38,6 +38,7 @@
 /* Colour is secondary to the outfit now: a slimmer row with a label. */
 .outfit-colors { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .outfit-colors > span { font-size: 12px; color: var(--muted); flex: none; }
+.outfit-colors > .color-grid { flex: 1; min-width: 0; margin-top: 0; }
 .outfit-colors .color-grid, .outfit-colors .gallery-colors { flex: 1; margin: 0; }
 .outfit-colors .color-pick { height: 16px; border-radius: 5px; }
 .gallery-colors.small .color-pick { width: 22px; height: 16px; border-radius: 5px; }
