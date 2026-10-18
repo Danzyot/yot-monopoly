@@ -463,9 +463,9 @@ export function poseRig(rig: Rig, o: PoseInput) {
     if (sad > 0 && side === -1) {
       // The right hand comes up to the face (which tips forward as it sulks).
       const face = smooth(sad * 1.3);
-      x = lerp(x, -0.045, face);
-      y = lerp(y, HEAD_Y - 0.035 + Math.sin(o.time * 5) * 0.003, face);
-      z = lerp(z, 0.095, face);
+      x = lerp(x, -0.05, face);
+      y = lerp(y, HEAD_Y - 0.06 + Math.sin(o.time * 5) * 0.003, face);
+      z = lerp(z, 0.105, face);
       rz = lerp(rz, -0.9, face);
     }
     if (taunt > 0) {
