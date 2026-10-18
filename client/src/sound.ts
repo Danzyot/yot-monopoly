@@ -59,6 +59,8 @@ function audio(): AudioContext | null {
 
 export function audioContext(): AudioContext | null { return audio(); }
 export function musicOutput(): GainNode | null { audio(); return musicBus; }
+/** The effects bus: what the SFX volume and mute govern (the ambience beds render here). */
+export function sfxOutput(): GainNode | null { audio(); return sfxBus; }
 
 /** Call from inside a click handler: this is when browsers let audio start. */
 export function primeAudio(): void { if (audio()) gestured = true; }

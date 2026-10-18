@@ -152,7 +152,7 @@ export default function MusicPlayer() {
           </div>
           <label className="audio-field audio-check" title="A quiet room tone for the scene, under the music">
             <input type="checkbox" checked={amb} onChange={e => { primeAudio(); setAmbienceEnabled(e.target.checked); }} />
-            <span className="small">Ambience<span className="muted"> — room sounds with the music</span></span>
+            <span className="small">Ambience<span className="muted"> — room sounds (follows the effects volume)</span></span>
           </label>
         </div>
       )}

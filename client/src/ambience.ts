@@ -3,20 +3,20 @@
 // synthesised live — filtered noise, a few oscillators and LFOs — so there is
 // nothing to download and a bed costs a handful of nodes.
 //
-// A bed renders into the music bus (musicOutput()), so the music's play /
-// pause, volume and mute govern it too: one control, nothing to explain. The
-// hook below also stops the bed outright while the music is off, so a silent
-// bed does not keep the CPU warm.
+// A bed renders into the effects bus (sfxOutput()), so the sound-effects
+// volume and mute govern it too — effects are on by default, music is not, so
+// the room is heard without anyone finding a switch. The hook below also stops
+// the bed outright while effects are off, so a silent bed does not keep the
+// CPU warm.
 import { useEffect } from 'react';
 import { getMap } from '../../shared/maps.ts';
 import type { GameView } from '../../shared/types.ts';
-import { musicState, onMusicChange } from './music.ts';
-import { audioContext, hasGestured, musicOutput, noise, onFirstGesture, readPref, writePref } from './sound.ts';
+import { audioContext, hasGestured, noise, onFirstGesture, onSfxChange, readPref, sfxOutput, sfxState, writePref } from './sound.ts';
 
 export type AmbienceScene = 'classic' | 'chog' | 'tptv' | 'speedway' | 'skyline';
 
 /** Bed level relative to the music bus (which already carries the music volume). */
-const LEVEL = 0.35;
+const LEVEL = 0.22;
 /** Fade in on start, out on stop; two beds overlap for this long on a scene change. */
 const FADE_S = 1.5;
 
@@ -348,7 +348,7 @@ const BUILD: Record<AmbienceScene, (bed: Bed) => void> = { classic, chog, tptv, 
 
 function build(scene: AmbienceScene): Bed | null {
   const ac = audioContext();
-  const bus = musicOutput();
+  const bus = sfxOutput();
   if (!ac || !bus) return null;
   const out = ac.createGain();
   const bed: Bed = { ac, out, nodes: new Set(), timers: new Set(), stopped: false };
@@ -427,7 +427,7 @@ export function sceneFor(game: Pick<GameView, 'mapId' | 'themeId'>): AmbienceSce
 
 /**
  * Keep the right bed running for the game on screen. It follows the music
- * entirely: while the music is paused, muted or at zero the bed is torn down,
+ * entirely: while the effects are muted or at zero the bed is torn down,
  * and when the scene changes the old bed fades out under the new one.
  */
 export function useAmbience(game: Pick<GameView, 'mapId' | 'themeId'> | null): void {
@@ -436,15 +436,15 @@ export function useAmbience(game: Pick<GameView, 'mapId' | 'themeId'> | null): v
     if (!scene) return;
     let stop: (() => void) | null = null;
     const sync = () => {
-      const m = musicState();
-      const want = enabled && m.playing && !m.muted && m.volume > 0;
+      const fx = sfxState();
+      const want = enabled && !fx.muted && fx.volume > 0;
       if (want && !stop) stop = startAmbience(scene);
       else if (!want && stop) { stop(); stop = null; }
     };
     sync();
-    const offMusic = onMusicChange(sync);
+    const offSfx = onSfxChange(sync);
     const offPref = onAmbienceChange(sync);
-    return () => { offMusic(); offPref(); stop?.(); };
+    return () => { offSfx(); offPref(); stop?.(); };
   }, [scene]);
 }
 

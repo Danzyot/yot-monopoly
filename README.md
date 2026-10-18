@@ -73,7 +73,7 @@ mini-games, music, and a full operator dashboard.
   generative lounge soundtrack that works with nothing uploaded, synthesised sound
   effects for dice, buying, rent, cards, jail, auctions and winning, and a quiet ambient
   bed per scene (fireplace and clock, casino murmur, studio hum, passing engines, city
-  wind) that follows the music's volume and switch.
+  wind) that follows the effects volume and switch (toggle it in the 🎵 menu).
 - **The board itself** is printed with vector icons (no emoji), hairline rules, a linen
   grain and a ruled centre frame; the houses, hotels and dice are moulded game pieces
   with dished pips and clearcoat.
