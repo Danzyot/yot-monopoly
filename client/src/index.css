@@ -2599,8 +2599,8 @@ a:focus-visible, .navlink:focus-visible, .brand:focus-visible, .edition:focus-vi
 
   /* Left column: players, compact rows, scrolls when the table is full. */
   .players, .players:has(.pmenu-btn) {
-    top: 42px; left: calc(6px + env(safe-area-inset-left, 0px)); right: auto; bottom: auto; width: 176px; padding: 0;
-    flex-direction: column; gap: 4px; max-height: calc(100dvh - 42px - 96px - env(safe-area-inset-bottom, 0px));
+    top: 46px; left: calc(6px + env(safe-area-inset-left, 0px)); right: auto; bottom: auto; width: 176px; padding: 0;
+    flex-direction: column; gap: 4px; max-height: calc(100dvh - 46px - 96px - env(safe-area-inset-bottom, 0px));
     overflow-y: auto; overflow-x: hidden; scrollbar-width: none;
   }
   .player, .player:has(.pmenu-btn) { flex: none; min-width: 0; padding: 4px 6px 4px 7px; gap: 6px; border-left-width: 3px; border-radius: 12px; }
@@ -2625,10 +2625,10 @@ a:focus-visible, .navlink:focus-visible, .brand:focus-visible, .edition:focus-vi
 
   /* Right column: the log/chat/deeds tabs. */
   .hud-bottom .sidepanel, .sidepanel {
-    position: absolute; top: 42px; right: calc(6px + env(safe-area-inset-right, 0px)); left: auto; bottom: auto;
-    width: 236px; height: auto; max-height: calc(100dvh - 42px - 8px - env(safe-area-inset-bottom, 0px)); gap: 6px; justify-content: flex-start;
+    position: absolute; top: 46px; right: calc(6px + env(safe-area-inset-right, 0px)); left: auto; bottom: auto;
+    width: 236px; height: auto; max-height: calc(100dvh - 46px - 8px - env(safe-area-inset-bottom, 0px)); gap: 6px; justify-content: flex-start;
   }
-  .sidepanel .tab-body, .hud-bottom .sidepanel .tab-body { height: auto; flex: 0 1 auto; min-height: 0; max-height: calc(100dvh - 42px - 44px - 14px - env(safe-area-inset-bottom, 0px)); padding: 8px; }
+  .sidepanel .tab-body, .hud-bottom .sidepanel .tab-body { height: auto; flex: 0 1 auto; min-height: 0; max-height: calc(100dvh - 46px - 44px - 14px - env(safe-area-inset-bottom, 0px)); padding: 8px; }
   .sidepanel.closed .tab-body, .hud-bottom .sidepanel.closed .tab-body { display: none; }
   .tabs { gap: 4px; }
   .tabs button { font-size: 12px; padding: 5px 2px; min-height: 36px; }
