@@ -2527,3 +2527,5 @@ a:focus-visible, .navlink:focus-visible, .brand:focus-visible, .edition:focus-vi
   .adm-room-head { flex-wrap: wrap; }
   .adm-facts-list { grid-template-columns: 1fr; }
 }
+.adm-rowbtn.on { border-color: var(--hi); }
+.adm-rowbtn:hover:not(:disabled) { border-color: color-mix(in srgb, var(--hi) 50%, transparent); }
