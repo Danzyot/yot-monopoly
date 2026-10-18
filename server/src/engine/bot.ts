@@ -44,9 +44,8 @@ export function botAction(g: Game, id: string): Action | null {
   if (g.phase === 'auction' && a) {
     if (!a.bidders.includes(id) || a.highBidder === id) return null;
     const s = g.spaces[a.space];
-    const value = Math.max(valueOf(g, id, a.space), denyValue(g, id, a.space));
     const next = a.highBid + Math.max(5, Math.round((s.price ?? 100) * 0.05));
-    if (next <= value && next <= me.cash - owe - RESERVE / 2) return { type: 'bid', amount: next };
+    if (next <= auctionCeiling(g, id, a.space) && next <= me.cash - owe - reserve(g, id)) return { type: 'bid', amount: next };
     return { type: 'pass' };
   }
 
@@ -145,11 +144,19 @@ function valueOf(g: Game, id: string, space: number, leaving: number[] = []): nu
   return Math.round(v);
 }
 
-/** What keeping `space` from an opponent who would complete a set with it is worth. */
-function denyValue(g: Game, id: string, space: number): number {
+/**
+ * The most to bid for `space` at auction: a bargain for a stray lot, close
+ * to the printed price for one that builds toward a set, and over it when it
+ * completes a set of ours or keeps an opponent from completing theirs.
+ */
+function auctionCeiling(g: Game, id: string, space: number): number {
   const s = g.spaces[space];
-  const threat = g.active().some(o => o.id !== id && completesFor(g, o.id, space));
-  return threat ? Math.round((s.price ?? 0) * 1.3) : 0;
+  const price = s.price ?? 0;
+  const completes = completesFor(g, id, space);
+  const blocks = g.active().some(o => o.id !== id && completesFor(g, o.id, space));
+  // A mortgaged deed (a bankrupt's estate) is worth its price less the mortgage to lift.
+  const factor = completes || blocks ? 1.1 : valueOf(g, id, space) > price ? 0.95 : 0.8;
+  return Math.round(price * factor) - (g.owned[space]?.mortgaged ? mortgageValue(s) : 0);
 }
 
 /**
@@ -163,6 +170,10 @@ function worthTaking(g: Game, id: string, t: { from: string; give: { cash: numbe
   // The 10% due at once on each mortgaged deed received.
   const interest = t.give.spaces.reduce((n, i) => n + (g.owned[i]?.mortgaged ? Math.ceil(mortgageValue(g.spaces[i]) / 10) : 0), 0);
   const completesMine = t.give.spaces.some(i => completesFor(g, id, i, t.get.spaces));
+  // Never hand an opponent a monopoly unless the deal completes one of ours
+  // too, or they buy it outright at twice the printed price of what we give.
+  const completesTheirs = t.get.spaces.some(i => completesFor(g, t.from, i, t.give.spaces));
+  if (completesTheirs && !completesMine && t.give.cash < 2 * t.get.spaces.reduce((n, i) => n + price(i), 0)) return false;
   const gain = t.give.cash + t.give.jailCards * 40
     + t.give.spaces.reduce((n, i) => n + valueOf(g, id, i, t.get.spaces) + (completesFor(g, id, i, t.get.spaces) ? price(i) : 0), 0);
   const loss = t.get.cash + t.get.jailCards * 40 + interest
@@ -213,12 +224,14 @@ function develop(g: Game, id: string): Action | null {
     .find(i => me.cash - liftCost(g.spaces, i, g.owned[i]) > keep * 2);
   if (lift !== undefined && g.debtOf(id) === 0) return { type: 'unmortgage', space: lift };
   // Build evenly; three houses is where rent jumps, so every set gets there
-  // first. When the bank is nearly out of houses, the strongest set gets them.
+  // first, the strongest set leading. When the bank is nearly out of houses,
+  // the strongest set gets them whatever its level.
   const shortage = g.rules.limitedBuildings && g.housesLeft <= 3;
   const buildable = mine
     .filter(i => g.canBuild(id, i) === null && me.cash - g.spaces[i].houseCost! >= keep)
     .sort((a, b) => (shortage ? strength(g, b) - strength(g, a) : 0)
       || Math.min(g.owned[a].houses, 3) - Math.min(g.owned[b].houses, 3)
+      || strength(g, b) - strength(g, a)
       || g.owned[a].houses - g.owned[b].houses || b - a);
   if (buildable.length) return { type: 'build', space: buildable[0] };
   // Out of houses with a strong set waiting: free one from our weakest
