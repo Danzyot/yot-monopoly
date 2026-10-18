@@ -17,9 +17,9 @@
     "url": "/models/skyline/set-env.webp?v=5f53f04cb3"
   },
   "skylineSet": {
-    "lightmap": "/models/skyline/set-light.webp?v=769077be24",
-    "lightmapIntensity": 9.8227,
-    "url": "/models/skyline/set.glb?v=e6e585a595"
+    "lightmap": "/models/skyline/set-light.webp?v=22c43e0157",
+    "lightmapIntensity": 15.5997,
+    "url": "/models/skyline/set.glb?v=0c9ebd0e74"
   },
   "speedwayEnv": {
     "url": "/models/speedway/set-env.webp?v=2f0e62282c"
