@@ -56,8 +56,9 @@ mini-games, music, and a full operator dashboard.
   trading (10% interest on mortgaged deeds received, or lift the mortgage at once for the
   principal), and the official **Speed Die** variant (Mr. Monopoly, Bus, triples).
 - **Mini-games** on arcade spaces (and optionally Free Parking on Classic): Dice Duel,
-  High or Low, Reaction Race, Quick Math and Wheel Spin. Server-authoritative; bots play
-  them too.
+  High or Low, Reaction Race, Quick Math and Wheel Spin, each an arcade moment (a real
+  spinning wheel with a ticking pointer, tumbling dice, a card flip, traffic lights, a
+  draining timer, keyboard play). Server-authoritative; bots play them too.
 - **House rules** per room: starting cash, Free Parking jackpot (taxes, card fines and
   arcade losses; never jail fines), double on GO, auctions, even building, limited
   buildings, mini-games, Free Parking arcade, no rent in jail.
@@ -71,7 +72,12 @@ mini-games, music, and a full operator dashboard.
 - **Music & sound**: operator-uploaded music library with playlists, a built-in
   generative lounge soundtrack that works with nothing uploaded, and synthesised sound
   effects for dice, buying, rent, cards, jail, auctions and winning.
-- **Bots** fill seats, and **autopilot** plays for anyone disconnected more than 45 s,
+- **The board itself** is printed with vector icons (no emoji), hairline rules, a linen
+  grain and a ruled centre frame; the houses, hotels and dice are moulded game pieces
+  with dished pips and clearcoat.
+- **Bots** play a sound game — fair set-for-set trades, no gifting monopolies, auction
+  ceilings that scale with what a lot is worth to them, even building on their best set —
+  fill seats, and **autopilot** plays for anyone disconnected more than 45 s,
   away after timeouts, or handed to it by the host (never spending their money or
   trading for them). Reconnecting, or simply acting, reclaims the seat.
 - Chat, leaderboard, and phone-friendly layout throughout.
@@ -120,6 +126,13 @@ posts it in a verify channel). `DEMO_MODE=1` adds a name-only sign-in for develo
   and Discord result announcements on or off (enforced server-side).
 - Discord — post the Verify panel, DM players, sign-in/interactions diagnostics.
 - Graphics and Music libraries.
+
+**Testing**: 154 server tests, including a rules suite, a seeded soak of all-bot games with
+every rule toggle that checks money conservation and every other invariant after each
+move, and a fuzz test that throws random legal and illegal actions (spectators, wrong
+turns, stale bids, NaN and huge amounts, unknown types) at the engine and expects an
+`EngineError` and an unchanged game every time. `tools/e2e/smoke.mjs` plays bot games in
+a real browser.
 
 **Hardening**: trusted-proxy client IPs, per-IP socket cap, action and HTTP rate limits,
 slow-request guards, chat filter and cooldown, HMAC-signed sessions, magic-byte checks on
