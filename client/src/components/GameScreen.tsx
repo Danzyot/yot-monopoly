@@ -13,6 +13,7 @@ import Chat from './Chat.tsx';
 import Deed from './Deed.tsx';
 import MusicPlayer from './MusicPlayer.tsx';
 import { useGameSounds } from '../useGameSounds.ts';
+import { useAmbience } from '../ambience.ts';
 import { CARD_FLIGHT_MS, useSceneBusy } from '../three/sequence.ts';
 import { useCinematicPref } from '../three/cinematic.ts';
 import { CAMERA_MODES, useCameraMode } from '../three/camera.ts';
@@ -75,6 +76,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   const nav = useNavigate();
   const myPlayer = game.players.find(p => p.id === me);
   useGameSounds(game, me);
+  useAmbience(game);
   const social = useSocial(me);
   const reactionsOn = config.features.reactions !== false && config.features.chat;
   const [notify, toggleNotify] = useNotifyPref();
