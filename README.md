@@ -25,10 +25,13 @@ mini-games, music, and a full operator dashboard.
 - **3D characters** instead of tokens — twelve detailed figures modelled in Blender
   (Snacky, Mr. Stare, Spiky, Robo, Whiskers, Sir Deed, Merlot, Cosmo, Captain Cash,
   Shade, Chef Gusto, Zorp) in glossy vinyl, with arms and legs that follow every move,
-  tinted in each player's colour. They walk tile by tile, cheer or fist-pump when they
-  buy or earn, sulk when they pay, stamp when they're jailed, look around and wave when
-  idle, slump in jail, fall over when bankrupt and dance when they win. Every character
-  and move can be previewed at `/characters`.
+  tinted in each player's colour. Their motion is hand-animated: a crouch before the first
+  hop, arms swinging against the legs, a squash on landing and hands that trail and settle
+  a beat late. They cheer or fist-pump when they buy or earn, sulk when they pay, taunt
+  whoever just paid them rent, stamp and fold their arms when they're jailed, shrug,
+  stretch, fidget, look around and wave when idle, slump in jail, fall over when bankrupt
+  and dance when they win. Every character and all fourteen moves can be previewed at
+  `/characters`.
 - **Game feel**: the dice land, then the piece walks, then the result shows; coins fly
   from payer to payee with the amount floating over each piece; Chance and Community
   Chest are real piles on the board and a drawn card flies off its pile to the screen;
@@ -87,9 +90,17 @@ mini-games, music, and a full operator dashboard.
   fill seats, and **autopilot** plays for anyone disconnected more than 45 s,
   away after timeouts, or handed to it by the host (never spending their money or
   trading for them). Reconnecting, or simply acting, reclaims the seat.
-- Chat, leaderboard, and phone-friendly layout throughout.
-- **Table social**: emoji reactions that pop over the sender's character (spectators'
-  float up the side), and **pokes** for a player whose turn has dragged past 15 s.
+- **Phones and tablets**: a layout for every screen — portrait phones get a bottom stack
+  with 40 px tap targets and notch-safe margins; a phone held sideways gets players down
+  the left, the log and chat down the right and a compact action bar at the bottom;
+  tablets keep the desktop HUD with the dock out of the action bar's way.
+- **Table social**: an emoji reaction picker (keys 1–9/0) whose reactions pop over the
+  sender's character (spectators' float up the side), **quick chat** phrases (Q, or the
+  chip row above the chat) alongside typed chat that groups a player's lines and shows a
+  "new messages" pill when you've scrolled up, join/leave/autopilot lines, and **pokes**
+  for a player whose turn has dragged past 15 s (a cooldown ring shows when the next one
+  is ready; the poked player's piece gets a 👉).
+- Leaderboard and player profiles with a podium of the top three.
 - **Trading**: counter-offers (edit an incoming offer and send it back in one step) and
   a **portfolio** view of every player's deeds by colour set, cash, net worth and jail cards.
 - **End of game**: final standings with net worth, turns, duration and awards (most rent
@@ -97,7 +108,8 @@ mini-games, music, and a full operator dashboard.
   host **rematch** that returns the table to the lobby with the same seats and settings.
 - **Turn alerts**: the tab title flashes when the game is waiting on you, plus optional
   browser notifications (the 🔔 button). **Keyboard shortcuts**: Space/R roll, B buy,
-  A auction, E end turn, P pay debt, H build & manage, T trade, C camera view, Esc close,
+  A auction, E end turn, P pay debt, H build & manage, T trade, Q quick chat, C camera view,
+  Esc close,
   ? help.
 
 **Community**
