@@ -25,9 +25,9 @@ import type { Ctx as MinigameCtx, Names } from './minigames/types.ts';
 
 export class EngineError extends Error {}
 
-export const AUCTION_MS = 12_000;
-/** Each bid guarantees at least this long for someone to respond. */
-export const AUCTION_EXTEND_MS = 6_000;
+// The auction clock lives in shared/pacing.ts so the bidding panel explains it exactly.
+export { AUCTION_MS, AUCTION_EXTEND_MS } from '../../../shared/pacing.ts';
+import { AUCTION_MS, AUCTION_EXTEND_MS } from '../../../shared/pacing.ts';
 /** A debtor gets this many turn-lengths to pay before the engine settles for them. */
 export const DEBT_TURNS = 2;
 /** Consecutive turn timeouts before a player is marked away (autopilot takes over). */
@@ -90,6 +90,8 @@ export interface GameSnapshot {
   phase: TurnPhase;
   dice: [number, number] | null;
   rollSeq: number;
+  /** Turn number of the last roll (absent in older snapshots). */
+  rollTurn?: number;
   doublesCount: number;
   extraRoll: boolean;
   debts: Debt[];
@@ -163,6 +165,8 @@ export class Game {
   phase: TurnPhase = 'roll';
   dice: [number, number] | null = null;
   rollSeq = 0;
+  /** The turn the dice were last rolled in: they belong to that turn only. */
+  rollTurn = 0;
   doublesCount = 0;
   extraRoll = false;
   /** The current player chose "End turn" on a buy: hand over as soon as the property is settled. */
@@ -655,6 +659,7 @@ export class Game {
     this.speed = speed;
     this.speedPending = null;
     this.rollSeq++;
+    this.rollTurn = this.turnNumber;
     const total = d[0] + d[1];
     const doubles = d[0] === d[1];
     const triples = doubles && speed === d[0];
@@ -825,6 +830,14 @@ export class Game {
     a.bids = [...(a.bids ?? []).filter(b => b.id !== p.id), { id: p.id, amount }];
     a.endsAt = Math.max(a.endsAt, this.now() + AUCTION_EXTEND_MS);
     this.say(`${p.name} bid ${this.money(amount)}.`, p.id);
+    // Deeds are locked and trades wait while an auction runs, so nobody's
+    // spending money can grow: whoever can no longer top this bid is out,
+    // rather than holding the clock open as a bidder in name only.
+    const priced = a.bidders.filter(id => id !== p.id && this.player(id).cash - this.debtOf(id) <= amount);
+    if (priced.length) {
+      a.bidders = a.bidders.filter(id => !priced.includes(id));
+      this.say(`${priced.map(id => this.player(id).name).join(' and ')} can't top ${this.money(amount)} and ${priced.length > 1 ? 'drop' : 'drops'} out.`);
+    }
     if (a.bidders.length === 1) this.finishAuction();
   }
 
@@ -1743,7 +1756,7 @@ export class Game {
   snapshot(): GameSnapshot {
     return structuredClone({
       players: this.players, owned: this.owned, currentIdx: this.currentIdx, phase: this.phase,
-      dice: this.dice, rollSeq: this.rollSeq, doublesCount: this.doublesCount, extraRoll: this.extraRoll,
+      dice: this.dice, rollSeq: this.rollSeq, rollTurn: this.rollTurn, doublesCount: this.doublesCount, extraRoll: this.extraRoll,
       debts: this.debts, auction: this.auction, trades: this.trades, pot: this.pot,
       housesLeft: this.housesLeft, hotelsLeft: this.hotelsLeft, lastCard: this.lastCard,
       winner: this.winner, log: this.log, turnNumber: this.turnNumber, decks: this.decks,
@@ -1774,6 +1787,8 @@ export class Game {
     g.endsAt = snap.endsAt ?? null;
     g.timeUp = snap.timeUp ?? false;
     g.speed = snap.speed ?? null;
+    // Older snapshots: the dice on the table are this turn's unless a new turn is waiting to roll.
+    g.rollTurn = snap.rollTurn ?? (g.dice && g.phase !== 'roll' ? g.turnNumber : 0);
     g.choice = snap.choice ?? null;
     g.speedPending = snap.speedPending ?? null;
     g.endAfter = snap.endAfter ?? false;
@@ -1846,6 +1861,7 @@ export class Game {
       phase: this.phase,
       dice: this.dice,
       rollSeq: this.rollSeq,
+      rollTurn: this.rollTurn,
       doublesCount: this.doublesCount,
       extraRoll: this.extraRoll,
       debts: this.debts,

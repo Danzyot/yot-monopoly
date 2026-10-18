@@ -1,0 +1,128 @@
+/* Turn flow: the roll result that pops up between the dice and the walk
+   (RollResult.tsx), the dice readout landing in the action bar, and the
+   auction panel (Auction.tsx). Timings match shared/pacing.ts. */
+
+/* ---- Roll result ---- */
+.roll-result-layer {
+  position: fixed; inset: 0; z-index: 8; display: grid; place-items: center; pointer-events: none;
+  padding: 0 16px;
+}
+.roll-result {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 16px 28px 18px; border-radius: 26px; max-width: 100%;
+  background: color-mix(in srgb, var(--panel-solid, #161c2a) 82%, transparent);
+  border: 2px solid color-mix(in srgb, #fff 30%, transparent);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(6px);
+  color: #fff;
+  /* In: a springy pop (220 ms). Out: shrinks and slides into the action bar (380 ms). */
+  animation: rrPop 220ms cubic-bezier(.2, 1.5, .4, 1) backwards;
+  transition: transform 380ms cubic-bezier(.55, 0, .8, .4), opacity 380ms ease-in;
+}
+.roll-result.dbl { border-color: #ffd84a; box-shadow: 0 0 0 4px rgba(255, 216, 74, 0.35), 0 18px 50px rgba(0, 0, 0, 0.5); }
+@keyframes rrPop { from { transform: scale(0.4); opacity: 0; } 70% { opacity: 1; } }
+.rr-who { font: 400 20px/1 var(--display, system-ui); text-shadow: var(--outline, 0 2px 0 rgba(0,0,0,.35)); }
+.rr-sum { display: flex; align-items: center; gap: 12px; }
+.rr-die {
+  display: inline-grid; place-items: center; width: 76px; height: 76px; border-radius: 18px;
+  background: linear-gradient(180deg, #fff, #e3e8f2); color: #16244a; font: 400 52px/1 var(--display, system-ui);
+  font-style: normal; box-shadow: 0 6px 0 #8e9ab5, 0 10px 18px rgba(0, 0, 0, 0.3);
+}
+.rr-die.speed { background: linear-gradient(180deg, #ff8f86, #e8433a); color: #fff; box-shadow: 0 6px 0 #9a1f18, 0 10px 18px rgba(0, 0, 0, 0.3); font-size: 40px; }
+.rr-op { font: 400 40px/1 var(--display, system-ui); text-shadow: var(--outline, 0 2px 0 rgba(0,0,0,.35)); opacity: 0.9; }
+.rr-total {
+  font: 400 88px/1 var(--display, system-ui); color: var(--hi, #ffd23f); min-width: 1.2ch; text-align: center;
+  text-shadow: 0 4px 0 rgba(0, 0, 0, 0.35), 0 0 3px rgba(0, 0, 0, 0.4);
+  animation: rrTotal 360ms 120ms cubic-bezier(.2, 1.8, .4, 1) backwards;
+}
+@keyframes rrTotal { from { transform: scale(0.2); opacity: 0; } }
+.rr-badge {
+  padding: 4px 18px 5px; border-radius: 99px; background: linear-gradient(180deg, #ffe680, #ffc629); color: #4a2c00;
+  font: 400 24px/1.1 var(--display, system-ui); letter-spacing: 0.02em; box-shadow: 0 4px 0 #b07b00;
+  animation: rrBadge 420ms 160ms cubic-bezier(.2, 1.8, .4, 1) backwards;
+}
+@keyframes rrBadge { from { transform: scale(0.3) rotate(-8deg); opacity: 0; } }
+.rr-note { font-weight: 800; font-size: 14px; opacity: 0.9; }
+
+/* The readout arrives in the action bar as the result lands there. */
+.actionbar .dice-read, .bc-lt-dice { animation: diceLand 320ms cubic-bezier(.2, 1.6, .4, 1) backwards; }
+@keyframes diceLand { from { transform: scale(1.6); opacity: 0; } }
+
+@media (max-width: 760px), (max-height: 520px) {
+  .roll-result { padding: 12px 18px 14px; gap: 6px; border-radius: 20px; }
+  .rr-who { font-size: 16px; }
+  .rr-sum { gap: 8px; }
+  .rr-die { width: 54px; height: 54px; border-radius: 14px; font-size: 36px; }
+  .rr-die.speed { font-size: 28px; }
+  .rr-op { font-size: 28px; }
+  .rr-total { font-size: 60px; }
+  .rr-badge { font-size: 19px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .roll-result, .rr-total, .rr-badge, .actionbar .dice-read, .bc-lt-dice { animation: none; }
+  .roll-result { transition: opacity 300ms linear; }
+}
+
+/* ---- Auction ---- */
+.auction.ax { width: 380px; max-width: calc(100vw - 16px); }
+.ax-why {
+  display: flex; flex-direction: column; gap: 2px; padding: 10px 14px 8px; text-align: center;
+  background: rgba(0, 0, 0, 0.28);
+}
+.ax-kicker { font: 400 13px/1.2 var(--display, system-ui); letter-spacing: 0.06em; color: var(--hi, #ffd23f); text-shadow: var(--outline, none); }
+.ax-headline { font-size: 15px; font-weight: 800; line-height: 1.3; }
+.ax-headline b { color: var(--hi, #ffd23f); }
+
+.ax-top { display: grid; grid-template-columns: 1fr 1.15fr; gap: 10px; padding: 10px 12px 0; align-items: stretch; }
+.ax-lot {
+  display: flex; flex-direction: column; border-radius: 10px; overflow: hidden; background: #fbfbf7; color: #16244a;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.25); text-align: center; min-height: 88px;
+}
+.ax-lot-band { display: grid; place-items: center; min-height: 22px; background: var(--set); color: var(--set-ink); font-size: 16px; }
+.ax-lot-name { flex: 1; display: grid; place-items: center; padding: 4px 6px; font: 400 17px/1.1 var(--display, system-ui); text-transform: uppercase; }
+.ax-lot-price { font-size: 12px; font-weight: 700; padding: 0 6px 6px; opacity: 0.85; }
+.ax-lead {
+  display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; text-align: center;
+  border-radius: 12px; background: rgba(0, 20, 70, 0.45); padding: 6px 8px;
+  animation: leadBump 0.35s cubic-bezier(.2, 1.6, .4, 1);
+}
+.ax-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.8; }
+.ax-bid { font: 400 34px/1 var(--display, system-ui); color: #7dff6a; text-shadow: var(--outline, none); }
+.ax-by { font-size: 13px; font-weight: 700; }
+.ax-by b { text-shadow: var(--outline, none); }
+
+.ax-clock { position: relative; height: 26px; margin: 10px 12px 0; border-radius: 99px; overflow: hidden; background: rgba(0, 0, 0, 0.45); }
+.ax-clock i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(180deg, #9dff7a, #3fbf2a); transition: width 0.12s linear; }
+.ax-clock.urgent i { background: linear-gradient(180deg, #ff8f86, #e8433a); animation: timerFlash 0.5s ease-in-out infinite; }
+.ax-clock span { position: relative; display: block; text-align: center; font: 400 16px/26px var(--display, system-ui); text-shadow: var(--outline, 0 1px 0 #000); }
+
+.ax-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.ax-quick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ax-qb { flex-direction: column; gap: 2px; padding: 8px 4px 9px; min-height: 56px; }
+.ax-qb-inc { font: 400 22px/1 var(--display, system-ui); }
+.ax-qb-amt { font: 800 12px/1 var(--font, system-ui); opacity: 0.85; text-shadow: none; }
+.ax-custom { display: flex; gap: 6px; }
+.ax-custom input { flex: 1; min-width: 0; font-size: 15px; }
+.ax-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ax-pass { font-weight: 800; }
+.ax-note { text-align: center; font-weight: 800; font-size: 14px; padding: 6px 8px; border-radius: 10px; background: rgba(0, 0, 0, 0.22); }
+.ax-note.good { background: rgba(91, 227, 91, 0.18); }
+.ax-note.warn { background: rgba(255, 176, 32, 0.2); }
+.ax-field { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 12px; }
+.ax-field .ax-label { margin-right: 2px; }
+.ax-bidder { padding: 1px 8px; border-radius: 99px; border: 2px solid; background: rgba(0, 0, 0, 0.25); font-weight: 800; }
+.ax-bidder.out { opacity: 0.45; text-decoration: line-through; border-style: dashed; }
+.ax-bidder.top { background: rgba(91, 227, 91, 0.25); }
+.ax-how { margin: 0; font-size: 12px; line-height: 1.35; opacity: 0.85; }
+
+@media (max-width: 760px) {
+  .auction.ax { width: min(380px, calc(100vw - 16px)); }
+  .ax-top { grid-template-columns: 1fr 1fr; }
+  .ax-lot { min-height: 70px; }
+  .ax-bid { font-size: 28px; }
+  .ax-qb { min-height: 48px; }
+}
+@media (max-height: 520px) {
+  .ax-how { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .ax-lead { animation: none; } }

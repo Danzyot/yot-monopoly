@@ -20,6 +20,7 @@ import BoardScene from '../three/BoardScene.tsx';
 import { useGameSounds } from '../useGameSounds.ts';
 import { useAmbience } from '../ambience.ts';
 import { CARD_FLIGHT_MS, useSceneBusy } from '../three/sequence.ts';
+import { RollResult, useDiceShown } from './RollResult.tsx';
 import { CAMERA_MODES, type CameraMode } from '../three/camera.ts';
 import { setSfxMuted, sfxState } from '../sound.ts';
 import { setMuted as setMusicMuted } from '../music.ts';
@@ -114,6 +115,7 @@ export default function BroadcastScreen({ room, me }: { room: RoomView; me: stri
           <StateBadge game={game} theme={theme} />
           <BroadcastCard game={game} theme={theme} />
           <Stingers game={game} />
+          <RollResult game={game} target=".bc-lower" />
         </> : (
           <WaitingThird room={room} theme={theme} />
         )}
@@ -166,11 +168,13 @@ function doing(game: GameView, theme: Theme): string {
 function LowerThird({ game, room, theme }: { game: GameView; room: RoomView; theme: Theme }) {
   const id = game.winner ?? game.current;
   const p = game.players.find(x => x.id === id);
+  // This turn's roll only, once the score has popped up and flown down here.
+  const diceShown = useDiceShown(game);
   if (!p) return null;
   const seat = room.seats.find(s => s.id === p.id);
   const deeds = ownedBy(game, p.id).length;
   const worth = game.netWorth?.[p.id];
-  const dice = game.dice;
+  const dice = diceShown && !game.winner ? game.dice : null;
   // Keyed on the turn, so the panel re-mounts (and slides in) with every new turn.
   return (
     <div className={`bc-lower ${game.winner ? 'winner' : ''}`} key={`${game.turnNumber}:${id}`} style={{ '--pc': p.color } as React.CSSProperties}>

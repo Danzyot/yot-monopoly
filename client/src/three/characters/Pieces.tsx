@@ -16,6 +16,7 @@ import {
 } from './Figure.tsx';
 import { ReactionBubble } from './ReactionBubble.tsx';
 import { diceSettleAt, holdUntil } from '../sequence.ts';
+import { FLY_MS, HOP_MS, MAX_HOPS } from '../../../../shared/pacing.ts';
 import { celebrateGo } from '../GoConfetti.tsx';
 import { pieceObjects } from '../camera.ts';
 
@@ -24,7 +25,6 @@ export interface PieceReaction { emoji: string; seq: number }
 
 /** The middle of the board, where the dice land. */
 const CENTRE = new Vector3(0, 0, 0);
-const HOP_MS = 190;
 const LAND_MS = 150;
 /** A resting piece winds up (crouches) this long before its first hop. */
 const CROUCH_MS = 120;
@@ -144,10 +144,10 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
     const start = a.queue.at(-1) ?? a.shown;
     const steps = (p.position - start + n) % n;
     // Teleports (jail, "go back 3") fly straight; normal moves hop tile by tile.
-    if (p.inJail || steps > 12 || steps === 0) a.queue.push(p.position);
+    if (p.inJail || steps > MAX_HOPS || steps === 0) a.queue.push(p.position);
     else for (let k = 1; k <= steps; k++) a.queue.push((start + k) % n);
     // Out of jail on a roll: the first hop clears the bars.
-    a.leapNext = a.jailed && !p.inJail && steps > 0 && steps <= 12;
+    a.leapNext = a.jailed && !p.inJail && steps > 0 && steps <= MAX_HOPS;
   }
   if (anim.current) anim.current.jailed = p.inJail;
   if (!motion.current) {
@@ -199,7 +199,7 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
       a.crouchAt = 0;
       a.from = chained ? a.to : [g.position.x, g.position.z];
       a.to = final ? tokenSpot(next, slot, count, p.inJail, n) : tokenSpot(next, 0, 1, false, n);
-      a.dur = Math.hypot(a.to[0] - a.from[0], a.to[1] - a.from[1]) > 2 ? 750 : a.leap ? HOP_MS * 2 : HOP_MS;
+      a.dur = Math.hypot(a.to[0] - a.from[0], a.to[1] - a.from[1]) > 2 ? FLY_MS : a.leap ? HOP_MS * 2 : HOP_MS;
       a.shown = next;
       a.t0 = chained ? prevEnd : now;
       // Onto or over GO: confetti as the hop lands.
