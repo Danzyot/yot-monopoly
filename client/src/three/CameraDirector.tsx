@@ -9,6 +9,7 @@
 //   - anyone lands on a big rent bill -> the street that's charging it
 //   - anyone goes bankrupt          -> their piece falling over
 //   - the game is won               -> a slow circle round the winner's victory dance
+//   - the game begins               -> one slow turn round the table
 // Shots wait for the dice and the walk to finish, never stack up, and give
 // way the moment the player grabs the camera. They can be switched off.
 
@@ -80,7 +81,14 @@ export function CameraDirector({ game, me, n, enabled, mode }: { game: GameView;
   useEffect(() => {
     const before = prev.current;
     prev.current = game;
-    if (!before || !enabled) return;
+    if (!before) {
+      // A game about to start: one slow turn round the table before the first roll.
+      if (enabled && game.rollSeq === 0 && game.turnNumber <= 1 && game.phase === 'roll') {
+        queue.current = [{ pos: new Vector3(0, 7, 13), target: new Vector3(0, 0.3, 0), hold: 5200, orbit: 2 * Math.PI / 5.2 }];
+      }
+      return;
+    }
+    if (!enabled) return;
     const shots: Shot[] = [];
     for (const [k, o] of Object.entries(game.owned)) {
       const i = Number(k);
