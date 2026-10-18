@@ -6,11 +6,10 @@
 // sees. The timings live in shared/pacing.ts, which the server's bots read too.
 
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { DICE_MS, RESULT_HOLD_MS, RESULT_IN_MS, RESULT_MS, WALK_DELAY_MS } from '../../../shared/pacing.ts';
+import { CARD_FLIGHT_MS, DICE_MS, RESULT_HOLD_MS, RESULT_IN_MS, RESULT_MS, WALK_DELAY_MS } from '../../../shared/pacing.ts';
 
-export { DICE_MS, RESULT_MS };
-/** How long a drawn card takes to fly from its pile to the camera (CardDecks). */
-export const CARD_FLIGHT_MS = 800;
+/** CARD_FLIGHT_MS: how long a drawn card takes to fly from its pile to the camera (CardDecks). */
+export { CARD_FLIGHT_MS, DICE_MS, RESULT_MS };
 /** Never hold the HUD longer than this, whatever the scene reports. */
 const MAX_HOLD_MS = 7000;
 

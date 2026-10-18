@@ -126,3 +126,23 @@
   .ax-how { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .ax-lead { animation: none; } }
+
+/* ---- Card reveal ----
+   The drawn card (Chance / Breaking News, Chest / Payout) arrives from its 3D
+   pile (CARD_FLIGHT_MS), then settles in and its lines unfold one after the
+   other, slowly enough to read as it lands (CARD_REVEAL_MS in shared/pacing.ts). */
+.card-pop:not(.bc-card) { animation: cardReveal 0.7s cubic-bezier(.22, 1.2, .36, 1) both; }
+.card-pop:not(.bc-card) > * { animation: cardLine 0.45s ease-out both; }
+.card-pop:not(.bc-card) > :nth-child(1) { animation-delay: 0.2s; }
+.card-pop:not(.bc-card) > :nth-child(2) { animation-delay: 0.32s; }
+.card-pop:not(.bc-card) > :nth-child(3) { animation-delay: 0.48s; }
+.card-pop:not(.bc-card) > :nth-child(4) { animation-delay: 0.62s; }
+@keyframes cardReveal {
+  0% { transform: translate(-50%, -42%) scale(0.86) rotate(-6deg); opacity: 0; }
+  60% { transform: translate(-50%, -51%) scale(1.03) rotate(-1.5deg); opacity: 1; }
+  100% { transform: translate(-50%, -50%) rotate(-2deg); opacity: 1; }
+}
+@keyframes cardLine { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) {
+  .card-pop:not(.bc-card), .card-pop:not(.bc-card) > * { animation: none; }
+}

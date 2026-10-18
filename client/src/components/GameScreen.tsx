@@ -533,7 +533,7 @@ function CardPopup({ game }: { game: GameView }) {
   }, [pending, busy]);
   useEffect(() => {
     if (shown === null) return;
-    const t = setTimeout(() => setShown(null), 5000);
+    const t = setTimeout(() => setShown(null), 7000);
     return () => clearTimeout(t);
   }, [shown]);
   if (!card || shown !== card.seq) return null;

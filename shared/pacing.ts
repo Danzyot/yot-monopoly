@@ -28,8 +28,12 @@ export const HOP_MS = 230;
 export const MAX_HOPS = 12;
 /** A teleport (jail, a long card jump) flies straight in this long. */
 export const FLY_MS = 750;
+/** A drawn card lifts off its pile, turns over and glides up to the camera. */
+export const CARD_FLIGHT_MS = 1400;
+/** ...then its text unfolds on screen (the .card-pop entrance in CSS). */
+export const CARD_REVEAL_MS = 700;
 /** A drawn card flies from its pile and is read. */
-export const CARD_MS = 1600;
+export const CARD_MS = CARD_FLIGHT_MS + CARD_REVEAL_MS + 900;
 /** The landing squash and a breath before the HUD comes back. */
 export const SETTLE_MS = 400;
 
