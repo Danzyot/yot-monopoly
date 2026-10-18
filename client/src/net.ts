@@ -85,6 +85,8 @@ export function useConnected(): boolean {
     const up = () => setC(true), down = () => setC(false);
     s.on('connect', up);
     s.on('disconnect', down);
+    // A connect between the first render and this subscription would otherwise be missed.
+    setC(s.connected);
     return () => { s.off('connect', up); s.off('disconnect', down); };
   }, [s]);
   return c;
