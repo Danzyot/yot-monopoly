@@ -228,6 +228,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
           title={cinematic ? 'Cinematic camera on — big moments get a close-up. Click to turn off' : 'Cinematic camera off — click to turn on'}>🎬</button>
         <button className="dock-btn" onClick={cycleQuality} aria-label={`${qualityInfo.label}. Change`}
           title={`${qualityInfo.label} — ${qualityInfo.hint}. Click for the next setting`}>{qualityInfo.icon}</button>
+        <button className="dock-btn" onClick={() => window.open(`/r/${room.code}?tv=1`, '_blank', 'noopener')} title="Broadcast view — a clean TV / stream picture of this table, in a new tab" aria-label="Open broadcast view">📺</button>
         <button className={`dock-btn ${helpOpen ? 'on' : ''}`} onClick={openHelp} title="How to play (?)" aria-label="How to play">?</button>
       </div>
       <SpectatorReactions reactions={social.reactions} />
