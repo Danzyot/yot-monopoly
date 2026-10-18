@@ -25,9 +25,9 @@
     "url": "/models/speedway/set-env.webp?v=2f0e62282c"
   },
   "speedwaySet": {
-    "lightmap": "/models/speedway/set-light.webp?v=19f881f69a",
-    "lightmapIntensity": 4.8866,
-    "url": "/models/speedway/set.glb?v=73c37c803a"
+    "lightmap": "/models/speedway/set-light.webp?v=af6775c8a6",
+    "lightmapIntensity": 4.7585,
+    "url": "/models/speedway/set.glb?v=0fb2bfbbfc"
   },
   "table": {
     "url": "/models/table.glb?v=948e42f7ea"
