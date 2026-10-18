@@ -9,9 +9,9 @@
     "url": "/models/chog/room-env.webp?v=a984cb9f8d"
   },
   "chogRoom": {
-    "lightmap": "/models/chog/room-light.webp?v=4c60e87387",
-    "lightmapIntensity": 6.7589,
-    "url": "/models/chog/room.glb?v=45fd3de759"
+    "lightmap": "/models/chog/room-light.webp?v=873c3c79f1",
+    "lightmapIntensity": 6.6179,
+    "url": "/models/chog/room.glb?v=32ae4809a8"
   },
   "classicEnv": {
     "url": "/models/classic/room-env.webp?v=7283a87788"
