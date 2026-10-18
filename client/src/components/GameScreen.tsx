@@ -9,7 +9,7 @@ import { characterEmoji } from '../format.ts';
 import { toast, toastError } from '../toast.tsx';
 import { themeStyle } from '../themeStyle.ts';
 import BoardScene from '../three/BoardScene.tsx';
-import Chat from './Chat.tsx';
+import Chat, { QuickChatButton } from './Chat.tsx';
 import Deed from './Deed.tsx';
 import MusicPlayer from './MusicPlayer.tsx';
 import { useGameSounds } from '../useGameSounds.ts';
@@ -33,7 +33,7 @@ import EventFeed from './EventFeed.tsx';
 import { CoachHint, markHint, tradePartnerFor } from './Hints.tsx';
 import { askConfirm } from './Modal.tsx';
 import { canBuildAnywhere, debtOf, hasFullSet, ownedBy, raisable } from '../gameHelpers.ts';
-import { useSocial } from '../social.ts';
+import { useSocial, useSystemLines } from '../social.ts';
 import { useNotifyPref, useTurnAlerts } from '../turnAlerts.ts';
 import type { ReactionMsg } from '../../../shared/types.ts';
 
@@ -77,7 +77,8 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   const myPlayer = game.players.find(p => p.id === me);
   useGameSounds(game, me);
   useAmbience(game);
-  const social = useSocial(me);
+  const social = useSocial(me, room);
+  const systemLines = useSystemLines(room);
   const reactionsOn = config.features.reactions !== false && config.features.chat;
   const [notify, toggleNotify] = useNotifyPref();
   const [cinematic, toggleCinematic] = useCinematicPref();
@@ -179,7 +180,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
         </div>
         <div className="tab-body">
           {tab === 'log' && <Log game={game} />}
-          {tab === 'chat' && <Chat chat={chat} />}
+          {tab === 'chat' && <Chat chat={chat} system={systemLines} me={me} />}
           {tab === 'mine' && <MyDeeds game={game} me={me} onPick={setSelected} onManage={() => openManage(debtOf(game, me) > (myPlayer?.cash ?? 0) ? 'raise' : 'build')} />}
           {tab === 'table' && <Portfolio game={game} me={me} onPick={setSelected} onTrade={setTradeWith} compact />}
         </div>
@@ -203,7 +204,8 @@ export default function GameScreen({ room, game, me, chat, skew }: {
       {theme.logoUrl && <img className="corner-mark" src={theme.logoUrl} alt={theme.name} />}
 
       <div className="social-dock">
-        {me && reactionsOn && <ReactionPicker />}
+        {me && reactionsOn && <ReactionPicker sentSeq={social.sentSeq} />}
+        {me && config.features.chat && <QuickChatButton />}
         {reactionsOn && !over && <PokeButton room={room} game={game} me={me} skew={skew} />}
         {myPlayer && !over && (
           <button className={`dock-btn ${notify ? 'on' : ''}`} onClick={toggleNotify}

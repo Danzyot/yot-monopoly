@@ -408,6 +408,17 @@ export interface PublicProfile {
 /** The reaction bar. The server only relays these, so a client cannot send arbitrary text. */
 export const REACTION_EMOJI = ['👍', '😂', '😮', '😭', '😡', '🔥', '💸', '🎉', '🤝', '👀'] as const;
 export type ReactionEmoji = typeof REACTION_EMOJI[number];
+/**
+ * Shown over a poked player's piece. Never sent over the wire as a reaction
+ * (the server refuses it): the client raises it locally when a poke arrives.
+ */
+export const POKE_EMOJI = '👉' as const;
+
+/**
+ * Canned chat lines. Sent as ordinary chat messages (same filter and
+ * cooldown); listed here so client and server agree on the exact text.
+ */
+export const QUICK_CHAT = ['Nice roll!', 'Trade?', 'Ouch 😬', 'Pay up 💸', 'GG', 'Hurry up ⏱', 'Lucky!', 'No deal'] as const;
 
 /** One reaction, broadcast to the room as 'reaction'. */
 export interface ReactionMsg {
@@ -415,7 +426,8 @@ export interface ReactionMsg {
   seq: number;
   id: string;
   name: string;
-  emoji: ReactionEmoji;
+  /** A bar emoji from the server; POKE_EMOJI only on a client-side poke marker. */
+  emoji: ReactionEmoji | typeof POKE_EMOJI;
   /** Not seated in this game: shown at the side rather than over a character. */
   spectator: boolean;
 }

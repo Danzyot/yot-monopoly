@@ -11,6 +11,56 @@ export function toast(text: string, kind: Toast['kind'] = 'info') {
 
 export const toastError = (e: unknown) => toast(e instanceof Error ? e.message : String(e), 'error');
 
+// ---- social chips: a reaction or poke from someone else, in the corner ----
+
+export interface SocialToast {
+  /** Dedupes repeats (a server seq), so one event never shows twice. */
+  key: string;
+  /** Emoji or avatar URL. */
+  avatar: string;
+  name: string;
+  emoji: string;
+  /** Short verb after the name ("poked you"); absent for a plain reaction. */
+  text?: string;
+}
+const socialListeners = new Set<(t: SocialToast) => void>();
+export const SOCIAL_TOAST_MS = 2_800;
+/** At most this many chips at once; older ones drop off so a burst stays readable. */
+export const SOCIAL_TOAST_MAX = 3;
+
+export function toastSocial(t: SocialToast) {
+  socialListeners.forEach(f => f(t));
+}
+
+function SocialChips() {
+  const [items, setItems] = useState<SocialToast[]>([]);
+  useEffect(() => {
+    const timers = new Set<ReturnType<typeof setTimeout>>();
+    const add = (t: SocialToast) => {
+      setItems(i => (i.some(x => x.key === t.key) ? i : [...i.slice(-(SOCIAL_TOAST_MAX - 1)), t]));
+      const h = setTimeout(() => { timers.delete(h); setItems(i => i.filter(x => x.key !== t.key)); }, SOCIAL_TOAST_MS);
+      timers.add(h);
+    };
+    socialListeners.add(add);
+    return () => { socialListeners.delete(add); timers.forEach(clearTimeout); };
+  }, []);
+  if (!items.length) return null;
+  return (
+    <div className="social-toasts" aria-live="polite">
+      {items.map(t => (
+        <div key={t.key} className={`social-toast ${t.text ? 'poke' : ''}`}>
+          {/^https:\/\//.test(t.avatar)
+            ? <img className="social-toast-avatar" src={t.avatar} alt="" referrerPolicy="no-referrer" />
+            : <span className="social-toast-avatar emoji">{t.avatar}</span>}
+          <span className="social-toast-name">{t.name}</span>
+          {t.text && <span className="social-toast-text">{t.text}</span>}
+          <span className="social-toast-emoji">{t.emoji}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ToastHost() {
   const [items, setItems] = useState<Toast[]>([]);
   useEffect(() => {
@@ -22,8 +72,11 @@ export function ToastHost() {
     return () => { listeners.delete(add); };
   }, []);
   return (
-    <div className="toasts">
-      {items.map(t => <div key={t.id} className={`toast ${t.kind}`}>{t.text}</div>)}
-    </div>
+    <>
+      <div className="toasts">
+        {items.map(t => <div key={t.id} className={`toast ${t.kind}`}>{t.text}</div>)}
+      </div>
+      <SocialChips />
+    </>
   );
 }
