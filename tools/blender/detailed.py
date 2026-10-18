@@ -320,157 +320,303 @@ def mitten(cid, part, m, mat, side):
 
 
 # --------------------------------------------------------------------------
+# Shared bits for the two headline figures: laced sneakers, dress shoes, a
+# surface spot (stubble, buttons)
+# --------------------------------------------------------------------------
+
+def hi_sneakers(cid, m, out, shoe='main', tongue='cloth'):
+    """Sneakers with a toe cap, a stitched sole seam, a tongue, cross laces and a heel tab."""
+    for side in (-1, 1):
+        x = side * 0.042
+        out.append(ell(f'{cid}_Shoe{side}', (x, 0.025, 0.014), (0.034, 0.025, 0.054), m[shoe], seg=(20, 12)))
+        out.append(ell(f'{cid}_Sole{side}', (x, 0.009, 0.016), (0.037, 0.011, 0.058), m['white'], seg=(20, 10), deform=cut_above(0.013)))
+        # Sole seam: a dark stitch line where the rubber meets the upper.
+        out.append(loop(f'{cid}_SoleSeam{side}', [(x + 0.0355 * math.cos(a), 0.0135, 0.016 + 0.0565 * math.sin(a))
+                                                  for a in (2 * math.pi * k / 12 for k in range(12))], 0.0011, m['ink'], ring=5, n=3))
+        out.append(ell(f'{cid}_Toe{side}', (x, 0.019, 0.054), (0.028, 0.016, 0.02), m['white'], seg=(14, 8)))
+        # Tongue poking up out of the throat of the shoe.
+        out.append(rbox(f'{cid}_ShoeTongue{side}', (x, 0.047, 0.016), (0.02, 0.024, 0.005), m[tongue], r=(-0.55, 0, 0), bevel=0.002, segs=1))
+        # Laces: three bars with a cross over them.
+        for k in range(3):
+            out.append(rbox(f'{cid}_Lace{side}{k}', (x, 0.045 - k * 0.004, 0.014 + k * 0.012), (0.024, 0.0035, 0.004), m['white'],
+                            r=(-0.5, 0, 0), bevel=0.0012, segs=1))
+        for sgn in (-1, 1):
+            out.append(strand(f'{cid}_LaceX{side}{sgn}', [(x - sgn * 0.011, 0.0485, 0.01), (x, 0.045, 0.024), (x + sgn * 0.011, 0.04, 0.038)],
+                              0.0016, 0.0016, m['white'], ring=5, n=4, round_tip=False))
+        out.append(rbox(f'{cid}_ShoeHeel{side}', (x, 0.044, -0.037), (0.012, 0.012, 0.004), m['white'], r=(0.25, 0, 0), bevel=0.0015, segs=1))
+
+
+def dress_shoes(cid, m, out, shoe='main'):
+    """Rounded dress shoes with a dark sole, a toe-cap seam and a heel."""
+    for side in (-1, 1):
+        x = side * 0.042
+        out.append(ell(f'{cid}_Shoe{side}', (x, 0.026, 0.014), (0.033, 0.026, 0.056), m[shoe], seg=(20, 12)))
+        out.append(ell(f'{cid}_Sole{side}', (x, 0.008, 0.016), (0.036, 0.01, 0.06), m['ink'], seg=(20, 8), deform=cut_above(0.011)))
+        out.append(rbox(f'{cid}_SoleHeel{side}', (x, 0.012, -0.03), (0.06, 0.012, 0.028), m['ink'], bevel=0.003, segs=1))
+        # Toe-cap seam across the vamp, and a thin welt line along the sole.
+        out.append(strand(f'{cid}_ToeSeam{side}', [(x - 0.03, 0.028, 0.03), (x, 0.044, 0.036), (x + 0.03, 0.028, 0.03)],
+                          0.0014, 0.0014, m['ink'], ring=5, n=5, round_tip=False))
+        out.append(loop(f'{cid}_SoleWelt{side}', [(x + 0.0345 * math.cos(a), 0.012, 0.016 + 0.058 * math.sin(a))
+                                                  for a in (2 * math.pi * k / 12 for k in range(12))], 0.0012, m['c2'], ring=5, n=3))
+
+
+def spot(name, e, x, y, r, mat, lift=0.0, seg=(8, 5)):
+    """A little dome sitting on the front of ellipsoid e at (x, y)."""
+    return ell(name, (0, 0, 0), (r, r, r * 0.5), mat, parent=on_ell(e, x, y, lift), seg=seg)
+
+
+# --------------------------------------------------------------------------
 # Snacky: messy dark hair, a big grin, black tee, jeans, a snack bar
 # --------------------------------------------------------------------------
 
 def snacky(m):
     cid = 'snacky'
     body, head = [], []
-    # ---- body: tee, jeans, sneakers
-    body.append(ell(f'{cid}_Torso', (0, 0.13, 0), (0.079, 0.074, 0.062), m['cloth'], fuse=True))
-    body.append(ell(f'{cid}_Hem', (0, 0.083, 0), (0.083, 0.024, 0.065), m['cloth'], fuse=True))
+    # ---- body: tee (fused cloth), jeans at the waist, sneakers
+    TORSO = ((0, 0.13, 0), (0.079, 0.074, 0.062))
+    body.append(ell(f'{cid}_Torso', TORSO[0], TORSO[1], m['cloth'], fuse=True))
+    body.append(ell(f'{cid}_Hem', (0, 0.092, 0), (0.082, 0.02, 0.064), m['cloth'], fuse=True))
     for side in (-1, 1):
         body.append(ell(f'{cid}_Sleeve{side}', (side * 0.082, 0.163, 0), (0.033, 0.027, 0.031), m['cloth'], r=(0, 0, -side * 0.55), fuse=True))
-        body.append(torus(f'{cid}_SleeveHem{side}', (side * 0.097, 0.149, 0), 0.024, 0.0035, m['cloth'], r=(math.pi / 2, 0, -side * 0.55)))
-    body.append(torus(f'{cid}_Collar', (0, 0.196, 0.004), 0.033, 0.006, m['ink'], r=(math.pi / 2 - 0.25, 0, 0)))
+        # Sleeve hem: a rolled edge with a stitch line.
+        body.append(torus(f'{cid}_SleeveHem{side}', (side * 0.098, 0.149, 0), 0.0245, 0.0035, m['cloth'], r=(math.pi / 2, 0, -side * 0.55)))
+        body.append(torus(f'{cid}_SleeveStitch{side}', (side * 0.095, 0.151, 0), 0.0265, 0.0009, m['ink'], r=(math.pi / 2, 0, -side * 0.55), seg=24, mseg=5))
+        # Fabric folds: a pull from the armpit toward the chest, and a crease at the hem.
+        body.append(strand(f'{cid}_Fold{side}', [(side * 0.062, 0.148, 0.03), (side * 0.04, 0.125, 0.055), (side * 0.02, 0.1, 0.06)],
+                           0.009, 0.005, m['cloth'], fuse=True, ring=8))
+    body.append(strand(f'{cid}_FoldHem', [(-0.05, 0.1, 0.045), (-0.015, 0.093, 0.062), (0.03, 0.098, 0.058)], 0.008, 0.005, m['cloth'], fuse=True, ring=8))
+    body.append(strand(f'{cid}_FoldBack', [(0.03, 0.17, -0.045), (-0.0, 0.14, -0.06), (-0.04, 0.11, -0.05)], 0.008, 0.005, m['cloth'], fuse=True, ring=8))
+    # Ribbed neckline: a cloth roll with a fine stitch line, and the neck.
+    body.append(torus(f'{cid}_Collar', (0, 0.196, 0.004), 0.034, 0.0065, m['cloth'], r=(math.pi / 2 - 0.25, 0, 0), seg=32, mseg=8))
+    body.append(torus(f'{cid}_CollarRib', (0, 0.1955, 0.0045), 0.034, 0.0012, m['ink'], r=(math.pi / 2 - 0.25, 0, 0), seg=32, mseg=5))
+    body.append(torus(f'{cid}_CollarRib2', (0, 0.1945, 0.0045), 0.0315, 0.001, m['ink'], r=(math.pi / 2 - 0.25, 0, 0), seg=32, mseg=5))
     body.append(cyl(f'{cid}_Neck', (0, 0.21, 0), 0.027, 0.05, m['skin']))
     # A print on the tee in the player's colour (so everyone can tell whose Snacky is whose).
     body.append(rbox(f'{cid}_Print', (0, 0.138, 0.061), (0.052, 0.034, 0.006), m['main'], r=(-0.2, 0, 0), bevel=0.004))
     body.append(rbox(f'{cid}_PrintStripe', (0, 0.138, 0.0645), (0.038, 0.006, 0.003), m['white'], r=(-0.2, 0, 0), bevel=0.0012))
-    body.append(ell(f'{cid}_Hips', (0, 0.07, 0), (0.07, 0.03, 0.057), m['denim'], fuse=True))
+    # Jeans: hips with a waistband, belt loops, a fly and pocket stitching, and
+    # back pockets. The legs themselves are drawn live by the game.
+    HIPS = ((0, 0.066, 0), (0.07, 0.03, 0.057))
+    body.append(ell(f'{cid}_Hips', HIPS[0], HIPS[1], m['denim'], fuse=True))
+    body.append(torus(f'{cid}_Waistband', (0, 0.078, 0), 0.0635, 0.006, m['denim'], r=(math.pi / 2, 0, 0), parent=M(s=(1, 1, 0.84)), seg=32, mseg=8))
+    body.append(torus(f'{cid}_WaistStitch', (0, 0.075, 0), 0.0685, 0.0011, m['gold'], r=(math.pi / 2, 0, 0), parent=M(s=(1, 1, 0.84)), seg=32, mseg=5))
+    for k, a in enumerate((0.55, math.pi - 0.55, math.pi + 0.55, -0.55)):
+        px, pz = 0.066 * math.sin(a), 0.056 * math.cos(a)
+        body.append(rbox(f'{cid}_BeltLoop{k}', (px, 0.078, pz), (0.007, 0.016, 0.004), m['denim'], r=(0, a, 0), bevel=0.0012, segs=1))
+    fly = lambda y: Vector((0, y, ell_z(HIPS, 0, y)))
+    body.append(strand(f'{cid}_Fly', [fly(0.07) + Vector((0.004, 0, 0.001)), fly(0.055) + Vector((0.004, 0, 0.001)), fly(0.042) + Vector((0.002, 0, 0.001))],
+                       0.0011, 0.0011, m['gold'], ring=5, n=4, round_tip=False))
+    for side in (-1, 1):
+        pk = lambda x, y: Vector((x, y, ell_z(HIPS, x, y) + 0.001))
+        body.append(strand(f'{cid}_Pocket{side}', [pk(side * 0.026, 0.07), pk(side * 0.042, 0.06), pk(side * 0.052, 0.048)],
+                           0.0011, 0.0011, m['gold'], ring=5, n=4, round_tip=False))
+        body.append(rbox(f'{cid}_BackPocket{side}', (side * 0.03, 0.06, -0.049), (0.024, 0.02, 0.003), m['denim'], r=(0.25, 0, 0), bevel=0.0015, segs=1))
     for side in (-1, 1):
         body.append(strand(f'{cid}_Leg{side}', [(side * 0.033, 0.075, 0), (side * 0.038, 0.052, 0.002), (side * 0.041, 0.03, 0.006)], 0.027, 0.024, m['denim'], fuse=True))
-        body.append(torus(f'{cid}_Cuff{side}', (side * 0.041, 0.034, 0.006), 0.024, 0.005, m['denim'], r=(math.pi / 2, 0, 0)))
-    sneakers(cid, m, body)
+        body.append(torus(f'{cid}_Cuff{side}', (side * 0.041, 0.036, 0.006), 0.0245, 0.005, m['denim'], r=(math.pi / 2, 0, 0)))
+    hi_sneakers(cid, m, body)
 
     # ---- head
     def jaw(v):
-        # Narrow and round the lower face into a chin; a touch of fullness at the cheeks.
-        if v.y < -0.02:
-            t = min(1.0, (-v.y - 0.02) / 0.09)
-            v.x *= 1 - 0.22 * t * t
-            v.z = v.z * (1 - 0.08 * t) + 0.004 * t
+        # Narrow the lower face into a jaw and chin, fuller at the cheekbones.
+        if v.y < -0.015:
+            t = min(1.0, (-v.y - 0.015) / 0.095)
+            v.x *= 1 - 0.3 * t * t
+            v.z = v.z * (1 - 0.1 * t) + 0.006 * t
+        if 0.03 > v.y > -0.05 and v.z > 0.03:
+            v.x *= 1.02
         return v
-    head.append(ell(f'{cid}_Skull', (0, 0, 0), (0.117, 0.113, 0.107), m['skin'], seg=(36, 24), deform=jaw, fuse=True))
+    SKULL = ((0, 0, 0), (0.117, 0.113, 0.107))
+    head.append(ell(f'{cid}_Skull', SKULL[0], SKULL[1], m['skin'], seg=(36, 24), deform=jaw, fuse=True))
+    head.append(ell(f'{cid}_Chin', (0, -0.088, 0.055), (0.03, 0.022, 0.03), m['skin'], fuse=True))
     for side in (-1, 1):
-        head.append(ell(f'{cid}_Ear{side}', (side * 0.111, -0.008, -0.004), (0.016, 0.027, 0.017), m['skin'], r=(0, -side * 0.3, 0), fuse=True))
-        head.append(ell(f'{cid}_Cheek{side}', (side * 0.055, -0.036, 0.07), (0.028, 0.022, 0.026), m['skin'], fuse=True))
-    head.append(ell(f'{cid}_Nose', (0, -0.02, 0.104), (0.014, 0.013, 0.014), m['skin'], fuse=True))
-    head.append(ell(f'{cid}_NoseTip', (0, -0.027, 0.112), (0.011, 0.01, 0.009), m['skin'], fuse=True))
+        head.append(ell(f'{cid}_JawSide{side}', (side * 0.05, -0.064, 0.018), (0.027, 0.026, 0.04), m['skin'], fuse=True))
+        head.append(ell(f'{cid}_Cheek{side}', (side * 0.056, -0.03, 0.072), (0.029, 0.024, 0.026), m['skin'], fuse=True))
+        # Ears: a lobe fused to the head, with a rim and a hollow.
+        EG = M((side * 0.112, -0.006, -0.006), (0, side * 0.35, 0))
+        head.append(ell(f'{cid}_Ear{side}', (0, 0, 0), (0.014, 0.028, 0.019), m['skin'], parent=EG, fuse=True))
+        head.append(torus(f'{cid}_EarRim{side}', (side * 0.006, 0.002, 0), 0.016, 0.004, m['skin'], r=(0, math.pi / 2, 0), parent=EG, seg=18, mseg=6))
+        head.append(ell(f'{cid}_EarHole{side}', (side * 0.006, -0.002, 0.001), (0.004, 0.009, 0.008), m['c3'], parent=EG, seg=(8, 6)))
+    head.append(ell(f'{cid}_Nose', (0, -0.02, 0.104), (0.014, 0.014, 0.014), m['skin'], fuse=True))
+    head.append(ell(f'{cid}_NoseTip', (0, -0.028, 0.113), (0.012, 0.01, 0.009), m['skin'], fuse=True))
+    for side in (-1, 1):
+        head.append(ell(f'{cid}_Nostril{side}', (side * 0.009, -0.032, 0.109), (0.007, 0.006, 0.006), m['skin'], fuse=True))
 
-    # Eyes: big, warm brown, a bright catchlight; a little squint from the grin.
+    # Eyes: big, warm brown with an iris ring and two catchlights; a little squint from the grin.
     for side in (-1, 1):
         G = M((side * 0.042, 0.004, 0.096), (0, side * 0.36, 0))
         head.append(ell(f'{cid}_Sclera{side}', (0, 0, 0), (0.021, 0.022, 0.011), m['white'], parent=G, seg=(20, 14)))
         blink_lid(cid, head, m, G, side, (0.021, 0.022, 0.011))
-        head.append(ell(f'{cid}_Iris{side}', (0, -0.001, 0.0075), (0.0155, 0.017, 0.006), m['c3'], parent=G, seg=(18, 12)))
-        head.append(ell(f'{cid}_Pupil{side}', (0, -0.001, 0.0115), (0.008, 0.009, 0.003), m['ink'], parent=G, seg=(14, 10)))
+        head.append(ell(f'{cid}_IrisRing{side}', (0, -0.001, 0.0068), (0.0165, 0.018, 0.006), m['ink'], parent=G, seg=(18, 12)))
+        head.append(ell(f'{cid}_Iris{side}', (0, -0.001, 0.0082), (0.0145, 0.016, 0.0055), m['c3'], parent=G, seg=(18, 12)))
+        head.append(ell(f'{cid}_Pupil{side}', (0, -0.001, 0.0115), (0.0075, 0.0085, 0.003), m['ink'], parent=G, seg=(14, 10)))
         head.append(ell(f'{cid}_Glint{side}', (-0.006, 0.007, 0.0135), (0.0045, 0.0045, 0.002), m['white'], parent=G, seg=(10, 6)))
-        # Upper lid line and a smile crease under the eye.
+        head.append(ell(f'{cid}_Glint2{side}', (0.006, -0.007, 0.0135), (0.0022, 0.0022, 0.0015), m['white'], parent=G, seg=(8, 5)))
+        # Upper lid line and lower lashes.
         head.append(strand(f'{cid}_Lid{side}', [(-0.023, 0.006, 0.006), (-0.01, 0.02, 0.01), (0.01, 0.021, 0.01), (0.023, 0.009, 0.006)],
                            0.0032, 0.0022, m['ink'], parent=G, ring=6))
-        # Brows: thick, dark, a little raised (he's having a good time).
-        head.append(strand(f'{cid}_Brow{side}', [(side * 0.018, 0.06, 0.103), (side * 0.042, 0.061, 0.1), (side * 0.067, 0.05, 0.087)],
-                           0.0075, 0.0045, m['hair'], ring=8))
+        head.append(strand(f'{cid}_LowerLid{side}', [(-0.02, -0.014, 0.006), (0.0, -0.021, 0.009), (0.02, -0.014, 0.006)],
+                           0.0014, 0.0012, m['c3'], parent=G, ring=5, n=5))
+        # Brows: thick, dark, tapered. His left brow (+x) is cocked higher: a cheeky grin.
+        lift = 0.008 if side > 0 else 0.0
+        head.append(strand(f'{cid}_Brow{side}', [(side * 0.016, 0.055 + lift * 0.4, 0.104), (side * 0.04, 0.062 + lift, 0.1),
+                                                  (side * 0.062, 0.054 + lift * 0.6, 0.09), (side * 0.072, 0.046 + lift * 0.3, 0.08)],
+                           0.007, 0.003, m['hair'], ring=8, round_tip=False))
 
-    # The grin: an open mouth with a row of teeth and a hint of tongue.
-    # A D-shaped grin: flat along the top lip, round below.
-    MG = M((0, -0.05, 0.094), (-0.15, 0, 0))
-    head.append(ell(f'{cid}_Mouth', (0, 0, 0), (0.038, 0.026, 0.013), m['c2'], parent=MG, seg=(26, 14), deform=cut_above_local(MG, 0.004)))
-    head.append(ell(f'{cid}_Teeth', (0, 0.0, 0.0045), (0.031, 0.0065, 0.009), m['white'], parent=MG, seg=(22, 10)))
-    head.append(ell(f'{cid}_Tongue', (0, -0.014, 0.004), (0.02, 0.008, 0.009), m['accent'], parent=MG, seg=(16, 8)))
-    head.append(strand(f'{cid}_Lip', [(-0.039, 0.004, 0.006), (-0.02, -0.024, 0.011), (0.0, -0.028, 0.012), (0.02, -0.024, 0.011), (0.039, 0.004, 0.006)],
-                       0.0035, 0.0035, m['skin'], parent=MG, ring=6))
+    # The grin: a wide D-shaped open mouth, a row of teeth with gaps, a tongue, a full lower lip.
+    MG = M((0, -0.052, 0.094), (-0.15, 0, 0))
+    head.append(ell(f'{cid}_Mouth', (0, 0, 0), (0.043, 0.027, 0.013), m['c2'], parent=MG, seg=(26, 14), deform=cut_above_local(MG, 0.004)))
+    head.append(ell(f'{cid}_Teeth', (0, 0.0, 0.0045), (0.036, 0.0065, 0.009), m['white'], parent=MG, seg=(22, 10)))
+    for k in range(5):
+        tx = -0.02 + 0.01 * k
+        head.append(rbox(f'{cid}_ToothGap{k}', (tx, 0.0, 0.0125), (0.0012, 0.009, 0.002), m['c2'], parent=MG, bevel=0.0004, segs=1))
+    head.append(ell(f'{cid}_Tongue', (0, -0.015, 0.004), (0.022, 0.009, 0.009), m['accent'], parent=MG, seg=(16, 8)))
+    head.append(strand(f'{cid}_Lip', [(-0.044, 0.004, 0.006), (-0.024, -0.024, 0.011), (0.0, -0.029, 0.012), (0.024, -0.024, 0.011), (0.044, 0.004, 0.006)],
+                       0.0038, 0.0038, m['skin'], parent=MG, ring=6))
 
-    # Hair: a scalp cap pulled back off the face, then ~45 clumps — a messy
-    # fringe falling over the forehead, volume on top, flicks over the ears.
+    # Hair: a thin scalp cap for coverage, then swept strands. The parting is on
+    # his left (+x); the fringe sweeps across the forehead to his right (-x),
+    # the top flows back from the parting, the sides fall over the ears and the
+    # back drops to the nape. Mid points are pushed out for volume.
     def hairline(v):
-        # Push the cap inside the skull where the face, ears and neck show.
         face = v.z > 0.02 and v.y < 0.062 - 0.25 * max(0.0, abs(v.x) - 0.05)
         ears = abs(v.x) > 0.085 and v.y < -0.005 and v.z > -0.04
         nape = v.y < -0.06
         if face or ears or nape:
             return v * 0.86
         return v
-    head.append(ell(f'{cid}_HairCap', (0, 0.012, -0.006), (0.123, 0.115, 0.118), m['hair'], seg=(36, 24), deform=hairline, fuse=True))
-    rng = np.random.default_rng(7)
+    head.append(ell(f'{cid}_HairCap', (0, 0.014, -0.006), (0.121, 0.115, 0.116), m['hair'], seg=(36, 24), deform=hairline, fuse=True))
+    rng = np.random.default_rng(11)
+    PART = 0.03
     clumps = []
-    # Fringe: roots along the front hairline, falling forward and down, swept to his right.
-    for k in range(11):
-        x = -0.085 + 0.017 * k + rng.normal(0, 0.004)
-        root = Vector((x, 0.078 - 0.12 * x * x, 0.07))
-        sweep = -0.025 + rng.normal(0, 0.012)
-        mid = root + Vector((sweep * 0.6, 0.004 + rng.normal(0, 0.006), 0.035))
-        tip = root + Vector((sweep, -0.03 - rng.random() * 0.025, 0.05 - 0.03 * abs(x) / 0.09))
-        clumps.append(([root, mid, tip], 0.024 + rng.random() * 0.008))
-    # Top and crown: up and back, tousled.
-    for k in range(18):
-        a = rng.random() * 2 * math.pi
-        rr = 0.02 + rng.random() * 0.075
-        root = Vector((math.cos(a) * rr, 0.0, math.sin(a) * rr * 0.9 - 0.01))
-        root.y = math.sqrt(max(0.0, 0.112 ** 2 - root.x ** 2 - root.z ** 2)) * 0.98
-        out = root.normalized()
-        # Mostly lying back and to the sides, a few tufts sticking up: messy, not spiky.
-        front = root.z > 0.03
-        flow = Vector((rng.normal(0, 0.45), 0.18 + rng.random() * 0.2, (0.5 if front else -0.65) + rng.normal(0, 0.25))).normalized()
-        d = (out * 0.45 + flow * 0.55).normalized()
-        length = 0.035 + rng.random() * 0.03
-        mid = root + d * length * 0.55
-        tip = root + d * length + Vector((rng.normal(0, 0.012), -0.018, rng.normal(0, 0.01)))
-        clumps.append(([root, mid, tip], 0.028 + rng.random() * 0.01))
-    # Sides and back: down and back, flicking out at the ends.
+
+    def on_scalp(x, z, lift=0.0):
+        """Point on the scalp ellipsoid above (x, z)."""
+        y = 0.014 + 0.115 * math.sqrt(max(0.0, 1 - (x / 0.121) ** 2 - ((z + 0.006) / 0.116) ** 2))
+        p = Vector((x, y, z))
+        n = Vector((x / 0.121 ** 2, (y - 0.014) / 0.115 ** 2, (z + 0.006) / 0.116 ** 2)).normalized()
+        return p + n * lift, n
+
+    # Fringe: roots along the front hairline, long sweeps to -x over the forehead.
+    for k in range(13):
+        x = -0.088 + 0.01467 * k + rng.normal(0, 0.002)
+        root, n = on_scalp(x, 0.05 + 0.025 * (1 - (x / 0.09) ** 2), -0.004)
+        swept = x > PART - 0.01  # right of the parting: short, sweeping to +x and back
+        dx = (0.035 + rng.random() * 0.02) if swept else -(0.03 + rng.random() * 0.03)
+        drop = 0.02 + rng.random() * 0.022
+        mid = root + Vector((dx * 0.45, 0.012 - drop * 0.3, 0.04)) + n * 0.012
+        tip = root + Vector((dx, -drop - (0.01 if not swept else 0), 0.052 - 0.02 * abs(x) / 0.1))
+        clumps.append(([root, mid, tip], 0.026 + rng.random() * 0.008))
+    # Top: strands fanning away from the parting line and back over the crown.
     for k in range(16):
-        a = math.pi * (0.15 + 0.7 * rng.random()) * (1 if k % 2 else -1) + math.pi / 2  # mostly sides/back
-        side = Vector((math.cos(a), 0.0, -abs(math.sin(a)) * 0.9 - 0.1)).normalized()
-        root = Vector((side.x * 0.1, 0.05 + rng.random() * 0.03, side.z * 0.1))
-        # Falling down the back and sides, hugging the head, the tips only just flicking out.
-        mid = root + side * 0.01 + Vector((0, -0.04, 0))
-        tip = mid + side * 0.008 + Vector((rng.normal(0, 0.006), -0.035 - rng.random() * 0.015, 0))
-        clumps.append(([root, mid, tip], 0.024 + rng.random() * 0.008))
+        z = 0.05 - 0.0085 * k + rng.normal(0, 0.004)
+        for sgn in (-1, 1):
+            if k % 2 == 1 and sgn > 0:
+                continue
+            x = PART + sgn * (0.012 + rng.random() * 0.03)
+            root, n = on_scalp(x, z, -0.005)
+            d = Vector((sgn * (0.6 + rng.random() * 0.5), 0.0, -0.45 + (0.5 if z > 0.03 else 0.0) + rng.normal(0, 0.15))).normalized()
+            length = 0.055 + rng.random() * 0.03
+            mid = root + d * length * 0.5 + n * (0.009 + rng.random() * 0.005)
+            tip = root + d * length + n * 0.002 + Vector((rng.normal(0, 0.006), -0.012, 0))
+            clumps.append(([root, mid, tip], 0.03 + rng.random() * 0.008))
+    # A few tufts standing up along the parting and at the crown: messy, not combed.
+    for k, (x, z, dx) in enumerate(((0.02, 0.03, -0.3), (0.0, -0.03, -0.5))):
+        root, n = on_scalp(x, z, -0.004)
+        d = (n * 0.6 + Vector((dx, 0.2, -0.5))).normalized()
+        mid = root + d * 0.022
+        tip = root + d * 0.042 + Vector((dx * 0.03, -0.012, -0.012))
+        clumps.append(([root, mid, tip], 0.024))
+    # Sides: down over the ears, tips flicking out and back.
+    for k in range(10):
+        side = -1 if k % 2 else 1
+        z = 0.03 - 0.022 * (k // 2) + rng.normal(0, 0.004)
+        x = side * (0.1 - 0.01 * abs(z) / 0.05)
+        root, n = on_scalp(x, z, -0.005)
+        root.y = 0.05 + rng.normal(0, 0.006)
+        mid = root + Vector((side * 0.014, -0.038, -0.004)) + n * 0.008
+        tip = mid + Vector((side * 0.012, -0.03 - rng.random() * 0.012, -0.01 + rng.normal(0, 0.006)))
+        clumps.append(([root, mid, tip], 0.025 + rng.random() * 0.006))
+    # Back: falling down to the nape.
+    for k in range(9):
+        a = math.pi * (0.6 + 0.8 * (k / 8))  # across the back
+        x, z = 0.1 * math.cos(a), -0.1 * abs(math.sin(a)) - 0.005
+        root, n = on_scalp(x * 0.9, z * 0.9, -0.004)
+        root.y = 0.055 + rng.normal(0, 0.006)
+        mid = root + n * 0.012 + Vector((0, -0.04, 0))
+        tip = mid + n * 0.004 + Vector((rng.normal(0, 0.006), -0.04 - rng.random() * 0.015, -0.004))
+        clumps.append(([root, mid, tip], 0.022 + rng.random() * 0.006))
     for i, (pts, r0) in enumerate(clumps):
-        head.append(strand(f'{cid}_Hair{i}', pts, r0, 0.004, m['hair'], fuse=True, ring=10))
+        head.append(strand(f'{cid}_Hair{i}', pts, r0, 0.008, m['hair'], fuse=True, ring=10))
     for o in head:
         if o.name.startswith(f'{cid}_Hair'):
-            o['budget'] = 3600
+            o['budget'] = 4000
 
     # ---- hands: a wristband on the left; the snack bar in the right
     hand_l = mitten(cid, 'HandL', m, 'skin', 1)
-    # Wristband, square to the forearm (which runs up and in toward the shoulder).
     hand_l.append(torus(f'{cid}_Band', (-0.008, 0.021, 0), 0.0175, 0.005, m['ink'], r=(math.pi / 2, 0.45, 0)))
     hand_r = mitten(cid, 'HandR', m, 'skin', -1)
+    # The snack bar: a crinkled gold wrapper torn open at the top, the chocolate
+    # bar showing with its grooves, and a blank label band round the middle.
     S = M((-0.006, 0.032, 0.024), (-0.25, 0, 0.32))
     hand_r += [
-        rbox(f'{cid}_Snack', (0, 0, 0), (0.031, 0.15, 0.012), m['gold'], parent=S, bevel=0.004),
-        rbox(f'{cid}_SnackBand', (0, 0.012, 0.0005), (0.0325, 0.036, 0.0128), m['accent'], parent=S, bevel=0.003),
-        rbox(f'{cid}_SnackTop', (0, 0.06, 0.0005), (0.0325, 0.022, 0.0128), m['c1'], parent=S, bevel=0.003),
-        rbox(f'{cid}_SnackLabel', (0, 0.012, 0.0068), (0.02, 0.016, 0.0015), m['white'], parent=S, bevel=0.0007),
-        rbox(f'{cid}_CrimpTop', (0, 0.079, 0), (0.034, 0.008, 0.0045), m['gold'], parent=S, bevel=0.0015),
+        rbox(f'{cid}_Snack', (0, -0.02, 0), (0.031, 0.11, 0.012), m['gold'], parent=S, bevel=0.004),
+        rbox(f'{cid}_SnackBar', (0, 0.045, 0), (0.025, 0.07, 0.009), m['c3'], parent=S, bevel=0.0025),
+        rbox(f'{cid}_SnackBand', (0, -0.012, 0.0005), (0.0325, 0.036, 0.0128), m['accent'], parent=S, bevel=0.003),
+        rbox(f'{cid}_SnackLabel', (0, -0.012, 0.0068), (0.02, 0.016, 0.0015), m['white'], parent=S, bevel=0.0007),
         rbox(f'{cid}_CrimpBot', (0, -0.079, 0), (0.034, 0.008, 0.0045), m['gold'], parent=S, bevel=0.0015),
     ]
+    # Grooves across the bar.
+    for k in range(3):
+        hand_r.append(rbox(f'{cid}_BarGroove{k}', (0, 0.07 - k * 0.014, 0.0046), (0.026, 0.0015, 0.0012), m['ink'], parent=S, bevel=0.0003, segs=1))
+    # The torn edge: ragged flaps of wrapper round the open top.
+    for k, (fx, fy, fz, rz) in enumerate(((-0.012, 0.038, 0.0065, 0.5), (0.006, 0.043, 0.0068, -0.35), (0.015, 0.036, 0.0, 0.9),
+                                            (-0.004, 0.036, -0.0068, 0.2), (0.012, 0.04, -0.0066, -0.6))):
+        hand_r.append(rbox(f'{cid}_Tear{k}', (fx, fy, fz), (0.012, 0.014, 0.0012), m['gold'], parent=S, r=(0, 0, rz), bevel=0.0005, segs=1))
+    # Crinkles in the wrapper: little slanted ridges.
+    for k, (cy, rz, cz) in enumerate(((-0.045, 0.3, 1), (-0.06, -0.4, 1), (-0.034, -0.25, -1), (-0.058, 0.35, -1), (-0.07, 0.1, 1))):
+        hand_r.append(rbox(f'{cid}_Crinkle{k}', (rng.normal(0, 0.006), cy, cz * 0.0062), (0.022, 0.0015, 0.0012), m['gold'], parent=S,
+                           r=(0, 0, rz), bevel=0.0004, segs=1))
     return {'Body': body, 'Head': head, 'HandL': hand_l, 'HandR': hand_r}
 
 
 # --------------------------------------------------------------------------
 # Mr. Stare: a tall brown dome, enormous unblinking eyes, a long nose, a
-# thin droopy moustache — and a bow tie for occasions
+# thin two-part moustache — a collar, buttons and a belt so he reads as a
+# little person, and a bow tie for occasions
 # --------------------------------------------------------------------------
 
 def starer(m):
     cid = 'starer'
     body, head = [], []
-    body.append(ell(f'{cid}_Trunk', (0, 0.118, 0), (0.077, 0.088, 0.066), m['skin'], seg=(32, 20), fuse=True))
+    TRUNK = ((0, 0.118, 0), (0.077, 0.088, 0.066))
+    body.append(ell(f'{cid}_Trunk', TRUNK[0], TRUNK[1], m['skin'], seg=(32, 20), fuse=True))
     body.append(cyl(f'{cid}_Neck', (0, 0.196, 0.004), 0.048, 0.07, m['skin'], fuse=True, r_top=0.044))
     for side in (-1, 1):
         body.append(ell(f'{cid}_Shoulder{side}', (side * 0.06, 0.16, 0), (0.03, 0.026, 0.03), m['skin'], fuse=True))
         body.append(ell(f'{cid}_Leg{side}', (side * 0.036, 0.048, 0.002), (0.027, 0.036, 0.027), m['skin'], fuse=True))
-    body.append(ell(f'{cid}_Belly', (0, 0.105, 0.04), (0.055, 0.06, 0.035), m['c1'], seg=(24, 16)))
+    # Shirt front: a lighter placket with buttons, a collar at the neck.
+    BELLY = ((0, 0.105, 0.04), (0.055, 0.06, 0.035))
+    body.append(ell(f'{cid}_Belly', BELLY[0], BELLY[1], m['c1'], seg=(24, 16)))
+    pl = lambda y: (0, y, ell_z(BELLY, 0, y) + 0.0008)
+    body.append(strand(f'{cid}_Placket', [pl(0.158), pl(0.11), pl(0.055)], 0.0012, 0.0012, m['c2'], ring=5, n=5, round_tip=False))
+    for k, y in enumerate((0.14, 0.115, 0.09)):
+        body.append(spot(f'{cid}_Button{k}', BELLY, 0, y, 0.0048, m['white'], lift=0.0005, seg=(10, 6)))
+        body.append(spot(f'{cid}_ButtonHole{k}', BELLY, 0, y, 0.0015, m['c2'], lift=0.0028, seg=(6, 4)))
+    body.append(torus(f'{cid}_CollarBand', (0, 0.19, 0.003), 0.0485, 0.0045, m['white'], r=(math.pi / 2, 0, 0), seg=32, mseg=8))
+    for side in (-1, 1):
+        CG = on_ell(TRUNK, side * 0.03, 0.172, 0.0012) @ M(r=(0, 0, -side * 0.55))
+        body.append(rbox(f'{cid}_Collar{side}', (0, 0, 0), (0.026, 0.03, 0.003), m['white'], parent=CG, bevel=0.0015, segs=1))
+    # Belt with a buckle, right where the live legs start.
+    body.append(torus(f'{cid}_Belt', (0, 0.07, 0), 0.0615, 0.0065, m['ink'], r=(math.pi / 2, 0, 0), parent=M(s=(1, 1, 0.86)), seg=32, mseg=8))
+    body.append(rbox(f'{cid}_Buckle', (0, 0.068, 0.07), (0.018, 0.015, 0.005), m['gold'], bevel=0.0015, segs=1))
+    body.append(rbox(f'{cid}_BucklePin', (0, 0.068, 0.0735), (0.0025, 0.011, 0.002), m['ink'], bevel=0.0005, segs=1))
     # Bow tie in the player's colour.
     BT = M((0, 0.186, 0.058), (-0.25, 0, 0))
     for side in (-1, 1):
-        body.append(ell(f'{cid}_Bow{side}', (side * 0.021, 0, 0), (0.021, 0.016, 0.008), m['main'], parent=BT, r=(0, 0, side * 0.25), seg=(18, 12),
-                        deform=None))
+        body.append(ell(f'{cid}_Bow{side}', (side * 0.021, 0, 0), (0.021, 0.016, 0.008), m['main'], parent=BT, r=(0, 0, side * 0.25), seg=(18, 12)))
     body.append(ell(f'{cid}_Knot', (0, 0, 0.004), (0.009, 0.01, 0.008), m['main'], parent=BT, seg=(12, 8)))
-    sneakers(cid, m, body)
+    dress_shoes(cid, m, body)
 
     def dome(v):
         # Tall rounded crown, a flatter face, a broad jaw that runs into the neck.
@@ -480,24 +626,59 @@ def starer(m):
             t = min(1.0, (-v.y - 0.05) / 0.09)
             v.x *= 1 + 0.06 * t
         return v
-    head.append(ell(f'{cid}_Skull', (0, 0.012, 0), (0.106, 0.138, 0.1), m['skin'], seg=(36, 26), deform=dome, fuse=True))
-    head.append(ell(f'{cid}_Brow', (0, 0.07, 0.07), (0.075, 0.02, 0.03), m['skin'], fuse=True))
+    SKULL = ((0, 0.012, 0), (0.106, 0.138, 0.1))
+    head.append(ell(f'{cid}_Skull', SKULL[0], SKULL[1], m['skin'], seg=(36, 26), deform=dome, fuse=True))
+    # A slightly lumpy crown: soft bumps fused into the dome.
+    for k, (ax, ay, az, r) in enumerate(((0.03, 0.115, 0.02, 0.034), (-0.045, 0.1, -0.03, 0.03), (0.06, 0.07, -0.05, 0.028),
+                                          (-0.02, 0.13, -0.045, 0.03), (0.0, 0.06, -0.085, 0.03), (-0.07, 0.05, 0.02, 0.026))):
+        d = Vector((ax / 0.106, (ay - 0.012) / 0.138, az / 0.1))
+        p = Vector(SKULL[0]) + Vector((d.x * 0.106, d.y * 0.138, d.z * 0.1)) / max(1e-6, d.length)
+        head.append(ell(f'{cid}_Bump{k}', tuple(p - d.normalized() * r * 0.9), (r, r, r), m['skin'], fuse=True, seg=(14, 10)))
+    # Brow ridge over the eyes, heavier at the outer corners.
+    head.append(strand(f'{cid}_BrowRidge', [(-0.088, 0.068, 0.048), (-0.05, 0.078, 0.074), (0, 0.076, 0.084), (0.05, 0.078, 0.074), (0.088, 0.068, 0.048)],
+                       0.012, 0.012, m['skin'], fuse=True, ring=12, round_tip=False))
     head.append(ell(f'{cid}_Jowl', (0, -0.075, 0.055), (0.082, 0.05, 0.05), m['skin'], fuse=True))
+    JOWL = ((0, -0.075, 0.055), (0.082, 0.05, 0.05))
     # The nose: a long ridge from between the eyes to a round, lighter tip.
     head.append(strand(f'{cid}_NoseRidge', [(0, 0.03, 0.088), (0, 0.0, 0.103), (0, -0.026, 0.113)], 0.013, 0.016, m['skin'], fuse=True, ring=12))
     head.append(ell(f'{cid}_NoseTip', (0, -0.036, 0.116), (0.022, 0.018, 0.019), m['c1'], seg=(22, 14)))
     for side in (-1, 1):
         head.append(ell(f'{cid}_Nostril{side}', (side * 0.009, -0.049, 0.118), (0.0045, 0.003, 0.003), m['c2'], seg=(10, 6)))
-    # Eyes: huge, round, wide open, set in darker sockets. They do not blink.
+        # Small flat ears with a hollow.
+        EG = M((side * 0.104, -0.012, -0.008), (0, side * 0.3, 0))
+        head.append(ell(f'{cid}_Ear{side}', (0, 0, 0), (0.011, 0.024, 0.017), m['skin'], parent=EG, fuse=True))
+        head.append(ell(f'{cid}_EarHole{side}', (side * 0.006, -0.002, 0.0), (0.003, 0.009, 0.007), m['c2'], parent=EG, seg=(8, 6)))
+    # Eyes: huge, round, wide open, glossy, in darker sockets: a dark ring round a
+    # layered iris, a big pupil and two catchlights. They do not blink.
     for side in (-1, 1):
         G = M((side * 0.047, 0.034, 0.078), (0, side * 0.28, 0))
-        head.append(torus(f'{cid}_Socket{side}', (0, 0, 0.004), 0.034, 0.0075, m['c2'], parent=G, seg=32, mseg=8))
-        head.append(ell(f'{cid}_Sclera{side}', (0, 0, 0), (0.033, 0.033, 0.024), m['white'], parent=G, seg=(26, 18)))
-        head.append(ell(f'{cid}_Pupil{side}', (0, 0, 0.022), (0.0165, 0.0165, 0.006), m['ink'], parent=G, seg=(20, 12)))
-        head.append(ell(f'{cid}_Glint{side}', (-0.006, 0.007, 0.0262), (0.004, 0.004, 0.0015), m['white'], parent=G, seg=(10, 6)))
-    # The moustache: one thin dark line, peaked under the nose, drooping at the ends.
-    head.append(strand(f'{cid}_Moustache', [(-0.052, -0.088, 0.078), (-0.03, -0.068, 0.1), (0, -0.058, 0.112),
-                                            (0.03, -0.068, 0.1), (0.052, -0.088, 0.078)], 0.0055, 0.0045, m['ink'], ring=8))
+        head.append(torus(f'{cid}_Socket{side}', (0, 0, 0.004), 0.034, 0.0065, m['c2'], parent=G, seg=32, mseg=8))
+        head.append(ell(f'{cid}_Sclera{side}', (0, 0, 0), (0.033, 0.033, 0.025), m['white'], parent=G, seg=(26, 18)))
+        head.append(ell(f'{cid}_IrisRing{side}', (0, 0, 0.0208), (0.0225, 0.0225, 0.006), m['hair'], parent=G, seg=(22, 12)))
+        head.append(ell(f'{cid}_Iris{side}', (0, 0, 0.0236), (0.0185, 0.0185, 0.0045), m['c2'], parent=G, seg=(20, 12)))
+        head.append(ell(f'{cid}_Pupil{side}', (0, 0, 0.0255), (0.0145, 0.0145, 0.0045), m['ink'], parent=G, seg=(20, 12)))
+        head.append(ell(f'{cid}_Glint{side}', (-0.0085, 0.0095, 0.0288), (0.0058, 0.0058, 0.0018), m['white'], parent=G, seg=(12, 7)))
+        head.append(ell(f'{cid}_Glint2{side}', (0.0075, -0.0075, 0.0288), (0.0028, 0.0028, 0.0014), m['white'], parent=G, seg=(8, 5)))
+        # Lower-lid bags: a soft bulge under each eye with a crease below it.
+        head.append(strand(f'{cid}_Bag{side}', [(side * 0.016, -0.004, 0.09), (side * 0.047, -0.012, 0.1), (side * 0.08, -0.002, 0.082)],
+                           0.0075, 0.006, m['skin'], fuse=True, ring=8))
+        head.append(strand(f'{cid}_BagLine{side}', [(side * 0.024, -0.019, 0.098), (side * 0.047, -0.023, 0.103), (side * 0.07, -0.015, 0.093)],
+                           0.0012, 0.0009, m['c2'], ring=5, n=5))
+    # The moustache: two thin tapered halves meeting under the nose, drooping at the ends.
+    for side in (-1, 1):
+        head.append(strand(f'{cid}_Moustache{side}', [(side * 0.003, -0.059, 0.113), (side * 0.022, -0.062, 0.107), (side * 0.042, -0.074, 0.093),
+                                                      (side * 0.056, -0.092, 0.075)], 0.0045, 0.0012, m['ink'], ring=7, round_tip=False))
+    # A plain, neutral mouth.
+    mouth = lambda x, y: (x, y, ell_z(JOWL, x, y) + 0.001)
+    head.append(strand(f'{cid}_Mouth', [mouth(-0.027, -0.1), mouth(0, -0.103), mouth(0.027, -0.1)], 0.0022, 0.0022, m['ink'], ring=6, n=6, round_tip=False))
+    # A hint of stubble: tiny dark specks over the jowl and chin.
+    rng = np.random.default_rng(3)
+    for k in range(40):
+        x = rng.uniform(-0.064, 0.064)
+        y = rng.uniform(-0.12, -0.08)
+        if abs(x) < 0.032 and y > -0.097:
+            continue  # leave the mouth and moustache clear
+        head.append(spot(f'{cid}_Stubble{k}', JOWL, x, y, 0.0013 + rng.random() * 0.0007, m['c2'], lift=-0.0002, seg=(6, 4)))
     hand_l = mitten(cid, 'HandL', m, 'skin', 1)
     hand_r = mitten(cid, 'HandR', m, 'skin', -1)
     return {'Body': body, 'Head': head, 'HandL': hand_l, 'HandR': hand_r}
