@@ -1166,7 +1166,7 @@ def main():
             return 0.7   # in front of the table: only the low views see them
         return 1.0
     blib.lightmap_unwrap(lit, margin=0.002 if not DRAFT else 0.004, weight=weight)
-    size, spp = (1024, 24) if DRAFT else (2048, 32)
+    size, spp = (1024, 24) if DRAFT else (2048, 96)
     # Three diffuse bounces fill a room this dark well enough and keep the final bake near an hour.
     sc = bpy.context.scene
     sc.cycles.max_bounces = 4
