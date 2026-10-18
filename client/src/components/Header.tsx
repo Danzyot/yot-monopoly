@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../auth.tsx';
 import { BRAND } from '../../../shared/brand.ts';
 import { Avatar } from './Avatar.tsx';
@@ -10,11 +10,12 @@ export default function Header() {
     <header className="site-header">
       <Link to="/" className="brand"><span className="brand-hat">🎩</span> {BRAND.name}</Link>
       <nav className="row" aria-label="Site">
-        <Link className="navlink hide-sm" to="/characters">Characters</Link>
-        {config.features.leaderboard && <Link className="navlink" to="/leaderboard">Leaderboard</Link>}
+        {/* NavLink adds aria-current="page" on the active route; .navlink.active styles it. */}
+        <NavLink className="navlink hide-sm" to="/characters">Characters</NavLink>
+        {config.features.leaderboard && <NavLink className="navlink" to="/leaderboard">Leaderboard</NavLink>}
         {config.inviteUrl && <a className="navlink" href={config.inviteUrl} target="_blank" rel="noreferrer">Discord</a>}
         {profile?.isAdmin && <Link className="navlink accent" to="/admin">Dashboard</Link>}
-        {profile && config.features.leaderboard && <Link className="navlink hide-sm" to={profilePath(profile.id)}>My profile</Link>}
+        {profile && config.features.leaderboard && <NavLink className="navlink hide-sm" to={profilePath(profile.id)}>My profile</NavLink>}
         {profile ? (
           <span className="row me">
             {/* The avatar doubles as the profile link where "My profile" is hidden (phones). */}

@@ -24,7 +24,7 @@ function favourite(counts: Map<string, { n: number; last: number }>): { id: stri
 export function buildProfile(id: string, records: readonly GameRecord[]): PublicProfile | null {
   if (!validPlayerId(id)) return null;
   let name = '', avatar = '';
-  let games = 0, wins = 0, points = 0, rankedGames = 0;
+  let games = 0, wins = 0, points = 0, rankedGames = 0, firstGameAt = 0;
   const maps = new Map<string, { n: number; last: number }>();
   const characters = new Map<string, { n: number; last: number }>();
   const recent: ProfileGame[] = [];
@@ -42,6 +42,7 @@ export function buildProfile(id: string, records: readonly GameRecord[]): Public
     // Records are oldest first, so the latest name and avatar win.
     name = me.name;
     if (me.avatar) avatar = me.avatar;
+    if (!games) firstGameAt = r.endedAt;
     games++;
     if (place === 0) wins++;
     if (isRanked(r)) {
@@ -60,7 +61,7 @@ export function buildProfile(id: string, records: readonly GameRecord[]): Public
   if (!games) return null;
   return {
     id, name, avatar: avatar || '🎩',
-    games, wins, winRate: wins / games, points, rankedGames,
+    games, wins, winRate: wins / games, points, rankedGames, firstGameAt,
     favouriteMap: favourite(maps),
     favouriteCharacter: favourite(characters),
     recent: recent.slice(-RECENT_GAMES).reverse(),

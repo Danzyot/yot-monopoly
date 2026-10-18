@@ -24,6 +24,10 @@ export interface LeaderRow {
   games: number;
   wins: number;
   points: number;
+  /** Latest avatar seen in a result; absent for players only in older records. */
+  avatar?: string;
+  /** Most-played character (ties go to the most recent); absent in older records. */
+  character?: string;
 }
 
 const FILE = 'results.json';
@@ -61,12 +65,21 @@ export function recentResults(limit = 50): GameRecord[] {
 
 export function leaderboard(limit = 100): LeaderRow[] {
   const by = new Map<string, LeaderRow>();
+  const chars = new Map<string, Map<string, number>>();
   for (const r of records) {
     if (!isRanked(r)) continue;
     r.places.forEach((p, i) => {
       if (p.isBot) return;
       const row = by.get(p.id) ?? { id: p.id, name: p.name, games: 0, wins: 0, points: 0 };
       row.name = p.name;
+      if (p.avatar) row.avatar = p.avatar;
+      if (p.character) {
+        const c = chars.get(p.id) ?? new Map<string, number>();
+        c.set(p.character, (c.get(p.character) ?? 0) + 1);
+        chars.set(p.id, c);
+        // Records are oldest first: >= lets the most recent character win a tie.
+        if ((c.get(p.character) ?? 0) >= Math.max(...c.values())) row.character = p.character;
+      }
       row.games++;
       if (i === 0) row.wins++;
       // Points reward beating more people: last place scores 0.
