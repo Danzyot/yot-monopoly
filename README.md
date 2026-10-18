@@ -33,9 +33,10 @@ mini-games, music, and a full operator dashboard.
   from payer to payee with the amount floating over each piece; Chance and Community
   Chest are real piles on the board and a drawn card flies off its pile to the screen;
   houses and hotels drop onto their lots; a bought deed's title card pops up and flies to
-  its new owner; confetti off GO; jailed pieces sit behind bars (the door swings open when
+  its new owner, and a glossy plaque with a fluttering pennant in their colour marks the
+  tile; confetti off GO; the fire flickers and the neon pulses; jailed pieces sit behind bars (the door swings open when
   they get out); the Free Parking jackpot piles up as gold coins; pieces blink and turn
-  their heads to watch whoever is playing; bots chime in with the odd emoji and wait for
+  their heads to watch whoever is playing (and tap a foot when their own player dithers); bots chime in with the odd emoji and wait for
   the board to finish animating before they move; a cinematic camera swoops in for buys,
   builds, hotels, big rent, jail, bankruptcies and the winner's dance (🎬 to turn it off);
   a "Your turn!" splash; End turn right from a property you don't want.
