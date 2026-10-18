@@ -40,6 +40,8 @@ for (const map of MAPS) {
   for (const edition of EDITIONS) {
     const tag = `${map}-${edition}${PHONE ? '-phone' : ''}`;
     const page = await (await browser.newContext(viewport)).newPage();
+    // Software GL on a busy box renders at a frame a second: give every click and wait room.
+    page.setDefaultTimeout(90_000);
     const errors = [];
     page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
     page.on('console', m => { if (m.type() === 'error' && !/ERR_CERT|fonts\.g/.test(m.text())) errors.push(`console: ${m.text().slice(0, 200)}`); });
