@@ -111,9 +111,9 @@ def _spline(points, n=10):
     return out
 
 
-def strand(name, points, r0, r1, mat, parent=None, fuse=False, ring=10, round_tip=True):
-    """A tapered tube along a smooth path (hair clumps, brows, lash lines, a moustache)."""
-    path = _spline(points)
+def strand(name, points, r0, r1, mat, parent=None, fuse=False, ring=10, round_tip=True, n=10):
+    """A tapered tube along a smooth path (hair clumps, brows, lash lines, a moustache); n samples per segment."""
+    path = _spline(points, n)
     if parent is not None:
         path = [parent @ q for q in path]
     bm = bmesh.new()
@@ -240,7 +240,7 @@ def crescent(name, G, rc, w, mat, open_dir=0.0):
     for k, sgn in enumerate((-1, 1)):
         pts = [Vector((rc * math.cos(open_dir + math.pi + sgn * a), rc * math.sin(open_dir + math.pi + sgn * a), 0))
                for a in (0.0, 0.8, 1.6, 2.3)]
-        out.append(strand(f'{name}{k}', pts, w, w * 0.15, mat, parent=G, ring=6, round_tip=False))
+        out.append(strand(f'{name}{k}', pts, w, w * 0.15, mat, parent=G, ring=6, round_tip=False, n=4))
     return out
 
 
@@ -700,10 +700,10 @@ def cat(m):
     body.append(ell(f'{cid}_Trunk', (0, 0.118, 0), (0.07, 0.075, 0.06), m['main'], fuse=True))
     body.append(ell(f'{cid}_Belly', (0, 0.108, 0.04), (0.045, 0.054, 0.028), m['white'], fuse=True))
     # A ruff of white chest fur: pointed tufts spilling over the top of the belly.
-    for k, (x, y, ln) in enumerate([(-0.024, 0.163, 0.03), (0.0, 0.168, 0.036), (0.024, 0.163, 0.03), (-0.013, 0.15, 0.028), (0.013, 0.15, 0.028)]):
+    for k, (x, y, ln) in enumerate([(-0.026, 0.162, 0.024), (0.0, 0.168, 0.028), (0.026, 0.162, 0.024), (-0.013, 0.152, 0.022), (0.013, 0.152, 0.022)]):
         z0 = ell_z(((0, 0.118, 0), (0.07, 0.075, 0.06)), x, y) - 0.006
         body.append(strand(f'{cid}_ChestTuft{k}', [(x, y, z0), (x * 1.15, y - ln * 0.5, z0 + 0.012), (x * 1.25, y - ln, z0 + 0.014)],
-                           0.013, 0.002, m['white'], fuse=True, round_tip=False))
+                           0.015, 0.003, m['white'], fuse=True, round_tip=False))
     legs(cid, m, body, 'main', top=0.07)
     for side in (-1, 1):
         x = side * 0.042
@@ -749,7 +749,7 @@ def cat(m):
         for k, (dx, ln) in enumerate([(-0.006, 0.03), (0.005, 0.036)]):
             head.append(strand(f'{cid}_EarTuft{side}{k}', [(side * (0.064 + dx), 0.074, 0.029), (side * (0.068 + dx * 1.4), 0.074 + ln * 0.5, 0.031),
                                                            (side * (0.075 + dx * 2), 0.074 + ln, 0.025)], 0.0045, 0.0008, m['white'], ring=6,
-                               round_tip=False))
+                               round_tip=False, n=5))
         for k, dy in enumerate((-0.006, 0.006, 0.018)):
             head.append(strand(f'{cid}_Whisker{side}{k}', [(side * 0.04, -0.045 + dy * 0.3, 0.1), (side * 0.09, -0.04 + dy, 0.098), (side * 0.14, -0.035 + dy * 1.6, 0.085)],
                                0.0016, 0.0009, m['ink'], ring=5))
@@ -824,7 +824,7 @@ def knight(m):
         head.append(ell(f'{cid}_Hinge{side}', tuple(on_ell(HE, side * 0.098, 0.01, lift=0.001).translation), (0.008, 0.008, 0.008), m['accent'],
                         seg=(12, 8)))
     head.append(strand(f'{cid}_VisorRidge', [tuple(on_ell(HE, 0, y, lift=0.006).translation) for y in (0.045, 0.0, -0.035, -0.066)],
-                       0.0045, 0.0035, m['metal'], ring=8))
+                       0.0045, 0.0035, m['metal'], ring=8, n=5))
     head.append(torus(f'{cid}_Rim', (0, -0.075, 0.0), 0.095, 0.008, m['accent'], r=(math.pi / 2, 0, 0)))
     # The plume: a gold holder and a fan of curling feathers.
     head.append(cyl(f'{cid}_PlumeHolder', (0, 0.124, 0.016), 0.012, 0.022, m['accent'], r=(-0.35, 0, 0), seg=14, r_top=0.009))
@@ -835,13 +835,13 @@ def knight(m):
         root = Vector((lane * 0.006, 0.13, 0.02 - f * 0.012))
         tip = Vector((lane * 0.022 + rng.normal(0, 0.004), 0.185 - f * 0.07 - abs(lane) * 0.01, -0.01 - f * 0.11))
         mid = root.lerp(tip, 0.45) + Vector((lane * 0.006, 0.035 - f * 0.01, 0.01))
-        head.append(strand(f'{cid}_Plume{k}', [root, mid, tip], 0.016 - abs(lane) * 0.003, 0.0055, m['c1'], ring=7))
+        head.append(strand(f'{cid}_Plume{k}', [root, mid, tip], 0.016 - abs(lane) * 0.003, 0.0055, m['c1'], ring=7, n=6))
     # Gauntlets: flared cuffs with a gold rim.
     def gauntlet(part, side):
         return mitten(cid, part, m, 'metal', side) + [
             cyl(f'{cid}_{part}Gauntlet', (0, 0.028, 0), 0.021, 0.022, m['metal'], seg=18, r_top=0.028),
             torus(f'{cid}_{part}GauntletRim', (0, 0.039, 0), 0.028, 0.003, m['accent'], r=(math.pi / 2, 0, 0), seg=20, mseg=6),
-            strand(f'{cid}_{part}Knuckles', [(-0.02, -0.006, 0.014), (0, -0.004, 0.02), (0.02, -0.006, 0.014)], 0.004, 0.004, m['accent'], ring=6)]
+            strand(f'{cid}_{part}Knuckles', [(-0.02, -0.006, 0.014), (0, -0.004, 0.02), (0.02, -0.006, 0.014)], 0.004, 0.004, m['accent'], ring=6, n=5)]
     hl = gauntlet('HandL', 1)
     SH = M((0.012, 0.0, 0.03), (0, 0.5, 0))
     hl += [cyl(f'{cid}_Shield', (0, 0, 0), 0.065, 0.012, m['main'], r=(math.pi / 2, 0, 0), parent=SH, seg=28),
@@ -892,7 +892,7 @@ def wizard(m):
     # Two big motifs on the skirt, a gold trim down the front, and the sash knotted at the side.
     body.append(star(f'{cid}_RobeStar', robe(-0.62, 0.075, 0.0005), 0.015, 0.0065, 0.005, m['accent']))
     body += crescent(f'{cid}_RobeMoon', robe(0.66, 0.078, 0.002), 0.012, 0.0045, m['accent'], open_dir=0.4)
-    body.append(strand(f'{cid}_FrontTrim', [(0, y, R(y) + 0.0005) for y in (0.104, 0.07, 0.035, 0.012)], 0.0035, 0.0035, m['accent'], ring=6))
+    body.append(strand(f'{cid}_FrontTrim', [(0, y, R(y) + 0.0005) for y in (0.104, 0.07, 0.035, 0.012)], 0.0035, 0.0035, m['accent'], ring=6, n=3))
     ka = 0.62
     kp = Vector((0.073 * math.sin(ka), 0.11, 0.073 * math.cos(ka)))
     body.append(ell(f'{cid}_SashKnot', tuple(kp), (0.011, 0.012, 0.008), m['accent'], r=(0, ka, 0), seg=(14, 10)))
@@ -900,12 +900,12 @@ def wizard(m):
         a2 = ka + da
         end = Vector(((R(0.11 - dy) + 0.004) * math.sin(a2), 0.11 - dy, (R(0.11 - dy) + 0.004) * math.cos(a2)))
         mid = kp.lerp(end, 0.5) + Vector((math.sin(a2), 0, math.cos(a2))) * 0.003
-        body.append(strand(f'{cid}_SashTail{k}', [kp, mid, end], 0.0055, 0.0045, m['accent'], ring=8))
+        body.append(strand(f'{cid}_SashTail{k}', [kp, mid, end], 0.0055, 0.0045, m['accent'], ring=8, n=5))
         body.append(ell(f'{cid}_Tassel{k}', tuple(end + Vector((0, -0.006, 0))), (0.0055, 0.009, 0.0055), m['accent'], seg=(10, 8)))
     for side in (-1, 1):
         body.append(ell(f'{cid}_Slipper{side}', (side * 0.035, 0.012, 0.06), (0.024, 0.014, 0.034), m['ink'], seg=(16, 10)))
         body.append(strand(f'{cid}_SlipperCurl{side}', [(side * 0.035, 0.016, 0.088), (side * 0.035, 0.024, 0.1), (side * 0.035, 0.032, 0.094)],
-                           0.0075, 0.003, m['ink'], ring=8))
+                           0.0075, 0.003, m['ink'], ring=8, n=5))
     head.append(ell(f'{cid}_Face', (0, -0.005, 0.0), (0.098, 0.096, 0.094), m['skin'], seg=(30, 20), fuse=True))
     head.append(ell(f'{cid}_Nose', (0, -0.015, 0.095), (0.02, 0.022, 0.02), m['skin'], fuse=True))
     eyes(cid, head, m, y=0.012, gap=0.036, z=0.084, size=(0.016, 0.018), iris='c3', yaw=0.36)
@@ -927,7 +927,8 @@ def wizard(m):
             mid = root.lerp(tip, 0.5) + Vector((math.sin(a) * 0.012, 0, 0.018))
             curl = tip + Vector((-math.sin(a) * 0.012, 0.006, 0.006))
             beard.append(strand(f'{cid}_Beard{layer}{k}', [root, mid, tip, curl], rad, 0.004, m['white'], fuse=True))
-    # Long hair falling from under the hat at the sides and back.
+    # Long hair falling from under the hat at the sides and back, over a soft mass.
+    beard.append(ell(f'{cid}_HairMass', (0, 0.0, -0.035), (0.096, 0.052, 0.075), m['white'], fuse=True))
     for k in range(9):
         a = math.pi / 2 + k * (math.pi / 8)
         root = Vector((math.sin(a) * 0.09, 0.045, math.cos(a) * 0.09))
@@ -935,7 +936,7 @@ def wizard(m):
         beard.append(strand(f'{cid}_Locks{k}', [root, root.lerp(tip, 0.5) + Vector((math.sin(a) * 0.012, 0, math.cos(a) * 0.012)), tip],
                             0.026, 0.014, m['white'], fuse=True))
     for o in beard:
-        o['budget'] = 2600
+        o['budget'] = 2100
     head += beard
     for side in (-1, 1):
         head.append(strand(f'{cid}_Moustache{side}', [(0, -0.038, 0.106), (side * 0.024, -0.044, 0.104), (side * 0.046, -0.06, 0.092),
@@ -982,7 +983,7 @@ def wizard(m):
         ph = math.pi / 4 + k * math.pi / 2
         c, s = math.cos(ph), math.sin(ph)
         hr.append(strand(f'{cid}_Prong{k}', [(c * 0.008, 0.16, s * 0.008), (c * 0.019, 0.172, s * 0.019), (c * 0.025, 0.19, s * 0.025),
-                                            (c * 0.014, 0.206, s * 0.014)], 0.0042, 0.0018, m['wood'], parent=ST, ring=7))
+                                            (c * 0.014, 0.206, s * 0.014)], 0.0042, 0.0018, m['wood'], parent=ST, ring=7, n=5))
     return {'Body': body, 'Head': head, 'HandL': mitten(cid, 'HandL', m, 'skin', 1), 'HandR': hr}
 
 
@@ -1207,7 +1208,7 @@ def chef(m):
     body.append(ell(f'{cid}_Belly', B[0], B[1], m['white'], fuse=True))
     # Double-breasted front: the flap's edge piped in red, two rows of buttons.
     body.append(strand(f'{cid}_Piping', [(0.043, y, ell_z(J, 0.043, y) + 0.0008) for y in (0.176, 0.155, 0.135, 0.118)], 0.0026, 0.0026,
-                       m['accent'], ring=6))
+                       m['accent'], ring=6, n=4))
     for row in (-1, 1):
         for k in range(3):
             G = on_ell(J, row * 0.027, 0.17 - k * 0.02, lift=0.0008)
@@ -1218,7 +1219,7 @@ def chef(m):
     body.append(ell(f'{cid}_KerchiefKnot', (0, 0.176, 0.057), (0.013, 0.011, 0.009), m['main'], seg=(14, 10)))
     for side in (-1, 1):
         body.append(strand(f'{cid}_KerchiefTail{side}', [(side * 0.004, 0.172, 0.06), (side * 0.01, 0.156, 0.066), (side * 0.013, 0.142, 0.066)],
-                           0.009, 0.004, m['main'], ring=8))
+                           0.009, 0.004, m['main'], ring=8, n=5))
     # Apron: a panel over the belly with a pocket, a red hem and a waist tie in the player's colour.
     surf = lambda x, y: Vector((x, y, max(ell_z(J, x, max(y, 0.07)), ell_z(B, x, max(y, 0.07)))))
     apron, aedge = sheet(f'{cid}_Apron', surf, 0, lambda t: 0.058 + 0.008 * t, 0.116, 0.042, 0.0015, 0.004, m['white'], nu=12, nv=8)
@@ -1228,7 +1229,7 @@ def chef(m):
     pocket, pedge = sheet(f'{cid}_Pocket', psurf, 0.026, lambda t: 0.017, 0.096, 0.07, 0.0016, 0.003, m['white'], nu=6, nv=5)
     body.append(pocket)
     body.append(strand(f'{cid}_PocketTrim', [psurf(x, 0.096) + Vector((0, 0, 0.0016)) for x in (0.009, 0.026, 0.043)], 0.0022, 0.0022,
-                       m['accent'], ring=6))
+                       m['accent'], ring=6, n=4))
     tie = []
     for k in range(14):
         a = 2 * math.pi * k / 14
@@ -1236,12 +1237,14 @@ def chef(m):
         z = 0.0635 * math.cos(a)
         if z > 0:
             z = max(z, surf(x, 0.118).z)
+        else:
+            z = 0.0675 * math.cos(a)
         tie.append((x, 0.118, z + 0.003))
     body.append(loop(f'{cid}_ApronTie', tie, 0.0045, m['main'], ring=8, n=3))
     body.append(ell(f'{cid}_TieKnot', (0, 0.118, -0.07), (0.01, 0.009, 0.007), m['main'], seg=(12, 8)))
     for side in (-1, 1):
         body.append(strand(f'{cid}_TieEnd{side}', [(side * 0.004, 0.115, -0.071), (side * 0.012, 0.098, -0.07), (side * 0.016, 0.08, -0.066)],
-                           0.0045, 0.0035, m['main'], ring=6))
+                           0.0045, 0.0035, m['main'], ring=6, n=5))
     legs(cid, m, body, 'c1', top=0.068)
     boots(cid, m, body, 'ink')
     head.append(ell(f'{cid}_Face', (0, -0.006, 0), (0.1, 0.098, 0.096), m['skin'], seg=(30, 20), fuse=True))
@@ -1256,13 +1259,14 @@ def chef(m):
     head.append(strand(f'{cid}_Smile', [(-0.025, -0.064, 0.094), (0, -0.074, 0.1), (0.025, -0.064, 0.094)], 0.0035, 0.003, m['ink'], ring=6))
     # The toque: a band, a pleated crown (a ring of soft ribs) and a puffed top.
     toque = [cyl(f'{cid}_HatBand', (0, 0.085, -0.004), 0.082, 0.05, m['white'], seg=32, fuse=True),
-             ell(f'{cid}_Puff', (0, 0.182, -0.004), (0.088, 0.046, 0.088), m['white'], fuse=True)]
+             ell(f'{cid}_Puff', (0, 0.182, -0.004), (0.088, 0.046, 0.088), m['white'], fuse=True),
+             cyl(f'{cid}_Crown', (0, 0.145, -0.004), 0.08, 0.085, m['white'], seg=32, fuse=True)]
     for k in range(14):
         a = 2 * math.pi * k / 14
         toque.append(ell(f'{cid}_Pleat{k}', (0.076 * math.sin(a), 0.152, 0.076 * math.cos(a) - 0.004), (0.022, 0.05, 0.019), m['white'],
                          r=(0, a, 0), fuse=True))
     for o in toque:
-        o['budget'] = 2400
+        o['budget'] = 2000
     head += toque
     head.append(torus(f'{cid}_HatSeam', (0, 0.109, -0.004), 0.0825, 0.0035, m['white'], r=(math.pi / 2, 0, 0), seg=32, mseg=6))
     head.append(torus(f'{cid}_HatStripe', (0, 0.07, -0.004), 0.083, 0.0035, m['main'], r=(math.pi / 2, 0, 0), seg=32, mseg=6))
