@@ -4,8 +4,9 @@
 // procedural canvas textures. Nothing is downloaded: every surface is drawn.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useFrame } from '@react-three/fiber';
 import {
-  CanvasTexture, Color, Object3D, RepeatWrapping, SRGBColorSpace, type InstancedMesh,
+  CanvasTexture, Color, Object3D, RepeatWrapping, SRGBColorSpace, type InstancedMesh, type PointLight,
 } from 'three';
 
 // The camera looks steeply down at the board, so what frames it is mostly
@@ -114,4 +115,27 @@ export function speckle(g: CanvasRenderingContext2D, base: string, amount: numbe
     if (streak) g.fillRect(r() * w, r() * h, 2 + r() * 40, 1);
     else g.fillRect(r() * w, r() * h, 1 + r() * 2, 1 + r() * 2);
   }
+}
+
+/**
+ * A point light that moves a little: `flicker` for fire (fast, irregular),
+ * `pulse` for neon and screens (slow, smooth). `amount` is the swing as a
+ * share of the base intensity. Costs one useFrame; no geometry.
+ */
+export function LiveLight({ position, color, intensity, mode = 'flicker', amount = 0.25, speed = 1, decay = 2 }: {
+  position: V3; color: string; intensity: number; mode?: 'flicker' | 'pulse'; amount?: number; speed?: number; decay?: number;
+}) {
+  const ref = useRef<PointLight>(null);
+  const seed = useMemo(() => Math.random() * 100, []);
+  useFrame(({ clock }) => {
+    const l = ref.current;
+    if (!l) return;
+    const t = clock.elapsedTime * speed + seed;
+    const k = mode === 'flicker'
+      // Three sines at odd ratios read as a flame, never as a loop.
+      ? (Math.sin(t * 7.3) * 0.5 + Math.sin(t * 11.9) * 0.3 + Math.sin(t * 23.1) * 0.2)
+      : Math.sin(t * 0.9);
+    l.intensity = intensity * (1 + k * amount);
+  });
+  return <pointLight ref={ref} position={position} color={color} intensity={intensity} decay={decay} />;
 }

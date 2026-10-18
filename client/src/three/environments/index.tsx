@@ -4,7 +4,7 @@
 
 import type { EnvironmentId } from '../../../../shared/maps.ts';
 import type { Theme } from '../../../../shared/themes.ts';
-import { FLOOR, mix } from './common.tsx';
+import { FLOOR, LiveLight, mix } from './common.tsx';
 import { Lounge } from './Lounge.tsx';
 import { BakedScene, ClassicRoom, WithModel } from '../models.tsx';
 import { ASSETS } from '../assets.gen.ts';
@@ -101,7 +101,7 @@ function RoomLights() {
     <>
       <hemisphereLight args={['#ffe2bd', '#2a1a10', 0.6]} />
       <pointLight position={[13.6, FLOOR + 9.4, -10.5]} color="#ffb46b" intensity={260} decay={2} />
-      <pointLight position={[-18, FLOOR + 2, 0]} color="#ff7a2e" intensity={220} decay={2} />
+      <LiveLight position={[-18, FLOOR + 2, 0]} color="#ff7a2e" intensity={220} mode="flicker" amount={0.3} />
     </>
   );
 }
@@ -114,7 +114,7 @@ function TptvRoomLights() {
   return (
     <>
       <hemisphereLight args={['#aab4e0', '#1a120a', 0.5]} />
-      <pointLight position={[0, FLOOR + 10, -15]} color="#c4d2ff" intensity={160} decay={2} />
+      <LiveLight position={[0, FLOOR + 10, -15]} color="#c4d2ff" intensity={160} mode="flicker" amount={0.12} speed={0.6} />
       <pointLight position={[0, FLOOR + 1.5, -12]} color="#ff9e2c" intensity={90} decay={2} />
       <pointLight position={[-13, FLOOR + 8, -7]} color="#fff1dd" intensity={140} decay={2} />
       <pointLight position={[13, FLOOR + 8, -7]} color="#fff1dd" intensity={140} decay={2} />
@@ -131,7 +131,7 @@ function ChogRoomLights() {
   return (
     <>
       <hemisphereLight args={['#e6c8ff', '#2a1046', 0.55]} />
-      <pointLight position={[0, FLOOR + 13, -15]} color="#ff5fae" intensity={160} decay={2} />
+      <LiveLight position={[0, FLOOR + 13, -15]} color="#ff5fae" intensity={160} mode="pulse" amount={0.18} speed={1.4} />
       <pointLight position={[-14, FLOOR + 9, -13]} color="#ff7ab8" intensity={110} decay={2} />
       <pointLight position={[14, FLOOR + 8, -13]} color="#ffb0d8" intensity={90} decay={2} />
       <pointLight position={[-14.6, FLOOR + 10.5, -1.8]} color="#ffcf9a" intensity={90} decay={2} />
@@ -154,8 +154,8 @@ function SkylineLights() {
       <hemisphereLight args={['#8f9be0', '#2b1d22', 0.55]} />
       <pointLight position={[-12, FLOOR + 10, 9]} color="#ffc47e" intensity={140} decay={2} />
       <pointLight position={[12, FLOOR + 10, 9]} color="#ffc47e" intensity={140} decay={2} />
-      <pointLight position={[-12, FLOOR + 3, -12]} color="#ff8a3a" intensity={160} decay={2} />
-      <pointLight position={[0, FLOOR + 7, -17]} color="#ff4fb0" intensity={150} decay={2} />
+      <LiveLight position={[-12, FLOOR + 3, -12]} color="#ff8a3a" intensity={160} mode="flicker" amount={0.3} />
+      <LiveLight position={[0, FLOOR + 7, -17]} color="#ff4fb0" intensity={150} mode="pulse" amount={0.15} speed={1.2} />
       <pointLight position={[14, FLOOR + 9, -10]} color="#ffd29a" intensity={70} decay={2} />
     </>
   );
