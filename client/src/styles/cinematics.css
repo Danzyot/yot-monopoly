@@ -1,0 +1,99 @@
+/* Cutscenes (client/src/three/cinematics): letterbox, title card, sound words, siren wash. */
+
+.cine {
+  position: absolute; inset: 0; z-index: 0; overflow: hidden; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; user-select: none;
+  --cine-bar: clamp(30px, 11vh, 92px);
+}
+
+.cine-bar {
+  position: absolute; left: 0; right: 0; height: var(--cine-bar); background: #050507;
+  animation: cine-bar-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.cine-bar.top { top: 0; --cine-from: -100%; }
+.cine-bar.bottom { bottom: 0; --cine-from: 100%; display: flex; align-items: center; justify-content: flex-end; padding: 0 16px; }
+.cine.leaving .cine-bar { animation: cine-bar-out 0.55s cubic-bezier(0.6, 0, 0.8, 0.4) both; }
+@keyframes cine-bar-in { from { transform: translateY(var(--cine-from)); } to { transform: none; } }
+@keyframes cine-bar-out { from { transform: none; } to { transform: translateY(var(--cine-from)); } }
+
+.cine-skip {
+  font: 600 12px/1 var(--font, Inter), system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55); animation: cine-fade-in 0.4s 0.8s both;
+}
+.cine-skip::after { content: ' ⏭'; }
+.bc .cine-skip { display: none; }
+
+.cine-vignette {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.45) 100%);
+  animation: cine-fade-in 0.5s both;
+}
+.cine.leaving .cine-vignette, .cine.leaving .cine-title, .cine.leaving .cine-siren { animation: cine-fade-out 0.4s both; }
+
+/* Police lights washing over the picture: red left, blue right, double flashes. */
+.cine-siren {
+  position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen; opacity: 0;
+  animation: cine-siren 0.72s steps(1, end) infinite, cine-fade-out 0.35s ease var(--cine-siren-until) forwards;
+}
+@keyframes cine-siren {
+  0%, 25% { opacity: 0.55; background: radial-gradient(circle at 10% 30%, rgba(255, 30, 30, 0.75), transparent 55%); }
+  12.5%, 37.5% { opacity: 0.1; background: radial-gradient(circle at 10% 30%, rgba(255, 30, 30, 0.5), transparent 55%); }
+  50%, 75% { opacity: 0.55; background: radial-gradient(circle at 90% 30%, rgba(40, 100, 255, 0.8), transparent 55%); }
+  62.5%, 87.5% { opacity: 0.1; background: radial-gradient(circle at 90% 30%, rgba(40, 100, 255, 0.5), transparent 55%); }
+}
+
+/* The title card stamps in, holds, and lifts away. */
+.cine-title {
+  position: absolute; left: 50%; top: calc(var(--cine-bar) + 4vh); transform: translateX(-50%);
+  text-align: center; pointer-events: none; white-space: nowrap;
+  animation: cine-title var(--cine-title-ms) var(--cine-title-at) both;
+}
+.cine-title-main {
+  font: 800 clamp(38px, 9vw, 96px)/0.95 var(--display, Impact), Impact, system-ui, sans-serif; letter-spacing: 0.04em;
+  color: #fff; -webkit-text-stroke: 2px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 4px 0 var(--cine-accent), 0 8px 0 rgba(0, 0, 0, 0.35), 0 0 28px rgba(0, 0, 0, 0.45);
+}
+.cine-title-sub {
+  display: inline-block; margin-top: 10px; padding: 5px 14px; border-radius: 99px;
+  font: 600 clamp(12px, 2.6vw, 17px)/1.2 var(--font, Inter), system-ui, sans-serif; color: #fff;
+  background: rgba(0, 0, 0, 0.55); border: 2px solid var(--cine-accent);
+}
+@keyframes cine-title {
+  0% { opacity: 0; transform: translateX(-50%) scale(2.3) rotate(-9deg); }
+  9% { opacity: 1; transform: translateX(-50%) scale(0.92) rotate(-4deg); }
+  14% { transform: translateX(-50%) scale(1.04) rotate(-4deg); }
+  18%, 84% { opacity: 1; transform: translateX(-50%) scale(1) rotate(-4deg); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-14px) scale(0.96) rotate(-4deg); }
+}
+.cine-winner .cine-title-main { color: #ffd84a; }
+.cine-bankrupt .cine-title-main { color: #ffdedb; }
+
+/* Comic sound words: a yellow starburst that pops and fades. */
+.cine-beat {
+  position: absolute; left: 58%; top: 52%; padding: 22px 30px; pointer-events: none; opacity: 0;
+  font: 900 clamp(22px, 5vw, 44px)/1 var(--display, Impact), Impact, system-ui, sans-serif; letter-spacing: 0.03em; color: #1a1a1a;
+  background: #ffd23f;
+  clip-path: polygon(50% 0%, 61% 18%, 82% 8%, 78% 30%, 100% 34%, 84% 50%, 100% 66%, 78% 70%, 82% 92%, 61% 82%, 50% 100%, 39% 82%, 18% 92%, 22% 70%, 0% 66%, 16% 50%, 0% 34%, 22% 30%, 18% 8%, 39% 18%);
+  animation: cine-beat 0.95s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+.cine-jackpot .cine-beat { left: 30%; top: 40%; background: #7be08c; }
+@keyframes cine-beat {
+  0% { opacity: 0; transform: scale(0.2) rotate(-14deg); }
+  18% { opacity: 1; transform: scale(1.12) rotate(6deg); }
+  30%, 70% { opacity: 1; transform: scale(1) rotate(4deg); }
+  100% { opacity: 0; transform: scale(1.25) rotate(4deg); }
+}
+
+@keyframes cine-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cine-fade-out { to { opacity: 0; } }
+
+@media (max-width: 640px) {
+  .cine { --cine-bar: clamp(26px, 8vh, 64px); }
+  .cine-title { top: calc(var(--cine-bar) + 2vh); }
+  .cine-beat { left: 50%; top: 56%; padding: 16px 22px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cine-title, .cine-beat { animation-name: cine-fade-in; }
+  .cine-siren { display: none; }
+}

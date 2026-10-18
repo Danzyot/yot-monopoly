@@ -18,6 +18,7 @@ import { ReactionBubble } from './ReactionBubble.tsx';
 import { diceSettleAt, holdUntil } from '../sequence.ts';
 import { celebrateGo } from '../GoConfetti.tsx';
 import { pieceObjects } from '../camera.ts';
+import { isPieceHeld } from '../cinematics/store.ts';
 
 /** An emoji reaction currently showing over a player's character. */
 export interface PieceReaction { emoji: string; seq: number }
@@ -278,6 +279,8 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
     m.opacity = p.bankrupt ? (m.lie > 0.9 ? approach(m.opacity, 0, 1.5, dt) : m.opacity) : approach(m.opacity, 1, 4, dt);
     tinter.set(m.grey, m.opacity);
     g.visible = m.opacity > 0.02;
+    // ── Cutscene hook (three/cinematics): while a cutscene plays this piece, its double is drawn instead. ──
+    if (isPieceHeld(p.id)) g.visible = false;
 
     // Grow/shrink smoothly as pieces join or leave the tile.
     m.scale = approach(m.scale, figureScale(n, count), 6, dt);

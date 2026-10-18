@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { BoxGeometry, CylinderGeometry, InstancedMesh, MeshStandardMaterial, Object3D, type Group } from 'three';
 import type { GameView } from '../../../shared/types.ts';
 import { C, tile } from './layout.ts';
+import { jailDoor } from './cinematics/store.ts';
 
 const STRIP = 0.42; // the "Just visiting" L (boardTexture drawJail)
 const SIDE = C - STRIP;
@@ -69,7 +70,8 @@ export function JailCell({ game, n }: { game: GameView | null; n: number }) {
     else if (t < 0.7) a = 1;
     else if (t < 1) { const k = (t - 0.7) / 0.3; a = 1 - k * k; }
     else if (t < 1.12) a = Math.sin(((t - 1) / 0.12) * Math.PI) * 0.06;
-    door.current.rotation.y = a * 1.6;
+    // A cutscene slamming the door works it itself.
+    door.current.rotation.y = jailDoor.angle ?? a * 1.6;
   });
 
   const h = SIDE / 2;
