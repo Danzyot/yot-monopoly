@@ -525,29 +525,40 @@ function TurnBanner({ game, me }: { game: GameView; me: string }) {
   return <div className="turn-banner" aria-hidden><span>Your turn!</span></div>;
 }
 
+// (Card staging lives in three/sequence.ts; imported here to keep this edit to CardPopup.)
+import { CARD_MS, stageView, useCardCue } from '../three/sequence.ts';
+import type { CardShown } from '../../../shared/types.ts';
+
+/**
+ * The drawn card's text, on the move's plan (three/sequence.ts): the 3D card
+ * flies off its pile as the piece arrives on the square (CardDecks), its text
+ * takes over as it reaches the camera, and any move the card makes plays
+ * after it has been read.
+ */
 function CardPopup({ game }: { game: GameView }) {
-  const card = game.lastCard;
+  // Plan this view's move now, so the cue below is on the clock even before the board renders.
+  stageView(game);
+  const cue = useCardCue();
   const theme = resolveTheme(game.themeId, game.mapId);
-  const firstSeq = useRef(card?.seq ?? 0);
-  const [shown, setShown] = useState<number | null>(null);
-  // Turn the card over once the piece has arrived, not while it is still walking.
-  const busy = useSceneBusy();
-  const pending = card && card.seq > firstSeq.current ? card.seq : null;
+  const [mountedAt] = useState(() => performance.now());
+  const [shown, setShown] = useState<CardShown | null>(null);
   useEffect(() => {
-    if (pending === null || busy) return;
-    // The 3D card flies off its pile first (CardDecks); its text takes over as it arrives.
-    const t = setTimeout(() => {
-      firstSeq.current = pending;
-      setShown(pending);
-    }, CARD_FLIGHT_MS - 60);
-    return () => clearTimeout(t);
-  }, [pending, busy]);
+    // A card cued before we were here is history.
+    if (!cue || cue.at + CARD_FLIGHT_MS < mountedAt) return;
+    const now = performance.now();
+    const show = setTimeout(() => setShown(cue.card), Math.max(0, cue.at + CARD_FLIGHT_MS - 60 - now));
+    // Up while it is read and the move it makes plays out, then out of the way.
+    const hide = setTimeout(() => setShown(s => (s === cue.card ? null : s)), Math.max(0, cue.at + CARD_MS + 3500 - now));
+    return () => { clearTimeout(show); clearTimeout(hide); };
+  }, [cue, mountedAt]);
   useEffect(() => {
-    if (shown === null) return;
-    const t = setTimeout(() => setShown(null), 7000);
+    // A card the next one replaced (or one clicked away) does not linger: belt and braces for the timers above.
+    if (!shown) return;
+    const t = setTimeout(() => setShown(s => (s === shown ? null : s)), 9000);
     return () => clearTimeout(t);
   }, [shown]);
-  if (!card || shown !== card.seq) return null;
+  const card = shown;
+  if (!card) return null;
   const who = game.players.find(p => p.id === card.player);
   return (
     <div className={`card-pop ${card.deck} ${theme.ui ? 'branded' : ''}`} onClick={() => setShown(null)} role="status" aria-live="polite">

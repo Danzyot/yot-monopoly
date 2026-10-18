@@ -35,15 +35,27 @@ export const SCENE_FLY_MS = PACE.FLY_MS;
 export const SCENE_CARD_MS = PACE.CARD_MS;
 export const SCENE_SETTLE_MS = PACE.SETTLE_MS;
 
-/** What the clients last staged: the roll, the card and where each piece stood. */
-export interface SceneMark { roll: number; card: number; at: Map<string, number> }
+/** What the clients last staged: the roll, the card, the move and where each piece stood. */
+export interface SceneMark { roll: number; card: number; at: Map<string, number>; move?: number }
 
 /**
- * How long clients spend animating the change from `seen` to `g`: a new roll
- * plays its dice and its result beat, the longest move walks (or flies), and a
+ * How long clients spend animating the change from `seen` to `g`. A new move
+ * plays leg by leg (Game.lastMove): its dice and result beat if it came from a
+ * throw, every leg's walk or flight, and each card drawn on the way, turned
+ * over before the next leg (PACE.moveMs, the very sum the client schedules).
+ * Without a move record (older state) the longest position change walks and a
  * new card flies up. 0 when nothing visible happened.
  */
-export function sceneMs(seen: SceneMark, g: Pick<Game, 'rollSeq' | 'lastCard' | 'players' | 'spaces'>): number {
+export function sceneMs(seen: SceneMark, g: Pick<Game, 'rollSeq' | 'lastCard' | 'players' | 'spaces'> & { lastMove?: Game['lastMove'] }): number {
+  const m = g.lastMove;
+  const card = g.lastCard?.seq ?? 0;
+  if (m && m.seq !== (seen.move ?? 0)) {
+    let ms = m.roll !== undefined && g.rollSeq !== seen.roll ? SCENE_DICE_MS + SCENE_RESULT_MS : 0;
+    ms += PACE.moveMs(m.legs);
+    // A card that came some other way than on this move's legs still flies up.
+    if (card !== seen.card && !m.legs.some(l => l.card?.seq === card)) ms += SCENE_CARD_MS;
+    return ms ? ms + SCENE_SETTLE_MS : 0;
+  }
   const n = g.spaces.length;
   let ms = g.rollSeq !== seen.roll ? SCENE_DICE_MS + SCENE_RESULT_MS : 0;
   let walk = 0;
@@ -196,7 +208,7 @@ export class Room {
       existing.disconnectedAt = null;
       this.departed.delete(m.id);
       existing.avatar = m.avatar;
-      if (this.status === 'lobby') existing.name = m.name;
+      if (this.status === 'lobby') existing.name = this.uniqueName(m.name, m.id);
       return existing;
     }
     if (this.status !== 'lobby') fail('This game has already started — you can watch');
@@ -204,12 +216,12 @@ export class Room {
     if (this.seats.length >= this.rules.maxPlayers) fail('The room is full — you can watch');
     const character = this.freeCharacter();
     const s: Seat = {
-      id: m.id, name: m.name, avatar: m.avatar, isBot: false, connected: true, disconnectedAt: null,
+      id: m.id, name: this.uniqueName(m.name, m.id), avatar: m.avatar, isBot: false, connected: true, disconnectedAt: null,
       character, color: this.freeColor(), outfit: defaultOutfit(character),
     };
     this.seats.push(s);
     if (!this.seat(this.hostId)) this.hostId = m.id;
-    this.hooks.onEvent(this, `${m.name} joined`);
+    this.hooks.onEvent(this, `${s.name} joined`);
     return s;
   }
 
@@ -422,13 +434,24 @@ export class Room {
     this.requireHost(id, isAdmin);
     this.requireLobby();
     if (this.seats.length >= this.rules.maxPlayers) fail('The room is full');
-    const used = new Set(this.seats.map(s => s.name));
-    const name = BOT_NAMES.find(n => !used.has(n)) ?? `Bot ${this.seats.length + 1}`;
+    const used = new Set(this.seats.map(s => s.name.toLowerCase()));
+    const name = this.uniqueName(BOT_NAMES.find(n => !used.has(n.toLowerCase())) ?? 'Bot', '');
     const character = this.freeCharacter();
     this.seats.push({
       id: `bot-${this.code}-${randomInt(1e9)}`, name, avatar: '🤖', isBot: true, connected: true, disconnectedAt: null,
       character, color: this.freeColor(), outfit: randomOutfit(n => randomInt(n), character),
     });
+  }
+
+  /**
+   * `name`, or "name 2", "name 3"... when someone else at the table already
+   * goes by it (ignoring case): everyone is told apart by name in the log,
+   * the feed and the HUD.
+   */
+  private uniqueName(name: string, self: string): string {
+    const taken = new Set(this.seats.filter(s => s.id !== self).map(s => s.name.toLowerCase()));
+    if (!taken.has(name.toLowerCase())) return name;
+    for (let k = 2; ; k++) if (!taken.has(`${name} ${k}`.toLowerCase())) return `${name} ${k}`;
   }
 
   /** Host (or operator) removes someone: lobby seat freed, in-game forfeited. */
@@ -622,13 +645,17 @@ export class Room {
   /** Work out how long clients will spend animating what changed since the last look. */
   private noteScene(g: Game) {
     const seen = this.seen;
-    this.seen = { roll: g.rollSeq, card: g.lastCard?.seq ?? 0, at: new Map(g.players.map(p => [p.id, p.position])), cut: cutsceneSnap(g) };
+    this.seen = {
+      roll: g.rollSeq, card: g.lastCard?.seq ?? 0, move: g.lastMove?.seq ?? 0,
+      at: new Map(g.players.map(p => [p.id, p.position])), cut: cutsceneSnap(g),
+    };
     if (!seen) return;
     let ms = sceneMs(seen, g);
     // Then the cinematic cutscene the change calls for, if any (jail, bankruptcy, a jackpot).
     const cue = pickCutscene(seen.cut, this.seen.cut);
     if (cue) ms += CUTSCENE_MS[cue.kind] + (ms ? 0 : SCENE_SETTLE_MS);
-    if (ms) this.sceneUntil = Date.now() + ms;
+    // A later, shorter scene never cuts short one still playing.
+    if (ms) this.sceneUntil = Math.max(this.sceneUntil, Date.now() + ms);
   }
 
   /** Re-arm timers after any change. */

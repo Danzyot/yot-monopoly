@@ -1,7 +1,9 @@
 // Player pieces on the board: one procedural character per player, tinted in
-// the player's colour. Movement is a queue of tile-by-tile hops built from
-// server position changes (teleports — jail, long card jumps — fly straight);
-// on top of that each figure breathes, turns to face where it's going,
+// the player's colour. Movement plays the server's move record leg by leg
+// (three/sequence.ts plans it on the clock: walk to the Chance square, wait
+// while the card is read, walk on), hop by hop; jail and long jumps fly
+// straight. Every hop has a planned start time, so a slow frame rate skips
+// hops instead of stretching the walk. On top of that each figure breathes, turns to face where it's going,
 // squashes and stretches through hops, steps foot over foot, cheers when it
 // buys or earns, sulks when it pays, stamps when it's jailed, fidgets when idle, slumps
 // in jail, lies down and fades when bankrupt, and dances when it wins. The
@@ -19,8 +21,9 @@ import {
 import { ReactionBubble } from './ReactionBubble.tsx';
 import { clearMove, hopPose } from './moves.ts';
 import { MoveFX, flightSound, propHandMirrored, stepSound } from './moveFx.ts';
-import { diceSettleAt, holdUntil } from '../sequence.ts';
-import { FLY_MS, HOP_MS, MAX_HOPS } from '../../../../shared/pacing.ts';
+import { diceSettleAt, plansFor, reserveWalk, stageView, stagedGameKey } from '../sequence.ts';
+import { HOP_MS, MAX_HOPS, legWalkMs } from '../../../../shared/pacing.ts';
+import type { MoveLeg } from '../../../../shared/types.ts';
 import { celebrateGo } from '../GoConfetti.tsx';
 import { pieceObjects } from '../camera.ts';
 import { isPieceHeld } from '../cinematics/store.ts';
@@ -31,20 +34,11 @@ export interface PieceReaction { emoji: string; seq: number }
 /** The middle of the board, where the dice land. */
 const CENTRE = new Vector3(0, 0, 0);
 const LAND_MS = 150;
-/** A resting piece winds up (crouches) this long before its first hop. */
+/** A resting piece winds up (crouches) this long before the first hop of a leg (inside the wait before it). */
 const CROUCH_MS = 120;
-/**
- * One piece walks at a time. Moves normally arrive one after another, but a
- * burst (a reconnect, a server restart, a slow frame) would otherwise set
- * several pieces walking at once and read as two players moving together; a
- * move that arrives while another piece is still walking waits its turn.
- */
-let walker: { id: string; until: number } | null = null;
-/** ...but never longer than this: a slow device must not build up a queue of walks. */
-const MAX_WAIT_MS = 900;
 /** ?perf debugging: each piece's move state (window.__yotWalk). */
 const walkDebug = new Map<string, () => object>();
-if (typeof window !== 'undefined') Object.assign(window, { __yotWalk: () => ({ walker: walker && { ...walker, inMs: Math.round(walker.until - performance.now()) }, pieces: [...walkDebug].map(([id, f]) => ({ id: id.slice(-6), ...f() })) }) });
+if (typeof window !== 'undefined') Object.assign(window, { __yotWalk: () => ({ pieces: [...walkDebug].map(([id, f]) => ({ id: id.slice(-6), ...f() })) }) });
 /** After the landing squash, a smaller rebound stretch. */
 const REBOUND_MS = 170;
 
@@ -69,22 +63,55 @@ function figureScale(n: number, count: number): number {
   return 1.7 * roomy * crowd;
 }
 
-interface Anim {
-  shown: number;    // space the piece is drawn at / heading to
-  queue: number[];  // spaces still to hop through
-  from: [number, number];
-  to: [number, number];
+/** One hop (or flight) of a walk, on the performance.now() clock. */
+interface Seg {
+  tile: number;
   t0: number;
   dur: number;
-  /** Was behind bars when the last state arrived (the first hop out is a leap over them). */
-  jailed: boolean;
-  /** The next hop to start is the leap out of the cell; the one under way is. */
-  leapNext: boolean;
+  fly: boolean;
+  /** The leap out of the jail cell. */
   leap: boolean;
-  /** When the wind-up crouch before the next move began (0: none pending). */
-  crouchAt: number;
-  /** When this piece started waiting for another to finish walking (0: not waiting). */
-  blockedAt?: number;
+  /** Starts a leg from rest: the piece crouches just before it. */
+  first: boolean;
+}
+
+interface Anim {
+  shown: number;    // space the piece is drawn at / heading to
+  /** Where the piece ends up once every planned hop is done. */
+  target: number;
+  /** Planned hops, in order; `next` is the first not yet started. */
+  segs: Seg[];
+  next: number;
+  /** The hop under way (or the last one, until the piece is at rest). */
+  cur: Seg | null;
+  from: [number, number];
+  to: [number, number];
+  /** Was behind bars when the last state arrived (a walk out starts with a leap over them). */
+  jailed: boolean;
+  /** The last move (sequence.ts plan) taken into `segs`, and the game it belongs to. */
+  planSeq: number;
+  game: number | null;
+}
+
+/** Queue a leg's hops starting at `t0`. */
+function addLeg(a: Anim, leg: Pick<MoveLeg, 'to' | 'kind' | 'steps' | 'leap'>, t0: number, n: number) {
+  const walk = legWalkMs(leg);
+  const steps = leg.steps ?? 0;
+  if (walk > 0 && leg.kind !== 'jail' && leg.kind !== 'teleport' && steps !== 0 && Math.abs(steps) <= MAX_HOPS) {
+    // Tile by tile (backwards for "go back 3"), from where the server says the leg began.
+    const dir = Math.sign(steps);
+    const origin = ((leg.to - steps) % n + n) % n;
+    let t = t0;
+    for (let k = 1; k <= Math.abs(steps); k++) {
+      const leap = k === 1 && !!leg.leap;
+      const dur = leap ? HOP_MS * 2 : HOP_MS;
+      a.segs.push({ tile: ((origin + dir * k) % n + n) % n, t0: t, dur, fly: false, leap, first: k === 1 });
+      t += dur;
+    }
+  } else if (walk > 0) {
+    a.segs.push({ tile: leg.to, t0, dur: walk, fly: true, leap: false, first: true });
+  }
+  a.target = leg.to;
 }
 
 /** Everything the frame loop eases between; lives in a ref, not React state. */
@@ -165,18 +192,32 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
   // prop here would snap the piece and kill the hop animation).
   const [initial] = useState<[number, number, number]>(() => [target[0], 0, target[1]]);
   if (!anim.current) {
-    anim.current = { shown: p.position, queue: [], from: target, to: target, t0: 0, dur: HOP_MS, jailed: p.inJail, leapNext: false, leap: false, crouchAt: 0 };
-  } else if (anim.current.queue.at(-1) !== p.position && anim.current.shown !== p.position) {
+    // Whatever moves were staged before this piece appeared are history.
+    const seen = plansFor(p.id, 0).at(-1)?.seq ?? 0;
+    anim.current = {
+      shown: p.position, target: p.position, segs: [], next: 0, cur: null, from: target, to: target,
+      jailed: p.inJail, planSeq: seen, game: stagedGameKey(),
+    };
+  } else {
     const a = anim.current;
-    const start = a.queue.at(-1) ?? a.shown;
-    const steps = (p.position - start + n) % n;
-    // Teleports (jail, "go back 3") fly straight; normal moves hop tile by tile.
-    if (p.inJail || steps > MAX_HOPS || steps === 0) a.queue.push(p.position);
-    else for (let k = 1; k <= steps; k++) a.queue.push((start + k) % n);
-    // Out of jail on a roll: the first hop clears the bars.
-    a.leapNext = a.jailed && !p.inJail && steps > 0 && steps <= MAX_HOPS;
+    if (a.game !== stagedGameKey()) { a.game = stagedGameKey(); a.planSeq = 0; }
+    // The moves sequence.ts has planned for this player, each leg at its planned time.
+    for (const plan of plansFor(p.id, a.planSeq)) {
+      a.planSeq = plan.seq;
+      if (plan.initial) { a.target = plan.legs.at(-1)?.to ?? a.target; continue; }
+      for (const leg of plan.legs) addLeg(a, leg, leg.t0, n);
+    }
+    if (a.target !== p.position) {
+      // A change no move record explains (an older server, a missed update):
+      // work out the walk from the positions, after the dice if there were any.
+      const steps = (p.position - a.target + n) % n;
+      const leg: Pick<MoveLeg, 'to' | 'kind' | 'steps' | 'leap'> = p.inJail || steps > MAX_HOPS
+        ? { to: p.position, kind: p.inJail ? 'jail' : 'teleport' }
+        : { to: p.position, kind: 'roll', steps, leap: a.jailed && !p.inJail };
+      addLeg(a, leg, reserveWalk(diceSettleAt(), legWalkMs(leg)), n);
+    }
   }
-  if (anim.current) anim.current.jailed = p.inJail;
+  anim.current.jailed = p.inJail;
   if (!motion.current) {
     // Someone already out when we arrive (reload mid-game) is simply not drawn.
     const out = p.bankrupt ? 1 : 0;
@@ -193,7 +234,12 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
   }
 
   useEffect(() => {
-    walkDebug.set(p.id, () => { const a = anim.current!; return { shown: a.shown, queue: a.queue.slice(), crouchAt: Math.round(a.crouchAt), kLeft: Math.round(a.t0 + a.dur - performance.now()) }; });
+    walkDebug.set(p.id, () => {
+      const a = anim.current!;
+      const now = performance.now();
+      const last = a.segs.at(-1);
+      return { shown: a.shown, target: a.target, planSeq: a.planSeq, hopsLeft: a.segs.length - a.next, doneInMs: last ? Math.round(last.t0 + last.dur - now) : 0 };
+    });
     return () => { walkDebug.delete(p.id); };
   }, [p.id]);
 
@@ -206,55 +252,35 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
     const now = performance.now();
     const time = state.clock.elapsedTime;
 
-    let k = a.t0 ? (now - a.t0) / a.dur : 1;
-    // A fresh move waits for the dice to land first, and for any other piece
-    // still walking to finish.
-    const settle = diceSettleAt();
-    // Anticipation: a piece starting from rest crouches for a beat first (a
-    // move chained straight onto the last hop just keeps going).
-    const resting = k >= 1 && !(a.t0 > 0 && now - (a.t0 + a.dur) < 400);
-    const otherWalking = walker !== null && walker.id !== p.id && now < walker.until;
-    const wantsToWait = a.queue.length > 0 && resting && !a.crouchAt && otherWalking;
-    if (wantsToWait && !a.blockedAt) a.blockedAt = now;
-    if (!wantsToWait) a.blockedAt = 0;
-    const blocked = wantsToWait && now - (a.blockedAt ?? now) < MAX_WAIT_MS;
-    const waiting = (k >= 1 && a.queue.length > 0 && now < settle) || blocked;
-    if (a.queue.length && resting && !a.crouchAt && !blocked) {
-      a.crouchAt = Math.max(now, settle - CROUCH_MS);
-      walker = { id: p.id, until: a.crouchAt + CROUCH_MS + a.queue.length * HOP_MS + LAND_MS };
-    }
-    if (walker?.id === p.id && (a.queue.length || k < 1)) {
-      walker.until = Math.max(walker.until, (k < 1 ? a.t0 + a.dur : now) + a.queue.length * HOP_MS + LAND_MS);
-    }
-    const crouchT = a.crouchAt ? (now - a.crouchAt) / CROUCH_MS : 2;
-    if (a.queue.length) {
-      const startAt = Math.max(now, waiting ? settle : now, blocked && walker ? Math.min(walker.until, (a.blockedAt ?? now) + MAX_WAIT_MS) : 0);
-      holdUntil(startAt + (crouchT < 1 ? CROUCH_MS : 0) + a.queue.length * HOP_MS + LAND_MS + 250);
-    }
-    while (k >= 1 && a.queue.length && !waiting && crouchT >= 1) {
-      // Chain hops back to back from when the previous one ended rather than
-      // from this frame, so slow frames (phones, software GL) can't leave a
-      // piece trailing behind the game; hops that are already over resolve
-      // in this loop without being drawn.
-      const prevEnd = a.t0 + a.dur;
-      const chained = a.t0 > 0 && now - prevEnd < 400;
-      const next = a.queue.shift()!;
+    // Start every hop whose planned time has come. Hops that are already over
+    // by now (a slow frame, a hidden tab) resolve here without being drawn: the
+    // piece skips ahead and stays on schedule; it never stretches the walk.
+    let started = 0;
+    while (a.next < a.segs.length && a.segs[a.next].t0 <= now) {
+      const s = a.segs[a.next++];
+      a.from = a.cur ? a.to : [g.position.x, g.position.z];
+      // The very last hop lands in this piece's slot; the rest pass through the middle of the tile.
+      a.to = a.next === a.segs.length ? tokenSpot(s.tile, slot, count, p.inJail, n) : tokenSpot(s.tile, 0, 1, false, n);
+      a.cur = s;
+      a.shown = s.tile;
       m.hops++;
-      const final = a.queue.length === 0;
-      a.leap = a.leapNext;
-      a.leapNext = false;
-      a.crouchAt = 0;
-      a.from = chained ? a.to : [g.position.x, g.position.z];
-      a.to = final ? tokenSpot(next, slot, count, p.inJail, n) : tokenSpot(next, 0, 1, false, n);
-      a.dur = Math.hypot(a.to[0] - a.from[0], a.to[1] - a.from[1]) > 2 ? FLY_MS : a.leap ? HOP_MS * 2 : HOP_MS;
-      a.shown = next;
-      a.t0 = chained ? prevEnd : now;
-      // Onto or over GO: confetti as the hop lands.
-      if (next === 0 && !p.inJail) celebrateGo(a.t0 + a.dur);
-      k = (now - a.t0) / a.dur;
+      started++;
+      // Onto or over GO: confetti as the hop lands (not for hops long gone).
+      if (s.tile === 0 && !p.inJail && s.t0 + s.dur > now - 300) celebrateGo(s.t0 + s.dur);
     }
-    const hopping = k < 1;
-    const long = a.dur > HOP_MS;
+    const cur = a.cur;
+    const k = cur ? (now - cur.t0) / cur.dur : 1;
+    const hopping = !!cur && k < 1;
+    if (cur && !hopping) {
+      m.landAt = cur.t0 + cur.dur;
+      if (a.next >= a.segs.length) { a.segs = []; a.next = 0; }
+      a.cur = null;
+    }
+    // Anticipation: a leg starting from rest crouches for a beat first (inside the wait before it).
+    const nextSeg = a.segs[a.next];
+    const crouchT = !hopping && nextSeg?.first ? (now - (nextSeg.t0 - CROUCH_MS)) / CROUCH_MS : 2;
+    const long = !!cur && cur.fly;
+    const leap = !!cur && cur.leap;
 
     const o = m.pose;
     o.time = time; o.phase = m.phase; o.handsUp = 0; o.squash = 1;
@@ -266,7 +292,7 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
     let lift = 0;
     let faceYaw: number;
 
-    if (hopping) {
+    if (hopping && cur) {
       // A hop carries its speed straight across (the weight is in the arc);
       // a long flight eases off and in.
       const e = long ? k * k * (3 - 2 * k) : k;
@@ -274,17 +300,17 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
       g.position.z = a.from[1] + (a.to[1] - a.from[1]) * e;
       // A gravity arc, squat on take-off and stretched in the air (moves.ts).
       // A leap out of the cell goes high enough to clear the bars (JailCell is 0.42 tall).
-      lift = hopPose(o, k) * (long ? 1.6 : a.leap ? 1.1 : 0.3);
+      lift = hopPose(o, k) * (long ? 1.6 : leap ? 1.1 : 0.3);
       if (long) { o.handsUp = Math.sin(Math.PI * k); spin = k * Math.PI * 2; } else o.walk = k;
       // Hop to hop, the arms get a smaller jolt as each foot comes down.
-      if (m.hops !== m.hopSeen) { if (m.hopSeen) o.kick = -0.5; m.hopSeen = m.hops; hopSounds(m.hopping, long || a.leap, own); }
+      if (m.hops !== m.hopSeen) { if (m.hopSeen) o.kick = -0.5; m.hopSeen = m.hops; hopSounds(m.hopping || started > 1, long || leap, own); }
       faceYaw = Math.atan2(a.to[0] - a.from[0], a.to[1] - a.from[1]);
-      m.landAt = now + a.dur * (1 - k);
-      holdUntil(m.landAt + LAND_MS + 250);
+      m.landAt = cur.t0 + cur.dur;
     } else {
       if (!p.bankrupt) {
-        // Settle into the (possibly changed) slot when other pieces arrive/leave.
-        const [x, z] = tokenSpot(a.shown, slot, count, p.inJail, n);
+        // Settle into the (possibly changed) slot when other pieces arrive/leave;
+        // between legs (a card being read) it waits in the middle of the tile.
+        const [x, z] = a.next < a.segs.length ? tokenSpot(a.shown, 0, 1, false, n) : tokenSpot(a.shown, slot, count, p.inJail, n);
         g.position.x += (x - g.position.x) * 0.2;
         g.position.z += (z - g.position.z) * 0.2;
       }
@@ -450,6 +476,8 @@ export function Pieces({ game, n, reactions, me }: {
   reactions?: Record<string, PieceReaction>;
 }) {
   const { players, owned, current, winner, phase } = game;
+  // Plan this view's move (if the HUD has not already) before the pieces read it.
+  stageView(game);
 
   // Slot assignment per tile so pieces sharing a space don't overlap.
   const slots = useMemo(() => {

@@ -17,7 +17,7 @@ import {
 } from '../../../shared/minigames.ts';
 import {
   SPEED_FACES,
-  type Action, type Auction, type CardShown, type Debt, type GameView, type LogEntry, type MoveChoice,
+  type Action, type Auction, type CardShown, type Debt, type GameView, type LastMove, type LogEntry, type MoveChoice, type MoveLegKind,
   type OwnedSpace, type PauseState, type PlayerState, type PlayerStats, type CharacterId, type SpeedFace,
   type Trade, type TradeSide, type TurnPhase,
 } from '../../../shared/types.ts';
@@ -112,6 +112,9 @@ export interface GameSnapshot {
   cardSeq: number;
   tradeSeq: number;
   outOrder: string[];
+  /** Optional: snapshots written before moves were recorded leg by leg lack these. */
+  lastMove?: LastMove | null;
+  moveSeq?: number;
   /** Optional: snapshots written before mini-games existed lack these. */
   minigame?: MinigameState | null;
   minigameSeq?: number;
@@ -184,6 +187,14 @@ export class Game {
   housesLeft = 32;
   hotelsLeft = 12;
   lastCard: CardShown | null = null;
+  /** The latest move, leg by leg (see LastMove): clients stage it, rooms time bots by it. */
+  lastMove: LastMove | null = null;
+  private moveSeq = 0;
+  /**
+   * Legs recorded before the next settle() belong to lastMove: one action (a
+   * roll, a choice, a timeout) is one move, however many legs it takes.
+   */
+  private moveOpen = false;
   winner: string | null = null;
   log: LogEntry[] = [];
   turnNumber = 1;
@@ -277,8 +288,10 @@ export class Game {
     return a;
   }
 
-  private say(text: string, who?: string) {
-    this.log.push({ t: this.now(), text, who });
+  private say(text: string, who?: string, money?: Pick<LogEntry, 'amount' | 'from' | 'to' | 'reason' | 'owed'>) {
+    const e: LogEntry = { t: this.now(), text, who, ...money };
+    if (this.moveOpen && this.lastMove) e.move = this.lastMove.seq;
+    this.log.push(e);
     this.onLog?.(text);
     if (this.log.length > MAX_LOG) this.log.splice(0, this.log.length - MAX_LOG);
   }
@@ -358,34 +371,51 @@ export class Game {
         const payer = this.stat(from.id);
         payer.biggestRentPaid = Math.max(payer.biggestRentPaid, amount);
       }
-      this.say(`${from.name} paid ${this.money(amount)}${to ? ` to ${to.name}` : ''} (${reason}).`, from.id);
+      this.say(`${from.name} paid ${this.money(amount)}${to ? ` to ${to.name}` : ''} (${reason}).`, from.id,
+        { amount, from: from.id, ...(to && { to: to.id }), reason });
     } else {
       this.debts.push({ from: from.id, to: to?.id ?? null, amount, reason, toPot });
-      this.say(`${from.name} owes ${this.money(amount)}${to ? ` to ${to.name}` : ''} (${reason}) — must raise funds.`, from.id);
+      this.say(`${from.name} owes ${this.money(amount)}${to ? ` to ${to.name}` : ''} (${reason}) — must raise funds.`, from.id,
+        { amount, from: from.id, ...(to && { to: to.id }), reason, owed: true });
     }
   }
 
   // ---- movement & landing ---------------------------------------------------
 
-  private moveBy(p: PlayerState, steps: number) {
+  /** Start a new move record (a roll starts one even if it goes nowhere). */
+  private beginMove(p: PlayerState, roll: boolean) {
+    this.lastMove = { player: p.id, seq: ++this.moveSeq, ...(roll && { roll: this.rollSeq }), legs: [] };
+    this.moveOpen = true;
+  }
+
+  /** Record that `p` just moved to where it now stands. */
+  private leg(p: PlayerState, kind: MoveLegKind, steps?: number, leap = false) {
+    if (!this.moveOpen || this.lastMove?.player !== p.id) this.beginMove(p, false);
+    this.lastMove!.legs.push({ to: p.position, kind, ...(steps !== undefined && { steps }), ...(leap && { leap: true }) });
+  }
+
+  private moveBy(p: PlayerState, steps: number, kind: MoveLegKind = 'roll', leap = false) {
     const target = p.position + steps;
+    p.position = target % this.size;
+    this.leg(p, kind, kind === 'teleport' ? undefined : steps, leap);
     if (target >= this.size) {
       const landedOnGo = target % this.size === 0;
       const pay = this.rules.goSalary * (landedOnGo && this.rules.doubleOnGo ? 2 : 1);
       this.bankPays(p, pay, 'salary');
       p.passedGo = true;
-      this.say(`${p.name} ${landedOnGo ? 'landed on' : 'passed'} ${this.spaces[0].name} and collected ${this.money(pay)}.`, p.id);
+      this.say(`${p.name} ${landedOnGo ? 'landed on' : 'passed'} ${this.spaces[0].name} and collected ${this.money(pay)}.`, p.id,
+        { amount: pay, to: p.id, reason: 'salary' });
     }
-    p.position = target % this.size;
   }
 
-  private advanceTo(p: PlayerState, to: number) {
+  private advanceTo(p: PlayerState, to: number, kind: MoveLegKind = 'roll') {
     const steps = (to - p.position + this.size) % this.size;
-    this.moveBy(p, steps === 0 ? this.size : steps);
+    this.moveBy(p, steps === 0 ? this.size : steps, kind);
   }
 
   private sendToJail(p: PlayerState) {
     p.position = this.jailIndex;
+    this.leg(p, 'jail');
     p.inJail = true;
     p.jailTurns = 0;
     this.doublesCount = 0;
@@ -437,7 +467,7 @@ export class Game {
         break;
       case 'parking':
         if (this.rules.freeParkingPot && this.pot > 0) {
-          this.say(`${p.name} scooped the ${s.name} pot of ${this.money(this.pot)}!`, p.id);
+          this.say(`${p.name} scooped the ${s.name} pot of ${this.money(this.pot)}!`, p.id, { amount: this.pot, to: p.id, reason: 'pot' });
           p.cash += this.pot;
           this.pot = 0;
         }
@@ -461,6 +491,9 @@ export class Game {
     if (card.effect.type === 'jailFree') p.jailCards.push(deck);
     else this.decks[deck].push(idx);
     this.lastCard = { deck, text, player: p.id, seq: ++this.cardSeq };
+    // Shown when the piece gets here, before any move the card makes.
+    const arrived = this.moveOpen && this.lastMove?.player === p.id ? this.lastMove.legs.at(-1) : undefined;
+    if (arrived && !arrived.card) arrived.card = { ...this.lastCard };
     this.say(`${p.name} drew ${this.theme.deckNames[deck]}: “${text}”`, p.id);
     this.applyCard(p, card.effect);
   }
@@ -469,19 +502,20 @@ export class Game {
     const others = this.active().filter(o => o !== p);
     switch (e.type) {
       case 'advance':
-        this.advanceTo(p, e.to);
+        this.advanceTo(p, e.to, 'card');
         this.resolveLanding(p);
         break;
       case 'nearest': {
         if (!this.spaces.some(s => s.kind === e.kind)) break; // this map has none
         let i = p.position;
         do i = (i + 1) % this.size; while (this.spaces[i].kind !== e.kind);
-        this.advanceTo(p, i);
+        this.advanceTo(p, i, 'card');
         this.resolveLanding(p, e.kind === 'railroad' ? { railroadMultiplier: 2 } : { utilityTenX: true });
         break;
       }
       case 'back':
         p.position = (p.position - e.steps + this.size) % this.size;
+        this.leg(p, 'card', -e.steps);
         this.resolveLanding(p);
         break;
       case 'jail':
@@ -489,9 +523,13 @@ export class Game {
         break;
       case 'jailFree':
         break;
-      case 'collect':
+      case 'collect': {
         this.bankPays(p, e.amount, 'card');
+        // The card's own line says it; tag it so clients can show the money.
+        const line = this.log.at(-1);
+        if (line?.who === p.id && line.amount === undefined) Object.assign(line, { amount: e.amount, to: p.id, reason: 'card' });
         break;
+      }
       case 'pay':
         this.charge(p, null, e.amount, 'card', true);
         break;
@@ -586,6 +624,7 @@ export class Game {
     if (p.bankrupt) fail('You are out of the game');
     // Resigning stays possible so a player can still leave a paused table.
     if (this.paused && a.type !== 'bankrupt') fail(`The game is paused by ${this.paused.by}`);
+    this.moveOpen = false; // (an action that failed half way never reached settle())
     this.dispatch(p, a);
     if (!opts.auto) {
       this.timeoutStreak[p.id] = 0;
@@ -667,6 +706,8 @@ export class Game {
     this.rollSeq++;
     this.rollTurn = this.turnNumber;
     this.rollBy = this.current.id;
+    const wasJailed = p.inJail;
+    this.beginMove(p, true);
     const total = d[0] + d[1];
     const doubles = d[0] === d[1];
     const triples = doubles && speed === d[0];
@@ -717,7 +758,7 @@ export class Game {
       return;
     }
     if (speed === 'mr') this.speedPending = 'mr';
-    this.moveBy(p, total + (typeof speed === 'number' ? speed : 0));
+    this.moveBy(p, total + (typeof speed === 'number' ? speed : 0), 'roll', wasJailed);
     this.resolveLanding(p);
     if (this.phase === 'done') this.afterResolution();
   }
@@ -739,7 +780,7 @@ export class Game {
       this.phase = 'done';
       this.say(`${p.name} jumped to ${this.spaces[value].name}.`, p.id);
       // Moving forward: passing GO on the way still pays.
-      if (value !== p.position) this.advanceTo(p, value);
+      if (value !== p.position) this.advanceTo(p, value, 'teleport');
     }
     this.resolveLanding(p);
     if (this.phase === 'done') this.afterResolution();
@@ -1478,6 +1519,8 @@ export class Game {
 
   /** Bookkeeping after every change: the time-limit ending, estate sales, deadlines. */
   private settle() {
+    // Whatever moves next is a new move.
+    this.moveOpen = false;
     // Out of time and between turn steps: that was the last one.
     if (this.timeUp && this.phase === 'roll' && !this.paused) this.finishByTime();
     this.pumpEstate();
@@ -1766,6 +1809,7 @@ export class Game {
       dice: this.dice, rollSeq: this.rollSeq, rollTurn: this.rollTurn, rollBy: this.rollBy, doublesCount: this.doublesCount, extraRoll: this.extraRoll,
       debts: this.debts, auction: this.auction, trades: this.trades, pot: this.pot,
       housesLeft: this.housesLeft, hotelsLeft: this.hotelsLeft, lastCard: this.lastCard,
+      lastMove: this.lastMove, moveSeq: this.moveSeq,
       winner: this.winner, log: this.log, turnNumber: this.turnNumber, decks: this.decks,
       cardSeq: this.cardSeq, tradeSeq: this.tradeSeq, outOrder: this.outOrder,
       minigame: this.minigame, minigameSeq: this.minigameSeq, savedAt: this.now(),
@@ -1799,6 +1843,8 @@ export class Game {
     g.rollBy = snap.rollBy ?? '';
     g.choice = snap.choice ?? null;
     g.speedPending = snap.speedPending ?? null;
+    g.lastMove = snap.lastMove ?? null;
+    g.moveSeq = snap.moveSeq ?? 0;
     g.endAfter = snap.endAfter ?? false;
     g.estateQueue = snap.estateQueue ?? [];
     g.resumePhase = snap.resumePhase ?? null;
@@ -1880,6 +1926,7 @@ export class Game {
       housesLeft: this.housesLeft,
       hotelsLeft: this.hotelsLeft,
       lastCard: this.lastCard,
+      lastMove: this.lastMove,
       winner: this.winner,
       log: this.log.slice(-80),
       turnNumber: this.turnNumber,

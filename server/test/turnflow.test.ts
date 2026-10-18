@@ -57,7 +57,7 @@ test('scene pacing: bots wait for the dice, the result and the walk', () => {
   assert.ok(PACE.HOP_MS >= 190);
 
   const { g, dice, act } = scripted();
-  const mark = () => ({ roll: g.rollSeq, card: g.lastCard?.seq ?? 0, at: new Map(g.players.map(p => [p.id, p.position])) });
+  const mark = () => ({ roll: g.rollSeq, card: g.lastCard?.seq ?? 0, move: g.lastMove?.seq ?? 0, at: new Map(g.players.map(p => [p.id, p.position])) });
   let seen = mark();
   assert.equal(sceneMs(seen, g), 0, 'nothing happened');
   dice(2, 4);
