@@ -1,0 +1,34 @@
+/* Build & manage: disabled actions read as disabled, with the reason inline.
+   Header: the Characters link stays on phones. */
+
+.bp-mort { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 0; }
+.bp-mort .btn.is-off:disabled,
+.bp-mort .btn.is-off:disabled:hover {
+  opacity: 0.5; filter: grayscale(1) brightness(0.8); cursor: not-allowed;
+  transform: none; box-shadow: none; background: rgba(255, 255, 255, 0.05); color: var(--muted); border-style: dashed;
+  text-shadow: none;
+}
+.bp-off-why { max-width: 150px; text-align: right; line-height: 1.15; font-size: 11px; font-weight: 700; color: var(--muted); }
+.btn:disabled:hover, .btn:disabled:active { transform: none; }
+
+/* The hotel/house steppers dim the same way when they cannot be used. */
+.bp-build .btn:disabled { opacity: 0.5; }
+
+/* Characters link: icon + label; icon-only on narrow phones. */
+.nav-chars { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.nav-chars .nav-ico { display: none; font-size: 16px; line-height: 1; }
+@media (max-width: 760px) {
+  .nav-chars .nav-ico { display: inline; }
+  .nav-chars .nav-label { font-size: 13px; }
+}
+@media (max-width: 480px) {
+  .site-header { gap: 6px; padding-left: 8px; padding-right: 8px; }
+  .site-header .brand { font-size: 16px; gap: 5px; min-width: 0; }
+  .site-header nav { gap: 2px; min-width: 0; }
+  .site-header .navlink { font-size: 13px; padding: 4px 4px; }
+  /* Icon only: the label stays for screen readers via aria-label on the link. */
+  .nav-chars .nav-label { display: none; }
+  .nav-chars { padding: 4px 6px; }
+  .nav-chars .nav-ico { font-size: 18px; }
+  .site-header .btn.small { padding: 5px 9px 6px; font-size: 13px; }
+}

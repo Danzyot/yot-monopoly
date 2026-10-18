@@ -94,9 +94,20 @@ export function mortgageValue(s: SpaceDef): number {
   return Math.floor((s.price ?? 0) / 2);
 }
 
-/** Cost to lift a mortgage: principal plus 10% interest. */
+/** 10% interest on a mortgage principal, rounded up to the next whole dollar (integer maths only). */
+export function interestOn(principal: number): number {
+  return Math.ceil(principal / 10);
+}
+
+/** Interest due on a mortgaged deed (received in a trade, or when lifting). */
+export function mortgageInterest(s: SpaceDef): number {
+  return interestOn(mortgageValue(s));
+}
+
+/** Cost to lift a mortgage: principal plus 10% interest, rounded up. */
 export function unmortgageCost(s: SpaceDef): number {
-  return Math.ceil(mortgageValue(s) * 1.1);
+  const v = mortgageValue(s);
+  return v + interestOn(v);
 }
 
 export function groupIndices(spaces: SpaceDef[], group: string): number[] {

@@ -2,7 +2,7 @@
 // so one dropped phone can't freeze a table. Pure: reads the game, returns the
 // next action (or null when it has nothing to do right now).
 
-import { groupIndices, isOwnable, mortgageValue } from '../../../shared/board.ts';
+import { groupIndices, isOwnable, mortgageInterest, mortgageValue } from '../../../shared/board.ts';
 import { liftCost } from '../../../shared/holdings.ts';
 import type { Action } from '../../../shared/types.ts';
 import type { Game } from './game.ts';
@@ -191,7 +191,7 @@ function worthTaking(g: Game, id: string, t: { from: string; give: { cash: numbe
   const me = g.player(id);
   const price = (i: number) => g.spaces[i].price ?? 0;
   // The 10% due at once on each mortgaged deed received.
-  const interest = t.give.spaces.reduce((n, i) => n + (g.owned[i]?.mortgaged ? Math.ceil(mortgageValue(g.spaces[i]) / 10) : 0), 0);
+  const interest = t.give.spaces.reduce((n, i) => n + (g.owned[i]?.mortgaged ? mortgageInterest(g.spaces[i]) : 0), 0);
   const completesMine = t.give.spaces.some(i => completesFor(g, id, i, t.get.spaces));
   // Never hand an opponent a monopoly unless the deal completes one of ours
   // too, or they buy it outright at twice the printed price of what we give.

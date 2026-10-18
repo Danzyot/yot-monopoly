@@ -5,7 +5,7 @@
 // cash on hand, jail cards, no buildings in a traded deed's colour set, and
 // no paying out cash that is already owed.
 import { useState } from 'react';
-import { groupIndices, mortgageValue, type SpaceDef } from '../../../shared/board.ts';
+import { groupIndices, mortgageInterest, mortgageValue, type SpaceDef } from '../../../shared/board.ts';
 import { resolveTheme, type Theme } from '../../../shared/themes.ts';
 import type { GameView, PlayerState, Trade, TradeSide } from '../../../shared/types.ts';
 import { act } from '../net.ts';
@@ -194,7 +194,7 @@ export function TradeModal({ game, me, withId, onClose, counter }: {
   const giveValue = sideValue(game, spaces, give);
   const getValue = sideValue(game, spaces, get);
   const diff = getValue - giveValue;
-  const interest = get.spaces.filter(i => game.owned[i]?.mortgaged).reduce((a, i) => a + Math.ceil(mortgageValue(spaces[i]) / 10), 0);
+  const interest = get.spaces.filter(i => game.owned[i]?.mortgaged).reduce((a, i) => a + mortgageInterest(spaces[i]), 0);
   const oneSided = !problem && (empty(give) || empty(get));
 
   const send = () => {

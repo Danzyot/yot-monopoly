@@ -3,7 +3,7 @@
 // Rooms own pacing (auction deadlines, bots); this file owns the rules.
 
 import {
-  groupIndices, isOwnable, mortgageValue, type SpaceDef,
+  groupIndices, isOwnable, mortgageInterest, mortgageValue, type SpaceDef,
 } from '../../../shared/board.ts';
 import type { CardEffect, DeckId } from '../../../shared/cards.ts';
 import type { Outfit } from '../../../shared/outfits.ts';
@@ -1321,7 +1321,7 @@ export class Game {
     for (const i of spaces) {
       const o = this.owned[i];
       if (!o?.mortgaged) continue;
-      const fee = Math.ceil(mortgageValue(this.spaces[i]) / 10);
+      const fee = mortgageInterest(this.spaces[i]);
       this.charge(p, null, fee, `10% interest on mortgaged ${this.spaces[i].name}`);
       o.interestPaid = true;
     }

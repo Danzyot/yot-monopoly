@@ -12,7 +12,8 @@ export default function Header() {
       <Link to="/" className="brand"><span className="brand-hat">🎩</span> {BRAND.name}</Link>
       <nav className="row" aria-label="Site">
         {/* NavLink adds aria-current="page" on the active route; .navlink.active styles it. */}
-        <NavLink className="navlink hide-sm" to="/characters">Characters</NavLink>
+        {/* Always shown: on phones the label shrinks (see manage.css) so it never wraps or overflows. */}
+        <NavLink className="navlink nav-chars" to="/characters" aria-label="Characters" title="Characters"><span className="nav-ico" aria-hidden="true">🎭</span><span className="nav-label">Characters</span></NavLink>
         {config.features.leaderboard && <NavLink className="navlink" to="/leaderboard">Leaderboard</NavLink>}
         {config.inviteUrl && <a className="navlink" href={config.inviteUrl} target="_blank" rel="noreferrer">Discord</a>}
         {profile?.isAdmin && <Link className="navlink accent" to="/admin">Dashboard</Link>}

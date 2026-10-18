@@ -186,9 +186,9 @@ function DeedRow({ game, me, i, full, raising, busy, cur, run, onPick }: {
   const rentNext = isProp && o.houses < 5 ? s.rent![o.houses + 1] : null;
   const half = Math.floor((s.houseCost ?? 0) / 2);
   // Hint for a blocked + on a full set: the rule says why (build evenly, bank empty, cash).
-  const buildNote = isProp && full && !o.mortgaged && why.build && o.houses < 5 && !raising ? why.build
-    // Raising cash: say why a deed can't be mortgaged yet.
-    : raising && !o.mortgaged && why.mortgage && !base ? why.mortgage : null;
+  const buildNote = isProp && full && !o.mortgaged && why.build && o.houses < 5 && !raising ? why.build : null;
+  // The mortgage button's own reason, shown right under it when it is disabled.
+  const mortWhy = raising && o.mortgaged ? null : o.mortgaged ? why.unmortgage : why.mortgage;
 
   return (
     <li className={`bp-deed ${o.mortgaged ? 'mortgaged' : ''}`}>
@@ -216,12 +216,15 @@ function DeedRow({ game, me, i, full, raising, busy, cur, run, onPick }: {
       )}
       <div className="bp-mort">
         {o.mortgaged ? raising ? null : (
-          <button className="btn tiny" disabled={busy || !!why.unmortgage} title={why.unmortgage ?? undefined}
+          <button className={`btn tiny ${mortWhy ? 'is-off' : ''}`} disabled={busy || !!why.unmortgage} title={why.unmortgage ?? undefined}
+            aria-describedby={mortWhy ? `bp-why-${i}` : undefined}
             onClick={() => run([{ type: 'unmortgage', space: i }])}>Unmortgage −{cur(liftCost(spaces, i, o))}</button>
         ) : (
-          <button className={`btn tiny ${raising ? 'gold' : 'ghost'}`} disabled={busy || !!why.mortgage} title={why.mortgage ?? undefined}
+          <button className={`btn tiny ${raising ? 'gold' : 'ghost'} ${mortWhy ? 'is-off' : ''}`} disabled={busy || !!why.mortgage} title={why.mortgage ?? undefined}
+            aria-describedby={mortWhy ? `bp-why-${i}` : undefined}
             onClick={() => run([{ type: 'mortgage', space: i }])}>Mortgage +{cur(mortgageValue(s))}</button>
         )}
+        {mortWhy && <span id={`bp-why-${i}`} className="bp-off-why small">{mortWhy}</span>}
       </div>
     </li>
   );
