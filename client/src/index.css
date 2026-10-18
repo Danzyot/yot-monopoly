@@ -3111,3 +3111,14 @@ a:focus-visible, .navlink:focus-visible, .brand:focus-visible, .edition:focus-vi
   .bc-lower { max-width: calc(100% - 2 * var(--bc-safe)); }
   .bc-lt-stats { display: none; }
 }
+
+/* Short portrait phones (667px and under): the dock column would run behind
+   the tips card and the tab row, so it wraps into a second column instead,
+   growing in from the right edge. */
+@media (max-width: 760px) and (orientation: portrait) {
+  .social-dock {
+    flex-wrap: wrap-reverse;
+    align-content: flex-start;
+    max-height: max(180px, calc(100dvh - 440px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)));
+  }
+}
