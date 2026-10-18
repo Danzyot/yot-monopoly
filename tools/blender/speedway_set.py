@@ -1908,7 +1908,7 @@ def main():
         if math.hypot(cx, cz) < 30:
             return 1.4 if seen else 0.8
         return 0.6
-    size, spp = (1024, 16) if DRAFT else (2048, 72)
+    size, spp = (1024, 16) if DRAFT else (2048, 128)
     # Outdoors a few bounces are plenty, and they keep a 2048² bake to under an hour.
     sc = bpy.context.scene
     sc.cycles.max_bounces = 4
