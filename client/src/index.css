@@ -1737,3 +1737,7 @@ input.tr-slider { width: 100%; padding: 0; height: 26px; accent-color: var(--hi)
 @media (max-width: 380px) {
   .tb-turn { display: none; }
 }
+
+/* Map cards: a picture of the map's 3D setting (captured in game, client/public/maps). */
+.map-thumb { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 10px; margin-bottom: 8px;
+  border: 2px solid color-mix(in srgb, var(--line) 50%, transparent); background: rgba(0, 0, 0, 0.3); }

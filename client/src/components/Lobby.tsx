@@ -183,6 +183,7 @@ export default function Lobby({ room, me, spectating, chat }: {
             {MAPS.map(m => (
               <button key={m.id} disabled={!isHost} className={`edition small map-card ${m.id === room.mapId ? 'on' : ''}`}
                 onClick={() => configure({ mapId: m.id })}>
+                <img className="map-thumb" src={`/maps/${m.id}.webp`} alt="" loading="lazy" />
                 <b>{m.name}</b>
                 <span className="small muted">{m.description}</span>
                 <span className="small">{m.spaces.length} spaces · best with {m.players[0]}–{m.players[1]}</span>

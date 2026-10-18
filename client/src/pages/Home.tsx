@@ -100,6 +100,7 @@ export default function Home() {
           <div className="card-grid">
             {MAPS.map(m => (
               <div key={m.id} className="info-card">
+                <img className="map-thumb" src={`/maps/${m.id}.webp`} alt="" loading="lazy" />
                 <b>{m.name}</b>
                 <span className="small muted">{m.description}</span>
                 <span className="info-meta">{m.spaces.length} spaces · {m.players[0]}–{m.players[1]} players</span>
