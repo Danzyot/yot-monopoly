@@ -429,8 +429,9 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
           : env === 'speedway' && !backdrop
             ? <SceneEnv url={ASSETS.speedwayEnv.url} intensity={0.55} rotation={-Math.PI / 2} />
             : <SceneEnv intensity={0.45} />}
-      <directionalLight castShadow position={[6, 12, 5]} intensity={look.keyIntensity} color={look.keyColor}
-        shadow-mapSize={[lowPower ? 1024 : 2048, lowPower ? 1024 : 2048]} shadow-camera-left={-8} shadow-camera-right={8}
+      {/* Devices that struggle drop live shadows (the baked sets keep theirs): it halves the draw calls. */}
+      <directionalLight castShadow={!lowPower} position={[6, 12, 5]} intensity={look.keyIntensity} color={look.keyColor}
+        shadow-mapSize={[2048, 2048]} shadow-camera-left={-8} shadow-camera-right={8}
         shadow-camera-top={8} shadow-camera-bottom={-8} shadow-bias={-0.0004} />
 
       <Spinner spin={spin}>
