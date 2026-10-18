@@ -12,6 +12,7 @@ import './styles/tooltip.css';
 import { installTooltips } from './tooltip.ts';
 
 installTooltips();
+import './styles/cinematics.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

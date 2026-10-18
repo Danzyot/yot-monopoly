@@ -13,6 +13,7 @@ import * as PACE from '../../shared/pacing.ts';
 import { DEFAULT_TABLE_STYLE, sanitizeTableStyle, type TableStyle } from '../../shared/tableStyles.ts';
 import { migrateCharacter } from '../../shared/characters.ts';
 import { parseOutfit, randomOutfit, sanitizeOutfit } from '../../shared/outfits.ts';
+import { CUTSCENE_MS, cutsceneSnap, pickCutscene, type CutsceneSnap } from '../../shared/cutscenes.ts';
 import { sanitizeRequirements } from './requirements.ts';
 import {
   PLAYER_COLORS, CHARACTERS, type Action, type CharacterId, type JoinRequirements, type RoomSeat, type RoomSummary, type RoomView,
@@ -24,7 +25,8 @@ const BOT_DELAY_MS = 900;
  * the client's three/sequence.ts, Dice.tsx and characters/Pieces.tsx read
  * too): the dice tumble, the result pops up and flies to the action bar, then
  * the piece hops tile by tile (or flies when it teleports), then a drawn card
- * flies up. Bots wait for it, so they never act while the scene is still playing.
+ * flies up, then any cutscene (shared/cutscenes.ts: CUTSCENE_MS). Bots wait for
+ * it, so they never act while the scene is still playing.
  */
 export const SCENE_DICE_MS = PACE.DICE_MS;
 export const SCENE_RESULT_MS = PACE.RESULT_MS;
@@ -166,7 +168,7 @@ export class Room {
   private failedMoves = new Map<string, string>();
   /** When clients should be done animating the latest roll, walk and card (see SCENE_*). */
   private sceneUntil = 0;
-  private seen: SceneMark | null = null;
+  private seen: (SceneMark & { cut: CutsceneSnap }) | null = null;
   /** Players who left a running game for good; they keep their seat but can't host. */
   private departed = new Set<string>();
   /** Players removed by the host or an operator: never seated here again (watching is fine). */
@@ -613,9 +615,12 @@ export class Room {
   /** Work out how long clients will spend animating what changed since the last look. */
   private noteScene(g: Game) {
     const seen = this.seen;
-    this.seen = { roll: g.rollSeq, card: g.lastCard?.seq ?? 0, at: new Map(g.players.map(p => [p.id, p.position])) };
+    this.seen = { roll: g.rollSeq, card: g.lastCard?.seq ?? 0, at: new Map(g.players.map(p => [p.id, p.position])), cut: cutsceneSnap(g) };
     if (!seen) return;
-    const ms = sceneMs(seen, g);
+    let ms = sceneMs(seen, g);
+    // Then the cinematic cutscene the change calls for, if any (jail, bankruptcy, a jackpot).
+    const cue = pickCutscene(seen.cut, this.seen.cut);
+    if (cue) ms += CUTSCENE_MS[cue.kind] + (ms ? 0 : SCENE_SETTLE_MS);
     if (ms) this.sceneUntil = Date.now() + ms;
   }
 

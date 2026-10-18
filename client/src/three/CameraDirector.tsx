@@ -20,6 +20,7 @@ import type { GameView } from '../../../shared/types.ts';
 import { tile } from './layout.ts';
 import { useSceneBusy } from './sequence.ts';
 import { pieceObjects, setDirectorActive, type CameraMode } from './camera.ts';
+import { cutsceneOwnsCamera } from './cinematics/store.ts';
 
 interface Shot { pos: Vector3; target: Vector3; hold: number; /** Circle the target at this many radians a second while holding. */ orbit?: number }
 
@@ -166,6 +167,18 @@ export function CameraDirector({ game, me, n, enabled, mode }: { game: GameView;
   useFrame(() => {
     if (!controls) return;
     const now = performance.now();
+    // A cutscene (three/cinematics) has the camera: drop any shot, and put a running one back home first.
+    if (cutsceneOwnsCamera()) {
+      queue.current = [];
+      const cut = playing.current;
+      if (cut) {
+        if (!steer.current) { camera.position.copy(cut.homePos); controls.target.copy(cut.homeTarget); }
+        playing.current = null;
+        setDirectorActive(false);
+        lastEnd.current = now;
+      }
+      return;
+    }
     let p = playing.current;
     if (!p) {
       const next = queue.current[0];

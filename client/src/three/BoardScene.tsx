@@ -21,6 +21,8 @@ import { GoConfetti, celebrateGo } from './GoConfetti.tsx';
 import { DeedPop } from './DeedPop.tsx';
 import { DeedMarkers } from './DeedMarkers.tsx';
 import { SceneEnv } from './SceneEnv.tsx';
+import { Cutscenes } from './cinematics/Cutscenes.tsx';
+import { CutsceneOverlay } from './cinematics/Overlay.tsx';
 import { useSceneBusy } from './sequence.ts';
 import { isDirectorActive, pieceObjects, type CameraMode } from './camera.ts';
 import type { Quality } from './quality.ts';
@@ -424,6 +426,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
   }, [hover, onSelect]);
 
   return (
+    <>
     <Canvas shadows dpr={dpr} frameloop={hidden ? 'never' : 'always'} camera={{ position: [0, 11.5, 10.5], fov: 45 }}
       onPointerMissed={() => onSelect?.(null)}
       // ?perf: expose the renderer and pieces so draw calls, triangles and positions can be read from the console.
@@ -459,6 +462,11 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
             {game.rules.freeParkingPot && theme.spaces[theme.spaces.length / 2]?.kind === 'parking' &&
               <ParkingPot pot={game.pot} n={theme.spaces.length} />}
             <Pieces game={game} n={theme.spaces.length} reactions={reactions} me={me} />
+            {!spin && (
+              <Cutscenes game={game} n={theme.spaces.length} enabled={cinematic} low={lowPower} currency={theme.currency}
+                houseColor={theme.palette.house ?? '#1f9d49'} hotelColor={theme.palette.hotel ?? '#d2202f'}
+                jailCell={theme.spaces[theme.spaces.length / 4]?.kind === 'jail'} />
+            )}
             <MoneyFX game={game} n={theme.spaces.length} currency={theme.currency} />
             <GoConfetti n={theme.spaces.length} />
             <DeedPop game={game} theme={theme} />
@@ -479,5 +487,8 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
         enableDamping dampingFactor={0.12}
         target={[0, 0, 0]} />
     </Canvas>
+    {/* Letterbox, title card and skip for the cutscenes (three/cinematics). */}
+    <CutsceneOverlay />
+    </>
   );
 }

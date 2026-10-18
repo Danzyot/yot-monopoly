@@ -54,6 +54,9 @@ export const ASSETS = {
     "varsity": "/outfits/varsity.webp?v=c3604716d4",
     "varsity-tint": "/outfits/varsity-tint.webp?v=fbe77bd03a"
   },
+  "cops": {
+    "url": "/models/cops.glb?v=e3093d8ef5"
+  },
   "skylineEnv": {
     "url": "/models/skyline/set-env.webp?v=5f53f04cb3"
   },
