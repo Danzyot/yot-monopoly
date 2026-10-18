@@ -28,7 +28,8 @@ export function envLook(kind: EnvironmentId, theme: Theme): EnvLook {
   const { sky } = theme.palette;
   switch (kind) {
     case 'speedway':
-      return { background: mix(sky, '#1e2a45', 0.55), fogNear: 30, fogFar: 85, keyColor: '#ffffff', keyIntensity: 2.1 };
+      // The baked track at dusk: fog fades the far hills into the hazy horizon of its sky.
+      return { background: '#cfa59c', fogNear: 60, fogFar: 340, keyColor: '#ffd9b5', keyIntensity: 2.0 };
     case 'skyline':
       // The haze the far towers fade into; the night sky's dome starts from the same colour.
       return { background: skylineHaze(theme), fogNear: 70, fogFar: 620, keyColor: '#ffeeda', keyIntensity: 1.8 };
@@ -40,7 +41,15 @@ export function envLook(kind: EnvironmentId, theme: Theme): EnvLook {
 
 export function Environment({ kind, theme }: { kind: EnvironmentId; theme: Theme }) {
   switch (kind) {
-    case 'speedway': return <Speedway theme={theme} />;
+    case 'speedway':
+      // A modelled, light-baked race track for every edition; the drawn one
+      // shows while it loads (and stays if it cannot).
+      return (
+        <WithModel fallback={<Speedway theme={theme} />}>
+          <BakedScene asset={ASSETS.speedwaySet} />
+          <SpeedwayLights />
+        </WithModel>
+      );
     case 'skyline':
       // Every edition gets the modelled, light-baked penthouse roof; the drawn
       // roof stands in while it loads (and for good if it cannot).
@@ -95,6 +104,17 @@ function SkylineLights() {
       <pointLight position={[-12, FLOOR + 3, -12]} color="#ff8a3a" intensity={160} decay={2} />
       <pointLight position={[0, FLOOR + 7, -17]} color="#ff4fb0" intensity={150} decay={2} />
       <pointLight position={[14, FLOOR + 9, -10]} color="#ffd29a" intensity={70} decay={2} />
+    </>
+  );
+}
+
+/** Live light matching the baked track: dusk sky above, grass below, the floodlights from behind. */
+function SpeedwayLights() {
+  return (
+    <>
+      <hemisphereLight args={['#c3c9ee', '#56683a', 0.55]} />
+      <pointLight position={[-24, FLOOR + 19, -13]} color="#e6eeff" intensity={520} decay={2} />
+      <pointLight position={[21, FLOOR + 19, -17.5]} color="#e6eeff" intensity={360} decay={2} />
     </>
   );
 }

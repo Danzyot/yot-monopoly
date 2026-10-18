@@ -13,6 +13,10 @@ tools/blender/run.sh skyline_set.py --preview # Metropolis roof: Cycles renders 
 tools/blender/run.sh skyline_set.py --draft   # Metropolis roof, quick bake
 tools/blender/run.sh skyline_set.py           # Metropolis roof, final bake
 tools/blender/run.sh skyline_env.py           # Metropolis roof's reflection panorama
+tools/blender/run.sh speedway_set.py --draft  # Speedway track, quick bake (~4 min)
+tools/blender/run.sh speedway_set.py --preview  # path-traced stills from the game cameras, no bake
+tools/blender/run.sh speedway_set.py          # Speedway track, final bake (~1 h on 4 cores)
+tools/blender/run.sh speedway_env.py          # its 360° panorama (reflections)
 ```
 
 The first run creates `tools/blender/.venv` with `bpy` 5.0 and Pillow
@@ -34,6 +38,9 @@ hash, so browsers never keep a stale model after a rebuild.
 | `classic_room.py` | The Classic edition's room, light-baked |
 | `skyline_set.py` | The Metropolis map's penthouse roof (every edition), light-baked, with the city round it |
 | `skyline_env.py` | A 360° panorama of the Metropolis roof, its environment map |
+| `classic_env.py` | 360° panorama of the Classic room (the environment map for reflections) |
+| `speedway_set.py` | The Speedway map's race track at dusk (every edition), light-baked: track, kerbs, pits, grandstands with a crowd, floodlights, hills and sky |
+| `speedway_env.py` | 360° panorama of the Speedway set (the environment map for reflections on that map) |
 
 ## How a baked room works
 
@@ -49,6 +56,11 @@ hash, so browsers never keep a stale model after a rebuild.
   so the room costs no live lights. `lightmapIntensity` in the manifest
   undoes the normalisation the bake writes the image with.
 - The table and board are in the bake as shadow casters only.
+- An outdoor set has far more small parts than a room: the Speedway gives
+  each little cluster of spectators, tyres or fence posts one tiny square of
+  the lightmap (shaded by normal in the vertex colours) and packs the rest
+  with its own shelf packer, so the atlas stays dense. Its sky and hills are
+  unlit, coloured in the vertex colours, and never baked.
 - Lit-live objects (the table, houses, the pieces) get matching live lights
   from `RoomLights` in `client/src/three/environments/index.tsx`.
 
