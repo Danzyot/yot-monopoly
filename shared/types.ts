@@ -397,6 +397,8 @@ export interface PublicProfile {
   /** Leaderboard points: games with 2+ people only, same formula. */
   points: number;
   rankedGames: number;
+  /** When their first recorded game ended ("playing since"). */
+  firstGameAt?: number;
   favouriteMap: { id: string; games: number } | null;
   favouriteCharacter: { id: string; games: number } | null;
   recent: ProfileGame[];
