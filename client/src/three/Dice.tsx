@@ -1,6 +1,6 @@
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
-import { CanvasTexture, Euler, MeshPhysicalMaterial, Quaternion, SRGBColorSpace, type Mesh } from 'three';
+import { CanvasTexture, Euler, MeshBasicMaterial, MeshPhysicalMaterial, Quaternion, RingGeometry, SRGBColorSpace, type Mesh } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { SpeedFace } from '../../../shared/types.ts';
 import { DICE_MS, markRoll } from './sequence.ts';
@@ -206,6 +206,37 @@ function Die({ top, seq, home, delay, materials, rollOnMount = false }: {
   );
 }
 
+const FLASH_MS = 1000;
+const flashGeo = new RingGeometry(0.55, 0.8, 48);
+const flashMat = new MeshBasicMaterial({ color: '#ffd84a', transparent: true, opacity: 0, depthWrite: false, toneMapped: false });
+
+/** Doubles: a gold ring bursts out from between the dice as they settle. */
+function DoublesFlash({ seq, on }: { seq: number; on: boolean }) {
+  const ref = useRef<Mesh>(null);
+  const st = useRef({ seq: -1, at: 0 });
+  useFrame(() => {
+    const m = ref.current;
+    if (!m) return;
+    const s = st.current;
+    const now = performance.now();
+    if (s.seq !== seq) {
+      // The first state we see is history, not a throw.
+      s.at = s.seq === -1 || !on ? 0 : now + ROLL_MS + 80;
+      s.seq = seq;
+    }
+    const k = s.at ? (now - s.at) / FLASH_MS : 2;
+    m.visible = k >= 0 && k < 1;
+    if (!m.visible) return;
+    const grow = 1 - (1 - k) ** 2;
+    m.scale.setScalar(0.6 + grow * 2.6);
+    (m.material as MeshBasicMaterial).opacity = (1 - k) * 0.85;
+  });
+  return (
+    <mesh ref={ref} geometry={flashGeo} material={flashMat} visible={false}
+      position={[(HOME_A[0] + HOME_B[0]) / 2, 0.03, (HOME_A[1] + HOME_B[1]) / 2]} rotation={[-Math.PI / 2, 0, 0]} />
+  );
+}
+
 export function Dice({ dice, seq, pip = '#111', body = '#fbfbf7', speed = null }: {
   dice: [number, number] | null; seq: number; pip?: string; body?: string;
   /** The Speed Die's face when it was part of this roll; hidden otherwise. */
@@ -232,6 +263,7 @@ export function Dice({ dice, seq, pip = '#111', body = '#fbfbf7', speed = null }
       {speed !== null && (
         <Die top={SPEED_LAYOUT.indexOf(speed)} seq={seq} home={HOME_SPEED} delay={120} materials={speedMaterials} rollOnMount />
       )}
+      <DoublesFlash seq={seq} on={!!dice && dice[0] === dice[1]} />
     </group>
   );
 }

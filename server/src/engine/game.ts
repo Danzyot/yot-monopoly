@@ -1143,7 +1143,11 @@ export class Game {
       return;
     }
     if (this.minigame) this.dropFromMinigame(p);
-    if (p === this.current) this.nextTurn();
+    if (p === this.current) { this.nextTurn(); return; }
+    // The creditor may be the current player, waiting on a debt that was just
+    // cancelled (it was owed to the one who went bankrupt to them): a Mr.
+    // Monopoly move held back by that debt goes ahead now.
+    this.resumeAfterDebt(this.current);
   }
 
   // ---- trading --------------------------------------------------------------
