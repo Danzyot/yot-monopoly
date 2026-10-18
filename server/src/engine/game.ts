@@ -1820,13 +1820,13 @@ export class Game {
 
   /**
    * Final standings: winner, then the richest survivors, then last-out to
-   * first-out. Equal net worth is split by cash in hand, then by seat order
-   * (whoever sat down first), so a time-limit ending always has one winner.
+   * first-out. Equal net worth keeps seat order (the sort is stable: whoever
+   * sat down first ranks higher), so a time-limit ending always has one winner.
    */
   standings(): { id: string; netWorth: number }[] {
     const worth = new Map(this.players.map(p => [p.id, this.netWorth(p.id)]));
     const alive = this.active().sort((a, b) =>
-      Number(b.id === this.winner) - Number(a.id === this.winner) || worth.get(b.id)! - worth.get(a.id)! || b.cash - a.cash);
+      Number(b.id === this.winner) - Number(a.id === this.winner) || worth.get(b.id)! - worth.get(a.id)!);
     const out = [...this.outOrder].reverse().map(id => this.player(id));
     return [...alive, ...out].map(p => ({ id: p.id, netWorth: worth.get(p.id)! }));
   }
