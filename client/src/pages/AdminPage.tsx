@@ -24,14 +24,18 @@ export default function AdminPage() {
   const Body = tab.Component;
   return (
     <div className="page adm">
+      <h1 className="sr-only">Operator dashboard</h1>
       <nav className="adm-tabs" aria-label="Dashboard sections">
         {ADMIN_TABS.map(t => (
-          <NavLink key={t.id} to={`/admin/${t.id}`} className={({ isActive }) => (isActive ? 'on' : '')}>
+          <NavLink key={t.id} to={`/admin/${t.id}`} className={({ isActive }) => (isActive ? 'on' : '')}
+            aria-current={t.id === tab.id ? 'page' : undefined}>
             <span aria-hidden>{t.icon}</span> {t.label}
           </NavLink>
         ))}
       </nav>
-      <Body key={tab.id} />
+      <main className="adm-body" key={tab.id}>
+        <Body />
+      </main>
     </div>
   );
 }

@@ -17,7 +17,8 @@ export default function DiscordTab() {
 
   return (
     <div className="adm-stack">
-      {o && !o.discordBot && <div className="adm-alert warn">⚠️ No Discord bot token is configured — posting and DMs will fail until DISCORD_BOT_TOKEN is set.</div>}
+      <h2 className="adm-h2">Discord</h2>
+      {o && !o.discordBot && <div className="adm-alert warn" role="alert">⚠️ No Discord bot token is configured — posting and DMs will fail until DISCORD_BOT_TOKEN is set.</div>}
       <div className="adm-grid">
         <form className="adm-card adm-stack" onSubmit={e => {
           e.preventDefault();
@@ -28,7 +29,7 @@ export default function DiscordTab() {
         }}>
           <h3>Verify panel</h3>
           <p className="muted small">Posts the message with the “Verify” button members click to sign in with a code.</p>
-          <input value={channel} inputMode="numeric" placeholder="Channel id (blank = DISCORD_VERIFY_CHANNEL_ID)" onChange={e => setChannel(e.target.value.replace(/\D/g, ''))} />
+          <input value={channel} aria-label="Channel id" inputMode="numeric" placeholder="Channel id (blank = DISCORD_VERIFY_CHANNEL_ID)" onChange={e => setChannel(e.target.value.replace(/\D/g, ''))} />
           <div><button className="btn small primary">Post panel</button></div>
         </form>
 
@@ -38,8 +39,8 @@ export default function DiscordTab() {
         }}>
           <h3>Direct message</h3>
           <p className="muted small">Sent by the bot. Find a player's Discord id on the Players tab.</p>
-          <input value={to} inputMode="numeric" placeholder="Discord user id" onChange={e => setTo(e.target.value.replace(/\D/g, ''))} />
-          <textarea value={text} rows={3} maxLength={1800} placeholder="Message" onChange={e => setText(e.target.value)} />
+          <input value={to} aria-label="Discord user id" inputMode="numeric" placeholder="Discord user id" onChange={e => setTo(e.target.value.replace(/\D/g, ''))} />
+          <textarea value={text} aria-label="Message" rows={3} maxLength={1800} placeholder="Message" onChange={e => setText(e.target.value)} />
           <div><button className="btn small primary" disabled={!to.trim() || !text.trim()}>Send DM</button></div>
         </form>
       </div>
