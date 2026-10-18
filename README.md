@@ -63,7 +63,9 @@ mini-games, music, and a full operator dashboard.
   buildings, mini-games, Free Parking arcade, no rent in jail.
 - **Timing**: a turn timer (off/30–120 s; the safe move is made on timeout, and after two
   in a row autopilot takes over until the player acts), a deadline for debts, an optional
-  game length (richest player wins when it runs out), and pause/resume for the host.
+  game length (the current turn step finishes, then the highest net worth wins — cash,
+  deeds at printed price or mortgage value, buildings at cost, less debts; a tie goes to
+  the player with more cash in hand, then to the earlier seat), and pause/resume for the host.
 - **Table styles** like the poker tables: seven table presets, a custom board logo and a
   backdrop image from the operator's graphics library.
 - **Music & sound**: operator-uploaded music library with playlists, a built-in
