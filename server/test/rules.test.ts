@@ -452,6 +452,19 @@ test('bot: in a housing shortage, frees houses from its weakest set for its stro
   assert.deepEqual(botAction(g, 'p0'), { type: 'build', space: 39 }, 'the freed house goes to the stronger set');
 });
 
+test('time limit: equal net worth goes to more cash in hand, then to the earlier seat', () => {
+  const { g, tick } = scripted(3, { timeLimitMin: 30, turnSeconds: 0 });
+  // p1 holds Boardwalk (400) and 1100 cash; p2 holds 1500 cash: both worth 1500, like p0.
+  g.owned[39] = { owner: 'p1', houses: 0, mortgaged: false };
+  g.player('p1').cash = 1100;
+  tick(30 * 60_000);
+  assert.equal(g.clockTimeout(), true);
+  assert.equal(g.phase, 'over');
+  assert.deepEqual(g.standings().map(x => x.id), ['p0', 'p2', 'p1'], 'all 1500: cash first, then seat order');
+  assert.equal(g.winner, 'p0');
+  assert.match(g.log.at(-2)!.text, /P0 wins with the highest net worth/);
+});
+
 test('seeded bot games with every rule toggle finish and keep every invariant', () => {
   const st = simulate(120, 1);
   assert.equal(st.finished, st.games, `unfinished seeds: ${st.unfinished}`);
