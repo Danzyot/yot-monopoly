@@ -334,6 +334,6 @@ test('profiles: aggregate results, match leaderboard points, tolerate old record
   assert.equal(buildProfile('dc_nobody', records), null);
   assert.equal(buildProfile('bot-1', records), null, 'bots have no profile');
   assert.equal(buildProfile('../../etc', records), null);
-  assert.deepEqual(Object.keys(p).sort(), ['avatar', 'favouriteCharacter', 'favouriteMap', 'games', 'id', 'name',
+  assert.deepEqual(Object.keys(p).sort(), ['avatar', 'favouriteCharacter', 'favouriteMap', 'firstGameAt', 'games', 'id', 'name',
     'points', 'rankedGames', 'recent', 'winRate', 'wins'], 'only public game facts');
 });
