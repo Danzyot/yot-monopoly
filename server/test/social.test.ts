@@ -238,6 +238,17 @@ test('chat refusals are ChatErrors so the sender reads the reason, not "Server e
   assert.throws(() => checkChat('chat-t1', 'again'), (e: unknown) => e instanceof ChatError && /Slow down/.test((e as Error).message));
 });
 
+test('quick chat: only the canned phrases carry the flag, and they still pass the chat gate', async () => {
+  const { checkChat, isQuickChat, ChatError } = await import('../src/chat.ts');
+  const { QUICK_CHAT } = await import('../../shared/types.ts');
+  for (const p of QUICK_CHAT) assert.ok(isQuickChat(p), p);
+  assert.ok(!isQuickChat('Nice roll!!'), 'near miss is free text');
+  assert.ok(!isQuickChat(''), 'empty is not a phrase');
+  // Same cooldown as typed chat: a second chip straight after is refused.
+  assert.equal(checkChat('quick-t1', QUICK_CHAT[0]), QUICK_CHAT[0]);
+  assert.throws(() => checkChat('quick-t1', QUICK_CHAT[1]), (e: unknown) => e instanceof ChatError && /Slow down/.test((e as Error).message));
+});
+
 test('bots react to their big moments, not every time, and not too often', () => {
   const bot = { id: 'b', name: 'Tycoon', cash: 1500, inJail: false, bankrupt: false, isBot: true };
   const me = { id: 'a', name: 'Dan', cash: 1500, inJail: false, bankrupt: false, isBot: false };

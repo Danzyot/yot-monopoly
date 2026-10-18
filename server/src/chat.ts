@@ -1,6 +1,6 @@
 // Chat rules shared by every room: rate limit, length, blocked language and
 // per-player mutes (set by operators).
-import { CHAT_COOLDOWN_MS } from '../../shared/types.ts';
+import { CHAT_COOLDOWN_MS, QUICK_CHAT } from '../../shared/types.ts';
 import { readJson, writeJson } from './jsonstore.ts';
 
 const SEP = '[^a-z0-9]{0,3}';
@@ -31,6 +31,14 @@ export function checkChat(playerId: string, raw: unknown): string {
   lastSent.set(playerId, now);
   if (lastSent.size > 50_000) lastSent.clear();
   return text;
+}
+
+/**
+ * A quick-chat line must be one of the canned phrases exactly: the `quick`
+ * flag only styles the message, so it must not be a way to dress up free text.
+ */
+export function isQuickChat(text: string): boolean {
+  return (QUICK_CHAT as readonly string[]).includes(text);
 }
 
 // ---- mutes ----

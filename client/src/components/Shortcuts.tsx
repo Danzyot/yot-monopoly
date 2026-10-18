@@ -16,6 +16,7 @@ export const SHORTCUTS: [string, string][] = [
   ['C', 'Change camera view'],
   ['H', 'Build & manage your deeds'],
   ['T', 'Make a trade'],
+  ['Q', 'Quick chat'],
   ['Esc', 'Close dialogs'],
   ['?', 'How to play & this list'],
 ];

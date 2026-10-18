@@ -6,7 +6,7 @@
 import type { Server, Socket } from 'socket.io';
 import { verifyToken } from './auth.ts';
 import { banMatches, banMessage, findBan, type Ban } from './bans.ts';
-import { ChatError, checkChat, isMuted } from './chat.ts';
+import { ChatError, checkChat, isMuted, isQuickChat } from './chat.ts';
 import { recordConnection } from './connections.ts';
 import { announceChannelId, postToChannel } from './discord.ts';
 import { EngineError } from './engine/game.ts';
@@ -383,15 +383,18 @@ export function attachSockets(io: Server): SocketLayer {
       broadcast(r);
     });
 
-    on<{ text: string }>('chat', (p, room) => {
+    on<{ text: string; quick?: boolean }>('chat', (p, room) => {
       const r = inRoom(room);
       if (!isOn('chat')) throw new RoomError('Chat is switched off');
       const prof = data.profile ?? (() => { throw new RoomError('Sign in to chat'); })();
       const text = checkChat(prof.id, p.text);
+      // A quick-chat chip is an ordinary message (same filter and cooldown) that
+      // only the canned phrases may claim, so the flag just styles it.
+      const quick = p.quick === true && isQuickChat(text);
       const seat = r.seat(prof.id);
       const msg = {
         t: Date.now(), id: prof.id, name: prof.name, color: seat?.color ?? '#aaa', text,
-        spectator: !seat, admin: !!prof.isAdmin,
+        spectator: !seat, admin: !!prof.isAdmin, ...(quick ? { quick } : {}),
       };
       io.to(`room:${r.code}`).emit('chat', msg);
       logGameEvent(r.code, getMap(r.mapId).name, `💬 ${prof.name}: ${text}`);
