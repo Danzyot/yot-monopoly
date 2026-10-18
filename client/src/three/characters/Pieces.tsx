@@ -40,6 +40,11 @@ const CROUCH_MS = 120;
  * move that arrives while another piece is still walking waits its turn.
  */
 let walker: { id: string; until: number } | null = null;
+/** ...but never longer than this: a slow device must not build up a queue of walks. */
+const MAX_WAIT_MS = 900;
+/** ?perf debugging: each piece's move state (window.__yotWalk). */
+const walkDebug = new Map<string, () => object>();
+if (typeof window !== 'undefined') Object.assign(window, { __yotWalk: () => ({ walker: walker && { ...walker, inMs: Math.round(walker.until - performance.now()) }, pieces: [...walkDebug].map(([id, f]) => ({ id: id.slice(-6), ...f() })) }) });
 /** After the landing squash, a smaller rebound stretch. */
 const REBOUND_MS = 170;
 
@@ -78,6 +83,8 @@ interface Anim {
   leap: boolean;
   /** When the wind-up crouch before the next move began (0: none pending). */
   crouchAt: number;
+  /** When this piece started waiting for another to finish walking (0: not waiting). */
+  blockedAt?: number;
 }
 
 /** Everything the frame loop eases between; lives in a ref, not React state. */
@@ -185,6 +192,11 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
     motion.current.pending = emote.kind;
   }
 
+  useEffect(() => {
+    walkDebug.set(p.id, () => { const a = anim.current!; return { shown: a.shown, queue: a.queue.slice(), crouchAt: Math.round(a.crouchAt), kLeft: Math.round(a.t0 + a.dur - performance.now()) }; });
+    return () => { walkDebug.delete(p.id); };
+  }, [p.id]);
+
   useFrame((state, delta) => {
     const a = anim.current!;
     const m = motion.current!;
@@ -202,7 +214,10 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
     // move chained straight onto the last hop just keeps going).
     const resting = k >= 1 && !(a.t0 > 0 && now - (a.t0 + a.dur) < 400);
     const otherWalking = walker !== null && walker.id !== p.id && now < walker.until;
-    const blocked = a.queue.length > 0 && resting && !a.crouchAt && otherWalking;
+    const wantsToWait = a.queue.length > 0 && resting && !a.crouchAt && otherWalking;
+    if (wantsToWait && !a.blockedAt) a.blockedAt = now;
+    if (!wantsToWait) a.blockedAt = 0;
+    const blocked = wantsToWait && now - (a.blockedAt ?? now) < MAX_WAIT_MS;
     const waiting = (k >= 1 && a.queue.length > 0 && now < settle) || blocked;
     if (a.queue.length && resting && !a.crouchAt && !blocked) {
       a.crouchAt = Math.max(now, settle - CROUCH_MS);
@@ -213,7 +228,7 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
     }
     const crouchT = a.crouchAt ? (now - a.crouchAt) / CROUCH_MS : 2;
     if (a.queue.length) {
-      const startAt = Math.max(now, waiting ? settle : now, blocked && walker ? walker.until : 0);
+      const startAt = Math.max(now, waiting ? settle : now, blocked && walker ? Math.min(walker.until, (a.blockedAt ?? now) + MAX_WAIT_MS) : 0);
       holdUntil(startAt + (crouchT < 1 ? CROUCH_MS : 0) + a.queue.length * HOP_MS + LAND_MS + 250);
     }
     while (k >= 1 && a.queue.length && !waiting && crouchT >= 1) {

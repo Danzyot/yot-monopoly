@@ -39,6 +39,11 @@ function schedule() {
   timer = setTimeout(schedule, Math.min(wait + 10, MAX_HOLD_MS));
 }
 
+/** ?perf: what is holding the scene (window.__yotSeq). */
+export function sequenceDebug() {
+  return { busy, holdMs: Math.round(busyUntil - performance.now()), stage: stage.beat, rollSeq };
+}
+
 /** When the scene as it stands now will be still (performance.now() time; now if it already is). */
 export function sceneFreeAt(): number {
   return busy ? busyUntil : performance.now();

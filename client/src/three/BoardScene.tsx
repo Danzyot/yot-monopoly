@@ -23,7 +23,7 @@ import { DeedMarkers } from './DeedMarkers.tsx';
 import { SceneEnv } from './SceneEnv.tsx';
 import { Cutscenes } from './cinematics/Cutscenes.tsx';
 import { CutsceneOverlay } from './cinematics/Overlay.tsx';
-import { useSceneBusy } from './sequence.ts';
+import { sequenceDebug, useSceneBusy } from './sequence.ts';
 import { isDirectorActive, pieceObjects, type CameraMode } from './camera.ts';
 import type { Quality } from './quality.ts';
 import { ASSETS } from './assets.gen.ts';
@@ -430,7 +430,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
     <Canvas shadows dpr={dpr} frameloop={hidden ? 'never' : 'always'} camera={{ position: [0, 11.5, 10.5], fov: 45 }}
       onPointerMissed={() => onSelect?.(null)}
       // ?perf: expose the renderer and pieces so draw calls, triangles and positions can be read from the console.
-      onCreated={({ gl }) => { if (location.search.includes('perf')) Object.assign(window, { __yotGl: gl, __yotPieces: pieceObjects, __yotGo: celebrateGo }); }}
+      onCreated={({ gl }) => { if (location.search.includes('perf')) Object.assign(window, { __yotGl: gl, __yotPieces: pieceObjects, __yotGo: celebrateGo, __yotSeq: sequenceDebug }); }}
       // A custom backdrop replaces the map's 3D surroundings: it is painted
       // behind a transparent canvas, keeps its aspect ratio on any screen and
       // needs no CORS, so any https image works.
