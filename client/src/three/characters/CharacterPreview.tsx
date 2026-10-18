@@ -7,6 +7,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import type { Group } from 'three';
 import { getCharacter, type CharacterId } from '../../../../shared/characters.ts';
+import type { Outfit } from '../../../../shared/outfits.ts';
 import { CharacterFigure, newRig, poseRig, useCharacterMaterials } from './Figure.tsx';
 import { SceneEnv } from '../SceneEnv.tsx';
 
@@ -25,7 +26,7 @@ function hasWebGL(): boolean {
 
 const HOP_S = 0.8;
 
-function Spinning({ id, color }: { id: CharacterId; color: string }) {
+function Spinning({ id, color, outfit }: { id: CharacterId; color: string; outfit?: Outfit }) {
   const ref = useRef<Group>(null);
   const rig = useMemo(newRig, []);
   const mats = useCharacterMaterials(id, color);
@@ -43,12 +44,12 @@ function Spinning({ id, color }: { id: CharacterId; color: string }) {
   });
   return (
     <group ref={ref}>
-      <CharacterFigure id={id} mats={mats} rig={rig} />
+      <CharacterFigure id={id} mats={mats} rig={rig} outfit={outfit} />
     </group>
   );
 }
 
-export default function CharacterPreview({ character, color }: { character: CharacterId; color: string }) {
+export default function CharacterPreview({ character, color, outfit }: { character: CharacterId; color: string; outfit?: Outfit }) {
   if (!hasWebGL()) {
     return <span className="char-preview-emoji" style={{ background: color }}>{getCharacter(character).emoji}</span>;
   }
@@ -60,8 +61,8 @@ export default function CharacterPreview({ character, color }: { character: Char
       <hemisphereLight args={['#ffffff', '#443355', 0.8]} />
       <directionalLight position={[1.5, 2.5, 2]} intensity={2.2} />
       <directionalLight position={[-2, 1, -1.5]} intensity={0.9} color={color} />
-      {/* Remount per pick/colour so the "picked!" hop replays. */}
-      <Spinning key={`${character}${color}`} id={character} color={color} />
+      {/* Remount per pick/colour so the "picked!" hop replays (an outfit change only re-dresses). */}
+      <Spinning key={`${character}${color}`} id={character} color={color} outfit={outfit} />
     </Canvas>
   );
 }

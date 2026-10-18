@@ -11,6 +11,7 @@ import { DEFAULT_RULES, getTheme, resolveTheme, type RuleConfig } from '../../sh
 import { getMap } from '../../shared/maps.ts';
 import { DEFAULT_TABLE_STYLE, sanitizeTableStyle, type TableStyle } from '../../shared/tableStyles.ts';
 import { migrateCharacter } from '../../shared/characters.ts';
+import { parseOutfit, randomOutfit, sanitizeOutfit } from '../../shared/outfits.ts';
 import { sanitizeRequirements } from './requirements.ts';
 import {
   PLAYER_COLORS, CHARACTERS, type Action, type CharacterId, type JoinRequirements, type RoomSeat, type RoomSummary, type RoomView,
@@ -176,7 +177,7 @@ export class Room {
     if (this.seats.length >= this.rules.maxPlayers) fail('The room is full — you can watch');
     const s: Seat = {
       id: m.id, name: m.name, avatar: m.avatar, isBot: false, connected: true, disconnectedAt: null,
-      character: this.freeCharacter(), color: this.freeColor(),
+      character: this.freeCharacter(), color: this.freeColor(), outfit: {},
     };
     this.seats.push(s);
     if (!this.seat(this.hostId)) this.hostId = m.id;
@@ -373,6 +374,16 @@ export class Room {
     s.color = color;
   }
 
+  /** What the seat wears over its character; any number of players may wear the same thing. */
+  pickOutfit(id: string, raw: unknown) {
+    this.dirty = true;
+    this.requireLobby();
+    const r = parseOutfit(raw);
+    if (!r.ok) fail(r.error);
+    const s = this.seat(id) ?? fail('You are not seated');
+    s.outfit = r.outfit;
+  }
+
   addBot(id: string, isAdmin: boolean) {
     this.dirty = true;
     this.requireHost(id, isAdmin);
@@ -382,7 +393,7 @@ export class Room {
     const name = BOT_NAMES.find(n => !used.has(n)) ?? `Bot ${this.seats.length + 1}`;
     this.seats.push({
       id: `bot-${this.code}-${randomInt(1e9)}`, name, avatar: '🤖', isBot: true, connected: true, disconnectedAt: null,
-      character: this.freeCharacter(), color: this.freeColor(),
+      character: this.freeCharacter(), color: this.freeColor(), outfit: randomOutfit(n => randomInt(n)),
     });
   }
 
@@ -430,7 +441,7 @@ export class Room {
     this.game = new Game({
       theme: resolveTheme(this.themeId, this.mapId),
       rules: this.rules,
-      players: order.map(s => ({ id: s.id, name: s.name, character: s.character, color: s.color, isBot: s.isBot })),
+      players: order.map(s => ({ id: s.id, name: s.name, character: s.character, color: s.color, outfit: s.outfit ?? {}, isBot: s.isBot })),
       rng: n => randomInt(n),
       onLog: text => this.hooks.onEvent(this, text),
       // The operator's site-wide switch wins over the room's house rule, even mid-game.
@@ -824,7 +835,7 @@ export class Room {
     // maps those (and anything unknown) onto a character.
     const withCharacter = <T extends object>(x: T) => {
       const { token: _legacy, ...rest } = x as T & { token?: unknown };
-      return { ...rest, character: migrateCharacter(x) };
+      return { ...rest, character: migrateCharacter(x), outfit: sanitizeOutfit((x as { outfit?: unknown }).outfit) };
     };
     r.seats = s.seats.map(x => ({ ...withCharacter(x), connected: x.isBot, disconnectedAt: x.isBot ? null : now }));
     if (s.game) {

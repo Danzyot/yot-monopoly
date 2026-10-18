@@ -19,6 +19,8 @@ import RequirementsPicker from './RequirementsPicker.tsx';
 import { ProfileLink } from '../community.tsx';
 import { askConfirm } from './Modal.tsx';
 import { HowToPlayButton } from './HowToPlay.tsx';
+import OutfitPicker, { loadOutfitPref, sameOutfit, saveOutfitPref } from './OutfitPicker.tsx';
+import type { Outfit } from '../../../shared/outfits.ts';
 
 const TOGGLES: [keyof RuleConfig, string, string][] = [
   ['auctions', 'Auctions', 'Unbought property goes to auction'],
@@ -108,6 +110,19 @@ export default function Lobby({ room, me, spectating, chat }: {
     call('room:seat', { character: pref }).catch(() => {});
   }, [mySeat, room.code, room.seats, me]);
 
+  // The outfit last worn (or dressed up on /characters): put on once per room.
+  const dressed = useRef<string | null>(null);
+  useEffect(() => {
+    if (!mySeat || dressed.current === room.code) return;
+    dressed.current = room.code;
+    const pref = loadOutfitPref();
+    if (Object.keys(pref).length && !sameOutfit(pref, mySeat.outfit)) call('room:seat', { outfit: pref }).catch(() => {});
+  }, [mySeat, room.code]);
+  const wear = (o: Outfit) => {
+    saveOutfitPref(o);
+    call('room:seat', { outfit: o }).catch(toastError);
+  };
+
   /** Host: fill the table with bots up to four seats, then start. */
   const quickStart = async () => {
     const want = Math.min(4, room.rules.maxPlayers);
@@ -186,7 +201,7 @@ export default function Lobby({ room, me, spectating, chat }: {
               <h3>Your character</h3>
               <div className="char-picker">
                 <div className="char-preview">
-                  <CharacterPreview character={mySeat.character} color={mySeat.color} />
+                  <CharacterPreview character={mySeat.character} color={mySeat.color} outfit={mySeat.outfit} />
                   <div className="char-about">
                     <b>{getCharacter(mySeat.character).name}</b>
                     <span className="small muted">{getCharacter(mySeat.character).blurb}</span>
@@ -209,15 +224,20 @@ export default function Lobby({ room, me, spectating, chat }: {
                   })}
                 </div>
               </div>
-              <div className="color-grid" role="group" aria-label="Your colour">
-                {PLAYER_COLORS.map(c => {
-                  const taken = room.seats.some(s => s.color === c && s.id !== me);
-                  return (
-                    <button key={c} disabled={taken} aria-label={`Colour ${c}${taken ? ' (taken)' : ''}`} aria-pressed={mySeat.color === c}
-                      className={`color-pick ${mySeat.color === c ? 'on' : ''}`} style={{ background: c }}
-                      onClick={() => call('room:seat', { color: c }).catch(toastError)} />
-                  );
-                })}
+              <h4 className="lobby-outfit-head">Outfit</h4>
+              <OutfitPicker outfit={mySeat.outfit ?? {}} color={mySeat.color} character={mySeat.character} onChange={wear} />
+              <div className="outfit-colors">
+                <span>Colour</span>
+                <div className="color-grid" role="group" aria-label="Your colour">
+                  {PLAYER_COLORS.map(c => {
+                    const taken = room.seats.some(s => s.color === c && s.id !== me);
+                    return (
+                      <button key={c} disabled={taken} aria-label={`Colour ${c}${taken ? ' (taken)' : ''}`} aria-pressed={mySeat.color === c}
+                        className={`color-pick ${mySeat.color === c ? 'on' : ''}`} style={{ background: c }}
+                        onClick={() => call('room:seat', { color: c }).catch(toastError)} />
+                    );
+                  })}
+                </div>
               </div>
             </>
           )}

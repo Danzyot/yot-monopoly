@@ -5,6 +5,7 @@ import type { MinigameMove, MinigameView } from './minigames.ts';
 import type { RuleConfig } from './themes.ts';
 import type { TableStyle } from './tableStyles.ts';
 import type { CharacterId } from './characters.ts';
+import type { Outfit } from './outfits.ts';
 
 // The character catalogue lives in characters.ts; re-exported so protocol
 // code can keep importing everything from here.
@@ -17,6 +18,8 @@ export interface PlayerState {
   character: CharacterId;
   /** Tints the character's main material, so no two players look alike. */
   color: string;
+  /** Items worn over the character (shared/outfits.ts); none when absent. */
+  outfit?: Outfit;
   cash: number;
   position: number;
   inJail: boolean;
@@ -220,6 +223,8 @@ export interface RoomSeat {
   avatar: string;
   character: CharacterId;
   color: string;
+  /** Items worn over the character (shared/outfits.ts). */
+  outfit?: Outfit;
   isBot: boolean;
   connected: boolean;
   /** The host (or an operator) handed this player to autopilot. */

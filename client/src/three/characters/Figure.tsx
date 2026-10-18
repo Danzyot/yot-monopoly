@@ -14,6 +14,8 @@ import { WithModel } from '../models.tsx';
 import type { CharacterId } from '../../../../shared/characters.ts';
 import { GEO, Part, disposeMaterials, makeMaterials, type Mats } from './parts.tsx';
 import { HEAD_Y, LOOKS, DefaultBody, type Look } from './looks.tsx';
+import { OutfitLayer } from './Outfit.tsx';
+import type { Outfit } from '../../../../shared/outfits.ts';
 
 export interface Rig {
   pose: Group | null;
@@ -51,13 +53,17 @@ const ANKLE = 0.03;
 /**
  * A character on the rig. The modelled version (tools/blender/characters.py)
  * shows once characters.glb is in; until then, or if it fails, the same design
- * drawn from primitives. Both hang their parts on the same rig groups.
+ * drawn from primitives. Both hang their parts on the same rig groups, and so
+ * does the outfit (Outfit.tsx) when one is given.
  */
-export function CharacterFigure(props: { id: CharacterId; mats: Mats; rig: Rig }) {
+export function CharacterFigure({ outfit, ...props }: { id: CharacterId; mats: Mats; rig: Rig; outfit?: Outfit }) {
   return (
-    <WithModel fallback={<DrawnFigure {...props} />}>
-      <ModelFigure {...props} />
-    </WithModel>
+    <>
+      <WithModel fallback={<DrawnFigure {...props} />}>
+        <ModelFigure {...props} />
+      </WithModel>
+      <OutfitLayer {...props} outfit={outfit} />
+    </>
   );
 }
 

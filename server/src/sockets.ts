@@ -329,10 +329,11 @@ export function attachSockets(io: Server): SocketLayer {
       broadcast(r);
     });
 
-    on<{ character?: CharacterId; color?: string }>('room:seat', (p, room) => {
+    on<{ character?: CharacterId; color?: string; outfit?: unknown }>('room:seat', (p, room) => {
       const r = inRoom(room);
       if (p.character) r.pickCharacter(me(), p.character);
       if (p.color) r.pickColor(me(), String(p.color));
+      if (p.outfit !== undefined) r.pickOutfit(me(), p.outfit);
       broadcast(r);
     });
 
