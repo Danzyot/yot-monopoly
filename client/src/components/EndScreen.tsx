@@ -73,6 +73,10 @@ export default function EndScreen({ room, game, me, onLeave }: {
   const ended = game.endedAt ?? room.now;
   const myPlace = order.findIndex(p => p.id === me) + 1;
   const iWon = !!winner && winner.id === me;
+  const worth = (p: PlayerState) => (p.bankrupt ? 0 : game.netWorth?.[p.id] ?? p.cash);
+  const top = Math.max(1, ...order.map(worth));
+  // Podium: 2nd · 1st · 3rd, the classic silhouette; missing places simply stay empty.
+  const podium = [order[1], order[0], order[2]].map((p, k) => ({ p, place: [2, 1, 3][k] }));
 
   const rematch = () => {
     setBusy(true);
@@ -98,34 +102,60 @@ export default function EndScreen({ room, game, me, onLeave }: {
           {game.turnNumber} {game.turnNumber === 1 ? 'turn' : 'turns'} · {duration(ended - game.startedAt)} · {theme.name}
         </p>
 
-        <ol className="end-standings">
+        {order.length >= 2 && (
+          <ol className="podium" aria-label="Podium">
+            {podium.map(({ p, place }) => p ? (
+              <li key={p.id} className={`podium-spot p${place} ${p.id === me ? 'me' : ''}`} style={{ ['--pc' as string]: p.color }}>
+                <span className="podium-char" aria-hidden>{characterEmoji(p.character)}</span>
+                <span className="podium-name">{p.name}</span>
+                <span className="podium-block">
+                  <span className="podium-medal" aria-hidden>{MEDALS[place - 1]}</span>
+                  <span className="podium-place">{ordinal(place)}</span>
+                </span>
+              </li>
+            ) : <li key={place} className={`podium-spot p${place} empty`} aria-hidden />)}
+          </ol>
+        )}
+
+        <h3 className="end-h">Final net worth</h3>
+        <ol className="end-standings" aria-label="Final standings">
           {order.map((p, i) => (
             <li key={p.id} className={p.id === me ? 'me' : ''}>
-              <span className="end-place">{MEDALS[i] ?? `${i + 1}.`}</span>
-              <span className="token-badge" style={{ background: p.color }}>{characterEmoji(p.character)}</span>
-              <span className="grow end-name">{p.name}{p.id === me ? ' (you)' : ''}</span>
-              <span className="end-worth">{p.bankrupt ? <span className="muted">bankrupt</span> : cur(game.netWorth?.[p.id] ?? p.cash)}</span>
+              <span className="end-place" aria-label={ordinal(i + 1)}>{MEDALS[i] ?? `${i + 1}.`}</span>
+              <span className="token-badge" style={{ background: p.color }} aria-hidden>{characterEmoji(p.character)}</span>
+              <span className="grow end-main">
+                <span className="end-line">
+                  <span className="end-name">{p.name}{p.id === me ? ' (you)' : ''}</span>
+                  <span className="end-worth">{p.bankrupt ? <span className="muted">bankrupt</span> : cur(worth(p))}</span>
+                </span>
+                <span className="end-bar" aria-hidden>
+                  <i style={{ ['--w' as string]: `${Math.max(2, Math.round((worth(p) / top) * 100))}%`, background: p.color, animationDelay: `${0.25 + i * 0.12}s` }} />
+                </span>
+              </span>
             </li>
           ))}
         </ol>
 
         {fun.length > 0 && (
-          <div className="end-awards">
-            {fun.map(a => (
-              <div key={a.title} className="end-award">
-                <span className="end-award-icon">{a.icon}</span>
-                <div className="grow">
-                  <div className="small muted">{a.title}</div>
-                  <div><b style={{ color: a.who.color }}>{a.who.name}</b> <span className="small">{a.value}</span></div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <>
+            <h3 className="end-h">Awards</h3>
+            <ul className="end-badges" aria-label="Awards">
+              {fun.map(a => (
+                <li key={a.title} className="end-badge" style={{ ['--pc' as string]: a.who.color }} title={`${a.who.name}: ${a.value}`}>
+                  <span className="end-badge-icon" aria-hidden>{a.icon}</span>
+                  <span className="end-badge-text">
+                    <b>{a.title}</b>
+                    <span className="small"><span className="end-badge-who">{a.who.name}</span> · {a.value}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
 
         <div className="end-actions">
           {isHost
-            ? <button className="btn primary chunky" disabled={busy} onClick={rematch} data-autofocus>🔁 Rematch!</button>
+            ? <button className="btn primary chunky rematch-btn" disabled={busy} onClick={rematch} data-autofocus>🔁 Rematch!</button>
             : <span className="muted small">Waiting for {host?.name ?? 'the host'} to start a rematch…</span>}
           <div className="row">
             <button className="btn ghost small" onClick={() => setHidden(true)}>View board</button>
@@ -136,15 +166,18 @@ export default function EndScreen({ room, game, me, onLeave }: {
   );
 }
 
-/** A burst of paper confetti behind the winner's card (CSS only; still under reduced motion). */
+/**
+ * A burst of paper confetti behind the winner's card. CSS only, a few seconds
+ * long rather than endless, and skipped entirely under reduced motion.
+ */
 function Confetti({ colors }: { colors: string[] }) {
-  const bits = Array.from({ length: 60 }, (_, i) => i);
+  const bits = Array.from({ length: 40 }, (_, i) => i);
   return (
     <div className="confetti" aria-hidden>
       {bits.map(i => (
         <i key={i} style={{
           left: `${(i * 37) % 100}%`, background: colors[i % colors.length],
-          animationDelay: `${(i % 12) * 0.25}s`, animationDuration: `${3.2 + (i % 5) * 0.45}s`,
+          animationDelay: `${(i % 10) * 0.2}s`, animationDuration: `${3.2 + (i % 5) * 0.45}s`,
           ['--drift' as string]: `${((i * 53) % 120) - 60}px`, ['--spin' as string]: `${360 + (i % 4) * 180}deg`,
         }} />
       ))}

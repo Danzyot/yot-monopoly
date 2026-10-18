@@ -4,11 +4,18 @@ import { call, useConnected, useRoomList } from '../net.ts';
 import { THEMES, getTheme } from '../../../shared/themes.ts';
 import { MAPS, getMap } from '../../../shared/maps.ts';
 import { BRAND } from '../../../shared/brand.ts';
+import { CHARACTER_DEFS } from '../../../shared/characters.ts';
 import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { requirementBadge, requirementSentence } from '../community.tsx';
 import BoardScene from '../three/BoardScene.tsx';
 import { HowToPlayButton } from '../components/HowToPlay.tsx';
+
+const STEPS: { icon: string; title: string; body: string }[] = [
+  { icon: '🎲', title: 'Create a table', body: 'Pick a board, an edition and your house rules. Sign in with just a name.' },
+  { icon: '🔗', title: 'Share the code', body: 'Friends join with the five-letter code or the invite link — phones welcome. Short on people? Bots fill in.' },
+  { icon: '🚀', title: 'Roll', body: 'Buy, build, trade and auction your way to the last player standing.' },
+];
 
 export default function Home() {
   const nav = useNavigate();
@@ -39,6 +46,8 @@ export default function Home() {
   };
 
   const live = rooms.filter(r => r.status !== 'lobby').length;
+  // Twice over so the strip loops seamlessly; the copy is hidden from readers.
+  const marquee = [...CHARACTER_DEFS, ...CHARACTER_DEFS];
 
   return (
     <div className="home">
@@ -58,6 +67,7 @@ export default function Home() {
           )}
           <form className="hero-join" onSubmit={e => { e.preventDefault(); join(code); }}>
             <input className="code-input" value={code} maxLength={5} placeholder="CODE" aria-label="Room code"
+              autoCapitalize="characters" autoComplete="off" spellCheck={false}
               onChange={e => setCode(e.target.value.toUpperCase())} />
             <button className="btn gold" type="submit">Join!</button>
           </form>
@@ -66,37 +76,76 @@ export default function Home() {
           <HowToPlayButton className="btn small ghost" label="❓ New here? How to play" />
           <Link className="btn small ghost" to="/characters">🎭 Meet the characters</Link>
         </div>
-        <p className="hero-status muted small">
+        <p className="hero-status muted small" role="status">
           {!connected ? 'Connecting to server…'
             : rooms.length === 0 ? 'No tables open yet — start one and invite your friends!'
               : `${rooms.length} open table${rooms.length === 1 ? '' : 's'}${live ? ` · ${live} playing` : ''}`}
         </p>
       </section>
 
+      {/* The cast, drifting by: tap any of them to meet them all. */}
+      <Link to="/characters" className="char-marquee" aria-label="Meet the 12 characters">
+        <div className="char-track">
+          {marquee.map((c, i) => (
+            <span key={`${c.id}${i}`} className="char-chip" aria-hidden={i >= CHARACTER_DEFS.length}>
+              <span className="char-chip-emoji">{c.emoji}</span>{c.name}
+            </span>
+          ))}
+        </div>
+      </Link>
+
       <div className="home-body">
+        <section className="panel how-panel" aria-labelledby="how-title">
+          <h2 id="how-title">How it works</h2>
+          <ol className="how-steps">
+            {STEPS.map((s, i) => (
+              <li key={s.title}>
+                <span className="how-icon" aria-hidden>{s.icon}</span>
+                <b><span className="how-n">{i + 1}</span>{s.title}</b>
+                <p>{s.body}</p>
+              </li>
+            ))}
+          </ol>
+        </section>
+
         {rooms.length > 0 && (
-          <section className="panel">
-            <h2>Live Tables</h2>
-            <ul className="room-list">
-              {rooms.map(r => (
-                <li key={r.code}>
-                  <span className={`room-status ${r.status}`}>{r.status === 'lobby' ? 'Open' : 'Playing'}</span>
-                  <div className="grow">
-                    <b className="mono">{r.code}</b> · {getMap(r.mapId).name === getTheme(r.themeId).name ? getMap(r.mapId).name : `${getMap(r.mapId).name} · ${getTheme(r.themeId).name}`}
-                    {r.requirements && <em className="tag req-tag" title={requirementSentence(r.requirements)}>🔒 {requirementBadge(r.requirements)}</em>}
-                    <div className="muted small">host {r.hostName} · {r.players}/{r.maxPlayers} players</div>
-                  </div>
-                  <button className={`btn small ${r.status === 'lobby' ? 'primary' : ''}`} onClick={() => join(r.code)}>
-                    {r.status === 'lobby' ? 'Join!' : 'Watch'}
-                  </button>
-                </li>
-              ))}
+          <section className="panel" aria-labelledby="tables-title">
+            <h2 id="tables-title">Live Tables</h2>
+            <ul className="room-cards">
+              {rooms.map(r => {
+                const map = getMap(r.mapId);
+                const theme = getTheme(r.themeId);
+                const open = r.status === 'lobby';
+                return (
+                  <li key={r.code} className={`room-card ${r.status}`}>
+                    <img className="room-thumb" src={`/maps/${map.id}.webp`} alt="" loading="lazy" />
+                    <div className="room-main">
+                      <div className="room-top">
+                        <b className="mono room-code">{r.code}</b>
+                        <span className={`room-status ${r.status}`}>{open ? 'Open' : 'Playing'}</span>
+                      </div>
+                      <div className="room-chips">
+                        <span className="chip">{map.name}</span>
+                        <span className="chip edition-chip" style={{ background: theme.palette.board, color: theme.palette.boardText, borderColor: theme.palette.accent }}>
+                          {theme.name}
+                        </span>
+                        {r.requirements && <em className="tag req-tag" title={requirementSentence(r.requirements)}>🔒 {requirementBadge(r.requirements)}</em>}
+                      </div>
+                      <div className="muted small room-meta">host {r.hostName} · <b>{r.players}/{r.maxPlayers}</b> players</div>
+                    </div>
+                    <button className={`btn small ${open ? 'primary' : ''}`} onClick={() => join(r.code)}
+                      aria-label={`${open ? 'Join' : 'Watch'} table ${r.code}`}>
+                      {open ? 'Join!' : 'Watch'}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         )}
 
-        <section className="panel">
-          <h2>Boards</h2>
+        <section className="panel" aria-labelledby="boards-title">
+          <h2 id="boards-title">Boards</h2>
           <div className="card-grid">
             {MAPS.map(m => (
               <div key={m.id} className="info-card">
@@ -107,7 +156,7 @@ export default function Home() {
               </div>
             ))}
           </div>
-          <h2 className="mt">Editions</h2>
+          <h2 className="mt" id="editions-title">Editions</h2>
           <div className="card-grid">
             {THEMES.map(t => (
               <div key={t.id} className="info-card edition-card" style={{ background: t.palette.board, color: t.palette.boardText, borderColor: t.palette.boardLine }}>
@@ -115,8 +164,8 @@ export default function Home() {
                   {t.logoUrl && <img className="edition-logo" src={t.logoUrl} alt="" />}
                   <b>{t.name}</b>
                 </div>
-                <div className="swatches">
-                  {Object.values(t.groupColors).slice(0, 8).map(c => <i key={c} style={{ background: c }} />)}
+                <div className="swatches" aria-hidden>
+                  {Object.values(t.groupColors).slice(0, 8).map((c, i) => <i key={`${c}${i}`} style={{ background: c }} />)}
                 </div>
                 <span className="small">{t.tagline}</span>
               </div>

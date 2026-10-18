@@ -1,10 +1,10 @@
-import { useRef, useState, type InputHTMLAttributes } from 'react';
+import { useEffect, useRef, useState, type InputHTMLAttributes } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { call, type ChatMsg } from '../net.ts';
 import { THEMES, TIME_LIMIT_CHOICES, TURN_SECONDS_CHOICES, getTheme, type RuleConfig } from '../../../shared/themes.ts';
 import { MAPS, getMap } from '../../../shared/maps.ts';
 import { PLAYER_COLORS, type RoomView } from '../../../shared/types.ts';
-import { CHARACTER_DEFS, getCharacter } from '../../../shared/characters.ts';
+import { CHARACTER_DEFS, getCharacter, isCharacterId } from '../../../shared/characters.ts';
 import { characterEmoji } from '../format.ts';
 import { toast, toastError } from '../toast.tsx';
 import { useAuth } from '../auth.tsx';
@@ -31,6 +31,19 @@ const TOGGLES: [keyof RuleConfig, string, string][] = [
   ['speedDie', 'Speed Die', 'Official variant: a third die once you have passed GO (Mr. Monopoly, Bus, triples)'],
   ['noRentInJail', 'No rent in jail', 'Owners sitting in jail collect no rent'],
 ];
+
+/** The gallery's "Play as …" remembers a character here; the lobby applies it once per room. */
+export const CHARACTER_PREF_KEY = 'yot:character';
+
+/** One line for the folded house-rules panel: the switches people ask about first. */
+function rulesSummary(r: RuleConfig): string {
+  return [
+    `Jackpot ${r.freeParkingPot ? 'on' : 'off'}`,
+    `Auctions ${r.auctions ? 'on' : 'off'}`,
+    r.turnSeconds ? `${r.turnSeconds} s turns` : 'No turn timer',
+    r.timeLimitMin ? `${r.timeLimitMin} min game` : 'No time limit',
+  ].join(' · ');
+}
 
 /** A select's options, keeping a value set some other way (e.g. an edition) visible. */
 const withCurrent = (choices: number[], v: number) => (choices.includes(v) ? choices : [...choices, v].sort((a, b) => a - b));
@@ -75,8 +88,48 @@ export default function Lobby({ room, me, spectating, chat }: {
   const mySeat = room.seats.find(s => s.id === me);
   const link = `${location.origin}/r/${room.code}`;
 
+  const canBots = config.features.bots || !!profile?.isAdmin;
+  const [starting, setStarting] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
+
   const configure = (p: { themeId?: string; mapId?: string; rules?: Partial<RuleConfig>; private?: boolean }) =>
     call('room:configure', p).catch(toastError);
+
+  // The character picked on /characters ("Play as …"): applied once, the first
+  // time we hold a seat in this room, and only while nobody else has it.
+  const applied = useRef<string | null>(null);
+  useEffect(() => {
+    if (!mySeat || applied.current === room.code) return;
+    applied.current = room.code;
+    let pref: string | null = null;
+    try { pref = localStorage.getItem(CHARACTER_PREF_KEY); } catch { /* private mode */ }
+    if (!isCharacterId(pref) || pref === mySeat.character) return;
+    if (room.seats.some(s => s.character === pref && s.id !== me)) return;
+    call('room:seat', { character: pref }).catch(() => {});
+  }, [mySeat, room.code, room.seats, me]);
+
+  /** Host: fill the table with bots up to four seats, then start. */
+  const quickStart = async () => {
+    const want = Math.min(4, room.rules.maxPlayers);
+    const bots = Math.max(0, want - room.seats.length);
+    const ok = await askConfirm({
+      icon: '🚀', title: 'Quick start?',
+      body: bots > 0
+        ? `${bots} bot${bots === 1 ? '' : 's'} will join to make ${want} players, then the game starts right away.`
+        : 'The game starts right away with the players seated now.',
+      confirm: 'Start now',
+    });
+    if (!ok) return;
+    setStarting(true);
+    try {
+      for (let i = 0; i < bots; i++) await call('room:addBot');
+      await call('room:start');
+    } catch (e) {
+      toastError(e);
+    } finally {
+      setStarting(false);
+    }
+  };
   const leave = async () => { await call('room:leave').catch(() => {}); nav('/'); };
   const makeHost = async (id: string, name: string) => {
     const mine = room.hostId === me;
@@ -92,7 +145,7 @@ export default function Lobby({ room, me, spectating, chat }: {
         <section className="panel">
           <div className="row between">
             <h2 className="row">{theme.logoUrl && <img className="brand-mark" src={theme.logoUrl} alt="" />}Room <span className="mono accent">{room.code}</span></h2>
-            <div className="row lobby-audio"><MusicPlayer /><button className="btn small danger" onClick={leave}>Leave</button></div>
+            <div className="row lobby-audio"><MusicPlayer /><button className="btn small danger" onClick={leave} aria-label="Leave the room">Leave</button></div>
           </div>
           <div className="row">
             <input readOnly value={link} onFocus={e => e.target.select()} />
@@ -106,23 +159,24 @@ export default function Lobby({ room, me, spectating, chat }: {
               <li key={s.id} style={{ borderColor: s.color }}>
                 {/* Character first (it is what they play as); their own avatar rides on its corner. */}
                 <span className="seat-ids">
-                  <span className="token-badge" style={{ background: s.color }}>{characterEmoji(s.character)}</span>
+                  <span className="token-badge" style={{ background: s.color }} role="img" aria-label={`${getCharacter(s.character).name}, ${s.color}`}>{characterEmoji(s.character)}</span>
                   {!s.isBot && <span className="seat-avatar"><Avatar src={s.avatar} size={16} /></span>}
                 </span>
                 <span className="grow">
-                  <ProfileLink id={s.id} isBot={s.isBot} newTab>{s.name}</ProfileLink> {s.id === room.hostId && <em className="tag">host</em>} {s.isBot && <em className="tag">bot</em>}
-                  {!s.connected && <em className="tag warn">away</em>}
+                  <span className="seat-name"><ProfileLink id={s.id} isBot={s.isBot} newTab>{s.name}</ProfileLink> {s.id === me && <em className="tag you">you</em>}{s.id === room.hostId && <em className="tag">host</em>} {s.isBot && <em className="tag">bot</em>}
+                  {!s.connected && <em className="tag warn">away</em>}</span>
+                  <span className="seat-char small"><i className="seat-swatch" style={{ background: s.color }} aria-hidden /> {getCharacter(s.character).name}</span>
                 </span>
                 {isHost && !s.isBot && s.connected && s.id !== room.hostId && (
                   <button className="btn tiny ghost" title={`Make ${s.name} the host`} onClick={() => makeHost(s.id, s.name)}>Make host</button>
                 )}
                 {isHost && s.id !== me && (
-                  <button className="btn tiny ghost" title="Remove" onClick={() => call('room:kick', { id: s.id }).catch(toastError)}>✕</button>
+                  <button className="btn tiny ghost" title={`Remove ${s.name}`} aria-label={`Remove ${s.name}`} onClick={() => call('room:kick', { id: s.id }).catch(toastError)}>✕</button>
                 )}
               </li>
             ))}
           </ul>
-          {isHost && room.seats.length < room.rules.maxPlayers && (config.features.bots || profile?.isAdmin) && (
+          {isHost && room.seats.length < room.rules.maxPlayers && canBots && (
             <button className="btn small" onClick={() => call('room:addBot').catch(toastError)}>+ Add bot</button>
           )}
           <RequirementsPicker room={room} canEdit={isHost} />
@@ -142,8 +196,9 @@ export default function Lobby({ room, me, spectating, chat }: {
                   {CHARACTER_DEFS.map(c => {
                     const holder = room.seats.find(s => s.character === c.id && s.id !== me);
                     return (
-                      <button key={c.id} disabled={!!holder}
+                      <button key={c.id} disabled={!!holder} aria-pressed={mySeat.character === c.id}
                         title={holder ? `${c.name} — taken by ${holder.name}` : `${c.name} — ${c.blurb}`}
+                        aria-label={holder ? `${c.name}, taken by ${holder.name}` : c.name}
                         className={`char-pick ${mySeat.character === c.id ? 'on' : ''}`}
                         onClick={() => call('room:seat', { character: c.id }).catch(toastError)}>
                         <span className="char-emoji">{c.emoji}</span>
@@ -154,11 +209,11 @@ export default function Lobby({ room, me, spectating, chat }: {
                   })}
                 </div>
               </div>
-              <div className="color-grid">
+              <div className="color-grid" role="group" aria-label="Your colour">
                 {PLAYER_COLORS.map(c => {
                   const taken = room.seats.some(s => s.color === c && s.id !== me);
                   return (
-                    <button key={c} disabled={taken} aria-label={`Colour ${c}`}
+                    <button key={c} disabled={taken} aria-label={`Colour ${c}${taken ? ' (taken)' : ''}`} aria-pressed={mySeat.color === c}
                       className={`color-pick ${mySeat.color === c ? 'on' : ''}`} style={{ background: c }}
                       onClick={() => call('room:seat', { color: c }).catch(toastError)} />
                   );
@@ -169,9 +224,17 @@ export default function Lobby({ room, me, spectating, chat }: {
 
           <div className="lobby-howto"><HowToPlayButton rules={room.rules} /></div>
           {isHost ? (
-            <button className="btn primary big" disabled={room.seats.length < 2} onClick={() => call('room:start').catch(toastError)}>
-              {room.seats.length < 2 ? 'Need 2+ players' : 'Start Game!'}
-            </button>
+            <div className="start-row">
+              <button className="btn primary big" disabled={room.seats.length < 2 || starting} onClick={() => call('room:start').catch(toastError)}>
+                {room.seats.length < 2 ? 'Need 2+ players' : 'Start Game!'}
+              </button>
+              {canBots && room.seats.length < Math.max(2, Math.min(4, room.rules.maxPlayers)) && (
+                <button className="btn gold quick-start" disabled={starting} onClick={quickStart}
+                  title="Fill the table with bots up to 4 players and start">
+                  🚀 Quick start <small>bots fill to {Math.min(4, room.rules.maxPlayers)} players</small>
+                </button>
+              )}
+            </div>
           ) : (
             <p className="muted waiting-host">Waiting for the host to hit Start…</p>
           )}
@@ -179,10 +242,12 @@ export default function Lobby({ room, me, spectating, chat }: {
 
         <section className="panel">
           <h3>Board</h3>
-          <div className="edition-pick">
+          <p className="pick-hint muted small">The map: how many spaces there are and the 3D setting around the table.{!isHost && ' Only the host can change it.'}</p>
+          <div className="edition-pick" role="group" aria-label="Board">
             {MAPS.map(m => (
               <button key={m.id} disabled={!isHost} className={`edition small map-card ${m.id === room.mapId ? 'on' : ''}`}
-                onClick={() => configure({ mapId: m.id })}>
+                aria-pressed={m.id === room.mapId} onClick={() => configure({ mapId: m.id })}>
+                {m.id === room.mapId && <span className="pick-selected">✓ Selected</span>}
                 <img className="map-thumb" src={`/maps/${m.id}.webp`} alt="" loading="lazy" />
                 <b>{m.name}</b>
                 <span className="small muted">{m.description}</span>
@@ -192,14 +257,21 @@ export default function Lobby({ room, me, spectating, chat }: {
           </div>
 
           <h3>Edition</h3>
-          <div className="edition-pick">
+          <p className="pick-hint muted small">The skin: property names, colours, money and cards. Some editions bring their own house rules.{!isHost && ' Only the host can change it.'}</p>
+          <div className="edition-pick" role="group" aria-label="Edition">
             {THEMES.map(t => (
               <button key={t.id} disabled={!isHost}
-                className={`edition small ${t.id === room.themeId ? 'on' : ''}`}
+                className={`edition small ${t.id === room.themeId ? 'on' : ''}`} aria-pressed={t.id === room.themeId}
                 style={{ background: t.palette.board, color: t.palette.boardText, borderColor: t.id === room.themeId ? t.palette.accent : t.palette.boardLine }}
                 onClick={() => configure({ themeId: t.id })}>
-                {t.logoUrl && <img className="edition-logo" src={t.logoUrl} alt="" />}
-                <b>{t.name}</b>
+                {t.id === room.themeId && <span className="pick-selected">✓ Selected</span>}
+                <span className="row">
+                  {t.logoUrl && <img className="edition-logo" src={t.logoUrl} alt="" />}
+                  <b>{t.name}</b>
+                </span>
+                <span className="swatches" aria-hidden>
+                  {Object.values(t.groupColors).slice(0, 8).map((c, i) => <i key={`${c}${i}`} style={{ background: c }} />)}
+                </span>
                 <span className="small">{t.tagline}</span>
               </button>
             ))}
@@ -208,8 +280,14 @@ export default function Lobby({ room, me, spectating, chat }: {
           <h3>Table style</h3>
           <TableStylePicker style={room.style} canEdit={isHost} />
 
-          <h3>House rules</h3>
-          <div className="rules">
+          <div className="rules-head">
+            <h3 id="rules-heading">House rules</h3>
+            <button className="btn tiny ghost" aria-expanded={rulesOpen} aria-controls="rules-body" onClick={() => setRulesOpen(o => !o)}>
+              {rulesOpen ? 'Hide' : isHost ? 'Edit' : 'Show all'}
+            </button>
+          </div>
+          <p className="rules-summary small">{rulesSummary(room.rules)} · {theme.currency}{room.rules.startingCash.toLocaleString()} to start · up to {room.rules.maxPlayers} players{room.private ? ' · private' : ''}</p>
+          <div className="rules" id="rules-body" hidden={!rulesOpen} aria-labelledby="rules-heading">
             <label className="rule">
               <span>Starting cash</span>
               <DraftNumber step={100} min={100} disabled={!isHost} value={room.rules.startingCash}

@@ -9,7 +9,7 @@ export default function Header() {
   return (
     <header className="site-header">
       <Link to="/" className="brand"><span className="brand-hat">🎩</span> {BRAND.name}</Link>
-      <nav className="row">
+      <nav className="row" aria-label="Site">
         <Link className="navlink hide-sm" to="/characters">Characters</Link>
         {config.features.leaderboard && <Link className="navlink" to="/leaderboard">Leaderboard</Link>}
         {config.inviteUrl && <a className="navlink" href={config.inviteUrl} target="_blank" rel="noreferrer">Discord</a>}
@@ -22,7 +22,7 @@ export default function Header() {
               ? <Link className="me-link" to={profilePath(profile.id)} title="My profile" aria-label="My profile"><Avatar src={profile.avatar} size={28} /></Link>
               : <Avatar src={profile.avatar} size={28} />}
             <span className="hide-sm">{profile.name}</span>
-            <button className="btn tiny ghost" onClick={signOut}>Sign out</button>
+            <button className="btn tiny ghost" onClick={signOut} aria-label={`Sign out ${profile.name}`}>Sign out</button>
           </span>
         ) : (
           <button className="btn small primary" onClick={openSignIn}>Sign in</button>
