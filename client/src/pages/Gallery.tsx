@@ -3,9 +3,12 @@
 
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Group } from 'three';
 import { CHARACTER_DEFS, type CharacterId } from '../../../shared/characters.ts';
+import { CHARACTER_PREF_KEY } from '../components/Lobby.tsx';
+import { toast } from '../toast.tsx';
 import { CharacterFigure, newRig, poseRig, useCharacterMaterials, type PoseInput } from '../three/characters/Figure.tsx';
 import { SceneEnv } from '../three/SceneEnv.tsx';
 
@@ -90,13 +93,35 @@ function Turntable({ id, color, move, startedAt }: { id: CharacterId; color: str
 }
 
 export default function Gallery() {
-  const [i, setI] = useState(0);
+  const nav = useNavigate();
+  const [params, setParams] = useSearchParams();
+  // A shared link (/characters?c=robot) opens on that character.
+  const fromLink = Math.max(0, CHARACTER_DEFS.findIndex(c => c.id === params.get('c')));
+  const [i, setI] = useState(fromLink);
   const [color, setColor] = useState(COLORS[1]);
   const [move, setMove] = useState<Move>('idle');
   const [startedAt, setStartedAt] = useState(() => performance.now());
   const def = CHARACTER_DEFS[i];
   const pick = (m: Move) => { setMove(m); setStartedAt(performance.now()); };
   const go = (d: number) => setI(x => (x + d + CHARACTER_DEFS.length) % CHARACTER_DEFS.length);
+  useEffect(() => {
+    document.title = `${def.name} · Characters`;
+    if (params.get('c') !== def.id) setParams({ c: def.id }, { replace: true });
+    return () => { document.title = 'Yot Monopoly'; };
+  }, [def, params, setParams]);
+  const playAs = () => {
+    try { localStorage.setItem(CHARACTER_PREF_KEY, def.id); } catch { /* private mode */ }
+    toast(`${def.emoji} You'll play as ${def.name}`);
+    nav('/');
+  };
+  const share = async () => {
+    const url = `${location.origin}/characters?c=${def.id}`;
+    const data = { title: `${def.name} · Yot Monopoly`, text: def.blurb, url };
+    try {
+      if (navigator.share && navigator.canShare?.(data)) { await navigator.share(data); return; }
+    } catch { /* cancelled: fall through to copy */ }
+    try { await navigator.clipboard.writeText(url); toast('Link copied!'); } catch { toast(url); }
+  };
   return (
     <div className="gallery">
       <div className="gallery-stage">
@@ -118,12 +143,17 @@ export default function Gallery() {
         <button className="btn gallery-arrow left" onClick={() => go(-1)} aria-label="Previous character">‹</button>
         <button className="btn gallery-arrow right" onClick={() => go(1)} aria-label="Next character">›</button>
       </div>
-      <section className="panel gallery-panel">
-        <h2>{def.emoji} {def.name}</h2>
-        <p className="muted">{def.blurb}</p>
-        <div className="gallery-moves">
+      <section className="panel gallery-panel" aria-live="polite">
+        <h1 className="gallery-title"><span aria-hidden>{def.emoji}</span> {def.name}</h1>
+        <p className="gallery-blurb">{def.blurb}</p>
+        <div className="gallery-cta">
+          <button className="btn primary chunky" onClick={playAs}>Play as {def.name}</button>
+          <button className="btn ghost small" onClick={share} aria-label={`Share a link to ${def.name}`}>🔗 Share</button>
+        </div>
+        <h2 className="gallery-sub">Moves</h2>
+        <div className="gallery-moves" role="group" aria-label="Moves">
           {MOVES.map(m => (
-            <button key={m.id} className={`btn small ${move === m.id ? 'primary' : ''}`} onClick={() => pick(m.id)}>{m.label}</button>
+            <button key={m.id} className={`btn small ${move === m.id ? 'primary' : ''}`} aria-pressed={move === m.id} onClick={() => pick(m.id)}>{m.label}</button>
           ))}
         </div>
         <div className="gallery-colors" role="radiogroup" aria-label="Player colour">
@@ -132,10 +162,11 @@ export default function Gallery() {
               aria-label={`Colour ${c}`} aria-checked={color === c} role="radio" onClick={() => setColor(c)} />
           ))}
         </div>
-        <div className="gallery-thumbs">
+        <h2 className="gallery-sub">All characters</h2>
+        <div className="gallery-thumbs" role="group" aria-label="Characters">
           {CHARACTER_DEFS.map((c, k) => (
-            <button key={c.id} className={`gallery-thumb ${k === i ? 'on' : ''}`} onClick={() => setI(k)} title={c.name}>
-              <span>{c.emoji}</span><small>{c.name}</small>
+            <button key={c.id} className={`gallery-thumb ${k === i ? 'on' : ''}`} onClick={() => setI(k)} title={`${c.name} — ${c.blurb}`} aria-pressed={k === i}>
+              <span aria-hidden>{c.emoji}</span><small>{c.name}</small>
             </button>
           ))}
         </div>
