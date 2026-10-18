@@ -363,11 +363,16 @@ function Stingers({ game }: { game: GameView }) {
   // Release the queue once the scene is quiet; one at a time.
   useEffect(() => {
     if (busy || !waiting.current.length || queue.length) return;
-    const next = waiting.current.shift()!;
-    setQueue([next]);
-    const t = setTimeout(() => setQueue([]), next.tone === 'win' ? STING_MS * 2 : STING_MS);
-    return () => clearTimeout(t);
+    setQueue([waiting.current.shift()!]);
   }, [busy, queue, game]);
+  // Each title has its moment, then makes way for the next (timed apart from
+  // the effect above, which re-runs with every snapshot).
+  useEffect(() => {
+    const cur = queue[0];
+    if (!cur) return;
+    const t = setTimeout(() => setQueue([]), cur.tone === 'win' ? STING_MS * 2 : STING_MS);
+    return () => clearTimeout(t);
+  }, [queue]);
   if (!queue.length) return null;
   return (
     <div className="bc-sting" aria-live="assertive">
