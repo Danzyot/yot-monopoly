@@ -9,67 +9,90 @@ import type { Group } from 'three';
 import { CHARACTER_DEFS, type CharacterId } from '../../../shared/characters.ts';
 import { CHARACTER_PREF_KEY } from '../components/Lobby.tsx';
 import { toast } from '../toast.tsx';
-import { CharacterFigure, newRig, poseRig, useCharacterMaterials, type PoseInput } from '../three/characters/Figure.tsx';
+import {
+  CharacterFigure, EMOTE_MS, EMOTE_OUT, emotePose, newRig, poseRig, useCharacterMaterials, type EmoteKind, type PoseInput,
+} from '../three/characters/Figure.tsx';
 import { SceneEnv } from '../three/SceneEnv.tsx';
 
-type Move = 'idle' | 'walk' | 'wave' | 'cheer' | 'pump' | 'sad' | 'stomp' | 'look' | 'jail' | 'win';
+type Move = 'idle' | 'walk' | 'jail' | 'win' | EmoteKind;
 
 const MOVES: { id: Move; label: string }[] = [
   { id: 'idle', label: '😌 Idle' },
   { id: 'walk', label: '🚶 Walk' },
   { id: 'wave', label: '👋 Wave' },
+  { id: 'look', label: '👀 Look around' },
+  { id: 'shrug', label: '🤷 Shrug' },
+  { id: 'stretch', label: '🥱 Stretch' },
+  { id: 'fidget', label: '🦶 Fidget' },
   { id: 'cheer', label: '🎉 Cheer' },
   { id: 'pump', label: '💪 Yes!' },
+  { id: 'taunt', label: '😏 Taunt' },
   { id: 'sad', label: '😞 Pay up' },
   { id: 'stomp', label: '😤 Jailed' },
-  { id: 'look', label: '👀 Look around' },
   { id: 'jail', label: '🔒 In jail' },
   { id: 'win', label: '🏆 Winner' },
 ];
 
-const COLORS = ['#e53935', '#1e88e5', '#43a047', '#fdd835', '#8e24aa', '#fb8c00', '#00acc1', '#ec407a'];
+/** Gallery walk: hop period, with a wind-up crouch before each run of four hops and a landing rest after. */
+const GALLERY_HOP_MS = 420;
+const GALLERY_CROUCH_MS = 120;
+const GALLERY_REST_MS = 520;
+const GALLERY_HOPS = 4;
+const GALLERY_WALK_MS = GALLERY_CROUCH_MS + GALLERY_HOPS * GALLERY_HOP_MS + GALLERY_REST_MS;
 
-const env = (c: number) => Math.max(0, Math.min(1, c * 5, (1 - c) * 5));
+const COLORS = ['#e53935', '#1e88e5', '#43a047', '#fdd835', '#8e24aa', '#fb8c00', '#00acc1', '#ec407a'];
 
 function Turntable({ id, color, move, startedAt }: { id: CharacterId; color: string; move: Move; startedAt: number }) {
   const spin = useRef<Group>(null);
   const body = useRef<Group>(null);
   const rig = useMemo(newRig, []);
   const mats = useCharacterMaterials(id, color);
+  // One PoseInput reused every frame; which hop of the walk was drawn last (its landing jolts the arms).
+  const pose = useRef<PoseInput>({ time: 0, phase: 0, slump: 0, lie: 0, handsUp: 0, squash: 1 });
+  const hopRef = useRef(-1);
   useFrame(({ clock }, delta) => {
     const t = clock.elapsedTime;
-    const c = ((performance.now() - startedAt) % 1800) / 1800;
-    const o: PoseInput = { time: t, phase: 0, slump: 0, lie: 0, handsUp: 0, squash: 1 };
+    const dt = Math.min(delta, 0.1);
+    const o = pose.current;
+    o.time = t; o.phase = 0; o.slump = 0; o.lie = 0; o.handsUp = 0; o.squash = 1; o.dt = dt; o.kick = 0;
+    o.walk = undefined; o.look = 0; o.wave = 0; o.pump = 0; o.sad = 0; o.stomp = 0; o.cheer = 0; o.crouch = 0;
+    o.shrug = 0; o.stretch = 0; o.fidget = 0; o.taunt = 0;
     let lift = 0, twirl = 0;
     switch (move) {
+      case 'idle': break;
+      case 'jail': o.slump = 1; break;
       case 'walk': {
-        // Hop after hop on the spot, alternating the leading foot.
-        const k = (t % 0.42) / 0.42;
-        o.walk = k;
-        o.stride = Math.floor(t / 0.42) % 2 ? 1 : -1;
-        lift = Math.sin(Math.PI * k) * 0.08;
-        o.squash = 1 + Math.sin(Math.PI * k) * 0.12 - Math.max(0, 1 - k / 0.15) * 0.12;
+        // Wind up, four hops on the spot (alternating the leading foot), land, rest; repeat.
+        const ms = (performance.now() - startedAt) % GALLERY_WALK_MS;
+        if (ms < GALLERY_CROUCH_MS) {
+          o.crouch = Math.min(1, (ms / GALLERY_CROUCH_MS) * 1.6);
+          hopRef.current = -1;
+        } else if (ms < GALLERY_CROUCH_MS + GALLERY_HOPS * GALLERY_HOP_MS) {
+          const hop = Math.floor((ms - GALLERY_CROUCH_MS) / GALLERY_HOP_MS);
+          const k = ((ms - GALLERY_CROUCH_MS) % GALLERY_HOP_MS) / GALLERY_HOP_MS;
+          o.walk = k;
+          o.stride = hop % 2 ? 1 : -1;
+          lift = Math.sin(Math.PI * k) * 0.08;
+          o.squash = 1 + Math.sin(Math.PI * k) * 0.12 - Math.max(0, 1 - k / 0.15) * 0.12;
+          if (hop !== hopRef.current && hopRef.current >= 0) o.kick = -0.5;
+          hopRef.current = hop;
+        } else {
+          // Landing squash, rebound, and the arms slapping down then settling.
+          const land = (ms - GALLERY_CROUCH_MS - GALLERY_HOPS * GALLERY_HOP_MS) / 150;
+          if (land < 1) o.squash = 1 - Math.sin(Math.PI * land) * 0.22;
+          else if (land < 2.2) o.squash = 1 + Math.sin(Math.PI * (land - 1) / 1.2) * 0.06;
+          if (hopRef.current >= 0) { o.kick = -0.9; hopRef.current = -1; }
+        }
         break;
       }
-      case 'wave': o.wave = env(c); break;
-      case 'cheer':
-        lift = Math.abs(Math.sin(Math.PI * 2 * c)) * 0.22 * (1 - c * 0.3);
-        o.squash = 1 + lift * 0.8;
-        o.handsUp = Math.sin(Math.PI * c);
-        twirl = Math.PI * 2 * (c * c * (3 - 2 * c));
+      case 'win':
+        emotePose(o, 'win', 0, t);
+        lift = EMOTE_OUT.lift; twirl = EMOTE_OUT.spin;
         break;
-      case 'pump': o.pump = env(c); lift = Math.abs(Math.sin(Math.PI * 4 * c)) * 0.06 * o.pump; break;
-      case 'sad': o.sad = env(c); break;
-      case 'stomp': o.stomp = c; break;
-      case 'look': o.look = Math.sin(c * Math.PI * 2) * 0.75 * env(c * 1.2); break;
-      case 'jail': o.slump = 1; break;
-      case 'win': {
-        const w = (t % 0.9) / 0.9;
-        lift = Math.abs(Math.sin(Math.PI * w)) * 0.26;
-        o.squash = 1 + lift * 0.7;
-        o.handsUp = 1;
-        twirl = t * 2.5;
-        break;
+      default: {
+        const c = ((performance.now() - startedAt) % EMOTE_MS[move]) / EMOTE_MS[move];
+        emotePose(o, move, c, t);
+        lift = EMOTE_OUT.lift; twirl = EMOTE_OUT.spin;
       }
     }
     poseRig(rig, o);

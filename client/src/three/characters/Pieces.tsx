@@ -11,7 +11,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { DoubleSide, Vector3, type Group, type Mesh, type MeshBasicMaterial } from 'three';
 import type { GameView, PlayerState } from '../../../../shared/types.ts';
 import { tileWidth, tokenSpot } from '../layout.ts';
-import { CharacterFigure, Tinter, newRig, poseRig, useCharacterMaterials } from './Figure.tsx';
+import {
+  CharacterFigure, EMOTE_MS, EMOTE_OUT, Tinter, emotePose, newRig, poseRig, useCharacterMaterials, type EmoteKind, type PoseInput,
+} from './Figure.tsx';
 import { ReactionBubble } from './ReactionBubble.tsx';
 import { diceSettleAt, holdUntil } from '../sequence.ts';
 import { celebrateGo } from '../GoConfetti.tsx';
@@ -24,14 +26,20 @@ export interface PieceReaction { emoji: string; seq: number }
 const CENTRE = new Vector3(0, 0, 0);
 const HOP_MS = 190;
 const LAND_MS = 150;
-const CHEER_MS = 1000;
+/** A resting piece winds up (crouches) this long before its first hop. */
+const CROUCH_MS = 120;
+/** After the landing squash, a smaller rebound stretch. */
+const REBOUND_MS = 170;
 
-/** One-off reactions, with how long each plays. */
-export type EmoteKind = 'cheer' | 'pump' | 'sad' | 'stomp' | 'wave' | 'look';
-const EMOTE_MS: Record<EmoteKind, number> = { cheer: CHEER_MS, pump: 1200, sad: 1600, stomp: 1300, wave: 1800, look: 2400 };
+export type { EmoteKind };
 export interface Emote { kind: EmoteKind; seq: number }
-/** Fade an emote in and out over its run (c = 0–1). */
-const envelope = (c: number) => Math.max(0, Math.min(1, c * 5, (1 - c) * 5));
+/** Idle fidgets and how likely each is. */
+const IDLES: [EmoteKind, number][] = [['look', 0.32], ['wave', 0.14], ['shrug', 0.16], ['stretch', 0.16], ['fidget', 0.22]];
+function pickIdle(): EmoteKind {
+  let r = Math.random();
+  for (const [kind, w] of IDLES) { r -= w; if (r <= 0) return kind; }
+  return 'look';
+}
 /**
  * Figures are modelled ~0.45 tall. From the table camera that is a speck, so
  * they are drawn bigger — as big as the tile allows: full size alone on a
@@ -56,6 +64,8 @@ interface Anim {
   /** The next hop to start is the leap out of the cell; the one under way is. */
   leapNext: boolean;
   leap: boolean;
+  /** When the wind-up crouch before the next move began (0: none pending). */
+  crouchAt: number;
 }
 
 /** Everything the frame loop eases between; lives in a ref, not React state. */
@@ -80,6 +90,11 @@ interface Motion {
   /** When this piece's player was first left waiting to roll (0: not waiting); foot-tap blend. */
   waitSince: number;
   tap: number;
+  /** Was mid-hop last frame, and which hop was drawn last (each landing jolts the arms). */
+  hopping: boolean;
+  hopSeen: number;
+  /** Reused every frame, so posing allocates nothing. */
+  pose: PoseInput;
 }
 
 /** Ease `v` toward `to` at `rate` per second, frame-rate independent. */
@@ -123,7 +138,7 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
   // prop here would snap the piece and kill the hop animation).
   const [initial] = useState<[number, number, number]>(() => [target[0], 0, target[1]]);
   if (!anim.current) {
-    anim.current = { shown: p.position, queue: [], from: target, to: target, t0: 0, dur: HOP_MS, jailed: p.inJail, leapNext: false, leap: false };
+    anim.current = { shown: p.position, queue: [], from: target, to: target, t0: 0, dur: HOP_MS, jailed: p.inJail, leapNext: false, leap: false, crouchAt: 0 };
   } else if (anim.current.queue.at(-1) !== p.position && anim.current.shown !== p.position) {
     const a = anim.current;
     const start = a.queue.at(-1) ?? a.shown;
@@ -142,7 +157,8 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
       yaw: 0, phase: Math.random() * Math.PI * 2, landAt: 0, pending: null, emote: null, emoteAt: 0,
       lastEmote: emote?.seq ?? 0, nextIdle: performance.now() + 5000 + Math.random() * 8000, hops: 0,
       slump: p.inJail ? 1 : 0, lie: out, grey: 0, opacity: 1 - out, marker: 0,
-      scale: figureScale(n, count), watch: 0, waitSince: 0, tap: 0,
+      scale: figureScale(n, count), watch: 0, waitSince: 0, tap: 0, hopping: false, hopSeen: 0,
+      pose: { time: 0, phase: 0, slump: 0, lie: 0, handsUp: 0, squash: 1 },
     };
   } else if (emote && emote.seq !== motion.current.lastEmote) {
     motion.current.lastEmote = emote.seq;
@@ -162,8 +178,13 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
     // A fresh move waits for the dice to land first.
     const settle = diceSettleAt();
     const waiting = k >= 1 && a.queue.length > 0 && now < settle;
-    if (a.queue.length) holdUntil(Math.max(now, waiting ? settle : now) + a.queue.length * HOP_MS + LAND_MS + 250);
-    while (k >= 1 && a.queue.length && !waiting) {
+    // Anticipation: a piece starting from rest crouches for a beat first (a
+    // move chained straight onto the last hop just keeps going).
+    const resting = k >= 1 && !(a.t0 > 0 && now - (a.t0 + a.dur) < 400);
+    if (a.queue.length && resting && !a.crouchAt) a.crouchAt = Math.max(now, settle - CROUCH_MS);
+    const crouchT = a.crouchAt ? (now - a.crouchAt) / CROUCH_MS : 2;
+    if (a.queue.length) holdUntil(Math.max(now, waiting ? settle : now) + (crouchT < 1 ? CROUCH_MS : 0) + a.queue.length * HOP_MS + LAND_MS + 250);
+    while (k >= 1 && a.queue.length && !waiting && crouchT >= 1) {
       // Chain hops back to back from when the previous one ended rather than
       // from this frame, so slow frames (phones, software GL) can't leave a
       // piece trailing behind the game; hops that are already over resolve
@@ -175,6 +196,7 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
       const final = a.queue.length === 0;
       a.leap = a.leapNext;
       a.leapNext = false;
+      a.crouchAt = 0;
       a.from = chained ? a.to : [g.position.x, g.position.z];
       a.to = final ? tokenSpot(next, slot, count, p.inJail, n) : tokenSpot(next, 0, 1, false, n);
       a.dur = Math.hypot(a.to[0] - a.from[0], a.to[1] - a.from[1]) > 2 ? 750 : a.leap ? HOP_MS * 2 : HOP_MS;
@@ -187,13 +209,13 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
     const hopping = k < 1;
     const long = a.dur > HOP_MS;
 
-    let squash = 1;
-    let handsUp = 0;
+    const o = m.pose;
+    o.time = time; o.phase = m.phase; o.handsUp = 0; o.squash = 1;
+    o.walk = undefined; o.look = 0; o.wave = 0; o.pump = 0; o.sad = 0; o.stomp = 0; o.tap = undefined;
+    o.cheer = 0; o.crouch = 0; o.shrug = 0; o.stretch = 0; o.fidget = 0; o.taunt = 0; o.kick = 0; o.dt = dt;
     let spin = 0;
     let lift = 0;
     let faceYaw: number;
-    let walk: number | undefined;
-    let pump = 0, sad = 0, stomp = 0, wave = 0, look = 0;
 
     if (hopping) {
       const e = k * k * (3 - 2 * k);
@@ -202,8 +224,10 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
       // A leap out of the cell goes high enough to clear the bars (JailCell is 0.42 tall).
       lift = Math.sin(Math.PI * k) * (long ? 1.6 : a.leap ? 1.1 : 0.3);
       // Stretch in the air, a quick squash on take-off.
-      squash = 1 + Math.sin(Math.PI * k) * 0.2 - Math.max(0, 1 - k / 0.15) * 0.18;
-      if (long) { handsUp = Math.sin(Math.PI * k); spin = k * Math.PI * 2; } else walk = k;
+      o.squash = 1 + Math.sin(Math.PI * k) * 0.2 - Math.max(0, 1 - k / 0.15) * 0.18;
+      if (long) { o.handsUp = Math.sin(Math.PI * k); spin = k * Math.PI * 2; } else o.walk = k;
+      // Hop to hop, the arms get a smaller jolt as each foot comes down.
+      if (m.hops !== m.hopSeen) { if (m.hopSeen) o.kick = -0.5; m.hopSeen = m.hops; }
       faceYaw = Math.atan2(a.to[0] - a.from[0], a.to[1] - a.from[1]);
       m.landAt = now + a.dur * (1 - k);
       holdUntil(m.landAt + LAND_MS + 250);
@@ -216,48 +240,32 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
       }
       // At rest, turn to face the viewer so faces are readable.
       faceYaw = Math.atan2(state.camera.position.x - g.position.x, state.camera.position.z - g.position.z);
+      // Landing: a squash, then a smaller rebound stretch; the arms get a jolt
+      // on the landing frame and spring back a beat behind the body.
       const land = (now - m.landAt) / LAND_MS;
-      if (m.landAt && land < 1) squash = 1 - Math.sin(Math.PI * land) * 0.22;
+      if (m.landAt && land < 1) o.squash = 1 - Math.sin(Math.PI * land) * 0.22;
+      else if (m.landAt && land < 1 + REBOUND_MS / LAND_MS) o.squash = 1 + Math.sin(Math.PI * (land - 1) * LAND_MS / REBOUND_MS) * 0.06;
+      if (m.hopping) o.kick = -0.9;
+      if (crouchT < 1 && !p.bankrupt) o.crouch = Math.min(1, crouchT * 1.6) * (crouchT >= 0 ? 1 : 0);
 
       // Reactions start once the piece has landed; idle fidgets fill the quiet.
       if (m.pending && !p.bankrupt) { m.emote = m.pending; m.pending = null; m.emoteAt = now; }
       const running = m.emote && now - m.emoteAt < EMOTE_MS[m.emote];
       if (!running) m.emote = null;
       if (!running && !winner && !p.bankrupt && !p.inJail && now > m.nextIdle) {
-        m.emote = Math.random() < 0.6 ? 'look' : 'wave';
+        m.emote = pickIdle();
         m.emoteAt = now;
         m.nextIdle = now + 9000 + Math.random() * 12000;
       }
-      const c = m.emote ? (now - m.emoteAt) / EMOTE_MS[m.emote] : 0;
       if (winner && !p.bankrupt) {
-        // Endless victory dance: bouncing, arms up, twirling.
-        const c = (time % 0.9) / 0.9;
-        lift = Math.abs(Math.sin(Math.PI * c)) * 0.26;
-        squash = 1 + lift * 0.7 - Math.max(0, 1 - Math.min(c, 1 - c) / 0.08) * 0.15;
-        handsUp = 1;
-        spin = time * 2.5;
-      } else if (m.emote === 'cheer') {
-        // Two happy jumps with a twirl.
-        lift = Math.abs(Math.sin(Math.PI * 2 * c)) * 0.22 * (1 - c * 0.3);
-        squash = 1 + lift * 0.8;
-        handsUp = Math.sin(Math.PI * c);
-        spin = Math.PI * 2 * (c * c * (3 - 2 * c));
-      } else if (m.emote === 'pump') {
-        // "Yes!": fist pumps and little bounces.
-        pump = envelope(c);
-        lift = Math.abs(Math.sin(Math.PI * 4 * c)) * 0.06 * pump;
-        squash = 1 + lift * 0.9;
-      } else if (m.emote === 'sad') {
-        sad = envelope(c);
-        squash = 1 - 0.05 * sad;
-      } else if (m.emote === 'stomp') {
-        stomp = c;
-      } else if (m.emote === 'wave') {
-        wave = envelope(c);
-      } else if (m.emote === 'look') {
-        look = Math.sin(c * Math.PI * 2) * 0.75 * envelope(c * 1.2);
+        emotePose(o, 'win', 0, time);
+        lift = EMOTE_OUT.lift; spin = EMOTE_OUT.spin;
+      } else if (m.emote) {
+        emotePose(o, m.emote, (now - m.emoteAt) / EMOTE_MS[m.emote], time);
+        lift = EMOTE_OUT.lift; spin = EMOTE_OUT.spin;
       }
     }
+    m.hopping = hopping;
     g.position.y = lift;
 
     m.yaw = turnToward(m.yaw, faceYaw, hopping ? 16 : 5, dt);
@@ -296,11 +304,11 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
     m.watch = approach(m.watch, watch, 3, dt);
     m.tap = approach(m.tap, tapping ? 1 : 0, 4, dt);
 
-    poseRig(rig, {
-      time, phase: m.phase, slump: m.slump, lie: m.lie, handsUp, squash,
-      walk, stride: m.hops % 2 ? 1 : -1, look: look + m.watch * (1 - Math.abs(look)), wave, pump, sad, stomp,
-      tap: m.tap > 0.02 ? m.tap : undefined,
-    });
+    o.slump = m.slump; o.lie = m.lie;
+    o.stride = m.hops % 2 ? 1 : -1;
+    o.look = (o.look ?? 0) + m.watch * (1 - Math.abs(o.look ?? 0));
+    o.tap = m.tap > 0.02 ? m.tap : undefined;
+    poseRig(rig, o);
 
     // Whose turn: a bobbing, spinning arrow above the head and a ground ring.
     m.marker = approach(m.marker, turn && !winner && !p.bankrupt ? 1 : 0, 8, dt);
@@ -388,8 +396,9 @@ export function Pieces({ game, n, reactions }: {
   }, [players]);
 
   // Reactions come from diffing consecutive views: a deed newly theirs or
-  // cash coming in → a cheer (or a fist pump); cash going out → a sad slump;
-  // just sent to jail → a stomping tantrum.
+  // cash from the bank → a cheer (a fist pump for small change); a big rent
+  // taken off another player → a taunt; cash going out → a sad slump; just
+  // sent to jail → a stomping tantrum.
   const prev = useRef<{ cash: Map<string, number>; owner: Map<number, string>; jail: Set<string> } | null>(null);
   const [emotes, setEmotes] = useState<Record<string, Emote>>({});
   useEffect(() => {
@@ -400,13 +409,15 @@ export function Pieces({ game, n, reactions }: {
     prev.current = { cash, owner, jail };
     if (!was) return;
     const picks: [string, EmoteKind][] = [];
+    // Someone paying in the same update means the money came from a player, not the bank.
+    const paid = players.some(q => !q.bankrupt && q.cash < (was.cash.get(q.id) ?? q.cash));
     for (const p of players) {
       if (p.bankrupt) continue;
       const before = was.cash.get(p.id) ?? p.cash;
       const bought = [...owner].some(([i, o]) => o === p.id && was.owner.get(i) !== p.id);
       if (p.inJail && !was.jail.has(p.id)) picks.push([p.id, 'stomp']);
       else if (bought) picks.push([p.id, 'cheer']);
-      else if (p.cash > before) picks.push([p.id, p.cash - before >= 150 ? 'cheer' : 'pump']);
+      else if (p.cash > before) picks.push([p.id, p.cash - before < 150 ? 'pump' : paid ? 'taunt' : 'cheer']);
       else if (p.cash < before) picks.push([p.id, 'sad']);
     }
     if (!picks.length) return;

@@ -25,9 +25,13 @@ export interface Rig {
   /** Eyelids (characters that blink), hinged along the top of each eye. */
   lidL: Group | null;
   lidR: Group | null;
+  /** Hand follow-through spring: [x,y,z, vx,vy,vz] per hand, then a primed flag. */
+  lag: Float32Array;
 }
 
-export const newRig = (): Rig => ({ pose: null, head: null, handL: null, handR: null, footL: null, footR: null, lidL: null, lidR: null });
+export const newRig = (): Rig => ({
+  pose: null, head: null, handL: null, handR: null, footL: null, footR: null, lidL: null, lidR: null, lag: new Float32Array(13),
+});
 
 /** Per-figure materials in the player's colour, freed when the figure goes. */
 export function useCharacterMaterials(id: CharacterId, color: string): Mats {
@@ -282,73 +286,168 @@ export interface PoseInput {
   wave?: number;
   /** 0–1: fist pumps with the left hand. */
   pump?: number;
-  /** 0–1: dejected (paid out): head down, shoulders in. */
+  /** 0–1: dejected (paid out): head down, shoulders in, slow head shake, a hand to the face. */
   sad?: number;
-  /** 0–1 through a stomping tantrum (sent to jail). */
+  /** 0–1 through a stomping tantrum (sent to jail); arms fold at the end. */
   stomp?: number;
   /** Seconds spent waiting for its player to act: the right foot taps while it waits. */
   tap?: number;
   /** 0–1: eyes closed (on top of blinking, sulking and dozing in jail). */
   lids?: number;
+  /** 0–1 through a cheer (with handsUp): a little arm pump on each jump and squinted-shut happy eyes. */
+  cheer?: number;
+  /** 0–1: crouched, winding up for a hop (anticipation). */
+  crouch?: number;
+  /** 0–1: a shrug, hands up and out, head cocked. */
+  shrug?: number;
+  /** 0–1: a big stretch: arms up, leaning back, a yawn. */
+  stretch?: number;
+  /** 0–1: shifting its weight from foot to foot. */
+  fidget?: number;
+  /** 0–1: taunting: a hand on the hip, the other beckoning. */
+  taunt?: number;
+  /**
+   * Seconds since the last frame. When given, the hands trail the body on a
+   * spring (follow-through: they overshoot and settle a beat behind).
+   */
+  dt?: number;
+  /** A one-frame vertical jolt (units/s) to the hands' spring — negative on landing, so the arms slap down and rebound. */
+  kick?: number;
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const smooth = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+
+/** Hand spring: ~26 rad/s, a little under-damped so it visibly overshoots. */
+const SPRING_W = 26;
+const SPRING_Z = 0.55;
+/** Hand positions are computed into these (no per-frame allocation). */
+const hx = [0, 0], hy = [0, 0], hz = [0, 0], hrz = [0, 0], hrx = [0, 0];
 
 export function poseRig(rig: Rig, o: PoseInput) {
   const { pose, head, handL, handR, footL, footR, lidL, lidR } = rig;
   if (!pose || !head || !handL || !handR) return;
+  const alive = 1 - o.lie;
+  const sad = o.sad ?? 0;
+  const wave = o.wave ?? 0;
+  const pump = o.pump ?? 0;
+  const stomp = o.stomp ?? 0;
+  const cheer = o.cheer ?? 0;
+  const crouch = o.crouch ?? 0;
+  const shrug = o.shrug ?? 0;
+  const stretch = o.stretch ?? 0;
+  const fidget = o.fidget ?? 0;
+  const taunt = o.taunt ?? 0;
+  const walking = o.walk !== undefined;
+  const w = o.walk ?? 0;
+  const stride = o.stride ?? 1;
+  const step = walking ? Math.sin(Math.PI * w) : 0;
+  // + leaning forward on take-off, - sitting back into the landing.
+  const pitch = walking ? Math.cos(Math.PI * w) : 0;
+  // Arms fold across the chest for the last quarter of the tantrum.
+  const fold = stomp > 0 ? smooth((stomp - 0.72) / 0.2) : 0;
+  // Weight shifts left/right while fidgeting; the unweighted foot shuffles.
+  const shift = fidget > 0 ? Math.sin(o.time * 2.6 + o.phase) * fidget : 0;
+  // A cheer's jumps: 0 → 1 → 0 twice; the arm pump rides on top of handsUp.
+  const jump = cheer > 0 ? Math.abs(Math.sin(Math.PI * 2 * cheer)) : 0;
+  const breathe = Math.sin(o.time * 2.4 + o.phase) * alive * (1 - o.slump * 0.5);
+
   if (lidL || lidR) {
-    // A blink every few seconds (each piece on its own beat), heavy lids when
+    // A blink every few seconds (each piece on its own beat, sometimes a
+    // double), squinted shut with delight in a cheer or a yawn, heavy lids when
     // sulking or slumped in jail, shut when out of the game.
     const period = 3.4 + ((o.phase * 0.37) % 1) * 2.4;
-    const k = (o.time + o.phase * 5) % period;
-    const blink = k < 0.17 ? Math.sin((Math.PI * k) / 0.17) : 0;
-    const shut = Math.max(blink, (o.sad ?? 0) * 0.55, o.slump * 0.5, o.lie, o.lids ?? 0);
+    const tt = o.time + o.phase * 5;
+    const k = tt % period;
+    const cycle = Math.floor(tt / period);
+    const double = ((cycle * 0.618 + o.phase * 0.3) % 1) < 0.3;
+    let blink = k < 0.17 ? Math.sin((Math.PI * k) / 0.17) : 0;
+    if (double && k >= 0.25 && k < 0.4) blink = Math.sin((Math.PI * (k - 0.25)) / 0.15);
+    const shut = Math.max(blink, sad * 0.55, o.slump * 0.5, o.lie, o.lids ?? 0,
+      cheer > 0 ? Math.sin(Math.PI * cheer) * 0.3 * o.handsUp : 0, stretch * 0.7);
     for (const lid of [lidL, lidR]) {
       if (!lid) continue;
       lid.visible = shut > 0.03;
       lid.scale.y = Math.max(0.03, shut);
     }
   }
-  const alive = 1 - o.lie;
-  const sad = o.sad ?? 0;
-  const wave = o.wave ?? 0;
-  const pump = o.pump ?? 0;
-  const stomp = o.stomp ?? 0;
-  const walking = o.walk !== undefined;
-  const w = o.walk ?? 0;
-  const stride = o.stride ?? 1;
-  const step = walking ? Math.sin(Math.PI * w) : 0;
-  const breathe = Math.sin(o.time * 2.4 + o.phase) * alive * (1 - o.slump * 0.5);
+
   // Stamping shakes the whole body a little on each impact.
-  const stompHit = stomp > 0 ? Math.max(0, Math.sin(stomp * Math.PI * 6)) : 0;
-  const sy = o.squash * (1 + breathe * 0.025) * (1 - stompHit * 0.05);
+  const stompHit = stomp > 0 && fold < 1 ? Math.max(0, Math.sin(stomp * Math.PI * 6)) * (1 - fold) : 0;
+  const sy = o.squash * (1 + breathe * 0.025) * (1 - stompHit * 0.05) * (1 - crouch * 0.1) * (1 + stretch * 0.05);
   const sxz = 1 / Math.sqrt(sy);
   pose.scale.set(sxz, sy, sxz);
-  // Lean forward when slumped; fall back flat when out of the game. The pivot
+  // Lean forward when slumped, into a crouch and on take-off; sit back into
+  // the landing and a stretch; fall back flat when out of the game. The pivot
   // is at the feet, so lift a little while lying to keep the body above the board.
-  pose.rotation.x = o.slump * 0.32 + sad * 0.16 - o.lie * (Math.PI / 2) + step * 0.08;
-  // A waddle from side to side while walking.
-  pose.rotation.z = step * 0.07 * stride + Math.sin(stomp * Math.PI * 6) * 0.04 * (stomp > 0 ? 1 : 0);
+  pose.rotation.x = o.slump * 0.32 + sad * 0.16 - o.lie * (Math.PI / 2) + step * 0.08 + pitch * 0.05 + crouch * 0.1
+    - stretch * 0.14 + fold * 0.03 + taunt * 0.04;
+  // A waddle from side to side while walking; a sway while shifting weight.
+  pose.rotation.z = step * 0.07 * stride + Math.sin(stomp * Math.PI * 6) * 0.04 * (stomp > 0 ? 1 - fold : 0)
+    + shift * 0.06 + taunt * 0.05;
+  // The hips twist a touch with each stride.
+  pose.rotation.y = step * 0.05 * stride - shift * 0.04;
   pose.position.y = o.lie * 0.075;
   pose.position.z = o.lie * 0.2;
 
-  head.position.y = HEAD_Y - o.slump * 0.025 - sad * 0.012 + breathe * 0.004;
-  head.rotation.x = o.slump * 0.45 + sad * 0.42 + Math.sin(o.time * 1.3 + o.phase) * 0.04 * alive - step * 0.05;
-  head.rotation.y = (o.look ?? 0) * alive + (sad > 0 ? Math.sin(o.time * 7) * 0.12 * sad : 0);
-  head.rotation.z = Math.sin(o.time * 0.9 + o.phase * 2) * 0.05 * alive * (1 - o.handsUp) - step * 0.05 * stride;
+  // The head bobs against the body's stretch (it lags the hop) and droops when down.
+  head.position.y = HEAD_Y - o.slump * 0.025 - sad * 0.012 + breathe * 0.004 - step * 0.012 - crouch * 0.01 + stretch * 0.01;
+  head.rotation.x = o.slump * 0.45 + sad * 0.42 + Math.sin(o.time * 1.3 + o.phase) * 0.04 * alive - step * 0.05 - pitch * 0.04
+    + crouch * 0.12 - stretch * 0.28 - fold * 0.14 - taunt * 0.1 - shrug * 0.06;
+  // Sad: a slow "no" of the head. Taunt: a saucy wag.
+  head.rotation.y = (o.look ?? 0) * alive + (sad > 0 ? Math.sin(o.time * 2.2) * 0.2 * sad : 0)
+    + (taunt > 0 ? Math.sin(o.time * 3) * 0.1 * taunt : 0);
+  head.rotation.z = Math.sin(o.time * 0.9 + o.phase * 2) * 0.05 * alive * (1 - o.handsUp) - step * 0.05 * stride
+    + shrug * 0.22 - stretch * 0.14 - shift * 0.05 + taunt * 0.12;
 
   const swing = Math.sin(o.time * 2.4 + o.phase) * 0.012 * alive;
   const flap = Math.sin(o.time * 18) * 0.02 * o.handsUp;
-  for (const [hand, side] of [[handL, 1], [handR, -1]] as const) {
-    const droop = Math.min(1, o.slump + sad * 0.8);
-    const base = HAND_REST.map((v, k) => lerp(v, HAND_DROOP[k], droop));
-    const p = base.map((v, k) => lerp(v, HAND_UP[k], o.handsUp));
-    let x = side * p[0] + side * flap;
-    let y = p[1] + swing * side;
-    // Arms swing against the legs while walking.
-    let z = p[2] - step * 0.035 * stride * side;
+  const droop = Math.min(1, o.slump + sad * 0.8);
+  for (let i = 0; i < 2; i++) {
+    const side = i === 0 ? 1 : -1;
+    let x = 0, y = 0, z = 0;
+    // Rest → drooping → raised, component by component (no arrays).
+    for (let k = 0; k < 3; k++) {
+      const v = lerp(lerp(HAND_REST[k], HAND_DROOP[k], droop), HAND_UP[k], o.handsUp);
+      if (k === 0) x = side * v + side * flap; else if (k === 1) y = v + swing * side; else z = v;
+    }
     let rz = side * o.handsUp * 0.6;
+    let rx = 0;
+    if (walking) {
+      // Arms swing against the legs: the arm opposite the leading foot comes
+      // forward and up; the other one back.
+      const fwd = side !== stride ? 1 : -1;
+      z += step * 0.035 * fwd;
+      y += step * (fwd > 0 ? 0.03 : 0.012);
+    }
+    // Cheering: each jump throws one arm higher, left then right.
+    if (jump > 0) {
+      const mine = (cheer < 0.5) === (side === 1) ? 1 : 0.35;
+      y += jump * 0.045 * mine * o.handsUp;
+    }
+    if (crouch > 0) {
+      // Winding up: arms pulled back behind.
+      z -= crouch * 0.04;
+      y -= crouch * 0.015;
+    }
+    if (shrug > 0) {
+      x += side * 0.035 * shrug;
+      y += 0.055 * shrug;
+      z += 0.025 * shrug;
+      rz = lerp(rz, side * 0.9, shrug);
+    }
+    if (stretch > 0) {
+      // Both arms up and back, fingers spread.
+      x = lerp(x, side * 0.1, stretch);
+      y = lerp(y, 0.4 + Math.sin(o.time * 3 + i) * 0.006, stretch);
+      z = lerp(z, -0.03, stretch);
+      rz = lerp(rz, side * 0.35, stretch);
+    }
+    if (fidget > 0) {
+      // Hands drift with the weight shift.
+      x += shift * 0.012;
+      y += (side * shift) * 0.01;
+    }
     if (side === -1 && wave > 0) {
       x = lerp(x, -0.135 + Math.sin(o.time * 14) * 0.03, wave);
       y = lerp(y, 0.33, wave);
@@ -361,14 +460,77 @@ export function poseRig(rig: Rig, o: PoseInput) {
       y = lerp(y, 0.26 + beat * 0.09, pump);
       z = lerp(z, 0.03, pump);
     }
-    if (stomp > 0) {
-      // Fists down and in, shaking.
-      x = lerp(x, side * 0.095, Math.min(1, stomp * 4));
-      y = lerp(y, 0.09 + stompHit * 0.015, Math.min(1, stomp * 4));
+    if (sad > 0 && side === -1) {
+      // The right hand comes up to the face (which tips forward as it sulks).
+      const face = smooth(sad * 1.3);
+      x = lerp(x, -0.045, face);
+      y = lerp(y, HEAD_Y - 0.035 + Math.sin(o.time * 5) * 0.003, face);
+      z = lerp(z, 0.095, face);
+      rz = lerp(rz, -0.9, face);
     }
-    hand.position.set(x, y, z);
-    hand.rotation.z = rz;
+    if (taunt > 0) {
+      if (side === 1) {
+        // Left hand on the hip.
+        x = lerp(x, 0.08, taunt);
+        y = lerp(y, 0.1, taunt);
+        z = lerp(z, 0.035, taunt);
+        rz = lerp(rz, 1.2, taunt);
+      } else {
+        // Right hand out front, beckoning "come and get it".
+        const curl = Math.max(0, Math.sin(o.time * 8));
+        x = lerp(x, -0.06, taunt);
+        y = lerp(y, 0.2 + curl * 0.02, taunt);
+        z = lerp(z, 0.11 - curl * 0.025, taunt);
+        rx = lerp(rx, -0.6 + curl * 0.8, taunt);
+      }
+    }
+    if (stomp > 0) {
+      // Fists down and in, shaking…
+      const in_ = Math.min(1, stomp * 4);
+      x = lerp(x, side * 0.095, in_);
+      y = lerp(y, 0.09 + stompHit * 0.015, in_);
+      // …then folded across the chest in a huff.
+      x = lerp(x, -side * 0.03, fold);
+      y = lerp(y, side === 1 ? 0.175 : 0.158, fold);
+      z = lerp(z, side === 1 ? 0.072 : 0.082, fold);
+      rz = lerp(rz, side * 1.4, fold);
+    }
+    hx[i] = x; hy[i] = y; hz[i] = z; hrz[i] = rz; hrx[i] = rx;
   }
+
+  const lag = rig.lag;
+  if (o.dt !== undefined && lag[12] > 0) {
+    // Follow-through: each hand chases its target on a damped spring, in
+    // sub-steps small enough to stay stable on slow frames.
+    const dt = Math.min(o.dt, 0.1);
+    const n = Math.max(1, Math.ceil(dt / 0.012));
+    const h = dt / n;
+    const kk = SPRING_W * SPRING_W, cc = 2 * SPRING_Z * SPRING_W;
+    if (o.kick) { lag[4] += o.kick; lag[10] += o.kick * 0.8; }
+    for (let i = 0; i < 2; i++) {
+      const b = i * 6;
+      for (let s = 0; s < n; s++) {
+        for (let c = 0; c < 3; c++) {
+          const target = c === 0 ? hx[i] : c === 1 ? hy[i] : hz[i];
+          const v = lag[b + 3 + c] + (-kk * (lag[b + c] - target) - cc * lag[b + 3 + c]) * h;
+          lag[b + 3 + c] = v;
+          lag[b + c] += v * h;
+        }
+      }
+      hx[i] = lag[b]; hy[i] = lag[b + 1]; hz[i] = lag[b + 2];
+    }
+  } else {
+    for (let i = 0; i < 2; i++) {
+      const b = i * 6;
+      lag[b] = hx[i]; lag[b + 1] = hy[i]; lag[b + 2] = hz[i];
+      lag[b + 3] = lag[b + 4] = lag[b + 5] = 0;
+    }
+    lag[12] = 1;
+  }
+  handL.position.set(hx[0], hy[0], hz[0]);
+  handL.rotation.set(hrx[0], 0, hrz[0]);
+  handR.position.set(hx[1], hy[1], hz[1]);
+  handR.rotation.set(hrx[1], 0, hrz[1]);
 
   for (const [foot, side] of [[footL, 1], [footR, -1]] as const) {
     if (!foot) continue;
@@ -382,9 +544,22 @@ export function poseRig(rig: Rig, o: PoseInput) {
     } else {
       foot.rotation.x = 0;
     }
+    if (crouch > 0) z -= crouch * 0.008;
+    if (fidget > 0) {
+      // The foot the weight came off shuffles out and back.
+      const off = Math.max(0, -shift * side);
+      y += off * 0.014;
+      x += side * off * 0.012;
+      foot.rotation.x = -off * 0.3;
+    }
+    if (side === 1 && taunt > 0) {
+      // Weight on the right, left toe cocked out.
+      x += taunt * 0.012;
+      foot.rotation.x = -taunt * 0.25;
+    }
     if (side === -1 && stomp > 0) {
       // Right foot stamps three times.
-      y += Math.max(0, Math.sin(stomp * Math.PI * 6 + Math.PI)) * 0.045;
+      y += Math.max(0, Math.sin(stomp * Math.PI * 6 + Math.PI)) * 0.045 * (1 - fold);
     }
     if (side === -1 && o.tap) {
       // Impatient: a toe-tap every half second or so, heel down.
@@ -397,6 +572,79 @@ export function poseRig(rig: Rig, o: PoseInput) {
   }
 }
 
+// ---- emotes ----------------------------------------------------------------
+// One-off reactions, with how long each plays. `emotePose` fills a PoseInput
+// (plus lift and spin) from the emote's progress so the board pieces and the
+// gallery play exactly the same move.
+
+export type EmoteKind = 'cheer' | 'pump' | 'sad' | 'stomp' | 'wave' | 'look' | 'shrug' | 'stretch' | 'fidget' | 'taunt';
+export const EMOTE_MS: Record<EmoteKind, number> = {
+  cheer: 1000, pump: 1300, sad: 1800, stomp: 1500, wave: 1800, look: 2400, shrug: 1500, stretch: 2600, fidget: 3000, taunt: 2200,
+};
+/** Fade an emote in and out over its run (c = 0–1). */
+export const envelope = (c: number) => Math.max(0, Math.min(1, c * 5, (1 - c) * 5));
+/** Written by emotePose: how high the whole figure is off the ground and how far it has twirled. */
+export const EMOTE_OUT = { lift: 0, spin: 0 };
+
+export function emotePose(o: PoseInput, kind: EmoteKind | 'win', c: number, time: number) {
+  let lift = 0, spin = 0;
+  switch (kind) {
+    case 'win': {
+      // Endless victory dance: bouncing, arms up, twirling.
+      const w = (time % 0.9) / 0.9;
+      lift = Math.abs(Math.sin(Math.PI * w)) * 0.26;
+      o.squash = 1 + lift * 0.7 - Math.max(0, 1 - Math.min(w, 1 - w) / 0.08) * 0.15;
+      o.handsUp = 1;
+      spin = time * 2.5;
+      break;
+    }
+    case 'cheer':
+      // Two happy jumps with a twirl, an arm thrown up on each.
+      lift = Math.abs(Math.sin(Math.PI * 2 * c)) * 0.22 * (1 - c * 0.3);
+      o.squash = 1 + lift * 0.8;
+      o.handsUp = Math.sin(Math.PI * c);
+      o.cheer = c;
+      spin = Math.PI * 2 * smooth(c);
+      break;
+    case 'pump': {
+      // "Yes!": fist pumps and little bounces, then one proper hop on the last pump.
+      o.pump = envelope(c);
+      const last = c > 0.68 ? Math.sin(Math.PI * Math.min(1, (c - 0.68) / 0.26)) : 0;
+      lift = Math.abs(Math.sin(Math.PI * 4 * c)) * 0.06 * o.pump + last * 0.14;
+      o.squash = 1 + lift * 0.9 - Math.max(0, 1 - Math.abs(c - 0.66) / 0.04) * 0.08;
+      break;
+    }
+    case 'sad':
+      o.sad = envelope(c);
+      o.squash = 1 - 0.05 * o.sad;
+      break;
+    case 'stomp':
+      o.stomp = c;
+      break;
+    case 'wave':
+      o.wave = envelope(c);
+      break;
+    case 'look':
+      o.look = Math.sin(c * Math.PI * 2) * 0.75 * envelope(c * 1.2);
+      break;
+    case 'shrug':
+      // Up… hold… and drop.
+      o.shrug = smooth(c * 4) * (1 - smooth((c - 0.6) / 0.3));
+      o.look = Math.sin(c * Math.PI) * 0.2;
+      break;
+    case 'stretch':
+      o.stretch = smooth(c * 2.5) * (1 - smooth((c - 0.7) / 0.28));
+      break;
+    case 'fidget':
+      o.fidget = envelope(c);
+      break;
+    case 'taunt':
+      o.taunt = envelope(c);
+      break;
+  }
+  EMOTE_OUT.lift = lift;
+  EMOTE_OUT.spin = spin;
+}
 const GREY = new Color('#8a8a8a');
 
 /**
