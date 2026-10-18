@@ -4,7 +4,7 @@ import {
   AUTO_ID, attachPlayer, loadLibrary, musicState, nextTrack, onMusicChange, setMuted, setMusicAllowed,
   setPlaylist, setVolume, togglePlay, type MusicState,
 } from '../music.ts';
-import { onSfxChange, primeAudio, setSfxMuted, setSfxVolume, sfxState, type SfxState } from '../sound.ts';
+import { onSfxChange, primeAudio, readPref, setSfxMuted, setSfxVolume, sfxState, writePref, type SfxState } from '../sound.ts';
 import { ambienceEnabled, onAmbienceChange, setAmbienceEnabled } from '../ambience.ts';
 
 const Icon = ({ d, size = 15 }: { d: string; size?: number }) => (
@@ -29,7 +29,15 @@ const P = {
 // Compact audio controls for the lobby and the in-game top bar: a sound
 // effects toggle, and — when the site has music switched on — play/pause,
 // next, and a small panel for the playlist and volumes.
-export default function MusicPlayer() {
+/** Set the first time the "Turn on music?" bubble is shown, so it only ever asks once. */
+const ASKED_KEY = 'yot:music.asked';
+const ASK_DELAY_MS = 2500;
+const ASK_SHOWN_MS = 14000;
+
+export default function MusicPlayer({ askOnce = false }: {
+  /** Offer "Turn on music?" once per browser (the game screen asks; the lobby does not). */
+  askOnce?: boolean;
+}) {
   const { config } = useAuth();
   const musicOn = config.features.music;
   const [m, setM] = useState<MusicState>(musicState);
@@ -37,6 +45,7 @@ export default function MusicPlayer() {
   const [amb, setAmb] = useState(ambienceEnabled);
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
+  const [asking, setAsking] = useState(false);
 
   useEffect(() => onSfxChange(setFx), []);
   useEffect(() => onAmbienceChange(setAmb), []);
@@ -60,6 +69,24 @@ export default function MusicPlayer() {
     return () => document.removeEventListener('pointerdown', onDown);
   }, [open]);
 
+  // The one-time gentle ask. Music stays off until they say yes: the click on
+  // "Turn on" is the gesture browsers need, and nothing plays before it.
+  useEffect(() => {
+    if (!askOnce || !musicOn || readPref(ASKED_KEY) === '1' || readPref('yot:music.on') === '1') return;
+    const show = window.setTimeout(() => {
+      if (musicState().playing) return;
+      writePref(ASKED_KEY, '1');
+      setAsking(true);
+    }, ASK_DELAY_MS);
+    return () => clearTimeout(show);
+  }, [askOnce, musicOn]);
+  useEffect(() => {
+    if (!asking) return;
+    const hide = window.setTimeout(() => setAsking(false), ASK_SHOWN_MS);
+    return () => clearTimeout(hide);
+  }, [asking]);
+  useEffect(() => { if (m.playing) setAsking(false); }, [m.playing]);
+
   const fxOff = fx.muted || fx.volume === 0;
   const musicSilent = m.muted || m.volume === 0;
 
@@ -77,19 +104,22 @@ export default function MusicPlayer() {
         }}
       >
         <Icon d={fxOff ? P.bellOff : P.bell} />
+        <span className="audio-label">Sounds</span>
       </button>
 
       {musicOn && (
         <>
           <button
-            className={`audio-btn${m.playing ? ' on' : ''}`}
-            title={m.playing ? `Pause music — ${m.trackName}` : 'Play music'}
-            aria-label={m.playing ? 'Pause music' : 'Play music'}
-            onClick={() => { primeAudio(); togglePlay(); }}
+            className={`audio-btn music-toggle${m.playing ? ' on' : ''}`}
+            title={m.playing ? `Music is on — click to turn off (${m.trackName})` : 'Music is off — click to turn on'}
+            aria-label={m.playing ? 'Turn music off' : 'Turn music on'}
+            aria-pressed={m.playing}
+            onClick={() => { primeAudio(); setAsking(false); togglePlay(); }}
           >
             {m.playing && !musicSilent
               ? <span className="music-bars" aria-hidden><i /><i /><i /></span>
-              : <Icon d={m.playing ? P.pause : P.note} />}
+              : <Icon d={P.note} />}
+            <span className="audio-label">{m.playing ? 'Music on' : 'Music off'}</span>
           </button>
           <button className="audio-btn hide-sm" title="Next track" aria-label="Next track"
             onClick={() => { primeAudio(); nextTrack(); }}>
@@ -100,6 +130,17 @@ export default function MusicPlayer() {
             <Icon d={P.more} size={13} />
           </button>
         </>
+      )}
+
+      {asking && musicOn && (
+        <div className="music-ask" role="dialog" aria-label="Turn on music?">
+          <b>🎵 Turn on music?</b>
+          <span className="muted small">Gentle background tunes. You can change it any time.</span>
+          <div className="music-ask-actions">
+            <button className="btn small primary" onClick={() => { primeAudio(); setAsking(false); if (!musicState().playing) togglePlay(); }}>Turn on</button>
+            <button className="btn small ghost" onClick={() => setAsking(false)}>No thanks</button>
+          </div>
+        </div>
       )}
 
       {open && musicOn && (

@@ -1,31 +1,58 @@
-// "How to play": the whole game in seven skimmable steps, reachable from the
-// home page, the lobby and the game's "?" button (which also lists the
-// keyboard shortcuts on devices that have a keyboard).
+// "How to play": the whole game on two short pages (the basics, then the
+// extras: arcades, house rules, camera), reachable from the home page, the
+// lobby and the game's "?" button, which also lists the keyboard shortcuts on
+// devices that have a keyboard. Every line below was checked against the
+// engine (server/src/engine/game.ts) and the action bar, so keep them in step.
 import { useState } from 'react';
 import type { RuleConfig } from '../../../shared/themes.ts';
+import { MINIGAME_INFO, MINIGAME_KINDS } from '../../../shared/minigames.ts';
+import { CAMERA_MODES } from '../three/camera.ts';
 import { CloseX, Modal } from './Modal.tsx';
 import { SHORTCUTS } from './Shortcuts.tsx';
 
 interface Step { icon: string; title: string; text: string }
 
-export function howToSteps(rules?: Partial<RuleConfig>): Step[] {
+export function howToSteps(rules?: Partial<RuleConfig>, cur = '$'): Step[] {
   const auctions = rules?.auctions !== false;
   const timed = (rules?.timeLimitMin ?? 0) > 0;
+  const fine = `${cur}${rules?.jailFine ?? 50}`;
+  const salary = `${cur}${rules?.goSalary ?? 200}`;
+  const even = rules?.evenBuild !== false;
+  const limited = rules?.limitedBuildings !== false;
   return [
-    { icon: '🎲', title: 'Roll & move', text: 'On your turn, hit GO to roll two dice and move. Doubles roll again — but three doubles in a row sends you to jail.' },
-    { icon: '🏠', title: 'Buy property', text: `Land on a deed nobody owns and buy it.${auctions ? ' Skip it and it goes to auction — anyone can bid, even you.' : ''}` },
-    { icon: '💰', title: 'Collect rent', text: 'Anyone landing on your deed pays you rent. Own a whole colour set and the rent doubles.' },
-    { icon: '🏗️', title: 'Build houses', text: 'With a full set, tap Build: up to 4 houses, then a hotel. Rent skyrockets. Build evenly across the set.' },
-    { icon: '🤝', title: 'Trade', text: 'Missing one deed of a set? Tap Trade (or ⇄ on a player) to swap deeds and cash. They can accept, decline or counter.' },
-    { icon: '🔒', title: 'Jail & cash trouble', text: 'In jail: roll doubles (3 tries), pay bail or use a card. Short on cash? Sell houses or mortgage deeds to pay what you owe.' },
-    { icon: '🏆', title: 'Win', text: timed ? 'Bankrupt everyone else — or be the richest when the clock runs out.' : 'Be the last player standing: everyone who can\'t pay goes bankrupt.' },
+    { icon: '🎲', title: 'Roll & move', text: `Hit Roll on your turn and walk that many squares. Pass GO to collect ${salary}. Doubles earn another roll, but three doubles in a row sends you to jail.` },
+    {
+      icon: '🏠', title: auctions ? 'Buy or auction' : 'Buy it',
+      text: auctions
+        ? 'Land on a deed nobody owns? Buy it at the list price, or hit Auction it: everyone can bid, you included. The highest bid wins, each bid adds a few seconds, and you can never bid more than your cash.'
+        : 'Land on a deed nobody owns? Buy it at the list price, or skip it and it stays with the bank.',
+    },
+    { icon: '💰', title: 'Rent', text: 'Land on someone else\'s deed and you pay them rent. A full colour set pays double, houses and hotels pay far more, stations pay more for each one owned, and utilities pay a multiple of your dice. Mortgaged deeds pay nothing.' },
+    { icon: '🏗️', title: 'Build', text: `Own every deed of a colour (none mortgaged) and tap Build. Houses go up one at a time${even ? ', evenly across the set' : ''}: four houses, then a hotel.${limited ? ' The bank only has 32 houses and 12 hotels.' : ''} Selling a building gives back half.` },
+    { icon: '🤝', title: 'Trade', text: 'Tap Trade (or the ⇄ on a player) to offer deeds, cash and jail cards for theirs. They can accept, decline or counter. Anytime, not only on your turn. No loans, and a set with buildings has to be sold down before its deeds can move.' },
+    { icon: '🔒', title: 'Jail', text: `In via the Go to Jail square, three doubles or a card. To get out, pick one at the start of your turn: roll for doubles (three tries; miss the third and you pay ${fine} and move anyway), pay ${fine} bail, or use a Get Out of Jail Free card. ${rules?.noRentInJail ? 'At this table jailed owners collect no rent.' : 'You still collect rent while locked up.'}` },
+    { icon: '💸', title: 'Short on cash?', text: 'Tap Raise cash to sell buildings and mortgage deeds (you get half the price; lifting a mortgage costs 10% extra). If you cannot pay what you owe you go bankrupt: your things go to who you owe, or back to the bank.' },
+    {
+      icon: '🏆', title: 'Win',
+      text: timed
+        ? 'Bankrupt everyone else, or be the richest (cash, deeds and buildings) when the game clock runs out.'
+        : 'Be the last player standing. Everyone who cannot pay goes bankrupt.',
+    },
   ];
 }
 
-function Steps({ rules }: { rules?: Partial<RuleConfig> }) {
+const HOUSE_RULES: { key: keyof RuleConfig; label: string; text: string }[] = [
+  { key: 'freeParkingPot', label: 'Free Parking jackpot', text: 'Taxes and fines pile up in the middle. Land on Free Parking to scoop the lot.' },
+  { key: 'doubleOnGo', label: 'Double on GO', text: 'Land exactly on GO and the salary is doubled.' },
+  { key: 'noRentInJail', label: 'No rent in jail', text: 'Owners sitting in jail collect no rent.' },
+  { key: 'speedDie', label: 'Speed Die', text: 'Once you have passed GO a third die joins: Mr. Monopoly sends you on to the next deed to buy or pay, the Bus lets you pick one die or the sum, and triples let you jump anywhere.' },
+  { key: 'arcadeParking', label: 'Free Parking arcade', text: 'Free Parking starts a mini-game too.' },
+];
+
+function Steps({ rules, cur }: { rules?: Partial<RuleConfig>; cur: string }) {
   return (
     <ol className="howto-steps">
-      {howToSteps(rules).map((s, i) => (
+      {howToSteps(rules, cur).map((s, i) => (
         <li key={s.title}>
           <span className="howto-icon" aria-hidden>{s.icon}</span>
           <div>
@@ -38,32 +65,87 @@ function Steps({ rules }: { rules?: Partial<RuleConfig> }) {
   );
 }
 
+/** Arcades, house rules and the camera: what the first page leaves out. */
+function Extras({ rules }: { rules?: Partial<RuleConfig> }) {
+  const arcades = rules?.minigames !== false;
+  return (
+    <div className="howto-extras">
+      <section>
+        <h3>🃏 Chance, Chest, tax</h3>
+        <p>Those squares draw a card or take a fee. Go to Jail sends you straight there, and Free Parking is a rest stop.</p>
+      </section>
+      {arcades && (
+        <section>
+          <h3>🕹️ Arcade squares</h3>
+          <p>Landing on one starts a quick mini-game for cash prizes from the bank (a bad spin can cost you). A random one each time:</p>
+          <ul className="howto-games">
+            {MINIGAME_KINDS.map(k => <li key={k}><b>{MINIGAME_INFO[k].icon} {MINIGAME_INFO[k].title}</b> {MINIGAME_INFO[k].blurb}</li>)}
+          </ul>
+          <p className="muted">Speed and Metropolis boards have arcades. On Classic the host can turn Free Parking into one.</p>
+        </section>
+      )}
+      <section>
+        <h3>🏠 House rules{rules ? ' at this table' : ''}</h3>
+        <p className="muted">The host picks these in the lobby. Auctions, even building and limited houses are covered on the first page.</p>
+        <ul className="howto-rules">
+          {HOUSE_RULES.filter(r => r.key !== 'arcadeParking' || arcades).map(r => {
+            const state = rules ? !!rules[r.key] : undefined;
+            return (
+              <li key={r.key} className={state === false ? 'off' : ''}>
+                <b>{r.label}</b>
+                {state !== undefined && <em className={`howto-flag ${state ? 'on' : ''}`}>{state ? 'on' : 'off'}</em>}
+                <span>{r.text}</span>
+              </li>
+            );
+          })}
+          {(rules?.turnSeconds ?? 0) > 0 && (
+            <li><b>Turn clock</b><em className="howto-flag on">{rules!.turnSeconds}s</em><span>Out of time and autopilot plays that step for you.</span></li>
+          )}
+          {(rules?.timeLimitMin ?? 0) > 0 && (
+            <li><b>Game clock</b><em className="howto-flag on">{rules!.timeLimitMin} min</em><span>When it runs out the richest player wins.</span></li>
+          )}
+        </ul>
+      </section>
+      <section>
+        <h3>🎥 Camera</h3>
+        <p>The camera button in the bottom-left dock (or C) cycles the views: {CAMERA_MODES.map(m => m.label).join(', ')}. In Free, drag to orbit, scroll or pinch to zoom, right-drag to pan. Cinematic adds close-ups for big moments.</p>
+      </section>
+    </div>
+  );
+}
+
+type Tab = 'rules' | 'extras' | 'keys';
+
 const hasKeyboard = () => typeof window !== 'undefined' && !window.matchMedia?.('(hover: none) and (pointer: coarse)').matches;
 
 /** How to play (and, in a game with a keyboard, the shortcuts) in a dialog. */
-export default function HowToPlay({ onClose, rules, shortcuts = false, startOn = 'rules' }: {
+export default function HowToPlay({ onClose, rules, shortcuts = false, startOn = 'rules', currency = '$' }: {
   onClose: () => void;
   /** The table's rules, to word the steps (auctions, game clock). */
   rules?: Partial<RuleConfig>;
   /** Offer the keyboard-shortcuts tab (in a game, on devices with a keyboard). */
   shortcuts?: boolean;
-  startOn?: 'rules' | 'keys';
+  startOn?: Tab;
+  /** The edition's money symbol. */
+  currency?: string;
 }) {
   const keys = shortcuts && hasKeyboard();
-  const [tab, setTab] = useState<'rules' | 'keys'>(keys ? startOn : 'rules');
+  const [tab, setTab] = useState<Tab>(startOn === 'keys' && !keys ? 'rules' : startOn);
+  const tabs: [Tab, string][] = [['rules', 'The basics'], ['extras', 'Extras'], ...(keys ? [['keys', 'Keys'] as [Tab, string]] : [])];
   return (
     <Modal onClose={onClose} labelledBy="howto-title" className="howto">
       <div className="howto-head">
         <h2 id="howto-title">How to play</h2>
         <CloseX onClick={onClose} />
       </div>
-      {keys && (
-        <div className="ux-seg howto-tabs" role="tablist">
-          <button role="tab" aria-selected={tab === 'rules'} className={tab === 'rules' ? 'on' : ''} onClick={() => setTab('rules')}>The game</button>
-          <button role="tab" aria-selected={tab === 'keys'} className={tab === 'keys' ? 'on' : ''} onClick={() => setTab('keys')}>Keyboard</button>
-        </div>
-      )}
-      {tab === 'rules' ? <Steps rules={rules} /> : (
+      <div className="ux-seg howto-tabs" role="tablist">
+        {tabs.map(([id, label]) => (
+          <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>{label}</button>
+        ))}
+      </div>
+      {tab === 'rules' && <Steps rules={rules} cur={currency} />}
+      {tab === 'extras' && <Extras rules={rules} />}
+      {tab === 'keys' && (
         <table className="howto-keys">
           <tbody>{SHORTCUTS.map(([k, what]) => <tr key={k}><td><kbd>{k}</kbd></td><td>{what}</td></tr>)}</tbody>
         </table>

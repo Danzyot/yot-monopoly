@@ -93,7 +93,7 @@ export function ReactionPicker({ disabled, sentSeq = 0 }: { disabled?: boolean; 
       )}
       <button className={`dock-btn react-btn ${open ? 'on' : ''} ${burst ? 'burst' : ''}`} disabled={disabled} onClick={() => setOpen(o => !o)}
         title={disabled ? 'Reactions are switched off' : 'Send a reaction'} aria-label="Send a reaction" aria-expanded={open} aria-haspopup="menu">
-        😀
+        <span className="dock-ico" aria-hidden>😀</span><span className="dock-text">React</span>
         {burst > 0 && (
           <span key={burst} className="react-burst" aria-hidden>
             {[0, 1, 2, 3, 4, 5].map(i => <i key={i} style={{ '--i': i } as CSSProperties} />)}

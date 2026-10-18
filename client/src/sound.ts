@@ -366,3 +366,25 @@ export function playGoLight(at = 0) {
 export function playCountdownBeep(at = 0, final = false) {
   tone(final ? 1320 : 880, at, final ? 0.3 : 0.08, 0.07, 'sine');
 }
+
+/** An auction opened: two wooden knocks of the gavel and a bright call. */
+export function playAuctionStart(at = 0) {
+  [0, 0.14].forEach(d => {
+    burst(at + d, 0.06, 0.28, 'lowpass', 900, 1);
+    tone(180, at + d, 0.09, 0.12, 'sine', 90);
+  });
+  tone(1175, at + 0.3, 0.25, 0.07, 'triangle');
+}
+
+/** A trade offer arrived for you: a soft two-note nudge. */
+export function playOffer(at = 0) {
+  tone(784, at, 0.12, 0.08, 'sine');
+  tone(1047, at + 0.11, 0.3, 0.08, 'sine');
+}
+
+/** A trade went through: deeds changing hands, a quick rising chime. */
+export function playTrade(at = 0) {
+  tone(988, at, 0.08, 0.07, 'triangle');
+  tone(1319, at + 0.07, 0.07, 0.07, 'triangle');
+  tone(1568, at + 0.14, 0.3, 0.07, 'triangle');
+}

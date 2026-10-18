@@ -74,7 +74,7 @@ export function CoachHint({ game, me, busy, onHelp, onBuild, onRaise, onTrade }:
   if ((debtOf(game, me) > p.cash || cantAfford) && !seen.has('raise')) {
     hint = {
       id: 'raise', icon: '💸', action: ['Raise cash', onRaise],
-      text: cantAfford ? "Can't afford it? Mortgage a deed for quick cash — or let it go to auction."
+      text: cantAfford ? `Can't afford it? Mortgage a deed for quick cash — or ${game.rules.auctions ? 'send it to auction' : 'skip it'}.`
         : 'Short on cash? Raise cash lets you sell houses and mortgage deeds to pay what you owe.',
     };
   } else if (calm && canBuildAnywhere(game, theme.spaces, me) && !seen.has('build')) {
@@ -82,7 +82,7 @@ export function CoachHint({ game, me, busy, onHelp, onBuild, onRaise, onTrade }:
   } else if (mine && game.phase === 'done' && !seen.has('trade') && tradePartnerFor(game, me)) {
     hint = { id: 'trade', icon: '🤝', text: 'One trade away from a full set? Offer cash or deeds for the missing one.', action: ['Trade', onTrade] };
   } else if (!seen.has('welcome') && !howToSeen()) {
-    hint = { id: 'welcome', icon: '👋', text: 'New here? The rules fit on one screen.', action: ['How to play', onHelp] };
+    hint = { id: 'welcome', icon: '👋', text: 'New here? The rules fit on one short page.', action: ['How to play', onHelp] };
   }
   if (!hint) return null;
   const h = hint;
