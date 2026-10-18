@@ -994,7 +994,8 @@ kbd { font: 600 11px ui-monospace, Menlo, monospace; background: rgba(255,255,25
 
 /* ---- home page v2 ---- */
 .home { position: relative; max-width: none; padding: 0 0 40px; }
-.home-bg { position: fixed; inset: 0; z-index: 0; opacity: 0.55; }
+.home-bg { position: fixed; inset: 0; z-index: 0; opacity: 0.55; transition: opacity 0.9s ease; }
+.home-bg.dim { opacity: 0; }
 .home-bg::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(15,20,32,0.35) 0%, rgba(15,20,32,0.75) 55%, var(--bg) 100%); pointer-events: none; }
 .home-hero, .home-body { position: relative; z-index: 1; }
 .home-hero { text-align: center; padding: 11vh 16px 7vh; margin: 0; }

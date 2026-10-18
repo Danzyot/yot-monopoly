@@ -17,6 +17,7 @@ import { useAmbience } from '../ambience.ts';
 import { CARD_FLIGHT_MS, useSceneBusy } from '../three/sequence.ts';
 import { useCinematicPref } from '../three/cinematic.ts';
 import { CAMERA_MODES, useCameraMode } from '../three/camera.ts';
+import { QUALITY_LEVELS, useQuality } from '../three/quality.ts';
 import PlayerMenu from './PlayerMenu.tsx';
 import { TradeModal, TradeOffers, counterDraft, type CounterDraft } from './Trade.tsx';
 import MinigamePanel from './MinigamePanel.tsx';
@@ -81,6 +82,13 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   const reactionsOn = config.features.reactions !== false && config.features.chat;
   const [notify, toggleNotify] = useNotifyPref();
   const [cinematic, toggleCinematic] = useCinematicPref();
+  const [quality, nextQuality] = useQuality();
+  const qualityInfo = QUALITY_LEVELS.find(q => q.id === quality)!;
+  const cycleQuality = () => {
+    const i = (QUALITY_LEVELS.findIndex(q => q.id === quality) + 1) % QUALITY_LEVELS.length;
+    toast(`${QUALITY_LEVELS[i].icon} ${QUALITY_LEVELS[i].label} — ${QUALITY_LEVELS[i].hint}`);
+    nextQuality();
+  };
   const [cameraMode, , nextCameraMode] = useCameraMode();
   const camInfo = CAMERA_MODES.find(m => m.id === cameraMode)!;
   const cycleCamera = () => {
@@ -130,7 +138,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
 
   return (
     <div className={`game ${theme.ui ? 'branded' : ''} ${pokedMe ? 'poked' : ''}`} style={themeStyle(theme)}>
-      <div className="scene"><BoardScene themeId={game.themeId} mapId={game.mapId} game={game} selected={selected} onSelect={setSelected} tableStyle={room.style} reactions={pieceReactions} me={me} cinematic={cinematic} cameraMode={cameraMode} /></div>
+      <div className="scene"><BoardScene themeId={game.themeId} mapId={game.mapId} game={game} selected={selected} onSelect={setSelected} tableStyle={room.style} reactions={pieceReactions} me={me} cinematic={cinematic} cameraMode={cameraMode} quality={quality} /></div>
 
       <header className="topbar">
         <div className="tb-left">
@@ -214,6 +222,8 @@ export default function GameScreen({ room, game, me, chat, skew }: {
           title={`Camera: ${camInfo.label} — ${camInfo.hint}. Click (or C) for the next view`}>{camInfo.icon}</button>
         <button className={`dock-btn ${cinematic ? 'on' : ''}`} onClick={toggleCinematic} aria-pressed={cinematic}
           title={cinematic ? 'Cinematic camera on — big moments get a close-up. Click to turn off' : 'Cinematic camera off — click to turn on'}>🎬</button>
+        <button className="dock-btn" onClick={cycleQuality} aria-label={`${qualityInfo.label}. Change`}
+          title={`${qualityInfo.label} — ${qualityInfo.hint}. Click for the next setting`}>{qualityInfo.icon}</button>
         <button className={`dock-btn ${helpOpen ? 'on' : ''}`} onClick={openHelp} title="How to play (?)" aria-label="How to play">?</button>
       </div>
       <SpectatorReactions reactions={social.reactions} />

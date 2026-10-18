@@ -7,6 +7,7 @@ import type { Theme } from '../../../../shared/themes.ts';
 import { FLOOR, LiveLight, mix } from './common.tsx';
 import { Lounge } from './Lounge.tsx';
 import { BakedScene, ClassicRoom, WithModel } from '../models.tsx';
+import { useGLTF, useTexture } from '@react-three/drei';
 import { ASSETS } from '../assets.gen.ts';
 import { NightSky, Skyline } from './Skyline.tsx';
 import { Speedway } from './Speedway.tsx';
@@ -170,4 +171,22 @@ function SpeedwayLights() {
       <pointLight position={[21, FLOOR + 19, -17.5]} color="#e6eeff" intensity={360} decay={2} />
     </>
   );
+}
+
+/** The baked set a scene shows, if it has one. */
+function bakedFor(kind: EnvironmentId, themeId: string): { url: string; lightmap: string } | null {
+  if (kind === 'speedway') return ASSETS.speedwaySet;
+  if (kind === 'skyline') return ASSETS.skylineSet;
+  if (themeId === 'classic') return ASSETS.classicRoom;
+  if (themeId === 'tptv') return ASSETS.tptvRoom;
+  if (themeId === 'chog') return ASSETS.chogRoom;
+  return null;
+}
+
+/** Start downloading a scene's set before it is shown (the home page tour, the lobby's next pick). */
+export function preloadEnvironment(kind: EnvironmentId, themeId: string): void {
+  const set = bakedFor(kind, themeId);
+  if (!set) return;
+  useGLTF.preload(set.url);
+  useTexture.preload(set.lightmap);
 }

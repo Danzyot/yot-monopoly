@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { call, useConnected, useRoomList } from '../net.ts';
 import { THEMES, getTheme } from '../../../shared/themes.ts';
@@ -9,6 +9,7 @@ import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { requirementBadge, requirementSentence } from '../community.tsx';
 import BoardScene from '../three/BoardScene.tsx';
+import { preloadEnvironment } from '../three/environments/index.tsx';
 import { HowToPlayButton } from '../components/HowToPlay.tsx';
 
 const STEPS: { icon: string; title: string; body: string }[] = [
@@ -16,6 +17,34 @@ const STEPS: { icon: string; title: string; body: string }[] = [
   { icon: '🔗', title: 'Share the code', body: 'Friends join with the five-letter code or the invite link — phones welcome. Short on people? Bots fill in.' },
   { icon: '🚀', title: 'Roll', body: 'Buy, build, trade and auction your way to the last player standing.' },
 ];
+
+/** The rooms the hero tours, one at a time, with a dip to dark between them. */
+const DIORAMA: { themeId: string; mapId: string }[] = [
+  { themeId: 'classic', mapId: 'classic' }, { themeId: 'chog', mapId: 'classic' }, { themeId: 'classic', mapId: 'speed' },
+  { themeId: 'tptv', mapId: 'classic' }, { themeId: 'classic', mapId: 'metropolis' },
+];
+const DIORAMA_MS = 16000;
+const DIP_MS = 900;
+
+function useDiorama(): [{ themeId: string; mapId: string }, boolean] {
+  const [i, setI] = useState(0);
+  const [dim, setDim] = useState(false);
+  useEffect(() => {
+    // Stay on one room for people who have asked their system for less motion.
+    if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let swap: ReturnType<typeof setTimeout> | null = null;
+    let at = 0;
+    // Fetch the next room while this one is on, so the swap is seamless.
+    const ahead = () => { const n = DIORAMA[(at + 1) % DIORAMA.length]; preloadEnvironment(getMap(n.mapId).environment, n.themeId); };
+    const warm = setTimeout(ahead, 3000);
+    const tick = setInterval(() => {
+      setDim(true);
+      swap = setTimeout(() => { at = (at + 1) % DIORAMA.length; setI(at); setDim(false); ahead(); }, DIP_MS);
+    }, DIORAMA_MS);
+    return () => { clearInterval(tick); clearTimeout(warm); if (swap) clearTimeout(swap); };
+  }, []);
+  return [DIORAMA[i], dim];
+}
 
 export default function Home() {
   const nav = useNavigate();
@@ -46,13 +75,14 @@ export default function Home() {
   };
 
   const live = rooms.filter(r => r.status !== 'lobby').length;
+  const [scene, dim] = useDiorama();
   // Twice over so the strip loops seamlessly; the copy is hidden from readers.
   const marquee = [...CHARACTER_DEFS, ...CHARACTER_DEFS];
 
   return (
     <div className="home">
-      {/* A live board slowly turning behind the hero: shows what the game is before a word is read. */}
-      <div className="home-bg" aria-hidden><BoardScene themeId="classic" mapId="classic" game={null} spin /></div>
+      {/* A live board slowly turning behind the hero, touring every room: shows what the game is before a word is read. */}
+      <div className={`home-bg ${dim ? 'dim' : ''}`} aria-hidden><BoardScene themeId={scene.themeId} mapId={scene.mapId} game={null} spin /></div>
 
       <section className="home-hero">
         <h1>{BRAND.name}</h1>

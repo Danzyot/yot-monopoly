@@ -23,6 +23,7 @@ import { DeedMarkers } from './DeedMarkers.tsx';
 import { SceneEnv } from './SceneEnv.tsx';
 import { useSceneBusy } from './sequence.ts';
 import { isDirectorActive, pieceObjects, type CameraMode } from './camera.ts';
+import type { Quality } from './quality.ts';
 import { ASSETS } from './assets.gen.ts';
 import { ModelBuildings, ModelTable, WithModel, preloadModels, type BuildingSpot } from './models.tsx';
 
@@ -372,7 +373,7 @@ function Spinner({ children, spin }: { children: React.ReactNode; spin?: boolean
   return <group ref={ref}>{children}</group>;
 }
 
-export default function BoardScene({ themeId, mapId, game, selected, onSelect, spin, tableStyle, reactions, me, cinematic = false, cameraMode = 'table' }: {
+export default function BoardScene({ themeId, mapId, game, selected, onSelect, spin, tableStyle, reactions, me, cinematic = false, cameraMode = 'table', quality = 'auto' }: {
   themeId: string;
   mapId: string;
   game: GameView | null;
@@ -389,6 +390,8 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
   cinematic?: boolean;
   /** The viewer's chosen view (table, follow, overhead, free). */
   cameraMode?: CameraMode;
+  /** The viewer's graphics setting (three/quality.ts). */
+  quality?: Quality;
 }) {
   const theme = resolveTheme(themeId, mapId);
   // Re-checked here as well as on the server: this string ends up in CSS.
@@ -400,9 +403,12 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
   const liveMode = useAutoMode(cameraMode, !!game && game.phase !== 'over');
   // Adaptive resolution: start sharp, drop to 1× device pixels as soon as the
   // frame rate sags (phones, integrated GPUs), climb back when there is headroom.
-  const [dpr, setDpr] = useState(() => Math.min(1.5, window.devicePixelRatio || 1));
+  const [autoDpr, setDpr] = useState(() => Math.min(1.5, window.devicePixelRatio || 1));
   // Once a device has shown it struggles, keep the cheaper shadows for the session.
-  const [lowPower, setLowPower] = useState(false);
+  const [autoLow, setLowPower] = useState(false);
+  // Low and High override what the frame-rate monitor decided.
+  const dpr = quality === 'low' ? 1 : quality === 'high' ? Math.min(2, window.devicePixelRatio || 1) : autoDpr;
+  const lowPower = quality === 'low' ? true : quality === 'high' ? false : autoLow;
   // Stop rendering entirely while the tab is in the background.
   const [hidden, setHidden] = useState(() => document.hidden);
   useEffect(() => {
