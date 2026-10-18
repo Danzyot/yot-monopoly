@@ -27,6 +27,7 @@ export function readFraction(key: string, dflt: number): number {
 let ctx: AudioContext | null = null;
 let sfxBus: GainNode | null = null;
 let musicBus: GainNode | null = null;
+let musicComp: DynamicsCompressorNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
 
 let sfxVolume = readFraction(K.sfxVol, 0.7);
@@ -48,7 +49,16 @@ function audio(): AudioContext | null {
       sfxBus.connect(ctx.destination);
       musicBus = ctx.createGain();
       musicBus.gain.value = 0;
-      musicBus.connect(ctx.destination);
+      // The music is mastered quietly through a gentle compressor so a busy
+      // bar (chords, drums and a lead stacking up) never clips or jumps out
+      // over the effects; it also acts as a soft limiter for the loud tracks.
+      musicComp = ctx.createDynamicsCompressor();
+      musicComp.threshold.value = -18;
+      musicComp.knee.value = 12;
+      musicComp.ratio.value = 4;
+      musicComp.attack.value = 0.01;
+      musicComp.release.value = 0.2;
+      musicBus.connect(musicComp).connect(ctx.destination);
     }
     if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
     return ctx;

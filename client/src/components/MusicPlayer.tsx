@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth.tsx';
 import {
-  attachPlayer, loadLibrary, musicState, nextTrack, onMusicChange, setMuted, setMusicAllowed,
+  AUTO_ID, attachPlayer, loadLibrary, musicState, nextTrack, onMusicChange, setMuted, setMusicAllowed,
   setPlaylist, setVolume, togglePlay, type MusicState,
 } from '../music.ts';
 import { onSfxChange, primeAudio, setSfxMuted, setSfxVolume, sfxState, type SfxState } from '../sound.ts';
@@ -106,7 +106,7 @@ export default function MusicPlayer() {
         <div className="audio-panel" role="dialog" aria-label="Music">
           <div className="audio-now">
             <span className="muted small">{m.playing ? 'Now playing' : 'Paused'}</span>
-            <b className="audio-track">{m.trackName}</b>
+            <b className="audio-track">{m.trackName}{m.playlistId === AUTO_ID && m.scene ? <span className="muted"> · auto</span> : null}</b>
           </div>
           <div className="audio-transport">
             <button className="btn small" onClick={() => { primeAudio(); togglePlay(); }}>
@@ -120,7 +120,7 @@ export default function MusicPlayer() {
             <span className="muted small">Playlist</span>
             <select value={m.playlistId} onChange={e => { primeAudio(); setPlaylist(e.target.value); }}>
               {m.playlists.map(p => (
-                <option key={p.id} value={p.id}>{p.name} ({p.tracks.length})</option>
+                <option key={p.id} value={p.id}>{p.id === AUTO_ID || p.tracks.length === 1 ? p.name : `${p.name} (${p.tracks.length})`}</option>
               ))}
             </select>
           </label>

@@ -71,8 +71,11 @@ mini-games, music, and a full operator dashboard.
   the earlier seat), and pause/resume for the host.
 - **Table styles** like the poker tables: seven table presets, a custom board logo and a
   backdrop image from the operator's graphics library.
-- **Music & sound**: operator-uploaded music library with playlists, a built-in
-  generative lounge soundtrack that works with nothing uploaded, synthesised sound
+- **Music & sound**: operator-uploaded music library with playlists, five built-in
+  generative soundtracks that work with nothing uploaded — one per scene (Study's lounge
+  jazz, Poker Room's purple-night synth, Ticker's newsroom electronica, Pit Lane's
+  driving rock, Rooftop's lo-fi hip-hop), picked automatically for the room on screen
+  and cross-faded when it changes, or pinned from the 🎵 menu — synthesised sound
   effects for dice, buying, rent, cards, jail, auctions and winning, and a quiet ambient
   bed per scene (fireplace and clock, casino murmur, studio hum, passing engines, city
   wind) that follows the effects volume and switch (toggle it in the 🎵 menu).

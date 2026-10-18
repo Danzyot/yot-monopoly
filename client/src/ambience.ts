@@ -105,6 +105,12 @@ function lfo(bed: Bed, rate: number, depth: number, target: AudioParam) {
   osc.connect(g).connect(target);
 }
 
+/** The bed's current level, falling back to its resting level when the engine hands back a non-finite value mid-ramp. */
+function gainNow(bed: Bed): number {
+  const v = bed.out.gain.value;
+  return Number.isFinite(v) ? v : LEVEL;
+}
+
 /** Run `fn` at random intervals between `min` and `max` seconds while the bed lives. */
 function every(bed: Bed, min: number, max: number, fn: (now: number) => void) {
   const arm = () => {
@@ -233,8 +239,9 @@ function chog(bed: Bed) {
     const n = 3 + Math.floor(Math.random() * 3);
     let f = Math.floor(Math.random() * 2);
     for (let i = 0; i < n; i++) {
-      ping(bed, now + i * 0.085, 0.3, 0.035, notes[Math.min(f, notes.length - 1)], 'sine');
-      f += Math.random() < 0.7 ? 1 : -1;
+      ping(bed, now + i * 0.085, 0.3, 0.035, notes[f], 'sine');
+      // Mostly climbing, sometimes a step back; never off either end of the run.
+      f = Math.max(0, Math.min(notes.length - 1, f + (Math.random() < 0.7 ? 1 : -1)));
     }
   });
 }
@@ -368,7 +375,7 @@ function teardown(bed: Bed) {
   bed.timers.clear();
   const now = bed.ac.currentTime;
   bed.out.gain.cancelScheduledValues(now);
-  bed.out.gain.setValueAtTime(bed.out.gain.value, now);
+  bed.out.gain.setValueAtTime(gainNow(bed), now);
   bed.out.gain.linearRampToValueAtTime(0, now + FADE_S);
   // Let the fade run, then silence the sources and unhook everything.
   window.setTimeout(() => {
@@ -393,7 +400,7 @@ export function startAmbience(scene: AmbienceScene): () => void {
     if (!bed || bed.stopped) return;
     const now = bed.ac.currentTime;
     bed.out.gain.cancelScheduledValues(now);
-    bed.out.gain.setValueAtTime(bed.out.gain.value, now);
+    bed.out.gain.setValueAtTime(gainNow(bed), now);
     bed.out.gain.linearRampToValueAtTime(document.hidden ? 0 : LEVEL, now + (document.hidden ? 0.4 : FADE_S));
   };
   const go = () => {

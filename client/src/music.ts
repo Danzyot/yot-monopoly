@@ -1,31 +1,31 @@
 // Background music engine (adapted from the poker room's music.ts).
 //
 // Two kinds of track share one transport:
-//  - Built-in tracks are synthesized live in WebAudio — a slow lounge band of
-//    chords, soft bass, a sparse keys line and brushed percussion. Nothing to
+//  - Built-in tracks are synthesized live in WebAudio (music/tracks.ts): one
+//    generative piece per scene — the Study's lounge band, the Poker Room's
+//    purple synths, the Ticker's bumper electronica, Pit Lane's rock, the
+//    Rooftop's lo-fi — each written bar by bar on the audio clock. Nothing to
 //    download or license, so music works on a fresh install with an empty
-//    library, and it loops forever for the cost of a dozen oscillators a bar.
+//    library, and a piece loops forever for the cost of a few dozen nodes.
 //  - Uploaded tracks come from the operator's library (/music/manifest.json,
 //    managed in the dashboard) and play through an <audio> element.
-// Uploaded playlists appear beside the built-in one; nothing replaces it.
-import { audioContext, hasGestured, musicOutput, noise, onFirstGesture, readFraction, readPref, writePref } from './sound.ts';
-
-interface SynthSpec {
-  bpm: number;
-  /** Base MIDI note of the key. */
-  key: number;
-  /** Chord roots as semitone offsets from the key, one chord per bar. */
-  roots: number[];
-  /** Chord shape per bar (intervals from its root). */
-  shapes: number[][];
-}
+// The default choice, "Scene soundtrack (auto)", follows the game on screen
+// and cross-fades between pieces when the scene changes; the player can pin
+// any built-in piece or an uploaded playlist instead. Music is off until the
+// player presses play — nothing here autoplays.
+import { useEffect } from 'react';
+import type { GameView } from '../../shared/types.ts';
+import { sceneFor, type AmbienceScene } from './ambience.ts';
+import { audioContext, hasGestured, musicOutput, onFirstGesture, readFraction, readPref, writePref } from './sound.ts';
+import { PIECES, pieceById, type Piece } from './music/tracks.ts';
+import { drop, mk, stats, type Layer } from './music/synth.ts';
 
 export interface Track {
   id: string;
   name: string;
-  /** File-backed tracks play this; synth tracks have `synth` instead. */
+  /** File-backed tracks play this; synth tracks name a built-in piece instead. */
   url?: string;
-  synth?: SynthSpec;
+  synth?: string;
 }
 
 export interface Playlist {
@@ -35,23 +35,22 @@ export interface Playlist {
   tracks: Track[];
 }
 
-const MAJ7 = [0, 4, 7, 11];
-const MIN7 = [0, 3, 7, 10];
-const MIN9 = [0, 3, 7, 10, 14];
-const MAJ9 = [0, 4, 7, 11, 14];
-const DOM9 = [0, 4, 10, 14];
+/** The automatic playlist: one built-in piece per scene, picked by the game on screen. */
+export const AUTO_ID = 'builtin:auto';
+/** @deprecated the old single built-in playlist; kept so stored preferences still resolve. */
+export const BUILTIN_ID = AUTO_ID;
 
-export const BUILTIN_ID = 'builtin:lounge';
-const BUILTIN: Playlist = {
-  id: BUILTIN_ID,
-  name: 'Built-in · Lounge',
-  builtIn: true,
-  tracks: [
-    { id: 'lounge-1', name: 'Boardwalk at Dusk', synth: { bpm: 76, key: 50, roots: [0, 5, -2, 3], shapes: [MIN9, MIN7, MAJ7, MAJ9] } },
-    { id: 'lounge-2', name: 'Free Parking', synth: { bpm: 84, key: 53, roots: [0, 9, 2, 7], shapes: [MAJ9, MIN7, MIN9, DOM9] } },
-    { id: 'lounge-3', name: 'Chance Encounter', synth: { bpm: 70, key: 45, roots: [0, 8, 5, 7], shapes: [MIN9, MAJ7, MIN7, DOM9] } },
-  ],
+const pieceTrack = (p: Piece): Track => ({ id: `synth:${p.id}`, name: p.name, synth: p.id });
+const AUTO: Playlist = { id: AUTO_ID, name: 'Scene soundtrack (auto)', builtIn: true, tracks: PIECES.map(pieceTrack) };
+const PINNED: Playlist[] = PIECES.map(p => ({ id: `builtin:${p.id}`, name: `${p.name} · ${p.blurb}`, builtIn: true, tracks: [pieceTrack(p)] }));
+
+/** Which piece plays for which room (music/tracks.ts). */
+const SCENE_PIECE: Record<AmbienceScene, string> = {
+  classic: 'study', chog: 'poker', tptv: 'ticker', speedway: 'pitlane', skyline: 'rooftop',
 };
+
+/** Two pieces overlap for this long when the scene (or the pick) changes. */
+const CROSSFADE_S = 2;
 
 // ---- persisted preferences ----
 const K = { on: 'yot:music.on', vol: 'yot:music.vol', muted: 'yot:music.muted', playlist: 'yot:music.playlist' };
@@ -62,13 +61,16 @@ export interface MusicState {
   playlistId: string;
   trackIndex: number;
   trackName: string;
+  /** The scene the automatic playlist is following (null off the game screen). */
+  scene: AmbienceScene | null;
   volume: number;
   muted: boolean;
   playlists: Playlist[];
 }
 
 let uploaded: Playlist[] = [];
-let playlistId = readPref(K.playlist) || BUILTIN_ID;
+let playlistId = readPref(K.playlist) || AUTO_ID;
+if (playlistId === 'builtin:lounge') playlistId = AUTO_ID;
 let trackIndex = 0;
 let volume = readFraction(K.vol, 0.5);
 let muted = readPref(K.muted) === '1';
@@ -77,26 +79,37 @@ let playing = false;
 // preference stays "on", but nothing plays where they cannot turn it off.
 let suspended = true;
 let allowed = true;
+let scene: AmbienceScene | null = null;
+// In the automatic playlist "next" steps off the scene's piece until the
+// scene changes again.
+let autoPick: number | null = null;
 
 const listeners = new Set<(s: MusicState) => void>();
 
 export function allPlaylists(): Playlist[] {
-  return [BUILTIN, ...uploaded].filter(p => p.tracks.length > 0);
+  return [AUTO, ...PINNED, ...uploaded].filter(p => p.tracks.length > 0);
 }
 
 function playlist(): Playlist {
-  return allPlaylists().find(p => p.id === playlistId) ?? BUILTIN;
+  return allPlaylists().find(p => p.id === playlistId) ?? AUTO;
+}
+
+function sceneTrackIndex(): number {
+  const id = SCENE_PIECE[scene ?? 'classic'];
+  return Math.max(0, AUTO.tracks.findIndex(t => t.synth === id));
 }
 
 function currentTrack(): Track {
   const p = playlist();
+  if (p.id === AUTO_ID) return p.tracks[autoPick ?? sceneTrackIndex()];
   return p.tracks[Math.min(trackIndex, p.tracks.length - 1)];
 }
 
 export function musicState(): MusicState {
+  const p = playlist();
   return {
-    playing, playlistId: playlist().id, trackIndex, trackName: currentTrack().name,
-    volume, muted, playlists: allPlaylists(),
+    playing, playlistId: p.id, trackIndex: p.id === AUTO_ID ? (autoPick ?? sceneTrackIndex()) : trackIndex,
+    trackName: currentTrack().name, scene, volume, muted, playlists: allPlaylists(),
   };
 }
 
@@ -139,201 +152,153 @@ export function loadLibrary(force = false): Promise<void> {
       // library changed under us, so restart on what is now selected.
       const p = playlist();
       const at = p.tracks.findIndex(t => t.id === wasTrack.id);
-      if (at >= 0) trackIndex = at;
+      if (at >= 0) { if (p.id !== AUTO_ID) trackIndex = at; }
       else {
         trackIndex = 0;
         if (playing && !suspended) startCurrent();
       }
       emit();
     } catch {
-      // No manifest (offline, old server): the built-in playlist still works.
+      // No manifest (offline, old server): the built-in pieces still work.
     }
   })();
   return loading;
 }
 
-// ---- synthesis ----
-const midi = (n: number) => 440 * Math.pow(2, (n - 69) / 12);
-
-interface Voice { src: AudioScheduledSourceNode; gain: GainNode }
-let voices: Voice[] = [];
-
-function track(src: AudioScheduledSourceNode, gain: GainNode, stopAt: number) {
-  const v = { src, gain };
-  voices.push(v);
-  src.onended = () => { voices = voices.filter(x => x !== v); };
-  src.stop(stopAt);
+// ---- the synth transport ----
+// A running piece is a Layer (its own gain into the music bus, a register of
+// every node it owns) plus its place in the bar count. Switching pieces
+// starts a new layer and fades the old one out underneath it.
+interface Running extends Layer {
+  piece: Piece;
+  bar: number;
+  nextBarAt: number;
 }
 
-function note(
-  ac: AudioContext, out: GainNode, freq: number, at: number, dur: number, vol: number,
-  type: OscillatorType, cutoff: number, attack = 0.01,
-) {
-  const osc = ac.createOscillator();
-  const lp = ac.createBiquadFilter();
-  const g = ac.createGain();
-  osc.type = type;
-  osc.frequency.value = freq;
-  lp.type = 'lowpass';
-  lp.frequency.value = cutoff;
-  g.gain.setValueAtTime(0, at);
-  g.gain.linearRampToValueAtTime(vol, at + attack);
-  g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
-  osc.connect(lp).connect(g).connect(out);
-  osc.start(at);
-  track(osc, g, at + dur + 0.05);
-}
-
-function hit(ac: AudioContext, out: GainNode, at: number, dur: number, vol: number, type: BiquadFilterType, freq: number) {
-  const src = ac.createBufferSource();
-  const bq = ac.createBiquadFilter();
-  const g = ac.createGain();
-  src.buffer = noise(ac);
-  bq.type = type;
-  bq.frequency.value = freq;
-  g.gain.setValueAtTime(vol, at);
-  g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
-  src.connect(bq).connect(g).connect(out);
-  src.start(at, Math.random() * 0.5);
-  track(src, g, at + dur + 0.02);
-}
-
-function kick(ac: AudioContext, out: GainNode, at: number, vol: number) {
-  const osc = ac.createOscillator();
-  const g = ac.createGain();
-  osc.frequency.setValueAtTime(110, at);
-  osc.frequency.exponentialRampToValueAtTime(45, at + 0.14);
-  g.gain.setValueAtTime(vol, at);
-  g.gain.exponentialRampToValueAtTime(0.0001, at + 0.25);
-  osc.connect(g).connect(out);
-  osc.start(at);
-  track(osc, g, at + 0.3);
-}
-
-/** One bar of lounge: pad chord, walking-ish bass, a few keys, brushes. */
-function scheduleBar(spec: SynthSpec, when: number, bar: number) {
-  const ac = audioContext();
-  const out = musicOutput();
-  if (!ac || !out) return;
-  const beat = 60 / spec.bpm;
-  const barLen = beat * 4;
-  const i = bar % spec.roots.length;
-  const root = spec.key + spec.roots[i];
-  const shape = spec.shapes[i % spec.shapes.length];
-
-  // Pad: the chord held across the bar with a slow swell — the warm bed.
-  for (const iv of shape) {
-    const osc = ac.createOscillator();
-    const lp = ac.createBiquadFilter();
-    const g = ac.createGain();
-    osc.type = 'triangle';
-    osc.frequency.value = midi(root + iv);
-    osc.detune.value = (Math.random() - 0.5) * 10;
-    lp.type = 'lowpass';
-    lp.frequency.value = 900;
-    g.gain.setValueAtTime(0, when);
-    g.gain.linearRampToValueAtTime(0.035, when + barLen * 0.3);
-    g.gain.setValueAtTime(0.035, when + barLen * 0.75);
-    g.gain.linearRampToValueAtTime(0.0001, when + barLen + 0.05);
-    osc.connect(lp).connect(g).connect(out);
-    osc.start(when);
-    track(osc, g, when + barLen + 0.1);
-  }
-
-  // Soft bass: root on 1, a chord tone or fifth on the "and" of 2 / on 3.
-  const bass = root - 12;
-  note(ac, out, midi(bass), when, beat * 1.6, 0.16, 'sine', 500, 0.02);
-  const pick = Math.random() < 0.5 ? 7 : shape[1];
-  note(ac, out, midi(bass + pick), when + beat * 2.5, beat * 1.2, 0.12, 'sine', 500, 0.02);
-
-  // Keys: a sparse, lazy line on chord tones an octave up — the only part
-  // that changes every time round, so the loop never feels like a loop.
-  if (bar % 2 === 1 || Math.random() < 0.5) {
-    for (let s = 0; s < 8; s++) {
-      if (Math.random() > 0.28) continue;
-      const iv = shape[Math.floor(Math.random() * shape.length)] + 12;
-      note(ac, out, midi(root + iv), when + (beat / 2) * s, beat * 1.3, 0.045, 'sine', 2400, 0.005);
-    }
-  }
-
-  // Brushes: soft kick on 1 (and a ghost later), swung hats, rim on 3.
-  kick(ac, out, when, 0.22);
-  if (Math.random() < 0.5) kick(ac, out, when + beat * 2.5, 0.12);
-  for (let s = 0; s < 8; s++) {
-    const swing = s % 2 === 1 ? beat * 0.16 : 0;
-    hit(ac, out, when + (beat / 2) * s + swing, 0.06, s % 2 === 0 ? 0.03 : 0.018, 'highpass', 6500);
-  }
-  hit(ac, out, when + beat * 2, 0.09, 0.05, 'bandpass', 1900);
-}
-
-// ---- transport ----
-const BARS_PER_TRACK = 32; // ~1.5–2 minutes, then on to the next tune
+let live: Running | null = null;
+const fading = new Set<Running>();
 let timer: number | null = null;
-let nextBarAt = 0;
-let bar = 0;
 let audioEl: HTMLAudioElement | null = null;
 let fileErrors = 0;
+
+let errors = 0;
+/** Live layers / nodes right now, nodes and bars ever built, scheduling errors. */
+export function musicStats(): { layers: number; nodes: number; created: number; bars: number; errors: number; piece: string | null } {
+  return { ...stats, errors, piece: live?.piece.id ?? null };
+}
+
+function startLayer(piece: Piece, fadeIn: number): Running | null {
+  const ac = audioContext();
+  const bus = musicOutput();
+  if (!ac || !bus) return null;
+  const L: Running = {
+    ac, out: null as unknown as GainNode, nodes: new Set(), persistent: [], stopped: false, send: {},
+    piece, bar: 0, nextBarAt: ac.currentTime + 0.1,
+  };
+  L.out = mk(L, ac.createGain());
+  L.persistent.push(L.out);
+  L.out.gain.setValueAtTime(0.0001, ac.currentTime);
+  L.out.gain.linearRampToValueAtTime(1, ac.currentTime + fadeIn);
+  L.out.connect(bus);
+  stats.layers += 1;
+  try { piece.setup?.(L); } catch (e) { errors += 1; console.error('music: setup failed', e); }
+  return L;
+}
+
+/** Fade a layer out and free everything it built once it is silent. */
+function teardown(L: Running, fade: number) {
+  if (L.stopped) return;
+  L.stopped = true;
+  fading.add(L);
+  const now = L.ac.currentTime;
+  try {
+    const g = L.out.gain;
+    g.cancelScheduledValues(now);
+    // Mid-ramp the current value can read back as NaN in some browsers;
+    // the fade then simply starts from full.
+    const cur = g.value;
+    g.setValueAtTime(Number.isFinite(cur) && cur > 0 ? cur : 1, now);
+    g.linearRampToValueAtTime(0.0001, now + fade);
+  } catch (e) { errors += 1; console.error('music: fade failed', e); }
+  window.setTimeout(() => {
+    fading.delete(L);
+    for (const n of [...L.nodes]) {
+      try { (n as AudioScheduledSourceNode).stop?.(); } catch { /* not a source, or never started */ }
+      drop(L, n);
+    }
+    L.persistent.length = 0;
+    stats.layers -= 1;
+  }, fade * 1000 + 80);
+}
+
+function scheduleAhead(L: Running) {
+  const { ac, piece } = L;
+  const barLen = (60 / piece.bpm) * 4;
+  // After the tab slept the clock jumped: skip ahead rather than firing every
+  // missed bar at once.
+  if (L.nextBarAt < ac.currentTime - 1) L.nextBarAt = ac.currentTime + 0.05;
+  // Just in time: a bar's nodes exist from the moment it is scheduled, so
+  // building it half a second ahead (the timer runs every 200 ms) keeps the
+  // live node count to roughly one bar's worth.
+  while (!L.stopped && L.nextBarAt < ac.currentTime + Math.min(0.5, barLen)) {
+    try { piece.bar(L, Math.max(L.nextBarAt, ac.currentTime + 0.02), L.bar); } catch (e) {
+      errors += 1;
+      if (errors < 4) console.error('music: bar failed', e);
+    }
+    L.nextBarAt += barLen;
+    L.bar += 1;
+    stats.bars += 1;
+  }
+}
+
+function tick() {
+  if (!live || !playing || suspended) return;
+  scheduleAhead(live);
+}
+
+/** Make `piece` the live layer, cross-fading from whatever was playing. */
+function switchTo(piece: Piece) {
+  if (live && !live.stopped && live.piece.id === piece.id) return;
+  const old = live;
+  const fade = old ? CROSSFADE_S : 0.4;
+  live = startLayer(piece, fade);
+  if (old) teardown(old, fade);
+  if (live) {
+    if (timer === null) timer = window.setInterval(tick, 200);
+    scheduleAhead(live);
+  }
+}
 
 function applyVolume() {
   const out = musicOutput();
   const ac = audioContext();
-  const live = playing && !suspended && allowed && !muted;
-  if (out && ac) out.gain.setTargetAtTime(live ? volume * 0.6 : 0, ac.currentTime, 0.15);
+  const on = playing && !suspended && allowed && !muted;
+  if (out && ac) out.gain.setTargetAtTime(on ? volume * 0.6 : 0, ac.currentTime, 0.15);
   if (audioEl) {
     audioEl.volume = volume;
     audioEl.muted = muted;
   }
 }
 
-function tick() {
-  const ac = audioContext();
-  const t = currentTrack();
-  if (!ac || !t?.synth || !playing || suspended) return;
-  const barLen = (60 / t.synth.bpm) * 4;
-  // After the tab slept the clock jumped: skip ahead rather than firing every
-  // missed bar at once.
-  if (nextBarAt < ac.currentTime - 1) nextBarAt = ac.currentTime + 0.05;
-  // The last bar is already queued: move on once it has played out, not the
-  // moment it is scheduled (which would cut it off).
-  if (bar >= BARS_PER_TRACK) {
-    if (ac.currentTime >= nextBarAt - 0.05) advance();
-    return;
-  }
-  while (bar < BARS_PER_TRACK && nextBarAt < ac.currentTime + barLen * 1.2) {
-    scheduleBar(t.synth, Math.max(nextBarAt, ac.currentTime + 0.02), bar);
-    nextBarAt += barLen;
-    bar += 1;
-  }
-}
-
-function silenceVoices() {
-  const ac = audioContext();
-  const now = ac?.currentTime ?? 0;
-  for (const v of voices) {
-    // A quick fade, not an instant stop, so switching never clicks.
-    try {
-      v.gain.gain.cancelScheduledValues(now);
-      v.gain.gain.setTargetAtTime(0, now, 0.03);
-      v.src.stop(now + 0.2);
-    } catch { /* already stopped */ }
-  }
-  voices = [];
+function stopSynth(fade = 0.25) {
+  if (timer !== null) { clearInterval(timer); timer = null; }
+  if (live) teardown(live, fade);
+  live = null;
 }
 
 function stopTransport() {
-  if (timer !== null) { clearInterval(timer); timer = null; }
-  silenceVoices();
+  stopSynth();
   if (audioEl) audioEl.pause();
 }
 
 /** `resume`: carry on from where a paused file left off instead of restarting it. */
 function startCurrent(resume = false) {
-  stopTransport();
-  if (!playing || suspended || !allowed) { applyVolume(); return; }
+  if (!playing || suspended || !allowed) { stopTransport(); applyVolume(); return; }
   const ac = audioContext();
   const t = currentTrack();
-  if (!ac || !t) return;
+  if (!ac || !t) { stopTransport(); return; }
   if (t.url) {
+    stopSynth();
     if (!audioEl) {
       audioEl = new Audio();
       audioEl.preload = 'auto';
@@ -352,10 +317,9 @@ function startCurrent(resume = false) {
     applyVolume();
     void audioEl.play().catch(() => { /* needs a gesture; the next click provides one */ });
   } else {
-    bar = 0;
-    nextBarAt = ac.currentTime + 0.1;
-    timer = window.setInterval(tick, 250);
-    tick();
+    if (audioEl) audioEl.pause();
+    const piece = pieceById(t.synth ?? '') ?? PIECES[0];
+    switchTo(piece);
   }
   applyVolume();
   emit();
@@ -363,7 +327,8 @@ function startCurrent(resume = false) {
 
 function advance() {
   const p = playlist();
-  trackIndex = (trackIndex + 1) % p.tracks.length;
+  if (p.id === AUTO_ID) autoPick = ((autoPick ?? sceneTrackIndex()) + 1) % p.tracks.length;
+  else trackIndex = (trackIndex + 1) % p.tracks.length;
   startCurrent();
   emit();
 }
@@ -395,6 +360,7 @@ export function setPlaylist(id: string): void {
   if (!allPlaylists().some(p => p.id === id)) return;
   playlistId = id;
   trackIndex = 0;
+  autoPick = null;
   writePref(K.playlist, id);
   if (playing) startCurrent();
   emit();
@@ -421,6 +387,26 @@ export function setMusicAllowed(on: boolean): void {
   allowed = on;
   if (!on) { stopTransport(); applyVolume(); }
   else if (playing && !suspended) startCurrent();
+}
+
+// ---- the scene ----
+
+/** Tell the automatic playlist which room is on screen (null: none, e.g. the lobby). */
+export function setMusicScene(s: AmbienceScene | null): void {
+  if (scene === s) return;
+  scene = s;
+  autoPick = null;
+  if (playing && !suspended && playlist().id === AUTO_ID) startCurrent(true);
+  emit();
+}
+
+/** Follow the game on screen: the automatic playlist cross-fades to its room's piece. */
+export function useMusicScene(game: Pick<GameView, 'mapId' | 'themeId'> | null): void {
+  const s = game ? sceneFor(game) : null;
+  useEffect(() => {
+    setMusicScene(s);
+    return () => setMusicScene(null);
+  }, [s]);
 }
 
 // A widget on screen keeps the music alive; with none mounted (home page,
@@ -463,4 +449,16 @@ export function attachPlayer(): () => void {
       emit();
     }, 600);
   };
+}
+
+// Like the renderer's __yotGl and the ambience's __yotAmbience: with ?perf in
+// the URL the engine can be driven and counted from the console (and the e2e
+// check).
+if (typeof window !== 'undefined' && location.search.includes('perf')) {
+  Object.assign(window, {
+    __yotMusic: {
+      stats: musicStats, state: musicState, play, pause, setPlaylist, setScene: setMusicScene,
+      pieces: PIECES.map(p => p.id), context: audioContext,
+    },
+  });
 }
