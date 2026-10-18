@@ -4,9 +4,28 @@
 
 import { CLASSIC_SPACES, type SpaceDef } from './board.ts';
 import { CLASSIC_CHANCE, CLASSIC_CHEST, standardDecks, type CardDef } from './cards.ts';
+import type { ThemePalette } from './themes.ts';
 
 /** 3D surroundings the board sits in (rendered by the client). */
 export type EnvironmentId = 'lounge' | 'speedway' | 'skyline';
+
+/** How the board face is art-directed (client/src/three/boardTexture.ts). */
+export type BoardArt = 'heritage' | 'rainbow' | 'night' | 'tptv' | 'chog';
+
+/**
+ * A map's own printed look, used when the Original theme is played on it.
+ * Branded themes (Chog, Takeprofit TV) bring their own look instead.
+ * Set colours were planned in OKLCH: lightness alternates between neighbouring
+ * sets so they stay apart for colour-blind players too, and every band also
+ * carries a set glyph (see SET_GLYPHS in boardTexture.ts).
+ */
+export interface MapLook {
+  art: BoardArt;
+  /** Shown in the lobby next to the theme, e.g. "Rainbow Road". */
+  name: string;
+  groupColors: Record<string, string>;
+  palette: Partial<ThemePalette>;
+}
 
 export interface MapDef {
   id: string;
@@ -20,7 +39,50 @@ export interface MapDef {
   players: [number, number];
   /** Rule defaults this map is designed around (applied when it is picked). */
   startingCash?: number;
+  /** The board's own look under the Original theme. */
+  look: MapLook;
 }
+
+// Heritage: a premium print of the standard board. Cream stock, warm ink,
+// rich but slightly desaturated sets (oklch L 0.43–0.88, C 0.08–0.18).
+const HERITAGE: MapLook = {
+  art: 'heritage',
+  name: 'Heritage',
+  groupColors: {
+    brown: '#7f4730', lightblue: '#8dd0e7', pink: '#b7447e', orange: '#e99541', red: '#c1332f',
+    yellow: '#f4d660', green: '#358b53', darkblue: '#204e90', teal: '#3b9d9e', purple: '#6c4494',
+  },
+  palette: { board: '#f7f0dd', boardLine: '#251e18', boardText: '#251e18', accent: '#ba2b28', rim: '#44241f' },
+};
+
+// Rainbow Road: a night-sky face with a neon rainbow track. Sets are neon
+// (oklch C 0.11–0.25) and alternate light/dark round the track.
+const RAINBOW: MapLook = {
+  art: 'rainbow',
+  name: 'Rainbow Road',
+  groupColors: {
+    brown: '#bb7048', lightblue: '#59dff8', pink: '#f72fa7', orange: '#ffa332', red: '#ea1f2f',
+    yellow: '#ffea6b', green: '#09c466', darkblue: '#424bef', teal: '#21d1ca', purple: '#a347ef',
+  },
+  palette: {
+    board: '#140f34', boardLine: '#8f86d9', boardText: '#f4f4fe', accent: '#ff4fb2', rim: '#301c64',
+    house: '#09c466', hotel: '#ff4fb2',
+  },
+};
+
+// Night City: deep navy and indigo, gold rules and lettering, neon sets.
+const NIGHT: MapLook = {
+  art: 'night',
+  name: 'Night City',
+  groupColors: {
+    brown: '#b47548', lightblue: '#7dd4fb', pink: '#eb4b9f', orange: '#fb9f44', teal: '#02b5b2',
+    red: '#db2c2f', yellow: '#fcdd5b', purple: '#914ad0', green: '#4fce74', darkblue: '#1e59cd',
+  },
+  palette: {
+    board: '#0d1833', boardLine: '#e9bd63', boardText: '#f6eedc', accent: '#e9bd63', rim: '#a97e2c',
+    house: '#4fce74', hotel: '#eb4b9f',
+  },
+};
 
 // Rents for a price: scale the classic street nearest in price, so new maps
 // inherit the classic game's tuned curve instead of invented numbers.
@@ -56,6 +118,7 @@ export const CLASSIC_MAP: MapDef = {
   chest: CLASSIC_CHEST,
   environment: 'lounge',
   players: [2, 6],
+  look: HERITAGE,
 };
 
 // 32 spaces, every colour set is a pair: sets complete fast, houses go up
@@ -80,6 +143,7 @@ export const SPEED_MAP: MapDef = {
   environment: 'speedway',
   players: [2, 5],
   startingCash: 1200,
+  look: RAINBOW,
 };
 
 // 48 spaces and ten colour sets — room for big tables and long, deal-heavy games.
@@ -109,6 +173,7 @@ export const METRO_MAP: MapDef = {
   environment: 'skyline',
   players: [4, 8],
   startingCash: 1800,
+  look: NIGHT,
 };
 
 export const MAPS: MapDef[] = [CLASSIC_MAP, SPEED_MAP, METRO_MAP];

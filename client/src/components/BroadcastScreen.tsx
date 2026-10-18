@@ -90,14 +90,16 @@ export default function BroadcastScreen({ room, me }: { room: RoomView; me: stri
         <header className="bc-top">
           <div className="bc-brand">
             {theme.logoUrl ? <img className="bc-logo" src={theme.logoUrl} alt="" /> : <span className="bc-hat" aria-hidden>🎩</span>}
-            <b className="bc-name">{theme.name}</b>
+            {tptv
+              ? <b className="bc-name tptv-wordmark" aria-label={theme.name}>Takeprofit<span>TV</span></b>
+              : <b className="bc-name">{theme.name}</b>}
             {tptv && <span className="bc-onair"><i /> ON AIR</span>}
             {!tptv && <span className="bc-live"><i /> LIVE</span>}
           </div>
           <div className="bc-top-mid">
             <span className="bc-code mono">{room.code}</span>
             {game && <span className="bc-turn">Turn {game.turnNumber}</span>}
-            {game && getMap(game.mapId).name !== theme.name && <span className="bc-map">{getMap(game.mapId).name}</span>}
+            {game && <span className="bc-map">{getMap(game.mapId).name}{theme.lookName !== theme.name ? ` · ${theme.lookName}` : ''}</span>}
           </div>
           <div className="bc-top-right">
             {!connected && <span className="bc-tag warn">reconnecting…</span>}
@@ -105,6 +107,7 @@ export default function BroadcastScreen({ room, me }: { room: RoomView; me: stri
             {room.spectators > 0 && <span className="bc-tag" title="Spectators">👀 {room.spectators}</span>}
             {muted && <span className="bc-tag" title="Muted (M)">🔇</span>}
           </div>
+          {tptv && <span className="tptv-bars" aria-hidden><i /><i /><i /><i /><i /><i /><i /></span>}
         </header>
 
         {game ? <>
