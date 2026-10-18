@@ -84,6 +84,16 @@ const io = new Server(http, {
   pingTimeout: 20_000,
   maxHttpBufferSize: 32_000,
   connectTimeout: 10_000,
+  // room:state is repetitive JSON (the log, players, seats): deflate shrinks it
+  // ~4.5×, which matters on phones and with a crowd watching. Small messages
+  // (acks, chat, reactions) go as they are. A small window and fast level keep
+  // each socket's zlib state to ~64 KB and the CPU cost to tens of µs.
+  perMessageDeflate: {
+    threshold: 1024,
+    zlibDeflateOptions: { level: 1, memLevel: 6 },
+    serverMaxWindowBits: 13,
+    clientMaxWindowBits: 13,
+  },
 });
 const sockets = attachSockets(io);
 

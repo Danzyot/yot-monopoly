@@ -39,6 +39,8 @@ interface SocketData {
 const MAX_SOCKETS_PER_IP = Number(process.env.MAX_SOCKETS_PER_IP ?? 24);
 const ACTIONS_PER_SEC = 12;
 const ACTION_BURST = 30;
+/** How often the rest of a room hears that the watcher count changed. */
+const SPECTATOR_REFRESH_MS = 1_000;
 /** A player's Discord requirement check is repeated at most this often. */
 const GATE_CHECK_GAP_MS = 2_500;
 
@@ -60,8 +62,35 @@ export function attachSockets(io: Server): SocketLayer {
   // Every state goes out through here, which is also how the poke tracker
   // learns when a turn began.
   const banter = new BotBanter();
+  const stateOf = (room: Room) => ({ ...room.view(), poke: pokes.view(room) });
+  // Broadcasts are coalesced: everything that changes a room within one tick
+  // (an action and the timers it re-arms, a burst of joins) goes out as one
+  // room:state, built and sent once. Handlers flush before they ack, so the
+  // acting client still sees the new state before its reply, as before.
+  const pending = new Set<Room>();
+  const flushBroadcasts = () => {
+    if (!pending.size) return;
+    const rooms = [...pending];
+    pending.clear();
+    for (const r of rooms) sendState(r);
+  };
   const broadcast = (room: Room) => {
-    io.to(`room:${room.code}`).emit('room:state', { ...room.view(), poke: pokes.view(room) });
+    if (!pending.size) setImmediate(flushBroadcasts);
+    pending.add(room);
+  };
+  // Spectators coming and going only move the watcher count: the newcomer is
+  // sent the state straight away, everyone else hears at most once a second
+  // (or with the next real change). A crowd arriving at once used to cost
+  // every socket a full state per arrival (n² messages).
+  const lazy = new Map<string, ReturnType<typeof setTimeout>>();
+  const broadcastSoon = (room: Room) => {
+    if (lazy.has(room.code)) return;
+    lazy.set(room.code, setTimeout(() => { lazy.delete(room.code); broadcast(room); }, SPECTATOR_REFRESH_MS));
+  };
+  const sendState = (room: Room) => {
+    const t = lazy.get(room.code);
+    if (t) { clearTimeout(t); lazy.delete(room.code); }
+    io.to(`room:${room.code}`).emit('room:state', stateOf(room));
     // Bots react to their big moments a beat later, once the board has caught up.
     const g = room.status === 'playing' ? room.game : null;
     for (const b of banter.observe(room.code, g ? g.players : null)) {
@@ -72,7 +101,13 @@ export function attachSockets(io: Server): SocketLayer {
       }, 2200 + Math.random() * 1500);
     }
   };
-  const lobbyChanged = () => io.to('lobby').emit('rooms', registry.list());
+  // The lobby list goes out at most once a tick, however many rooms changed in it.
+  let lobbyQueued = false;
+  const lobbyChanged = () => {
+    if (lobbyQueued) return;
+    lobbyQueued = true;
+    setImmediate(() => { lobbyQueued = false; io.to('lobby').emit('rooms', registry.list()); });
+  };
 
   const registry: Registry = new Registry({
     onChange: room => { broadcast(room); },
@@ -149,8 +184,10 @@ export function attachSockets(io: Server): SocketLayer {
         try {
           const room = data.room ? registry.get(data.room) ?? null : null;
           const extra = fn((payload ?? {}) as T, room) ?? {};
+          flushBroadcasts();
           reply({ ok: true, ...extra });
         } catch (e) {
+          flushBroadcasts();
           if (e instanceof EngineError || e instanceof RoomError || e instanceof ChatError) reply({ ok: false, error: e.message });
           else {
             console.error(`[socket] ${event} failed`, e);
@@ -172,8 +209,10 @@ export function attachSockets(io: Server): SocketLayer {
         try {
           const room = data.room ? registry.get(data.room) ?? null : null;
           const extra = (await fn((payload ?? {}) as T, room)) ?? {};
+          flushBroadcasts();
           reply({ ok: true, ...extra });
         } catch (e) {
+          flushBroadcasts();
           if (e instanceof EngineError || e instanceof RoomError || e instanceof ChatError) reply({ ok: false, error: e.message });
           else {
             console.error(`[socket] ${event} failed`, e);
@@ -191,8 +230,14 @@ export function attachSockets(io: Server): SocketLayer {
       data.room = room.code;
       socket.join(`room:${room.code}`);
       if (seated) room.setConnected(me(), true);
-      broadcast(room);
-      lobbyChanged();
+      if (seated || pending.has(room)) broadcast(room);
+      else {
+        // Only the watcher count moved: this socket gets the state now, the rest shortly.
+        socket.emit('room:state', stateOf(room));
+        broadcastSoon(room);
+      }
+      // The lobby list counts players, not watchers.
+      if (seated) lobbyChanged();
     };
 
     const leaveCurrent = (forfeit: boolean) => {
@@ -204,8 +249,8 @@ export function attachSockets(io: Server): SocketLayer {
       if (!seated) room.spectators = Math.max(0, room.spectators - 1);
       else if (forfeit) room.leave(me());
       else if (!otherSocketInRoom(room.code, me(), socket.id)) room.setConnected(me(), false);
-      broadcast(room);
-      lobbyChanged();
+      if (seated) { broadcast(room); lobbyChanged(); }
+      else broadcastSoon(room);
     };
 
     const socketInRoom = (code: string, id: string) => otherSocketInRoom(code, id, '');
@@ -451,7 +496,8 @@ export function attachSockets(io: Server): SocketLayer {
 
   return {
     registry,
-    broadcast,
+    // Admin HTTP actions answer after this returns: send now, as before.
+    broadcast: room => { broadcast(room); flushBroadcasts(); },
     enforceBan(ban: Ban): number {
       let hit = 0;
       for (const s of io.sockets.sockets.values()) {
