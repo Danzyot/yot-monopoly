@@ -308,6 +308,17 @@ def sneakers(cid, m, out, shoe='main'):
                             r=(-0.45, 0, 0), bevel=0.0015, segs=1))
 
 
+def undershirt(cid, m, out, torso, hem, shoulder):
+    """The plain base layer under a character's own top: a grey sleeveless undershirt a
+    little inside the top's torso, and bare skin shoulders for the live arms to come out of."""
+    (cx, cy, cz), (rx, ry, rz) = torso
+    out.append(ell(f'{cid}_Under', (cx, cy - 0.002, cz), (rx - 0.0055, ry - 0.004, rz - 0.0055), m['cloth'], seg=(32, 20), fuse=True))
+    out.append(ell(f'{cid}_UnderHem', hem, (rx - 0.004, 0.019, rz - 0.004), m['cloth'], fuse=True))
+    for side in (-1, 1):
+        out.append(ell(f'{cid}_Shoulder{side}', (side * shoulder[0], shoulder[1], shoulder[2]), (0.025, 0.021, 0.024), m['skin'],
+                       r=(0, 0, -side * 0.55), fuse=True))
+
+
 def mitten(cid, part, m, mat, side):
     """A soft hand with a thumb, palm turned in."""
     out = [
@@ -498,27 +509,31 @@ def cuban_chain(name, path, mat, link=0.0042, wire=0.0015, normal=None, n=None):
 
 def snacky(m):
     cid = 'snacky'
-    body, head = [], []
-    # ---- body: a white crew-neck tee (fused cloth), jeans at the waist, sneakers
+    body, top, chain, head = [], [], [], []
+    # ---- body: a white crew-neck tee (fused cloth), jeans at the waist, sneakers.
+    # The tee (Top) and the chain (Chain) are their own nodes, so the game can take
+    # them off when another outfit item takes their slot; under them he wears a
+    # plain grey undershirt (Body), shoulders bare, so "nothing" still looks dressed.
     TORSO = ((0, 0.13, 0), (0.079, 0.074, 0.062))
-    body.append(ell(f'{cid}_Torso', TORSO[0], TORSO[1], m['white'], fuse=True))
-    body.append(ell(f'{cid}_Hem', (0, 0.092, 0), (0.082, 0.02, 0.064), m['white'], fuse=True))
+    undershirt(cid, m, body, TORSO, hem=(0, 0.092, 0), shoulder=(0.08, 0.163, 0))
+    top.append(ell(f'{cid}_Torso', TORSO[0], TORSO[1], m['white'], fuse=True))
+    top.append(ell(f'{cid}_Hem', (0, 0.092, 0), (0.082, 0.02, 0.064), m['white'], fuse=True))
     for side in (-1, 1):
-        body.append(ell(f'{cid}_Sleeve{side}', (side * 0.082, 0.163, 0), (0.033, 0.028, 0.031), m['white'], r=(0, 0, -side * 0.55), fuse=True))
+        top.append(ell(f'{cid}_Sleeve{side}', (side * 0.082, 0.163, 0), (0.033, 0.028, 0.031), m['white'], r=(0, 0, -side * 0.55), fuse=True))
         # Sleeve hem: a turned edge.
-        body.append(torus(f'{cid}_SleeveHem{side}', (side * 0.098, 0.149, 0), 0.0245, 0.0034, m['white'], r=(math.pi / 2, 0, -side * 0.55)))
+        top.append(torus(f'{cid}_SleeveHem{side}', (side * 0.098, 0.149, 0), 0.0245, 0.0034, m['white'], r=(math.pi / 2, 0, -side * 0.55)))
         # Fabric folds: a pull from the armpit round the side (clear of the print), a crease at the waist.
-        body.append(strand(f'{cid}_Fold{side}', [(side * 0.07, 0.145, 0.02), (side * 0.072, 0.12, 0.03), (side * 0.06, 0.1, 0.04)],
+        top.append(strand(f'{cid}_Fold{side}', [(side * 0.07, 0.145, 0.02), (side * 0.072, 0.12, 0.03), (side * 0.06, 0.1, 0.04)],
                            0.008, 0.005, m['white'], fuse=True, ring=8))
-    body.append(strand(f'{cid}_FoldHem', [(-0.05, 0.1, 0.045), (-0.015, 0.094, 0.061), (0.03, 0.098, 0.057)], 0.007, 0.005, m['white'], fuse=True, ring=8))
-    body.append(strand(f'{cid}_FoldBack', [(0.03, 0.17, -0.045), (-0.0, 0.14, -0.06), (-0.04, 0.11, -0.05)], 0.008, 0.005, m['white'], fuse=True, ring=8))
+    top.append(strand(f'{cid}_FoldHem', [(-0.05, 0.1, 0.045), (-0.015, 0.094, 0.061), (0.03, 0.098, 0.057)], 0.007, 0.005, m['white'], fuse=True, ring=8))
+    top.append(strand(f'{cid}_FoldBack', [(0.03, 0.17, -0.045), (-0.0, 0.14, -0.06), (-0.04, 0.11, -0.05)], 0.008, 0.005, m['white'], fuse=True, ring=8))
     # Ribbed crew neck: a rolled band, and the neck.
-    body.append(torus(f'{cid}_Collar', (0, 0.196, 0.004), 0.034, 0.0062, m['white'], r=(math.pi / 2 - 0.25, 0, 0), seg=32, mseg=8))
+    top.append(torus(f'{cid}_Collar', (0, 0.196, 0.004), 0.034, 0.0062, m['white'], r=(math.pi / 2 - 0.25, 0, 0), seg=32, mseg=8))
     body.append(cyl(f'{cid}_Neck', (0, 0.21, 0), 0.027, 0.05, m['skin']))
     # WAWA across the chest: red block letters over a dark outline, following the chest's curve.
     chest = lambda x, y: Vector((x, y, ell_z(TORSO, x, y)))
-    body.append(lettering(f'{cid}_PrintEdge', 'WAWA', chest, 0.0, 0.124, 0.025, 0.0012, 0.002, m['ink'], grow=0.0022, counters=False))
-    body.append(lettering(f'{cid}_Print', 'WAWA', chest, 0.0, 0.124, 0.025, 0.0024, 0.002, m['accent']))
+    top.append(lettering(f'{cid}_PrintEdge', 'WAWA', chest, 0.0, 0.124, 0.025, 0.0012, 0.002, m['ink'], grow=0.0022, counters=False))
+    top.append(lettering(f'{cid}_Print', 'WAWA', chest, 0.0, 0.124, 0.025, 0.0024, 0.002, m['accent']))
     # A silver Cuban link chain round the neck, resting on the collarbones and dipping onto the chest.
     TC = Vector(TORSO[0])
     TR = Vector(TORSO[1])
@@ -536,7 +551,7 @@ def snacky(m):
         ca = math.cos(a)
         p = Vector((0.049 * math.sin(a), 0.2 - 0.04 * max(0.0, ca) ** 2, 0.046 * ca))
         path.append(on_torso(p))
-    body.append(cuban_chain(f'{cid}_Chain', path, m['metal'], link=0.0058, wire=0.0021, normal=torso_n))
+    chain.append(cuban_chain(f'{cid}_Cuban', path, m['metal'], link=0.0058, wire=0.0021, normal=torso_n))
     # Jeans: hips with a waistband, belt loops, a fly and pocket stitching, and
     # back pockets. The legs themselves are drawn live by the game.
     HIPS = ((0, 0.066, 0), (0.07, 0.03, 0.057))
@@ -557,7 +572,7 @@ def snacky(m):
     for side in (-1, 1):
         body.append(strand(f'{cid}_Leg{side}', [(side * 0.033, 0.075, 0), (side * 0.038, 0.052, 0.002), (side * 0.041, 0.03, 0.006)], 0.027, 0.024, m['denim'], fuse=True))
         body.append(torus(f'{cid}_Cuff{side}', (side * 0.041, 0.036, 0.006), 0.0245, 0.005, m['denim'], r=(math.pi / 2, 0, 0)))
-    hi_sneakers(cid, m, body)
+    hi_sneakers(cid, m, body, tongue='white')
 
     # ---- head: a longer face with a defined jaw and chin
     SK = (0.114, 0.118, 0.106)
@@ -723,132 +738,132 @@ def snacky(m):
     hand_l = mitten(cid, 'HandL', m, 'skin', 1)
     hand_l.append(torus(f'{cid}_Band', (-0.008, 0.021, 0), 0.0175, 0.0045, m['ink'], r=(math.pi / 2, 0.45, 0)))
     hand_r = mitten(cid, 'HandR', m, 'skin', -1)
-    return {'Body': body, 'Head': head, 'HandL': hand_l, 'HandR': hand_r}
+    return {'Body': body, 'Top': top, 'Chain': chain, 'Head': head, 'HandL': hand_l, 'HandR': hand_r}
 
 
 # --------------------------------------------------------------------------
-# Yot (id `starer`): a smooth, bald brown dome, enormous round staring eyes
-# in dark rims, a long flat nose bridge ending in a round bulb, drooping
-# moustache-like folds under it and a deadpan mouth; a polo shirt in the
-# player's colour, denim shorts and sneakers
+# Yot (id `starer`): a broad, round, smooth brown head, two big wide-open
+# round eyes set far apart, a long straight nose ending in a big pale bulb,
+# and a wide flat mouth that bows down at the ends: a deadpan stare. A plain
+# crew-neck tee in the player's colour, dark jeans and sneakers.
 # --------------------------------------------------------------------------
 
 def starer(m):
     cid = 'starer'
-    body, head = [], []
-    # ---- body: a polo shirt (fused cloth) over a short, solid trunk
+    body, top, head = [], [], []
+    # ---- body: a short, solid trunk. The tee is its own node (Top) over a grey
+    # undershirt, so the game can swap it for another outfit item.
     TRUNK = ((0, 0.122, 0), (0.078, 0.082, 0.064))
-    body.append(ell(f'{cid}_Trunk', TRUNK[0], TRUNK[1], m['main'], seg=(32, 20), fuse=True))
-    body.append(ell(f'{cid}_Hem', (0, 0.09, 0), (0.08, 0.02, 0.066), m['main'], fuse=True))
+    undershirt(cid, m, body, TRUNK, hem=(0, 0.09, 0), shoulder=(0.068, 0.158, 0))
+    top.append(ell(f'{cid}_Trunk', TRUNK[0], TRUNK[1], m['main'], seg=(32, 20), fuse=True))
+    top.append(ell(f'{cid}_Hem', (0, 0.09, 0), (0.08, 0.02, 0.066), m['main'], fuse=True))
     for side in (-1, 1):
-        # Short sleeves round the shoulders (the arms come out of them, live), with a ribbed band.
-        body.append(ell(f'{cid}_Sleeve{side}', (side * 0.07, 0.158, 0), (0.032, 0.028, 0.031), m['main'], r=(0, 0, -side * 0.55), fuse=True))
-        body.append(torus(f'{cid}_SleeveBand{side}', (side * 0.085, 0.144, 0), 0.0235, 0.0042, m['main'], r=(math.pi / 2, 0, -side * 0.55)))
-        body.append(torus(f'{cid}_SleeveStripe{side}', (side * 0.0875, 0.1425, 0), 0.0248, 0.0011, m['white'], r=(math.pi / 2, 0, -side * 0.55), seg=24, mseg=5))
-        body.append(strand(f'{cid}_Fold{side}', [(side * 0.066, 0.142, 0.022), (side * 0.068, 0.118, 0.032), (side * 0.056, 0.098, 0.042)],
-                           0.0075, 0.0045, m['main'], fuse=True, ring=8))
-    body.append(strand(f'{cid}_FoldBack', [(0.03, 0.165, -0.045), (0.0, 0.135, -0.06), (-0.04, 0.105, -0.05)], 0.0075, 0.0045, m['main'], fuse=True, ring=8))
-    # A thick neck rising out of a white polo collar, its points lying on the chest.
-    body.append(cyl(f'{cid}_Neck', (0, 0.205, 0.004), 0.045, 0.07, m['skin'], fuse=True, r_top=0.043))
-    body.append(torus(f'{cid}_CollarBand', (0, 0.193, 0.004), 0.047, 0.0058, m['white'], r=(math.pi / 2 - 0.12, 0, 0), seg=36, mseg=8))
-    for side in (-1, 1):
-        CG = on_ell(TRUNK, side * 0.026, 0.176, 0.0016) @ M(r=(0, 0, -side * 0.62))
-        body.append(rbox(f'{cid}_Collar{side}', (0, 0, 0), (0.028, 0.026, 0.003), m['white'], parent=CG, bevel=0.0014, segs=1))
-    # Placket: a short strip down from the collar with two buttons.
-    pl = lambda y: Vector((0, y, ell_z(TRUNK, 0, y)))
-    PG = on_ell(TRUNK, 0, 0.152, 0.0008)
-    body.append(rbox(f'{cid}_Placket', (0, 0, 0), (0.016, 0.042, 0.0024), m['main'], parent=PG, bevel=0.001, segs=1))
-    for side in (-1, 1):
-        body.append(strand(f'{cid}_PlacketSeam{side}', [pl(0.172) + Vector((side * 0.0082, 0, 0.0018)), pl(0.152) + Vector((side * 0.0082, 0, 0.0018)),
-                                                          pl(0.131) + Vector((side * 0.0082, 0, 0.0018))], 0.0008, 0.0008, m['ink'], ring=4, n=3, round_tip=False))
-    for k, y in enumerate((0.162, 0.142)):
-        body.append(spot(f'{cid}_Button{k}', TRUNK, 0, y, 0.0042, m['white'], lift=0.0022, seg=(10, 6)))
-    # Denim shorts: hips with a waistband and belt, wide short legs with a hem.
+        # Short sleeves round the shoulders (the arms come out of them, live), with a turned hem.
+        top.append(ell(f'{cid}_Sleeve{side}', (side * 0.07, 0.158, 0), (0.032, 0.028, 0.031), m['main'], r=(0, 0, -side * 0.55), fuse=True))
+        top.append(torus(f'{cid}_SleeveHem{side}', (side * 0.085, 0.144, 0), 0.0235, 0.0036, m['main'], r=(math.pi / 2, 0, -side * 0.55)))
+        top.append(strand(f'{cid}_Fold{side}', [(side * 0.066, 0.142, 0.022), (side * 0.068, 0.118, 0.032), (side * 0.056, 0.098, 0.042)],
+                          0.0075, 0.0045, m['main'], fuse=True, ring=8))
+    top.append(strand(f'{cid}_FoldHem', [(-0.048, 0.098, 0.05), (-0.012, 0.092, 0.064), (0.03, 0.096, 0.06)], 0.0065, 0.0045, m['main'], fuse=True, ring=8))
+    top.append(strand(f'{cid}_FoldBack', [(0.03, 0.165, -0.045), (0.0, 0.135, -0.06), (-0.04, 0.105, -0.05)], 0.0075, 0.0045, m['main'], fuse=True, ring=8))
+    # Ribbed crew neck: a rolled band round a thick neck.
+    top.append(torus(f'{cid}_Collar', (0, 0.193, 0.004), 0.046, 0.0062, m['main'], r=(math.pi / 2 - 0.14, 0, 0), seg=36, mseg=8))
+    body.append(cyl(f'{cid}_Neck', (0, 0.212, 0.004), 0.043, 0.06, m['skin'], r_top=0.041))
+    # Dark jeans: hips with a waistband, belt loops, a fly and pocket stitching,
+    # back pockets, cuffs over the shoes. The legs themselves are drawn live by the game.
     HIPS = ((0, 0.066, 0), (0.072, 0.03, 0.058))
     body.append(ell(f'{cid}_Hips', HIPS[0], HIPS[1], m['denim'], fuse=True))
+    body.append(torus(f'{cid}_Waistband', (0, 0.078, 0), 0.066, 0.006, m['denim'], r=(math.pi / 2, 0, 0), parent=M(s=(1, 1, 0.84)), seg=32, mseg=8))
+    body.append(torus(f'{cid}_WaistStitch', (0, 0.075, 0), 0.0705, 0.0011, m['gold'], r=(math.pi / 2, 0, 0), parent=M(s=(1, 1, 0.84)), seg=32, mseg=5))
+    for k, a in enumerate((0.55, math.pi - 0.55, math.pi + 0.55, -0.55)):
+        px, pz = 0.068 * math.sin(a), 0.057 * math.cos(a)
+        body.append(rbox(f'{cid}_BeltLoop{k}', (px, 0.078, pz), (0.007, 0.016, 0.004), m['denim'], r=(0, a, 0), bevel=0.0012, segs=1))
+    fly = lambda y: Vector((0, y, ell_z(HIPS, 0, y)))
+    body.append(strand(f'{cid}_Fly', [fly(0.07) + Vector((0.004, 0, 0.001)), fly(0.055) + Vector((0.004, 0, 0.001)), fly(0.042) + Vector((0.002, 0, 0.001))],
+                       0.0011, 0.0011, m['gold'], ring=5, n=4, round_tip=False))
     for side in (-1, 1):
-        body.append(strand(f'{cid}_Shorts{side}', [(side * 0.034, 0.072, 0.001), (side * 0.039, 0.06, 0.003), (side * 0.041, 0.05, 0.004)],
-                           0.031, 0.03, m['denim'], fuse=True, ring=14, round_tip=False))
-        body.append(torus(f'{cid}_ShortsHem{side}', (side * 0.041, 0.05, 0.004), 0.0285, 0.0042, m['denim'], r=(math.pi / 2, 0, 0)))
-        sh = lambda x, y: Vector((x, y, ell_z(HIPS, x, y) + 0.001))
-        body.append(strand(f'{cid}_Pocket{side}', [sh(side * 0.028, 0.072), sh(side * 0.046, 0.058), sh(side * 0.056, 0.046)],
-                           0.001, 0.001, m['gold'], ring=4, n=4, round_tip=False))
-    body.append(torus(f'{cid}_Belt', (0, 0.079, 0), 0.0655, 0.0058, m['ink'], r=(math.pi / 2, 0, 0), parent=M(s=(1, 1, 0.86)), seg=32, mseg=8))
-    body.append(rbox(f'{cid}_Buckle', (0, 0.079, 0.0605), (0.016, 0.013, 0.004), m['metal'], bevel=0.0014, segs=1))
-    body.append(rbox(f'{cid}_BuckleHole', (0, 0.079, 0.0628), (0.009, 0.006, 0.002), m['ink'], bevel=0.0006, segs=1))
+        pk = lambda x, y: Vector((x, y, ell_z(HIPS, x, y) + 0.001))
+        body.append(strand(f'{cid}_Pocket{side}', [pk(side * 0.026, 0.07), pk(side * 0.043, 0.06), pk(side * 0.053, 0.048)],
+                           0.0011, 0.0011, m['gold'], ring=5, n=4, round_tip=False))
+        body.append(rbox(f'{cid}_BackPocket{side}', (side * 0.031, 0.06, -0.05), (0.024, 0.02, 0.003), m['denim'], r=(0.25, 0, 0), bevel=0.0015, segs=1))
+        body.append(torus(f'{cid}_Cuff{side}', (side * 0.041, 0.036, 0.006), 0.0245, 0.005, m['denim'], r=(math.pi / 2, 0, 0)))
     hi_sneakers(cid, m, body, shoe='ink', tongue='white')
 
-    # ---- head: a tall smooth dome, broad and full in the cheeks
-    def dome(v):
+    # ---- head: broad and round, about as wide as tall, fullest at the cheeks,
+    # the face a little flatter than the back of the skull.
+    SC, SR, FLAT, CROWN = (0, 0.002, 0), (0.106, 0.114, 0.098), 0.9, 0.9
+
+    def widen(y):
+        t = (y - SC[1]) / SR[1]
+        return 1 + 0.09 * math.exp(-((t + 0.32) / 0.42) ** 2) - 0.035 * max(0.0, t)
+
+    def shape(v):
+        if v.y > SC[1]:
+            v.y = SC[1] + (v.y - SC[1]) * CROWN
+        v.x *= widen(v.y)
         if v.z > 0:
-            v.z *= 0.93
-        if v.y < -0.04:
-            t = min(1.0, (-v.y - 0.04) / 0.1)
-            v.x *= 1 + 0.07 * t
+            v.z *= FLAT
         return v
-    SKULL = ((0, 0.012, 0), (0.108, 0.138, 0.1))
 
     def face_z(x, y):
-        t = min(1.0, (-y - 0.04) / 0.1) if y < -0.04 else 0.0
-        xo = x / (1 + 0.07 * t)
-        return 0.93 * SKULL[1][2] * math.sqrt(max(0.0, 1 - (xo / SKULL[1][0]) ** 2 - ((y - SKULL[0][1]) / SKULL[1][1]) ** 2))
-    head.append(ell(f'{cid}_Skull', SKULL[0], SKULL[1], m['skin'], seg=(36, 26), deform=dome, fuse=True))
-    # Full, rounded lower face: cheeks and a wide muzzle the folds hang over.
-    LOWER = [((0, -0.072, 0.05), (0.078, 0.052, 0.05))] + [((side * 0.058, -0.03, 0.06), (0.036, 0.034, 0.032)) for side in (-1, 1)]
-    for k, (c, r) in enumerate(LOWER):
-        head.append(ell(f'{cid}_Cheek{k}', c, r, m['skin'], fuse=True))
-
-    def surf_z(x, y):
-        """The front of the face at (x, y): the dome, the cheeks or the muzzle, whichever stands out."""
-        zs = [face_z(x, y)]
-        for (cx, cy, cz), (a, b, c) in LOWER:
-            u = ((x - cx) / a) ** 2 + ((y - cy) / b) ** 2
-            if u < 1:
-                zs.append(cz + c * math.sqrt(1 - u))
-        return max(zs)
+        """The front of the head at (x, y)."""
+        xo = x / widen(y)
+        yo = (y - SC[1]) / (CROWN if y > SC[1] else 1.0)
+        return FLAT * SR[2] * math.sqrt(max(0.0, 1 - (xo / SR[0]) ** 2 - (yo / SR[1]) ** 2))
+    head.append(ell(f'{cid}_Skull', SC, SR, m['skin'], seg=(36, 26), deform=shape, fuse=True))
     for side in (-1, 1):
         # Small flat ears.
-        EG = M((side * 0.105, -0.01, -0.008), (0, side * 0.3, 0))
-        head.append(ell(f'{cid}_Ear{side}', (0, 0, 0), (0.011, 0.024, 0.017), m['skin'], parent=EG, fuse=True))
+        EG = M((side * 0.111, -0.008, -0.008), (0, side * 0.3, 0))
+        head.append(ell(f'{cid}_Ear{side}', (0, 0, 0), (0.011, 0.023, 0.016), m['skin'], parent=EG, fuse=True))
         head.append(ell(f'{cid}_EarHole{side}', (side * 0.006, -0.002, 0.0), (0.003, 0.009, 0.007), m['c2'], parent=EG, seg=(8, 6)))
-    # The nose: a long, broad, flat bridge from between the eyes down to a big round bulb.
-    for k in range(9):
-        t = k / 8
-        y, rx, rz = 0.044 - 0.064 * t, 0.0125 + 0.005 * t, 0.0078 + 0.0034 * t
-        head.append(ell(f'{cid}_Bridge{k}', (0, y, surf_z(0, y) + rz * 0.35), (rx, 0.014, rz), m['skin'], fuse=True))
-    head.append(ell(f'{cid}_NoseTip', (0, -0.04, surf_z(0, -0.04) + 0.017), (0.025, 0.02, 0.019), m['c1'], seg=(24, 16)))
+    # Eyes: big, round and wide open, set far apart: white balls bulging out of
+    # the face, each with a small dark pupil looking straight ahead and a
+    # catchlight, and a soft lid of skin where it meets the face (no outline).
+    ER, DEPTH = 0.031, 0.017
     for side in (-1, 1):
-        head.append(ell(f'{cid}_NoseWing{side}', (side * 0.019, -0.044, surf_z(0.019, -0.044) + 0.008), (0.011, 0.011, 0.01), m['c1'], seg=(14, 10)))
-        head.append(ell(f'{cid}_Nostril{side}', (side * 0.01, -0.0575, surf_z(0.01, -0.0575) + 0.019), (0.005, 0.0028, 0.004), m['c2'], seg=(10, 6)))
-    # Eyes: huge, round and wide open, set high and wide, each in a thick dark
-    # rim: a white ball, a dark iris round a big pupil, and bright catchlights.
+        ex, ey = side * 0.052, 0.034
+        fz = face_z(ex, ey)
+        c = Vector((ex, ey, fz - DEPTH))
+        nrm = Vector(((face_z(ex - 0.001, ey) - face_z(ex + 0.001, ey)) / 0.002,
+                      (face_z(ex, ey - 0.001) - face_z(ex, ey + 0.001)) / 0.002, 1)).normalized()
+        yaw = math.atan2(nrm.x, nrm.z)
+        pitch = -math.asin(max(-1.0, min(1.0, nrm.y / math.cos(yaw))))
+        head.append(ell(f'{cid}_Sclera{side}', tuple(c), (ER, ER, ER), m['white'], seg=(30, 20)))
+        # The lid: a thin ring round the opening, lying in the face, melted into the skull.
+        open_r = math.sqrt(ER ** 2 - DEPTH ** 2)
+        LG = M(tuple(c + nrm * DEPTH), (pitch, yaw, 0))
+        head.append(torus(f'{cid}_Lid{side}', (0, 0, 0), open_r + 0.0006, 0.0026, m['skin'], parent=LG,
+                          seg=32, mseg=8))
+        head[-1]['fuse'] = 1
+        # Iris, pupil and catchlight look ahead, between the face's slant and straight
+        # out (+z), so they sit near the middle of the opening: a fixed stare.
+        F = M(tuple(c), (pitch * 0.3, yaw * 0.55, 0))
+        head.append(ell(f'{cid}_Iris{side}', (0, 0, ER - 0.0012), (0.0124, 0.0124, 0.0028), m['c3'], parent=F, seg=(22, 12)))
+        head.append(ell(f'{cid}_Pupil{side}', (0, 0, ER - 0.0002), (0.0088, 0.0088, 0.0024), m['ink'], parent=F, seg=(20, 12)))
+        head.append(ell(f'{cid}_Glint{side}', (-0.004, 0.0045, ER + 0.0012), (0.003, 0.003, 0.0012), m['white'], parent=F, seg=(10, 6)))
+    # The nose: a long straight ridge from between the brows down the middle of
+    # the face to a big round bulb, paler than the skin.
+    for k in range(10):
+        t = k / 9
+        y, rx, rz = 0.06 - 0.078 * t, 0.0065 + 0.0055 * t, 0.0016 + 0.008 * t ** 0.8
+        head.append(ell(f'{cid}_Bridge{k}', (0, y, face_z(0, y) + rz * 0.3), (rx, 0.013, rz), m['skin'], fuse=True))
+    NY = -0.024
+    head.append(ell(f'{cid}_NoseTip', (0, NY, face_z(0, NY) + 0.016), (0.0215, 0.0185, 0.0175), m['c1'], seg=(24, 16)))
     for side in (-1, 1):
-        ex, ey = side * 0.05, 0.04
-        G = M((ex, ey, surf_z(ex, ey) - 0.006), (0, side * 0.3, 0))
-        head.append(torus(f'{cid}_Rim{side}', (0, 0, 0.0115), 0.0362, 0.0052, m['hair'], parent=G, seg=36, mseg=8))
-        head.append(ell(f'{cid}_Sclera{side}', (0, 0, 0), (0.036, 0.036, 0.026), m['white'], parent=G, seg=(28, 18)))
-        head.append(ell(f'{cid}_IrisRing{side}', (0, 0, 0.0212), (0.0205, 0.0205, 0.0062), m['hair'], parent=G, seg=(24, 14)))
-        head.append(ell(f'{cid}_Iris{side}', (0, 0, 0.0232), (0.017, 0.017, 0.005), m['c2'], parent=G, seg=(22, 12)))
-        head.append(ell(f'{cid}_Pupil{side}', (0, 0, 0.0252), (0.0135, 0.0135, 0.0045), m['ink'], parent=G, seg=(22, 12)))
-        head.append(ell(f'{cid}_Glint{side}', (-0.0075, 0.0085, 0.0292), (0.0058, 0.0058, 0.0018), m['white'], parent=G, seg=(12, 7)))
-        head.append(ell(f'{cid}_Glint2{side}', (0.0068, -0.0068, 0.0292), (0.0026, 0.0026, 0.0014), m['white'], parent=G, seg=(8, 5)))
-    # The folds: two fat rolls of cheek drooping out and down from the bulb like a
-    # moustache, each with a dark crease under it and a light catch on top.
-    for side in (-1, 1):
-        fold = [(side * 0.014, -0.05), (side * 0.036, -0.053), (side * 0.058, -0.066), (side * 0.072, -0.084)]
-        head.append(strand(f'{cid}_Fold{side}', [(x, y, surf_z(x, y) + 0.008) for x, y in fold], 0.0115, 0.006, m['skin'], fuse=True, ring=12))
-        head.append(strand(f'{cid}_FoldShade{side}', [(x * 1.02, y - 0.0115, surf_z(x, y - 0.0115) + 0.0035) for x, y in fold[:-1]] +
-                           [(fold[-1][0] * 1.0, fold[-1][1] - 0.008, surf_z(fold[-1][0], fold[-1][1] - 0.008) + 0.002)],
-                           0.0026, 0.0012, m['c2'], ring=6, n=6))
-        head.append(strand(f'{cid}_FoldLight{side}', [(x, y + 0.0062, surf_z(x, y) + 0.0175) for x, y in fold[:3]],
-                           0.0026, 0.0012, m['c1'], ring=6, n=6))
-    # A deadpan mouth: a short flat line low on the face.
-    MY = -0.105
-    head.append(strand(f'{cid}_Mouth', [(-0.022, MY + 0.001, surf_z(0.022, MY) + 0.0015), (0, MY, surf_z(0, MY) + 0.002),
-                                         (0.022, MY + 0.001, surf_z(0.022, MY) + 0.0015)], 0.0018, 0.0016, m['c2'], ring=6, n=6))
+        head.append(ell(f'{cid}_NoseWing{side}', (side * 0.017, NY - 0.006, face_z(0.017, NY - 0.006) + 0.006), (0.0095, 0.009, 0.009), m['skin'], fuse=True))
+        head.append(ell(f'{cid}_Nostril{side}', (side * 0.0085, NY - 0.0165, face_z(0.0085, NY - 0.0165) + 0.0145), (0.0045, 0.0024, 0.0036), m['c2'], seg=(10, 6)))
+    # The mouth: wide, flat and closed, bowing down a little at the ends; a pale
+    # upper lip over a dark line.
+    MY, MW = -0.051, 0.06
+
+    def mouth(x, lift):
+        y = MY - 0.012 * (abs(x) / MW) ** 2.2
+        return (x, y + lift, face_z(x, y + lift) + 0.0012)
+    xs = [MW * (k / 6 - 1) for k in range(13)]
+    head.append(strand(f'{cid}_Lip', [mouth(x * 0.92, 0.0038) for x in xs], 0.003, 0.003, m['c1'], ring=8, n=4))
+    head.append(strand(f'{cid}_Mouth', [mouth(x, -0.0004) for x in xs], 0.0024, 0.0024, m['c2'], ring=6, n=4))
     hand_l = mitten(cid, 'HandL', m, 'skin', 1)
     hand_r = mitten(cid, 'HandR', m, 'skin', -1)
-    return {'Body': body, 'Head': head, 'HandL': hand_l, 'HandR': hand_r}
+    return {'Body': body, 'Top': top, 'Head': head, 'HandL': hand_l, 'HandR': hand_r}
 
 
 BUILDERS = {'snacky': snacky, 'starer': starer}

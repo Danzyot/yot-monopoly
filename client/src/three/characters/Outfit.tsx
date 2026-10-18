@@ -36,17 +36,20 @@ export function itemFits(character: CharacterId, item: string): boolean {
   return !FIT.hide[character]?.includes(item);
 }
 
-/** Where an item goes on a character, in its anchor's frame (rig.head or rig.pose); null when hidden. */
+/**
+ * Where an item goes on a character, in its anchor's frame (rig.head or rig.pose); null when hidden,
+ * and for signature items, which the character's own model draws (Figure.tsx).
+ */
 export function outfitPlacement(character: CharacterId, item: string, outfit: Outfit): Anchor | null {
   const def = getOutfitItem(item);
-  if (!def || !itemFits(character, item)) return null;
+  if (!def || def.node || !itemFits(character, item)) return null;
   const anchor = FIT.chars[character]?.[def.slot] ?? FIT.canonical[def.slot];
   const tweak = FIT.items[item]?.[character];
   const ts = tweak?.s ?? 1;
   const p = anchor.p.map((v, i) => v + (tweak?.p?.[i] ?? 0)) as V3;
   let s = anchor.s.map((v, i) => v * (typeof ts === 'number' ? ts : ts[i])) as V3;
-  // A neck item over a jacket widens to sit on its collar.
-  if (def.slot === 'neck' && outfit.body && itemFits(character, outfit.body)) {
+  // A neck item over a jacket widens to sit on its collar (not over a character's own tee).
+  if (def.slot === 'neck' && outfit.body && !getOutfitItem(outfit.body)?.node && itemFits(character, outfit.body)) {
     s = s.map((v, i) => v * FIT.neckOverBody[i]) as V3;
   }
   return { p, s };

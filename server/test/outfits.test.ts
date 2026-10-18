@@ -1,7 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Registry, Room, type RoomHooks } from '../src/rooms.ts';
-import { OUTFIT_ITEMS, OUTFIT_SLOTS, parseOutfit, sanitizeOutfit } from '../../shared/outfits.ts';
+import {
+  OUTFIT_ITEMS, OUTFIT_SLOTS, defaultOutfit, outfitForCharacter, parseOutfit, randomOutfit, sanitizeOutfit,
+} from '../../shared/outfits.ts';
+import { CHARACTERS } from '../../shared/characters.ts';
 
 const hooks = (): RoomHooks => ({ onChange() {}, onEvent(_r: Room, _t: string) {}, onFinished() {} });
 const m = (id: string) => ({ id, name: id, avatar: '🙂' });
@@ -15,7 +18,9 @@ test('outfits: picks are validated against the known items of each slot', () => 
   const reg = new Registry(hooks(), 1e9);
   const r = reg.create('a');
   r.join(m('a')); r.join(m('b'));
-  assert.deepEqual(r.seat('a')!.outfit, {}, 'a new seat wears nothing');
+  r.pickCharacter('a', 'spiky');
+  r.pickCharacter('b', 'robot');
+  assert.deepEqual(r.seat('a')!.outfit, {}, 'a plain character wears nothing of its own');
 
   r.pickOutfit('a', { head: 'cap', eyes: 'shades', neck: 'chain', body: 'hoodie' });
   assert.deepEqual(r.view().seats.find(s => s.id === 'a')!.outfit, { head: 'cap', eyes: 'shades', neck: 'chain', body: 'hoodie' });
@@ -69,4 +74,71 @@ test('outfits: bots dress themselves from the catalogue', () => {
   for (const s of r.view().seats) assert.deepEqual(sanitizeOutfit(s.outfit), s.outfit);
   assert.deepEqual(parseOutfit({ head: 'cap' }), { ok: true, outfit: { head: 'cap' } });
   r.dispose();
+});
+
+test('outfits: signature items belong to one character and are what it wears by default', () => {
+  const sig = OUTFIT_ITEMS.filter(i => i.only);
+  assert.deepEqual(sig.map(i => i.id).sort(), ['cuban_chain', 'wawa_tee', 'yot_tee']);
+  for (const i of sig) assert.ok(CHARACTERS.includes(i.only!) && i.node, `${i.id} names its character and garment`);
+  assert.deepEqual(defaultOutfit('snacky'), { neck: 'cuban_chain', body: 'wawa_tee' });
+  assert.deepEqual(defaultOutfit('starer'), { body: 'yot_tee' });
+  assert.deepEqual(defaultOutfit('robot'), {});
+
+  // Parsing with a character refuses another character's own clothes.
+  assert.deepEqual(parseOutfit({ body: 'wawa_tee' }, 'snacky'), { ok: true, outfit: { body: 'wawa_tee' } });
+  assert.deepEqual(parseOutfit({ body: 'wawa_tee' }, 'starer'), { ok: false, error: 'That item belongs to another character' });
+  assert.deepEqual(sanitizeOutfit({ body: 'yot_tee', head: 'cap' }, 'snacky'), { head: 'cap' });
+  // Carried over to another character: foreign signatures off, empty slots take the new one's.
+  assert.deepEqual(outfitForCharacter({ head: 'cap', neck: 'cuban_chain', body: 'wawa_tee' }, 'starer'), { head: 'cap', body: 'yot_tee' });
+  assert.deepEqual(outfitForCharacter({ body: 'hoodie' }, 'snacky'), { neck: 'cuban_chain', body: 'hoodie' });
+  // Bots keep their signature items on.
+  for (let k = 0; k < 20; k++) {
+    const o = randomOutfit(n => Math.floor(Math.random() * n), 'snacky');
+    assert.equal(o.body, 'wawa_tee');
+    assert.equal(o.neck, 'cuban_chain');
+    assert.ok(!Object.values(randomOutfit(n => Math.floor(Math.random() * n), 'robot')).some(id => id && OUTFIT_ITEMS.find(i => i.id === id)!.only));
+  }
+});
+
+test('outfits: seats wear their character\'s own clothes, and only that character can pick them', () => {
+  const reg = new Registry(hooks(), 1e9);
+  const r = reg.create('a');
+  r.join(m('a')); r.join(m('b'));
+  const a = r.seat('a')!, b = r.seat('b')!;
+  assert.equal(a.character, 'snacky');
+  assert.deepEqual(a.outfit, { neck: 'cuban_chain', body: 'wawa_tee' }, 'a new seat wears its character\'s own look');
+  assert.deepEqual(b.outfit, defaultOutfit(b.character));
+
+  r.pickOutfit('a', { body: 'hoodie' });
+  assert.deepEqual(a.outfit, { body: 'hoodie' }, 'another item (or none) replaces the signature one');
+  r.pickOutfit('a', { body: 'wawa_tee', neck: 'cuban_chain' });
+  assert.throws(() => r.pickOutfit('a', { body: 'yot_tee' }), /another character/);
+  assert.deepEqual(a.outfit, { body: 'wawa_tee', neck: 'cuban_chain' }, 'a refused pick changes nothing');
+
+  // Switching character swaps the signature clothes.
+  r.pickCharacter('a', 'robot');
+  assert.deepEqual(a.outfit, {});
+  r.pickOutfit('a', { head: 'cap' });
+  r.pickCharacter('a', 'snacky');
+  assert.deepEqual(a.outfit, { head: 'cap', neck: 'cuban_chain', body: 'wawa_tee' });
+  r.pickCharacter('b', 'robot');
+  r.pickCharacter('a', 'starer');
+  assert.deepEqual(a.outfit, { head: 'cap', body: 'yot_tee' });
+  assert.throws(() => r.pickOutfit('a', { neck: 'cuban_chain' }), /another character/);
+
+  // Bots wear theirs.
+  r.addBot('a', false);
+  const bot = r.seats.find(s => s.isBot)!;
+  for (const [slot, id] of Object.entries(defaultOutfit(bot.character))) assert.equal(bot.outfit![slot as 'body'], id);
+
+  // A restore drops signature items the seat's character can't wear.
+  r.start('a', false);
+  const snap = JSON.parse(JSON.stringify(reg.snapshot()));
+  r.dispose();
+  const seat = snap[0].seats.find((s: { id: string }) => s.id === 'a');
+  seat.outfit = { body: 'wawa_tee', head: 'cap' };
+  const reg2 = new Registry(hooks(), 1e9);
+  reg2.restore(snap);
+  assert.deepEqual(reg2.get(r.code)!.seat('a')!.outfit, { head: 'cap' });
+  reg2.get(r.code)!.dispose();
 });

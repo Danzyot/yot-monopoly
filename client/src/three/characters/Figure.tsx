@@ -15,7 +15,7 @@ import type { CharacterId } from '../../../../shared/characters.ts';
 import { GEO, Part, disposeMaterials, makeMaterials, type Mats } from './parts.tsx';
 import { HEAD_Y, LOOKS, DefaultBody, type Look } from './looks.tsx';
 import { OutfitLayer } from './Outfit.tsx';
-import type { Outfit } from '../../../../shared/outfits.ts';
+import { OUTFIT_ITEMS, defaultOutfit, type Outfit } from '../../../../shared/outfits.ts';
 
 export interface Rig {
   pose: Group | null;
@@ -54,13 +54,15 @@ const ANKLE = 0.03;
  * A character on the rig. The modelled version (tools/blender/characters.py)
  * shows once characters.glb is in; until then, or if it fails, the same design
  * drawn from primitives. Both hang their parts on the same rig groups, and so
- * does the outfit (Outfit.tsx) when one is given.
+ * does the outfit (Outfit.tsx) when one is given. The character's own clothes
+ * (signature items) are part of its model and show while worn; with no outfit
+ * given, it wears them.
  */
 export function CharacterFigure({ outfit, ...props }: { id: CharacterId; mats: Mats; rig: Rig; outfit?: Outfit }) {
   return (
     <>
       <WithModel fallback={<DrawnFigure {...props} />}>
-        <ModelFigure {...props} />
+        <ModelFigure {...props} outfit={outfit ?? defaultOutfit(props.id)} />
       </WithModel>
       <OutfitLayer {...props} outfit={outfit} />
     </>
@@ -178,26 +180,36 @@ function LimbDriver({ look, geos, rig }: { look: Look; geos: BufferGeometry[]; r
   return null;
 }
 
-function ModelFigure({ id, mats, rig }: { id: CharacterId; mats: Mats; rig: Rig }) {
+/** A clone of a characters.glb node wearing this figure's own materials ("<id>:<key>" -> its material of that key). */
+function cloneNode(src: Object3D, mats: Mats, cast: boolean) {
+  const obj = src.clone(true);
+  obj.position.set(0, 0, 0);
+  obj.traverse((o: Object3D) => {
+    const m = o as Mesh;
+    if (!m.isMesh) return;
+    // Player colour, jail grey and fade all follow the figure's materials.
+    const swap = (mat: Material) => mats[(mat.name.split(':')[1] ?? 'main') as keyof Mats] ?? mats.main;
+    m.material = Array.isArray(m.material) ? m.material.map(swap) : swap(m.material);
+    m.castShadow = cast;
+  });
+  return obj;
+}
+
+function ModelFigure({ id, mats, rig, outfit }: { id: CharacterId; mats: Mats; rig: Rig; outfit: Outfit }) {
   const gltf = useGLTF(ASSETS.characters.url);
   const parts = useMemo(() => {
     const cid = LOOKS[id] ? id : 'spiky';
     return Object.fromEntries(PART_NAMES.map(name => {
       const src = gltf.scene.getObjectByName(`${cid}_${name}`);
       if (!src) throw new Error(`characters.glb has no ${cid}_${name}`);
-      const obj = src.clone(true);
-      obj.position.set(0, 0, 0);
-      obj.traverse((o: Object3D) => {
-        const m = o as Mesh;
-        if (!m.isMesh) return;
-        // "<id>:<key>" -> this figure's own material of that key (player colour, jail grey, fade).
-        const swap = (mat: Material) => mats[(mat.name.split(':')[1] ?? 'main') as keyof Mats] ?? mats.main;
-        m.material = Array.isArray(m.material) ? m.material.map(swap) : swap(m.material);
-        m.castShadow = name === 'Body' || name === 'Head';
-      });
-      return [name, obj];
+      return [name, cloneNode(src, mats, name === 'Body' || name === 'Head')];
     })) as Record<(typeof PART_NAMES)[number], Object3D>;
   }, [gltf.scene, id, mats]);
+  // The character's own garments (its signature outfit items), each shown while that item is worn.
+  const garments = useMemo(() => OUTFIT_ITEMS.flatMap(item => {
+    const src = item.only === id && item.node ? gltf.scene.getObjectByName(`${id}_${item.node}`) : undefined;
+    return src ? [{ item, obj: cloneNode(src, mats, item.slot === 'body') }] : [];
+  }), [gltf.scene, id, mats]);
   // Eyelids, for the characters that blink: each hangs from its hinge on the head.
   const lids = useMemo(() => {
     const cid = LOOKS[id] ? id : 'spiky';
@@ -218,6 +230,7 @@ function ModelFigure({ id, mats, rig }: { id: CharacterId; mats: Mats; rig: Rig 
   return (
     <group ref={g => { rig.pose = g; }}>
       <primitive object={parts.Body} />
+      {garments.map(({ item, obj }) => <primitive key={item.id} object={obj} visible={outfit[item.slot] === item.id} />)}
       <Limbs look={look} mats={mats} rig={rig} />
       <group ref={g => { rig.footL = g; }} position={[FOOT_REST[0], FOOT_REST[1], FOOT_REST[2]]}>
         <primitive object={parts.FootL} />

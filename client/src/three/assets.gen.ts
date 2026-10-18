@@ -6,7 +6,7 @@ export const ASSETS = {
     "url": "/models/buildings.glb?v=94108fccdf"
   },
   "characters": {
-    "url": "/models/characters.glb?v=f2f6bd0e95"
+    "url": "/models/characters.glb?v=951821c090"
   },
   "chogEnv": {
     "url": "/models/chog/room-env.webp?v=a984cb9f8d"
@@ -35,6 +35,7 @@ export const ASSETS = {
     "chain-tint": "/outfits/chain-tint.webp?v=0da78d17b3",
     "crown": "/outfits/crown.webp?v=18ded262ae",
     "crown-tint": "/outfits/crown-tint.webp?v=9628ef24e9",
+    "cuban_chain": "/outfits/cuban_chain.webp?v=22f1d5d2a3",
     "headphones": "/outfits/headphones.webp?v=f83e0a1694",
     "headphones-tint": "/outfits/headphones-tint.webp?v=1600d5df18",
     "hoodie": "/outfits/hoodie.webp?v=8f162953ec",
@@ -52,7 +53,10 @@ export const ASSETS = {
     "tophat-tint": "/outfits/tophat-tint.webp?v=e82ead8e0b",
     "url": "/models/outfits.glb?v=f4fdf32fc4",
     "varsity": "/outfits/varsity.webp?v=c3604716d4",
-    "varsity-tint": "/outfits/varsity-tint.webp?v=fbe77bd03a"
+    "varsity-tint": "/outfits/varsity-tint.webp?v=fbe77bd03a",
+    "wawa_tee": "/outfits/wawa_tee.webp?v=c6d65642f3",
+    "yot_tee": "/outfits/yot_tee.webp?v=9124d5a408",
+    "yot_tee-tint": "/outfits/yot_tee-tint.webp?v=0eefaa071b"
   },
   "skylineEnv": {
     "url": "/models/skyline/set-env.webp?v=5f53f04cb3"

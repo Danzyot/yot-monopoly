@@ -4,7 +4,7 @@ import { call, type ChatMsg } from '../net.ts';
 import { TIME_LIMIT_CHOICES, TURN_SECONDS_CHOICES, getTheme, type RuleConfig } from '../../../shared/themes.ts';
 import { getMap } from '../../../shared/maps.ts';
 import { PLAYER_COLORS, type RoomView } from '../../../shared/types.ts';
-import { CHARACTER_DEFS, getCharacter, isCharacterId } from '../../../shared/characters.ts';
+import { CHARACTER_DEFS, getCharacter, isCharacterId, type CharacterId } from '../../../shared/characters.ts';
 import { characterEmoji } from '../format.ts';
 import { toast, toastError } from '../toast.tsx';
 import { useAuth } from '../auth.tsx';
@@ -111,16 +111,20 @@ export default function Lobby({ room, me, spectating, chat }: {
     call('room:seat', { character: pref }).catch(() => {});
   }, [mySeat, room.code, room.seats, me]);
 
-  // The outfit last worn (or dressed up on /characters): put on once per room.
+  // The outfit last worn (or dressed up on /characters): put on once per room,
+  // as worn by the character we are about to play (the effect above may switch it first).
   const dressed = useRef<string | null>(null);
   useEffect(() => {
     if (!mySeat || dressed.current === room.code) return;
     dressed.current = room.code;
-    const pref = loadOutfitPref();
-    if (Object.keys(pref).length && !sameOutfit(pref, mySeat.outfit)) call('room:seat', { outfit: pref }).catch(() => {});
-  }, [mySeat, room.code]);
+    let prefChar: string | null = null;
+    try { prefChar = localStorage.getItem(CHARACTER_PREF_KEY); } catch { /* private mode */ }
+    const free = isCharacterId(prefChar) && !room.seats.some(s => s.character === prefChar && s.id !== me);
+    const pref = loadOutfitPref(free ? prefChar as CharacterId : mySeat.character);
+    if (!sameOutfit(pref, mySeat.outfit)) call('room:seat', { outfit: pref }).catch(() => {});
+  }, [mySeat, room.code, room.seats, me]);
   const wear = (o: Outfit) => {
-    saveOutfitPref(o);
+    if (mySeat) saveOutfitPref(o, mySeat.character);
     call('room:seat', { outfit: o }).catch(toastError);
   };
 
