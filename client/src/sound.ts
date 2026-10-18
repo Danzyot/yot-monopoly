@@ -305,3 +305,52 @@ export function playPoke(at = 0) {
 export function playReaction(at = 0) {
   tone(520, at, 0.09, 0.035, 'sine', 900);
 }
+
+// ---- arcade mini-games (MinigamePanel.tsx / useGameSounds.ts) ----
+
+/** The wheel's pointer clicking over a wedge: a tiny wooden tick. */
+export function playTick(at = 0) {
+  burst(at, 0.02, 0.12, 'bandpass', 2600, 6);
+  tone(1500, at, 0.025, 0.03, 'triangle', 900);
+}
+
+/** A mini-game opens: a short rising arcade sting. */
+export function playArcadeStart(at = 0) {
+  [523, 659, 784].forEach((f, i) => tone(f, at + i * 0.07, 0.14, 0.07, 'square'));
+  tone(1046, at + 0.21, 0.3, 0.08, 'triangle');
+}
+
+/** Won the round: a bright fanfare with a sparkle on top. */
+export function playArcadeWin(at = 0) {
+  [784, 988, 1175, 1568].forEach((f, i) => tone(f, at + i * 0.09, i === 3 ? 0.6 : 0.16, 0.09, 'triangle'));
+  [2093, 2637, 3136].forEach((f, i) => tone(f, at + 0.36 + i * 0.06, 0.25, 0.035, 'sine'));
+}
+
+/** Lost the round: a soft descending "wah". */
+export function playArcadeLose(at = 0) {
+  tone(392, at, 0.18, 0.07, 'triangle', 330);
+  tone(294, at + 0.17, 0.4, 0.07, 'triangle', 220);
+}
+
+/** Right answer / good guess: a quick two-note ding. */
+export function playRight(at = 0) {
+  tone(1046, at, 0.1, 0.08, 'sine');
+  tone(1568, at + 0.08, 0.25, 0.08, 'sine');
+}
+
+/** Wrong answer / false start: a flat buzzer. */
+export function playBuzz(at = 0) {
+  tone(130, at, 0.3, 0.12, 'square', 110);
+  tone(196, at, 0.3, 0.06, 'sawtooth', 160);
+}
+
+/** The light turns green: a sharp starter beep. */
+export function playGoLight(at = 0) {
+  tone(880, at, 0.08, 0.1, 'square');
+  tone(1760, at + 0.06, 0.28, 0.1, 'square');
+}
+
+/** A countdown second ticking by. */
+export function playCountdownBeep(at = 0, final = false) {
+  tone(final ? 1320 : 880, at, final ? 0.3 : 0.08, 0.07, 'sine');
+}

@@ -6,8 +6,8 @@ import { useEffect, useRef } from 'react';
 import { resolveTheme } from '../../shared/themes.ts';
 import type { GameView } from '../../shared/types.ts';
 import {
-  playBankrupt, playBid, playBuild, playBuy, playCardFlip, playDiceRoll, playDoubles, playHop, playJail,
-  playJailOpen, playPay, playReceive, playWin, playYourTurn,
+  playArcadeStart, playBankrupt, playBid, playBuild, playBuy, playBuzz, playCardFlip, playDiceRoll, playDoubles,
+  playGoLight, playHop, playJail, playJailOpen, playPay, playReceive, playWin, playYourTurn,
 } from './sound.ts';
 
 // Keep in step with the board animation (three/sequence.ts DICE_MS and
@@ -92,6 +92,27 @@ export function useGameSounds(game: GameView | null, me: string): void {
     if (game.winner && !before.winner) playWin(0.3);
     else if (game.current === me && before.current !== me && game.phase !== 'over') {
       playYourTurn(Math.max(0.2, landAt));
+    }
+
+    // Arcade mini-games: the moments the server decides (a new round, GO, a
+    // false start, a roll, a card). The wheel's ticks and every round's win /
+    // lose sting are timed by the panel itself, which knows when its
+    // animations finish.
+    const mg = game.minigame, was = before.minigame;
+    if (mg && mg.seq !== was?.seq) playArcadeStart(Math.max(0.1, landAt));
+    else if (mg && was && mg.stage === 'play') {
+      if (mg.kind === 'reaction' && was.kind === 'reaction') {
+        if (mg.go && !was.go) playGoLight();
+        if (mg.early.includes(me) && !was.early.includes(me)) playBuzz();
+      }
+      if (mg.kind === 'quickMath' && was.kind === 'quickMath' && mg.locked.includes(me) && !was.locked.includes(me)) playBuzz();
+      if (mg.kind === 'highLow' && was.kind === 'highLow' && mg.cards.length > was.cards.length) playCardFlip();
+      if (mg.kind === 'diceDuel' && was.kind === 'diceDuel'
+        && Object.keys(mg.rolls).length > Object.keys(was.rolls).length) playDiceRoll();
+    } else if (mg && was && mg.stage === 'result' && was.stage === 'play') {
+      if (mg.kind === 'highLow' && was.kind === 'highLow' && mg.cards.length > was.cards.length) playCardFlip();
+      if (mg.kind === 'diceDuel' && was.kind === 'diceDuel'
+        && Object.keys(mg.rolls).length > Object.keys(was.rolls).length) playDiceRoll();
     }
   }, [game, me]);
 }
