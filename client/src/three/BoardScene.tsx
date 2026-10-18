@@ -424,6 +424,8 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
           the quarter turn). */}
       {env === 'lounge' && theme.id === 'classic' && !backdrop
         ? <SceneEnv url={ASSETS.classicEnv.url} intensity={0.6} rotation={-Math.PI / 2} />
+        : env === 'lounge' && theme.id === 'tptv' && !backdrop
+          ? <SceneEnv url={ASSETS.tptvEnv.url} intensity={0.6} rotation={-Math.PI / 2} />
         : env === 'skyline' && !backdrop
           ? <SceneEnv url={ASSETS.skylineEnv.url} intensity={0.7} rotation={-Math.PI / 2} />
           : env === 'speedway' && !backdrop

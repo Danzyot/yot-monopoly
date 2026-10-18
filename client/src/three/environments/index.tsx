@@ -72,6 +72,15 @@ export function Environment({ kind, theme }: { kind: EnvironmentId; theme: Theme
           </WithModel>
         );
       }
+      // Takeprofit TV: its broadcast studio (tools/blender/tptv_room.py).
+      if (theme.id === 'tptv') {
+        return (
+          <WithModel fallback={<Lounge theme={theme} />}>
+            <BakedScene asset={ASSETS.tptvRoom} />
+            <TptvRoomLights />
+          </WithModel>
+        );
+      }
       return <Lounge theme={theme} />;
   }
 }
@@ -83,6 +92,22 @@ function RoomLights() {
       <hemisphereLight args={['#ffe2bd', '#2a1a10', 0.6]} />
       <pointLight position={[13.6, FLOOR + 9.4, -10.5]} color="#ffb46b" intensity={260} decay={2} />
       <pointLight position={[-18, FLOOR + 2, 0]} color="#ff7a2e" intensity={220} decay={2} />
+    </>
+  );
+}
+
+/**
+ * Live light matching the baked studio: a dim cool fill, the video wall
+ * behind the anchor desk, the amber LEDs and ON AIR sign, the softboxes.
+ */
+function TptvRoomLights() {
+  return (
+    <>
+      <hemisphereLight args={['#aab4e0', '#1a120a', 0.5]} />
+      <pointLight position={[0, FLOOR + 10, -15]} color="#c4d2ff" intensity={160} decay={2} />
+      <pointLight position={[0, FLOOR + 1.5, -12]} color="#ff9e2c" intensity={90} decay={2} />
+      <pointLight position={[-13, FLOOR + 8, -7]} color="#fff1dd" intensity={140} decay={2} />
+      <pointLight position={[13, FLOOR + 8, -7]} color="#fff1dd" intensity={140} decay={2} />
     </>
   );
 }

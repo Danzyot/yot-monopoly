@@ -18,6 +18,10 @@ tools/blender/run.sh speedway_set.py --draft  # Speedway track, quick bake (~4 m
 tools/blender/run.sh speedway_set.py --preview  # path-traced stills from the game cameras, no bake
 tools/blender/run.sh speedway_set.py          # Speedway track, final bake (~1 h on 4 cores)
 tools/blender/run.sh speedway_env.py          # its 360° panorama (reflections)
+tools/blender/run.sh tptv_room.py --draft     # Takeprofit TV studio, quick bake (~5 min)
+tools/blender/run.sh tptv_room.py --preview   # path-traced stills from the game cameras, no bake
+tools/blender/run.sh tptv_room.py             # Takeprofit TV studio, final bake
+tools/blender/run.sh tptv_env.py              # its 360° panorama (reflections)
 ```
 
 The first run creates `tools/blender/.venv` with `bpy` 5.0 and Pillow
@@ -45,6 +49,8 @@ hash, so browsers never keep a stale model after a rebuild.
 | `classic_env.py` | 360° panorama of the Classic room (the environment map for reflections) |
 | `speedway_set.py` | The Speedway map's race track at dusk (every edition), light-baked: track, kerbs, pits, grandstands with a crowd, floodlights, hills and sky |
 | `speedway_env.py` | 360° panorama of the Speedway set (the environment map for reflections on that map) |
+| `tptv_room.py` | The Takeprofit TV edition's room on the Classic map, light-baked: a broadcast studio and trading floor — video wall, anchor desk, ON AIR sign, trading desks with stacked monitors, studio cameras, softboxes, amber LEDs. Every screen is drawn into one atlas (PIL + numpy, the edition's fonts and logo) |
+| `tptv_env.py` | 360° panorama of the Takeprofit TV studio (its environment map) |
 
 ## How a baked room works
 

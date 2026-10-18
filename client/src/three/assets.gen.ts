@@ -34,5 +34,13 @@ export const ASSETS = {
   },
   "table": {
     "url": "/models/table.glb?v=948e42f7ea"
+  },
+  "tptvEnv": {
+    "url": "/models/tptv/room-env.webp?v=29df2c1033"
+  },
+  "tptvRoom": {
+    "lightmap": "/models/tptv/room-light.webp?v=cf38c8596c",
+    "lightmapIntensity": 12.3672,
+    "url": "/models/tptv/room.glb?v=91def4e109"
   }
 } as const;
