@@ -162,3 +162,97 @@ body.te-on .te-hover { outline: 2px dashed var(--hi, #ffd23f); outline-offset: 2
   .pdeed-strip { gap: 1px; margin-top: 2px; max-width: 130px; }
   .pdeed-strip i { width: 6px; height: 8px; }
 }
+
+/* ==========================================================================
+   HUD review pass: wider player cards, compact player chips on portrait
+   phones, labelled phone dock, and a landscape layout that leaves the board
+   in view (a one-row dock with a "⋯" sheet, the chat/log as a closed drawer,
+   no coach tips).
+   ========================================================================== */
+
+/* Desktop: room for a whole name ("Rich Uncle") next to its tags and buttons. */
+@media (min-width: 1101px) {
+  .players, .players:has(.pmenu-btn) { width: 300px; }
+}
+
+/* Only landscape phones use the "⋯" sheet and the one-button drawer; everywhere
+   else the extra dock buttons sit in line as before. */
+.dock-more, .panel-toggle, .tabs .tab-close { display: none; }
+.dock-extra { display: contents; }
+
+/* ---- portrait phones: tiny labels under the dock icons ---- */
+@media (max-width: 760px) and (orientation: portrait) {
+  .social-dock { gap: 4px; }
+  .social-dock .dock-btn {
+    flex-direction: column; gap: 2px; height: auto; min-height: 42px; width: 46px; min-width: 46px;
+    padding: 4px 2px 3px; border-radius: 14px;
+  }
+  .social-dock .dock-ico { font-size: 17px; line-height: 1; }
+  .social-dock .dock-text, .social-dock .poke-label {
+    display: block; max-width: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font: 800 8.5px/1 var(--font), sans-serif; letter-spacing: 0.01em;
+    color: color-mix(in srgb, var(--text) 85%, transparent); text-shadow: var(--outline, none);
+  }
+  .social-dock .poke-btn .poke-face { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 17px; line-height: 1; }
+
+  /* A full table (4+ players): each player is a chip of avatar, cash, turn
+     ring and deed strip, so the whole table fits across; a tap opens one
+     into its full card (and the card's body then opens the portfolio). */
+  .players.compact { gap: 4px; }
+  .player.mini, .player.mini:has(.pmenu-btn) { min-width: 0; padding: 3px 8px 3px 3px; gap: 5px; border-radius: 99px; align-items: center; }
+  .player.mini .pname, .player.mini .pdeeds, .player.mini .pchip, .player.mini .ptrade,
+  .player.mini .pmenu-btn, .player.mini .turn-ribbon { display: none; }
+  .player.mini .token-badge { width: 30px; height: 30px; font-size: 16px; cursor: pointer; }
+  .player.mini .pmoney { margin: 0; }
+  .player.mini .pmoney .cash { font-size: 14px; }
+  .player.mini .coin { display: none; }
+  .player.mini .pdeed-strip { max-width: 62px; margin-top: 2px; }
+  /* Whose turn it is: a gold ring round the avatar. */
+  .player.mini.turn .token-badge {
+    box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--hi, #ffd23f), 0 0 12px var(--hi, #ffd23f);
+    animation: miniTurn 1.6s ease-in-out infinite;
+  }
+  .player.expanded .token-badge { cursor: pointer; }
+}
+@keyframes miniTurn { 50% { box-shadow: 0 0 0 2px #fff, 0 0 0 5px var(--hi, #ffd23f), 0 0 18px var(--hi, #ffd23f); } }
+@media (prefers-reduced-motion: reduce) { .player.mini.turn .token-badge { animation: none; } }
+
+/* ---- landscape phones (667×375, 844×390): keep the board in view ---- */
+@media (max-height: 500px) and (orientation: landscape) {
+  /* The dock is one row of icons under the players; the rest folds into "⋯". */
+  .social-dock { width: auto; max-width: 184px; flex-wrap: nowrap; gap: 4px; align-items: center; }
+  .social-dock .dock-btn {
+    flex-direction: row; height: 38px; min-height: 0; min-width: 38px; padding: 0 8px; border-radius: 99px;
+  }
+  .social-dock .dock-text, .social-dock .poke-label { display: none; }
+  .social-dock .poke-btn .poke-face { flex-direction: row; }
+  .social-dock .dock-ico { font-size: 17px; }
+  .dock-more { display: inline-flex; }
+  .dock-more .dock-ico { font-size: 20px; font-weight: 900; }
+  .dock-extra { display: none; }
+  .social-dock.more-open .dock-extra {
+    display: grid; grid-template-columns: repeat(3, 66px); gap: 6px; position: absolute; left: 0; bottom: calc(100% + 8px);
+    padding: 8px; z-index: 9; background: var(--panel-solid); border: 2px solid var(--line); border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  }
+  .social-dock .dock-extra .dock-btn { flex-direction: column; gap: 3px; height: auto; min-height: 48px; padding: 5px 4px 4px; border-radius: 14px; box-shadow: none; }
+  .social-dock .dock-extra .dock-text { display: block; font: 700 10px/1 var(--font), sans-serif; white-space: nowrap; }
+  /* The player column runs down to the one-row dock. */
+  .players, .players:has(.pmenu-btn) { max-height: calc(100dvh - 46px - 56px - env(safe-area-inset-bottom, 0px)); }
+
+  /* Chat / log: a drawer, folded into one button (with the unread count)
+     until tapped; ✕ in its tab row folds it again. */
+  .sidepanel.closed:not(:has(.offer)), .hud-bottom .sidepanel.closed:not(:has(.offer)) { width: auto; }
+  .sidepanel.closed .tabs { display: none; }
+  .sidepanel.closed .panel-toggle {
+    display: inline-flex; align-self: flex-end; align-items: center; gap: 5px; min-height: 36px; padding: 4px 12px;
+    font: 400 14px/1 var(--display); color: var(--text); text-shadow: var(--outline, none); cursor: pointer;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--panel-solid) 80%, #fff 12%), var(--panel-solid));
+    border: 3px solid color-mix(in srgb, var(--line) 70%, transparent); border-radius: 14px; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.3);
+  }
+  .panel-toggle .tab-badge { margin-left: 2px; }
+  .tabs .tab-close { display: block; flex: 0 0 34px; padding: 4px 0; }
+
+  /* Tips would sit right over the board: none in landscape. */
+  .hud-bottom .coach { display: none; }
+}
