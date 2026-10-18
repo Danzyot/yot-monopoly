@@ -19,8 +19,8 @@ export interface CharacterDef {
 }
 
 export const CHARACTER_DEFS: CharacterDef[] = [
-  { id: 'snacky', name: 'Snacky', blurb: 'Never seen without a snack. Never seen without a grin.', emoji: '🍫' },
-  { id: 'starer', name: 'Mr. Stare', blurb: 'Has been looking at your hotels. For a while now.', emoji: '👀' },
+  { id: 'snacky', name: 'CJ WAWA', blurb: 'White tee, silver chain, half a smile. Buys the block and keeps it casual.', emoji: '😏' },
+  { id: 'starer', name: 'Yot', blurb: 'Has not blinked since the first roll. He is looking at your hotels.', emoji: '👀' },
   { id: 'spiky', name: 'Spiky', blurb: 'Purple, pointy and always in a hurry.', emoji: '🦔' },
   { id: 'robot', name: 'Robo', blurb: 'Counts rent to the last cent.', emoji: '🤖' },
   { id: 'cat', name: 'Whiskers', blurb: 'Lands on its feet. Usually on your hotel.', emoji: '🐱' },

@@ -23,7 +23,7 @@ mini-games, music, and a full operator dashboard.
   Poker design system: purple room, Chog pink, Outfit font, the Chog character on the
   board) and **Takeprofit TV** (from the takeprofit-tv site: ink black, amber, colour-bar sets, Big Shoulders + Space Mono, the TPTV logo on the board). Card text always names the board's own spaces.
 - **3D characters** instead of tokens — twelve detailed figures modelled in Blender
-  (Snacky, Mr. Stare, Spiky, Robo, Whiskers, Sir Deed, Merlot, Cosmo, Captain Cash,
+  (CJ WAWA, Yot, Spiky, Robo, Whiskers, Sir Deed, Merlot, Cosmo, Captain Cash,
   Shade, Chef Gusto, Zorp) in glossy vinyl, with arms and legs that follow every move,
   tinted in each player's colour. Their motion is hand-animated: a crouch before the first
   hop, arms swinging against the legs, a squash on landing and hands that trail and settle
