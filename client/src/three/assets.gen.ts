@@ -12,9 +12,9 @@ export const ASSETS = {
     "url": "/models/chog/room-env.webp?v=a984cb9f8d"
   },
   "chogRoom": {
-    "lightmap": "/models/chog/room-light.webp?v=dfaa3a6b22",
-    "lightmapIntensity": 5.7804,
-    "url": "/models/chog/room.glb?v=aae08b3b39"
+    "lightmap": "/models/chog/room-light.webp?v=4c60e87387",
+    "lightmapIntensity": 6.7589,
+    "url": "/models/chog/room.glb?v=45fd3de759"
   },
   "classicEnv": {
     "url": "/models/classic/room-env.webp?v=7283a87788"

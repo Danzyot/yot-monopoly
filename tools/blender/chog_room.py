@@ -466,7 +466,7 @@ def build_shell(objs):
 
 
 def build_rug(objs):
-    mat = textured('Rug', blib.image_from_array('rug', rug(1024 if DRAFT else 2048)), rough=1.0)
+    mat = textured('Rug', blib.image_from_array('rug', rug(1024)), rough=1.0)
     R = 12.8
     r = lathe('Rug', [(0, 0), (R, 0), (R + 0.03, 0.05), (R, 0.1), (0, 0.1)], 128, (0, F, 0), mat,
               cap_top=False, cap_bottom=False, hard_angle=60)
@@ -1020,6 +1020,25 @@ def setup_lighting(lights):
 
 # ---------------------------------------------------------------------------
 
+def smooth_island(path, uvs, quality=90):
+    """Blur the lightmap under one flat island (the portrait): its light is a smooth wash, so any grain is noise.
+
+    uvs: the island's lightmap UVs as glTF has them (v down), which index the image file directly.
+    """
+    from PIL import Image
+    im = np.asarray(Image.open(path).convert('RGB'), np.float32) / 255
+    h, w = im.shape[:2]
+    u, v = np.asarray(uvs, np.float32).T
+    x0, x1 = int(np.floor(u.min() * w)) - 2, int(np.ceil(u.max() * w)) + 2
+    y0, y1 = int(np.floor(v.min() * h)) - 2, int(np.ceil(v.max() * h)) + 2
+    x0, y0, x1, y1 = max(x0, 0), max(y0, 0), min(x1, w), min(y1, h)
+    crop = im[y0:y1, x0:x1]
+    rad = max(2, min(crop.shape[:2]) // 8)
+    im[y0:y1, x0:x1] = blur(crop, rad)
+    Image.fromarray((np.clip(im, 0, 1) * 255 + 0.5).astype(np.uint8), 'RGB').save(path, 'WEBP', quality=quality, method=6)
+    blib.log(f'smoothed the lightmap under the portrait ({x1 - x0}x{y1 - y0} px)')
+
+
 def build_all():
     objs: list = []
     lights: list = []
@@ -1147,15 +1166,17 @@ def main():
             return 0.7   # in front of the table: only the low views see them
         return 1.0
     blib.lightmap_unwrap(lit, margin=0.002 if not DRAFT else 0.004, weight=weight)
-    size, spp = (1024, 24) if DRAFT else (2048, 48)
+    size, spp = (1024, 24) if DRAFT else (2048, 32)
     # Three diffuse bounces fill a room this dark well enough and keep the final bake near an hour.
     sc = bpy.context.scene
     sc.cycles.max_bounces = 4
     sc.cycles.diffuse_bounces = 3
     sc.cycles.glossy_bounces = 0
     sc.cycles.transmission_bounces = 0
-    scale = blib.bake_lightmap(lit, size=size, samples=spp,
-                               out_file=os.path.join(blib.PUBLIC, 'models', 'chog', 'room-light.webp'))
+    light_file = os.path.join(blib.PUBLIC, 'models', 'chog', 'room-light.webp')
+    scale = blib.bake_lightmap(lit, size=size, samples=spp, out_file=light_file)
+    art = next(o for o in lit if o.name.startswith('ChogArt'))
+    smooth_island(light_file, [(d.uv[0], 1 - d.uv[1]) for d in art.data.uv_layers['Lightmap'].data])
 
     # One mesh for every plain-coloured thing, one per textured surface, one for the glowing bits.
     flat_objs = [o for o in lit if all(m.name == 'Flat' for m in o.data.materials)]

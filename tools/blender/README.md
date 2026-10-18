@@ -12,7 +12,7 @@ tools/blender/run.sh classic_room.py --draft  # Classic room, quick bake (~3 min
 tools/blender/run.sh classic_room.py          # Classic room, final bake (~40 min on 4 cores)
 tools/blender/run.sh chog_room.py --preview   # Chog Poker lounge: Cycles renders of the game views, no bake
 tools/blender/run.sh chog_room.py --draft     # Chog Poker lounge, quick bake
-tools/blender/run.sh chog_room.py             # Chog Poker lounge, final bake
+tools/blender/run.sh chog_room.py             # Chog Poker lounge, final bake (~30 min on 4 cores)
 tools/blender/run.sh chog_env.py              # its 360° panorama (reflections)
 tools/blender/run.sh skyline_set.py --preview # Metropolis roof: Cycles renders of the game views, no bake
 tools/blender/run.sh skyline_set.py --draft   # Metropolis roof, quick bake
