@@ -8,7 +8,7 @@
 
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { DoubleSide, type Group, type Mesh, type MeshBasicMaterial } from 'three';
+import { DoubleSide, Vector3, type Group, type Mesh, type MeshBasicMaterial } from 'three';
 import type { GameView, PlayerState } from '../../../../shared/types.ts';
 import { tileWidth, tokenSpot } from '../layout.ts';
 import { CharacterFigure, Tinter, newRig, poseRig, useCharacterMaterials } from './Figure.tsx';
@@ -20,6 +20,8 @@ import { pieceObjects } from '../camera.ts';
 /** An emoji reaction currently showing over a player's character. */
 export interface PieceReaction { emoji: string; seq: number }
 
+/** The middle of the board, where the dice land. */
+const CENTRE = new Vector3(0, 0, 0);
 const HOP_MS = 190;
 const LAND_MS = 150;
 const CHEER_MS = 1000;
@@ -70,6 +72,9 @@ interface Motion {
   scale: number;
   /** Head turn toward whoever is playing (radians, + to its left). */
   watch: number;
+  /** When this piece's player was first left waiting to roll (0: not waiting); foot-tap blend. */
+  waitSince: number;
+  tap: number;
 }
 
 /** Ease `v` toward `to` at `rate` per second, frame-rate independent. */
@@ -81,11 +86,13 @@ function turnToward(from: number, to: number, rate: number, dt: number): number 
   return from + d * (1 - Math.exp(-rate * dt));
 }
 
-function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId }: {
+function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, waitingToRoll }: {
   p: PlayerState; slot: number; count: number; turn: boolean; winner: boolean; emote?: Emote; n: number;
   reaction?: PieceReaction;
   /** Whose turn it is: everyone else's heads follow that piece round the board. */
   focusId?: string | null;
+  /** The game is waiting on the current player to roll (it taps its foot if that drags). */
+  waitingToRoll?: boolean;
 }) {
   const ref = useRef<Group>(null);
   const yawRef = useRef<Group>(null);
@@ -127,7 +134,7 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId }: {
       yaw: 0, phase: Math.random() * Math.PI * 2, landAt: 0, pending: null, emote: null, emoteAt: 0,
       lastEmote: emote?.seq ?? 0, nextIdle: performance.now() + 5000 + Math.random() * 8000, hops: 0,
       slump: p.inJail ? 1 : 0, lie: out, grey: 0, opacity: 1 - out, marker: 0,
-      scale: figureScale(n, count), watch: 0,
+      scale: figureScale(n, count), watch: 0, waitSince: 0, tap: 0,
     };
   } else if (emote && emote.seq !== motion.current.lastEmote) {
     motion.current.lastEmote = emote.seq;
@@ -257,21 +264,31 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId }: {
     m.scale = approach(m.scale, figureScale(n, count), 6, dt);
     scaleRef.current?.scale.setScalar(m.scale);
 
-    // At rest, keep an eye on whoever is playing (within what a neck can turn).
+    // At rest, keep an eye on whoever is playing (within what a neck can turn);
+    // the one playing eyes the dice in the middle while its player dithers.
     let watch = 0;
-    const focus = focusId && focusId !== p.id && !hopping && !winner && !p.bankrupt ? pieceObjects.get(focusId) : undefined;
-    if (focus) {
-      const dx = focus.position.x - g.position.x, dz = focus.position.z - g.position.z;
+    const mine = focusId === p.id;
+    const focus = focusId && !mine && !hopping && !winner && !p.bankrupt ? pieceObjects.get(focusId) : undefined;
+    const idle = mine && waitingToRoll && !hopping && !winner && !p.bankrupt && !p.inJail && !m.emote;
+    if (!idle) m.waitSince = 0;
+    else if (!m.waitSince) m.waitSince = now;
+    const waited = m.waitSince ? (now - m.waitSince) / 1000 : 0;
+    const tapping = waited > 6;
+    const aim = focus ? focus.position : tapping ? CENTRE : null;
+    if (aim) {
+      const dx = aim.x - g.position.x, dz = aim.z - g.position.z;
       if (dx * dx + dz * dz > 0.04) {
         const rel = Math.atan2(Math.sin(Math.atan2(dx, dz) - m.yaw), Math.cos(Math.atan2(dx, dz) - m.yaw));
         watch = Math.max(-1, Math.min(1, rel)) * (p.inJail ? 0.5 : 0.85);
       }
     }
     m.watch = approach(m.watch, watch, 3, dt);
+    m.tap = approach(m.tap, tapping ? 1 : 0, 4, dt);
 
     poseRig(rig, {
       time, phase: m.phase, slump: m.slump, lie: m.lie, handsUp, squash,
       walk, stride: m.hops % 2 ? 1 : -1, look: look + m.watch * (1 - Math.abs(look)), wave, pump, sad, stomp,
+      tap: m.tap > 0.02 ? m.tap : undefined,
     });
 
     // Whose turn: a bobbing, spinning arrow above the head and a ground ring.
@@ -344,7 +361,7 @@ export function Pieces({ game, n, reactions }: {
   /** Reactions to pop over characters, by player id. */
   reactions?: Record<string, PieceReaction>;
 }) {
-  const { players, owned, current, winner } = game;
+  const { players, owned, current, winner, phase } = game;
 
   // Slot assignment per tile so pieces sharing a space don't overlap.
   const slots = useMemo(() => {
@@ -396,7 +413,7 @@ export function Pieces({ game, n, reactions }: {
         return (
           <Piece key={p.id} p={p} slot={s.slot} count={s.count} n={n}
             turn={p.id === current && !winner} winner={p.id === winner} emote={emotes[p.id]}
-            reaction={reactions?.[p.id]} focusId={winner ?? current} />
+            reaction={reactions?.[p.id]} focusId={winner ?? current} waitingToRoll={phase === 'roll'} />
         );
       })}
     </>

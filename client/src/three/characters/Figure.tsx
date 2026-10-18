@@ -286,6 +286,8 @@ export interface PoseInput {
   sad?: number;
   /** 0–1 through a stomping tantrum (sent to jail). */
   stomp?: number;
+  /** Seconds spent waiting for its player to act: the right foot taps while it waits. */
+  tap?: number;
   /** 0–1: eyes closed (on top of blinking, sulking and dozing in jail). */
   lids?: number;
 }
@@ -383,6 +385,13 @@ export function poseRig(rig: Rig, o: PoseInput) {
     if (side === -1 && stomp > 0) {
       // Right foot stamps three times.
       y += Math.max(0, Math.sin(stomp * Math.PI * 6 + Math.PI)) * 0.045;
+    }
+    if (side === -1 && o.tap) {
+      // Impatient: a toe-tap every half second or so, heel down.
+      const tapIn = Math.min(1, o.tap);
+      const k = Math.max(0, Math.sin(o.time * 7.5));
+      y += k * 0.02 * tapIn;
+      foot.rotation.x = -k * 0.55 * tapIn;
     }
     foot.position.set(x, y, z);
   }
