@@ -43,6 +43,8 @@ mini-games, music, and a full operator dashboard.
 - **Camera views** (the camera button, or C): Auto (the default: trails whoever is moving,
   lingers on the landing, then pulls back to the table), Table, Follow (trails whoever is
   playing), Close-up (at board level just behind them), Overhead and Free (orbit, zoom, pan).
+- **Graphics setting** (the ⚙️ dock button): Auto backs off when the frame rate sags; Low
+  keeps a phone cool from the first frame (no live shadows, 1× pixels); High never backs off.
 - **Helping hands**: a seven-step How to play, one-time tips (you own a set → Build;
   one trade from a set → Trade; short of cash → Raise cash), a Build & manage panel with
   rent before/after and the even-building rules, a trade builder that says why an offer
