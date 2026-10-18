@@ -15,7 +15,7 @@ import MusicPlayer from './MusicPlayer.tsx';
 import { useGameSounds } from '../useGameSounds.ts';
 import { useAmbience } from '../ambience.ts';
 import { useMusicScene } from '../music.ts';
-import { CARD_FLIGHT_MS, useSceneBusy } from '../three/sequence.ts';
+import { CARD_FLIGHT_MS, useSceneBusy, useStagedLog } from '../three/sequence.ts';
 import { useCinematicPref } from '../three/cinematic.ts';
 import { CAMERA_MODES, useCameraMode } from '../three/camera.ts';
 import { QUALITY_LEVELS, useQuality } from '../three/quality.ts';
@@ -550,11 +550,12 @@ function CardPopup({ game }: { game: GameView }) {
 
 function Log({ game }: { game: GameView }) {
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => { end.current?.scrollIntoView({ block: 'end' }); }, [game.log.length, game.log.at(-1)?.t]);
+  const log = useStagedLog(game.log);
+  useEffect(() => { end.current?.scrollIntoView({ block: 'end' }); }, [log.length, log.at(-1)?.t]);
   const color = (id?: string) => game.players.find(p => p.id === id)?.color;
   return (
     <div className="log">
-      {game.log.map((l, i) => (
+      {log.map((l, i) => (
         <div key={i} className="log-line" style={{ borderLeftColor: color(l.who) ?? 'transparent' }}>{l.text}</div>
       ))}
       <div ref={end} />

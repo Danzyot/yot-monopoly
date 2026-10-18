@@ -19,7 +19,7 @@ import { Avatar } from './Avatar.tsx';
 import BoardScene from '../three/BoardScene.tsx';
 import { useGameSounds } from '../useGameSounds.ts';
 import { useAmbience } from '../ambience.ts';
-import { CARD_FLIGHT_MS, useSceneBusy } from '../three/sequence.ts';
+import { CARD_FLIGHT_MS, useSceneBusy, useStagedLog } from '../three/sequence.ts';
 import { RollResult, useDiceShown } from './RollResult.tsx';
 import { CAMERA_MODES, type CameraMode } from '../three/camera.ts';
 import { setSfxMuted, sfxState } from '../sound.ts';
@@ -262,7 +262,8 @@ function Standings({ game, theme }: { game: GameView; theme: Theme }) {
 
 /** The last few log lines, crawling along the bottom edge. */
 function Ticker({ game }: { game: GameView }) {
-  const entries = game.log.slice(-8);
+  const log = useStagedLog(game.log);
+  const entries = log.slice(-8);
   if (!entries.length) return null;
   const color = (id?: string) => game.players.find(p => p.id === id)?.color ?? 'var(--line)';
   const copy = (tag: string) => entries.map((l, i) => (
@@ -274,7 +275,7 @@ function Ticker({ game }: { game: GameView }) {
     <div className="bc-ticker" aria-live="off">
       <span className="bc-ticker-label">Latest</span>
       <div className="bc-ticker-clip">
-        <div className="bc-ticker-track" key={`${game.log.length}:${game.log.at(-1)?.t}`}>
+        <div className="bc-ticker-track" key={`${log.length}:${log.at(-1)?.t}`}>
           {copy('a')}{copy('b')}
         </div>
       </div>
@@ -357,7 +358,7 @@ function Stingers({ game }: { game: GameView }) {
     const add: Sting[] = [];
     const name = (id: string) => game.players.find(p => p.id === id)?.name ?? '';
     if (game.rollSeq > before.rollSeq && game.dice && game.dice[0] === game.dice[1]) {
-      add.push({ id: ++seq.current, text: 'DOUBLES!', sub: game.doublesCount >= 3 ? `${name(game.current)} — three in a row!` : name(game.current), tone: 'gold' });
+      add.push({ id: ++seq.current, text: 'DOUBLES!', sub: game.doublesCount >= 3 ? `${name(game.rollBy ?? game.current)} — three in a row!` : name(game.rollBy ?? game.current), tone: 'gold' });
     }
     for (const p of game.players) {
       const was = before.players.find(x => x.id === p.id);

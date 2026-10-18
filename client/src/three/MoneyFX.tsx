@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CylinderGeometry, InstancedMesh, MeshStandardMaterial, Object3D, Vector3 } from 'three';
 import type { GameView } from '../../../shared/types.ts';
 import { tile } from './layout.ts';
-import { useSceneBusy } from './sequence.ts';
+import { sceneFreeAt } from './sequence.ts';
 
 const MAX_COINS = 64;
 const FLIGHT_MS = 650;
@@ -30,11 +30,12 @@ const HIDDEN: [number, number, number] = [0, -50, 0];
 const coinsFor = (amount: number) => Math.max(3, Math.min(12, Math.round(Math.log2(Math.max(2, amount / 5)) + 1)));
 
 export function MoneyFX({ game, n, currency }: { game: GameView; n: number; currency: string }) {
-  const busy = useSceneBusy();
-  const busyRef = useRef(busy);
-  busyRef.current = busy;
   const prev = useRef<Map<string, number> | null>(null);
-  const pending = useRef<{ flights: Omit<Flight, 'start'>[]; labels: Omit<Label, 'start' | 'id'>[] }[]>([]);
+  // Each batch waits for the scene it belongs to (the roll and walk that caused
+  // it), not for later moves: a bot's purchase must not wait behind the next
+  // player's dice and then pop up beside them. `frames` counts frames since it
+  // arrived; on the second the pieces have reported their walk and `at` is fixed.
+  const pending = useRef<{ flights: Omit<Flight, 'start'>[]; labels: Omit<Label, 'start' | 'id'>[]; frames: number; at: number }[]>([]);
   const flights = useRef<Flight[]>([]);
   const [labels, setLabels] = useState<Label[]>([]);
   const mesh = useRef<InstancedMesh>(null);
@@ -74,14 +75,16 @@ export function MoneyFX({ game, n, currency }: { game: GameView; n: number; curr
       const s = spotOf(p.position);
       return { pos: [s.x, s.y + 0.35, s.z] as [number, number, number], text: `${d > 0 ? '+' : '−'}${currency}${Math.abs(d).toLocaleString()}`, gain: d > 0 };
     });
-    pending.current.push({ flights: out, labels: lbls });
+    pending.current.push({ flights: out, labels: lbls, frames: 0, at: Infinity });
   }, [game.players, game.phase, spotOf, currency]);
 
   useFrame(() => {
     const now = performance.now();
-    // Start what's waiting once the scene is still.
-    if (pending.current.length && !busyRef.current) {
-      const batch = pending.current.splice(0);
+    // Start each batch once the scene it arrived with is over.
+    for (const b of pending.current) if (++b.frames === 2) b.at = sceneFreeAt();
+    if (pending.current.some(b => now >= b.at)) {
+      const batch = pending.current.filter(b => now >= b.at);
+      pending.current = pending.current.filter(b => now < b.at);
       const newLabels: Label[] = [];
       for (const b of batch) {
         for (const f of b.flights) flights.current.push({ ...f, start: now });

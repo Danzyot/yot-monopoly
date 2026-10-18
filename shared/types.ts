@@ -140,6 +140,8 @@ export interface GameView {
    * when this equals turnNumber (absent from servers that predate it).
    */
   rollTurn?: number;
+  /** Who threw the last roll; the turn may have passed on already (a roll into jail ends it). */
+  rollBy?: string;
   doublesCount: number;
   /** Current player rolled doubles and gets another roll after this one resolves. */
   extraRoll: boolean;

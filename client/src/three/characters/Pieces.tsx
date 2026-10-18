@@ -32,6 +32,13 @@ const CENTRE = new Vector3(0, 0, 0);
 const LAND_MS = 150;
 /** A resting piece winds up (crouches) this long before its first hop. */
 const CROUCH_MS = 120;
+/**
+ * One piece walks at a time. Moves normally arrive one after another, but a
+ * burst (a reconnect, a server restart, a slow frame) would otherwise set
+ * several pieces walking at once and read as two players moving together; a
+ * move that arrives while another piece is still walking waits its turn.
+ */
+let walker: { id: string; until: number } | null = null;
 /** After the landing squash, a smaller rebound stretch. */
 const REBOUND_MS = 170;
 
@@ -187,15 +194,27 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
     const time = state.clock.elapsedTime;
 
     let k = a.t0 ? (now - a.t0) / a.dur : 1;
-    // A fresh move waits for the dice to land first.
+    // A fresh move waits for the dice to land first, and for any other piece
+    // still walking to finish.
     const settle = diceSettleAt();
-    const waiting = k >= 1 && a.queue.length > 0 && now < settle;
     // Anticipation: a piece starting from rest crouches for a beat first (a
     // move chained straight onto the last hop just keeps going).
     const resting = k >= 1 && !(a.t0 > 0 && now - (a.t0 + a.dur) < 400);
-    if (a.queue.length && resting && !a.crouchAt) a.crouchAt = Math.max(now, settle - CROUCH_MS);
+    const otherWalking = walker !== null && walker.id !== p.id && now < walker.until;
+    const blocked = a.queue.length > 0 && resting && !a.crouchAt && otherWalking;
+    const waiting = (k >= 1 && a.queue.length > 0 && now < settle) || blocked;
+    if (a.queue.length && resting && !a.crouchAt && !blocked) {
+      a.crouchAt = Math.max(now, settle - CROUCH_MS);
+      walker = { id: p.id, until: a.crouchAt + CROUCH_MS + a.queue.length * HOP_MS + LAND_MS };
+    }
+    if (walker?.id === p.id && (a.queue.length || k < 1)) {
+      walker.until = Math.max(walker.until, (k < 1 ? a.t0 + a.dur : now) + a.queue.length * HOP_MS + LAND_MS);
+    }
     const crouchT = a.crouchAt ? (now - a.crouchAt) / CROUCH_MS : 2;
-    if (a.queue.length) holdUntil(Math.max(now, waiting ? settle : now) + (crouchT < 1 ? CROUCH_MS : 0) + a.queue.length * HOP_MS + LAND_MS + 250);
+    if (a.queue.length) {
+      const startAt = Math.max(now, waiting ? settle : now, blocked && walker ? walker.until : 0);
+      holdUntil(startAt + (crouchT < 1 ? CROUCH_MS : 0) + a.queue.length * HOP_MS + LAND_MS + 250);
+    }
     while (k >= 1 && a.queue.length && !waiting && crouchT >= 1) {
       // Chain hops back to back from when the previous one ended rather than
       // from this frame, so slow frames (phones, software GL) can't leave a

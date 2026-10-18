@@ -121,3 +121,17 @@ test('auction: what you owe counts against what you can bid', () => {
   assert.ok(!g.auction!.bidders.includes('p2'), 'p2 can spend 50: not enough to top 50');
   assert.ok(g.auction!.bidders.includes('p0'));
 });
+
+test('rollBy names who threw the dice, even once the turn has moved on', () => {
+  const { g, dice, act } = scripted();
+  dice(1, 2);
+  act('p0', { type: 'roll' });
+  assert.equal(g.view().rollBy, 'p0');
+  act('p0', { type: 'buy' });
+  act('p0', { type: 'endTurn' });
+  const v = g.view();
+  assert.equal(v.current, 'p1');
+  assert.equal(v.rollBy, 'p0', 'the dice on the table are still p0\'s');
+  const init = { theme: resolveTheme('classic', 'classic'), rules: { ...DEFAULT_RULES } };
+  assert.equal(Game.restore(init, g.snapshot()).view().rollBy, 'p0', 'saved with the game');
+});

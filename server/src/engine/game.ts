@@ -94,6 +94,8 @@ export interface GameSnapshot {
   rollSeq: number;
   /** Turn number of the last roll (absent in older snapshots). */
   rollTurn?: number;
+  /** Who threw the last roll (absent in older snapshots). */
+  rollBy?: string;
   doublesCount: number;
   extraRoll: boolean;
   debts: Debt[];
@@ -169,6 +171,8 @@ export class Game {
   rollSeq = 0;
   /** The turn the dice were last rolled in: they belong to that turn only. */
   rollTurn = 0;
+  /** Who threw the last roll: the turn may already have passed on by the time it is shown. */
+  rollBy = '';
   doublesCount = 0;
   extraRoll = false;
   /** The current player chose "End turn" on a buy: hand over as soon as the property is settled. */
@@ -662,6 +666,7 @@ export class Game {
     this.speedPending = null;
     this.rollSeq++;
     this.rollTurn = this.turnNumber;
+    this.rollBy = this.current.id;
     const total = d[0] + d[1];
     const doubles = d[0] === d[1];
     const triples = doubles && speed === d[0];
@@ -1758,7 +1763,7 @@ export class Game {
   snapshot(): GameSnapshot {
     return structuredClone({
       players: this.players, owned: this.owned, currentIdx: this.currentIdx, phase: this.phase,
-      dice: this.dice, rollSeq: this.rollSeq, rollTurn: this.rollTurn, doublesCount: this.doublesCount, extraRoll: this.extraRoll,
+      dice: this.dice, rollSeq: this.rollSeq, rollTurn: this.rollTurn, rollBy: this.rollBy, doublesCount: this.doublesCount, extraRoll: this.extraRoll,
       debts: this.debts, auction: this.auction, trades: this.trades, pot: this.pot,
       housesLeft: this.housesLeft, hotelsLeft: this.hotelsLeft, lastCard: this.lastCard,
       winner: this.winner, log: this.log, turnNumber: this.turnNumber, decks: this.decks,
@@ -1791,6 +1796,7 @@ export class Game {
     g.speed = snap.speed ?? null;
     // Older snapshots: the dice on the table are this turn's unless a new turn is waiting to roll.
     g.rollTurn = snap.rollTurn ?? (g.dice && g.phase !== 'roll' ? g.turnNumber : 0);
+    g.rollBy = snap.rollBy ?? '';
     g.choice = snap.choice ?? null;
     g.speedPending = snap.speedPending ?? null;
     g.endAfter = snap.endAfter ?? false;
@@ -1864,6 +1870,7 @@ export class Game {
       dice: this.dice,
       rollSeq: this.rollSeq,
       rollTurn: this.rollTurn,
+      rollBy: this.rollBy || undefined,
       doublesCount: this.doublesCount,
       extraRoll: this.extraRoll,
       debts: this.debts,

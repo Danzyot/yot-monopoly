@@ -143,3 +143,9 @@ body.te-on .te-hover { outline: 2px dashed var(--hi, #ffd23f); outline-offset: 2
 .music-ask-actions { display: flex; gap: 6px; margin-top: 2px; }
 @keyframes musicAskIn { from { opacity: 0; transform: translateY(-6px); } }
 @media (prefers-reduced-motion: reduce) { .music-ask { animation: none; } }
+
+/* The deed card opens over the labelled dock (two rows on desktop) instead of
+   being cut off behind it; short screens scroll it. */
+@media (min-width: 761px) {
+  .deed-float { bottom: 16px; z-index: 7; max-height: calc(100dvh - 120px); overflow-y: auto; scrollbar-width: thin; }
+}

@@ -51,7 +51,7 @@ export function RollResult({ game, me, target = '.actionbar' }: {
   if ((beat !== 'result' && beat !== 'fly') || !game.dice) return null;
   const [a, b] = game.dice;
   const s = game.speed ?? null;
-  const roller = game.players.find(p => p.id === game.current);
+  const roller = game.players.find(p => p.id === (game.rollBy ?? game.current));
   const triples = s !== null && a === b && s === a;
   const doubles = a === b && !triples;
   const total = a + b + (typeof s === 'number' ? s : 0);

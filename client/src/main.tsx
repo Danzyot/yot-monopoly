@@ -8,6 +8,10 @@ import './styles/outfits.css';
 import './styles/turnflow.css';
 import './styles/ui-polish.css';
 import './styles/boards.css';
+import './styles/tooltip.css';
+import { installTooltips } from './tooltip.ts';
+
+installTooltips();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

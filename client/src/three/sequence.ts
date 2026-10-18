@@ -39,6 +39,11 @@ function schedule() {
   timer = setTimeout(schedule, Math.min(wait + 10, MAX_HOLD_MS));
 }
 
+/** When the scene as it stands now will be still (performance.now() time; now if it already is). */
+export function sceneFreeAt(): number {
+  return busy ? busyUntil : performance.now();
+}
+
 /** The scene is animating until `until` (performance.now() time). */
 export function holdUntil(until: number) {
   const now = performance.now();
@@ -114,3 +119,32 @@ export function useSceneBusy(): boolean {
   }, []);
   return b;
 }
+
+/**
+ * The game log as the board has shown it so far. The server logs a roll, the
+ * landing and any rent all at once, before the dice have even tumbled; lines
+ * that arrive are held back until the scene they came with (dice, result,
+ * walk, card) has played, so notices never announce a move the piece hasn't
+ * made yet. Lines already there when the view mounts show at once.
+ */
+export function useStagedLog<T extends { t: number }>(log: T[]): T[] {
+  const [shownT, setShownT] = useState(() => log.at(-1)?.t ?? 0);
+  const newest = log.at(-1)?.t ?? 0;
+  useEffect(() => {
+    if (newest <= shownT) return;
+    // Two frames: the dice mark the roll during render and the pieces report
+    // their walk on the next frame, so by then sceneFreeAt() covers this move.
+    let r2 = 0;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const r1 = requestAnimationFrame(() => {
+      r2 = requestAnimationFrame(() => {
+        t = setTimeout(() => setShownT(v => Math.max(v, newest)), Math.max(0, sceneFreeAt() - performance.now()));
+      });
+    });
+    // A hidden tab never paints: show the lines rather than hold them forever.
+    const fallback = setTimeout(() => setShownT(v => Math.max(v, newest)), 12_000);
+    return () => { cancelAnimationFrame(r1); cancelAnimationFrame(r2); if (t) clearTimeout(t); clearTimeout(fallback); };
+  }, [newest, shownT]);
+  return newest <= shownT ? log : log.filter(l => l.t <= shownT);
+}
+

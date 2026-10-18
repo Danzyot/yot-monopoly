@@ -1,0 +1,21 @@
+/* Hover notes (client/src/tooltip.ts): the game's own bubble, not the system tooltip. */
+.yot-tip {
+  position: fixed; z-index: 10000; pointer-events: none; max-width: 260px;
+  padding: 6px 11px 7px; border-radius: 10px;
+  background: var(--panel-solid, #173f9e); color: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.28), 0 10px 24px rgba(0, 0, 0, 0.35);
+  font: 700 13px/1.3 var(--font, 'Nunito', system-ui, sans-serif); letter-spacing: 0.01em;
+  text-align: center; white-space: pre-line;
+  animation: yotTipIn 0.14s ease-out;
+}
+.yot-tip::after {
+  content: ''; position: absolute; left: var(--arrow-x, 50%); bottom: -7px; width: 10px; height: 10px;
+  background: inherit; border: inherit; border-top: 0; border-left: 0;
+  transform: translateX(-50%) rotate(45deg);
+}
+.yot-tip.below::after { bottom: auto; top: -7px; transform: translateX(-50%) rotate(225deg); }
+@keyframes yotTipIn { from { opacity: 0; transform: translateY(3px) scale(0.96); } }
+.yot-tip.below { animation-name: yotTipInBelow; }
+@keyframes yotTipInBelow { from { opacity: 0; transform: translateY(-3px) scale(0.96); } }
+@media (prefers-reduced-motion: reduce) { .yot-tip { animation: none; } }

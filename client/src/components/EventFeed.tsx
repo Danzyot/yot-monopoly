@@ -2,6 +2,7 @@
 // log as it grows: rent paid to you or by you, trade answers, someone going
 // bankrupt. Everything else stays in the Log tab. At most three at a time,
 // each for a few seconds, so a busy turn never buries the board.
+import { useStagedLog } from '../three/sequence.ts';
 import { useEffect, useRef, useState } from 'react';
 import type { GameView, LogEntry, Trade } from '../../../shared/types.ts';
 
@@ -65,12 +66,12 @@ export function classify(l: LogEntry, game: GameView, me: string, prevTrades: Tr
 export default function EventFeed({ game, me }: { game: GameView; me: string }) {
   const [items, setItems] = useState<Notice[]>([]);
   // The newest log line already looked at, and the offers open before this update.
-  const mark = useRef<LogEntry | undefined>(game.log.at(-1));
+  const log = useStagedLog(game.log);
+  const mark = useRef<LogEntry | undefined>(log.at(-1));
   const trades = useRef<Trade[]>(game.trades);
   const seq = useRef(0);
 
   useEffect(() => {
-    const log = game.log;
     const last = mark.current;
     let from = 0;
     if (last) {
@@ -89,7 +90,7 @@ export default function EventFeed({ game, me }: { game: GameView; me: string }) 
     if (!add.length) return;
     setItems(cur => [...cur, ...add].slice(-MAX));
     for (const n of add) setTimeout(() => setItems(cur => cur.filter(x => x.id !== n.id)), LIFE_MS);
-  }, [game.log, game.trades, game, me]);
+  }, [log, game.trades, game, me]);
 
   if (!items.length) return null;
   return (
