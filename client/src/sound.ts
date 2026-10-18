@@ -366,3 +366,274 @@ export function playGoLight(at = 0) {
 export function playCountdownBeep(at = 0, final = false) {
   tone(final ? 1320 : 880, at, final ? 0.3 : 0.08, 0.07, 'sine');
 }
+
+// ---- character foley (three/characters/moveFx.ts) ----
+// The little sounds the pieces make as they move: footfalls, whooshes, the
+// props they pull out. Each takes `at` (a delay in seconds) and `v`, a volume
+// scale, so another player's piece can be quieter than your own. None of them
+// repeats a game sound from useGameSounds.ts: those voice what happened (a
+// purchase, rent, jail), these voice the character reacting to it.
+
+/** A sung vowel: a buzzy source through two formant filters, gliding f0 → f1 and formants a → b. */
+function voice(at: number, dur: number, f0: number, f1: number, form: [number, number, number, number], vol: number) {
+  const a = sfx();
+  if (!a) return;
+  const { ac, out } = a;
+  const t0 = ac.currentTime + at;
+  const osc = ac.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(f0, t0);
+  osc.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(vol, t0 + Math.min(0.04, dur / 4));
+  g.gain.setValueAtTime(vol, t0 + dur * 0.6);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  for (const [i, q] of [[0, 6], [1, 9]] as const) {
+    const bq = ac.createBiquadFilter();
+    bq.type = 'bandpass';
+    bq.Q.value = q;
+    bq.frequency.setValueAtTime(form[i], t0);
+    bq.frequency.linearRampToValueAtTime(form[i + 2], t0 + dur);
+    osc.connect(bq).connect(g);
+  }
+  g.connect(out);
+  osc.start(t0);
+  osc.stop(t0 + dur + 0.02);
+}
+
+/** Struck metal: inharmonic partials ringing down at different rates. */
+function metal(at: number, f: number, dur: number, vol: number, ratios: readonly number[] = [1, 2.76, 5.4, 8.93]) {
+  ratios.forEach((r, i) => tone(f * r, at, dur / (1 + i * 0.6), vol / (1 + i * 0.8), 'sine'));
+}
+
+/** Noise swelling up and away through a moving band: whooshes and swishes. */
+function swoosh(at: number, dur: number, vol: number, f0: number, f1: number) {
+  const a = sfx();
+  if (!a) return;
+  const { ac, out } = a;
+  const t0 = ac.currentTime + at;
+  const src = ac.createBufferSource();
+  src.buffer = noise(ac);
+  src.loop = true;
+  const bq = ac.createBiquadFilter();
+  bq.type = 'bandpass';
+  bq.Q.value = 1.4;
+  bq.frequency.setValueAtTime(f0, t0);
+  bq.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol, t0 + dur * 0.45);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  src.connect(bq).connect(g).connect(out);
+  src.start(t0, Math.random() * 0.5);
+  src.stop(t0 + dur + 0.02);
+}
+
+/** `x`, nudged a few percent either way so repeats don't sound machine-made. */
+const jit = (x: number, by = 0.06) => x * (1 + (Math.random() * 2 - 1) * by);
+
+/** A soft footfall: a padded thump and a tiny scuff (each hop landing). */
+export function playStep(at = 0, v = 1) {
+  tone(jit(150, 0.1), at, 0.07, 0.11 * v, 'sine', 80);
+  burst(at, 0.045, 0.09 * v, 'lowpass', jit(1100, 0.15), 1);
+  burst(at + 0.005, 0.02, 0.025 * v, 'bandpass', jit(3200, 0.2), 3);
+}
+
+/** A twirl or a flight through the air. */
+export function playWhoosh(at = 0, v = 1, dur = 0.38) {
+  swoosh(at, dur, 0.16 * v, jit(380), jit(2200));
+}
+
+/** A quick swish: a hand whipping round, a sign thrust up. */
+export function playSwish(at = 0, v = 1) {
+  swoosh(at, 0.16, 0.1 * v, jit(1400), jit(4200));
+}
+
+/** A happy "yay!" (cheers and pops). */
+export function playYay(at = 0, v = 1) {
+  voice(at, 0.34, jit(330), jit(520), [650, 1900, 380, 2400], 0.11 * v);
+  voice(at, 0.34, jit(660), jit(1040), [650, 1900, 380, 2400], 0.03 * v);
+}
+
+/** A cheery "hey!" for a wave. */
+export function playHey(at = 0, v = 1) {
+  voice(at, 0.2, jit(300), jit(380), [550, 1800, 480, 2100], 0.08 * v);
+}
+
+/** A puzzled "huh?" for a shrug. */
+export function playHuh(at = 0, v = 1) {
+  voice(at, 0.24, jit(170), jit(290), [600, 1150, 650, 1300], 0.08 * v);
+}
+
+/** A closed-mouth "hmm" while looking around. */
+export function playHmm(at = 0, v = 1) {
+  voice(at, 0.32, jit(190), jit(170), [260, 900, 280, 950], 0.07 * v);
+}
+
+/** "Mm-hm" on the phone. */
+export function playMurmur(at = 0, v = 1) {
+  voice(at, 0.13, jit(200), jit(180), [280, 950, 300, 1000], 0.06 * v);
+  voice(at + 0.17, 0.18, jit(170), jit(240), [300, 1000, 500, 1300], 0.06 * v);
+}
+
+/** A big yawn: "aaa-oh". */
+export function playYawn(at = 0, v = 1) {
+  voice(at, 0.85, jit(260), jit(170), [800, 1300, 450, 850], 0.07 * v);
+}
+
+/** A tired sigh: breath falling away. */
+export function playSigh(at = 0, v = 1) {
+  burst(at, 0.55, 0.07 * v, 'bandpass', 1300, 0.8, 500);
+  voice(at, 0.45, 210, 150, [700, 1200, 500, 900], 0.025 * v);
+}
+
+/** An angry "hmph!". */
+export function playHuff(at = 0, v = 1) {
+  burst(at, 0.16, 0.14 * v, 'lowpass', 900, 1, 300);
+  voice(at, 0.14, 150, 115, [300, 900, 280, 800], 0.05 * v);
+}
+
+/** A stamping foot: a hard thump with a dusty edge. */
+export function playThud(at = 0, v = 1) {
+  tone(jit(95), at, 0.18, 0.24 * v, 'sine', 42);
+  burst(at, 0.12, 0.18 * v, 'lowpass', 420, 1);
+  burst(at + 0.01, 0.08, 0.04 * v, 'bandpass', 2400, 1);
+}
+
+/** One coin's bright ting (caught, dropped). */
+export function playTing(at = 0, v = 1) {
+  metal(at, jit(2600, 0.08), 0.35, 0.05 * v, [1, 2.4, 4.1]);
+}
+
+/** A handful of coins jingling. */
+export function playCoins(at = 0, v = 1) {
+  let t = at;
+  for (let i = 0; i < 6; i++) {
+    metal(t, 2400 + Math.random() * 1600, 0.16, 0.035 * v * (1 - i * 0.1), [1, 2.4, 3.9]);
+    t += 0.03 + Math.random() * 0.045;
+  }
+}
+
+/** Paper money fluttering away. */
+export function playFlutter(at = 0, v = 1) {
+  for (let i = 0; i < 4; i++) burst(at + i * 0.028, 0.025, 0.06 * v * (1 - i * 0.18), 'bandpass', jit(3000, 0.25), 1.2);
+}
+
+/** A thumb riffling a wad of notes. */
+export function playRiffle(at = 0, v = 1) {
+  for (let i = 0; i < 9; i++) burst(at + i * 0.018, 0.016, 0.05 * v, 'bandpass', 2600 + i * 150, 1.5);
+}
+
+/** "Womp womp womp wommmp": the sad trombone (paying out big). Lasts ~1.5 s. */
+export function playWomp(at = 0, v = 1) {
+  const a = sfx();
+  if (!a) return;
+  const { ac, out } = a;
+  [293.7, 277.2, 261.6, 246.9].forEach((f, i) => {
+    const t0 = ac.currentTime + at + i * 0.25;
+    const dur = i === 3 ? 0.75 : 0.22;
+    const osc = ac.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(f * 1.02, t0);
+    osc.frequency.linearRampToValueAtTime(f, t0 + 0.05);
+    if (i === 3) {
+      // The last note sags and wobbles.
+      const lfo = ac.createOscillator();
+      const depth = ac.createGain();
+      lfo.frequency.value = 5.5;
+      depth.gain.setValueAtTime(0, t0);
+      depth.gain.linearRampToValueAtTime(f * 0.03, t0 + 0.3);
+      lfo.connect(depth).connect(osc.frequency);
+      osc.frequency.linearRampToValueAtTime(f * 0.92, t0 + dur);
+      lfo.start(t0);
+      lfo.stop(t0 + dur + 0.02);
+    }
+    // The plunger mute: the filter opens and closes on every note ("wah").
+    const bq = ac.createBiquadFilter();
+    bq.type = 'lowpass';
+    bq.Q.value = 4;
+    bq.frequency.setValueAtTime(350, t0);
+    bq.frequency.linearRampToValueAtTime(1300, t0 + Math.min(0.12, dur * 0.4));
+    bq.frequency.linearRampToValueAtTime(500, t0 + dur);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(0.09 * v, t0 + 0.03);
+    g.gain.setValueAtTime(0.09 * v, t0 + dur * 0.7);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(bq).connect(g).connect(out);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.02);
+  });
+}
+
+/** A tin cup banged on iron bars. */
+export function playClank(at = 0, v = 1) {
+  metal(at, jit(520, 0.1), 0.45, 0.07 * v, [1, 2.57, 4.32, 6.8]);
+  burst(at, 0.03, 0.12 * v, 'bandpass', 3500, 2);
+}
+
+/** The cup raked along the bars: clang-clang-clang. */
+export function playRake(at = 0, v = 1) {
+  for (let i = 0; i < 3; i++) {
+    metal(at + i * 0.065, jit(560 + i * 40, 0.05), 0.22, 0.045 * v, [1, 2.57, 4.32]);
+    burst(at + i * 0.065, 0.02, 0.07 * v, 'bandpass', 3800, 2);
+  }
+}
+
+/** A hammer on a nail. */
+export function playTink(at = 0, v = 1) {
+  metal(at, jit(1700, 0.04), 0.2, 0.06 * v, [1, 2.3, 3.9]);
+  burst(at, 0.025, 0.12 * v, 'highpass', 3000, 1);
+  tone(140, at, 0.05, 0.06 * v, 'sine', 90);
+}
+
+/** Wood knocking: a sign stopping overhead. */
+export function playKnock(at = 0, v = 1) {
+  tone(jit(320), at, 0.08, 0.1 * v, 'triangle', 190);
+  burst(at, 0.05, 0.1 * v, 'bandpass', 950, 3);
+}
+
+/** A fist stamped down on a contract. */
+export function playStamp(at = 0, v = 1) {
+  tone(120, at, 0.12, 0.18 * v, 'sine', 65);
+  burst(at, 0.08, 0.16 * v, 'lowpass', 600, 1);
+  burst(at, 0.03, 0.06 * v, 'highpass', 4000, 1);
+}
+
+/** A party popper going off. */
+export function playPop(at = 0, v = 1) {
+  burst(at, 0.05, 0.32 * v, 'highpass', 1200, 0.7);
+  tone(240, at, 0.11, 0.16 * v, 'sine', 60);
+  for (let i = 0; i < 4; i++) burst(at + 0.04 + i * 0.03 + Math.random() * 0.02, 0.012, 0.05 * v, 'bandpass', 5000, 3);
+}
+
+/** Confetti twinkling down. */
+export function playSparkle(at = 0, v = 1) {
+  for (let i = 0; i < 5; i++) tone(2600 + Math.random() * 2200, at + i * 0.055, 0.18, 0.025 * v, 'sine');
+}
+
+/** A trophy catching the light: a rising glassy run. */
+export function playShimmer(at = 0, v = 1) {
+  [1568, 1976, 2349, 3136, 3951].forEach((f, i) => tone(f, at + i * 0.05, 0.4, 0.035 * v, 'sine'));
+}
+
+/** Dialling a phone: four quick touch-tone beeps. */
+export function playDial(at = 0, v = 1) {
+  const pairs = [[770, 1336], [852, 1209], [697, 1477], [941, 1336]];
+  pairs.forEach(([lo, hi], i) => {
+    tone(lo, at + i * 0.06, 0.045, 0.03 * v, 'sine');
+    tone(hi, at + i * 0.06, 0.045, 0.03 * v, 'sine');
+  });
+}
+
+/** A slide whistle falling: giving up. */
+export function playSlide(at = 0, v = 1) {
+  tone(1400, at, 0.7, 0.06 * v, 'sine', 260);
+}
+
+/** A cloth flag flapping. */
+export function playFlap(at = 0, v = 1) {
+  burst(at, 0.07, 0.08 * v, 'lowpass', 1300, 1);
+  burst(at + 0.06, 0.05, 0.05 * v, 'lowpass', 1600, 1);
+}
