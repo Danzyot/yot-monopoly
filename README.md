@@ -109,8 +109,7 @@ mini-games, music, and a full operator dashboard.
 - **Turn alerts**: the tab title flashes when the game is waiting on you, plus optional
   browser notifications (the 🔔 button). **Keyboard shortcuts**: Space/R roll, B buy,
   A auction, E end turn, P pay debt, H build & manage, T trade, Q quick chat, C camera view,
-  Esc close,
-  ? help.
+  Esc close, ? help.
 
 **Community**
 - **Host transfer** — the host (or an operator) can make another seated player the host,
