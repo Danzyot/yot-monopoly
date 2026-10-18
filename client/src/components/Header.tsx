@@ -3,6 +3,7 @@ import { useAuth } from '../auth.tsx';
 import { BRAND } from '../../../shared/brand.ts';
 import { Avatar } from './Avatar.tsx';
 import { profilePath } from '../community.tsx';
+import { EditTextToggle } from '../textEdit.tsx';
 
 export default function Header() {
   const { profile, config, openSignIn, signOut } = useAuth();
@@ -16,6 +17,7 @@ export default function Header() {
         {config.inviteUrl && <a className="navlink" href={config.inviteUrl} target="_blank" rel="noreferrer">Discord</a>}
         {profile?.isAdmin && <Link className="navlink accent" to="/admin">Dashboard</Link>}
         {profile && config.features.leaderboard && <NavLink className="navlink hide-sm" to={profilePath(profile.id)}>My profile</NavLink>}
+        <EditTextToggle />
         {profile ? (
           <span className="row me">
             {/* The avatar doubles as the profile link where "My profile" is hidden (phones). */}

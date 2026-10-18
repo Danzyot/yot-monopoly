@@ -46,7 +46,9 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   const theme = resolveTheme(game.themeId, game.mapId);
   const [selected, setSelected] = useState<number | null>(null);
   const [tradeWith, setTradeWith] = useState<string | null>(null);
-  const [tab, setTab] = useState<'log' | 'chat' | 'mine' | 'table'>('log');
+  const { config } = useAuth();
+  // Chat is the main tab (the log is one tap away); with chat switched off the log leads.
+  const [tab, setTab] = useState<'log' | 'chat' | 'mine' | 'table'>(config.features.chat ? 'chat' : 'log');
   const [counter, setCounter] = useState<CounterDraft | null>(null);
   /** Portfolio dialog, focused on this player (undefined = closed). */
   const [portfolio, setPortfolio] = useState<string | undefined>(undefined);
@@ -75,7 +77,6 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   useEffect(() => { if (chatVisible) setSeenChat(chat.length); }, [chatVisible, chat.length]);
   const unread = chatVisible ? 0 : Math.max(0, chat.filter((m, i) => i >= seenChat && m.id !== me).length);
   const connected = useConnected();
-  const { config } = useAuth();
   const nav = useNavigate();
   const myPlayer = game.players.find(p => p.id === me);
   useGameSounds(game, me);
@@ -164,7 +165,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
               : <>🏠 ∞</>}
             {game.rules.freeParkingPot && <><span className="tb-sep">·</span><span title="Free Parking jackpot">🅿️ {theme.currency}{game.pot.toLocaleString()}</span></>}
           </span>
-          <MusicPlayer />
+          <MusicPlayer askOnce />
           <button className="btn tiny danger" onClick={leave}>Leave</button>
         </div>
       </header>
@@ -180,18 +181,18 @@ export default function GameScreen({ room, game, me, chat, skew }: {
       <aside className={`sidepanel ${panelOpen ? '' : 'closed'}`}>
         <TradeOffers game={game} me={me} onCounter={t => setCounter(counterDraft(t))} />
         <div className="tabs" role="tablist">
-          <button role="tab" aria-selected={tab === 'log' && panelOpen} className={tab === 'log' && panelOpen ? 'on' : ''} onClick={() => pickTab('log')}>Log</button>
           {config.features.chat && (
             <button role="tab" aria-selected={tab === 'chat' && panelOpen} className={tab === 'chat' && panelOpen ? 'on' : ''} onClick={() => pickTab('chat')}>
               Chat{unread > 0 && <span className="tab-badge" aria-label={`${unread} unread`}>{unread > 9 ? '9+' : unread}</span>}
             </button>
           )}
+          <button role="tab" aria-selected={tab === 'log' && panelOpen} className={tab === 'log' && panelOpen ? 'on' : ''} onClick={() => pickTab('log')}>Log</button>
           {myPlayer && !myPlayer.bankrupt && <button role="tab" aria-selected={tab === 'mine' && panelOpen} className={tab === 'mine' && panelOpen ? 'on' : ''} onClick={() => pickTab('mine')}>Deeds</button>}
           <button role="tab" aria-selected={tab === 'table' && panelOpen} className={tab === 'table' && panelOpen ? 'on' : ''} onClick={() => pickTab('table')}>Players</button>
         </div>
         <div className="tab-body">
-          {tab === 'log' && <Log game={game} />}
-          {tab === 'chat' && <Chat chat={chat} system={systemLines} me={me} />}
+          {(tab === 'log' || (tab === 'chat' && !config.features.chat)) && <Log game={game} />}
+          {tab === 'chat' && config.features.chat && <Chat chat={chat} system={systemLines} me={me} />}
           {tab === 'mine' && <MyDeeds game={game} me={me} onPick={setSelected} onManage={() => openManage(debtOf(game, me) > (myPlayer?.cash ?? 0) ? 'raise' : 'build')} />}
           {tab === 'table' && <Portfolio game={game} me={me} onPick={setSelected} onTrade={setTradeWith} compact />}
         </div>
@@ -222,16 +223,28 @@ export default function GameScreen({ room, game, me, chat, skew }: {
         {myPlayer && !over && (
           <button className={`dock-btn ${notify ? 'on' : ''}`} onClick={toggleNotify}
             title={notify ? 'Turn alerts on — click to turn off' : 'Notify me when it\'s my turn (while this tab is hidden)'}
-            aria-pressed={notify}>{notify ? '🔔' : '🔕'}</button>
+            aria-pressed={notify}>
+            <span className="dock-ico" aria-hidden>{notify ? '🔔' : '🔕'}</span><span className="dock-text">{notify ? 'Alerts on' : 'Alerts'}</span>
+          </button>
         )}
         <button className="dock-btn on cam-btn" onClick={cycleCamera} aria-label={`Camera: ${camInfo.label}. Change view`}
-          title={`Camera: ${camInfo.label} — ${camInfo.hint}. Click (or C) for the next view`}>{camInfo.icon}</button>
+          title={`Camera: ${camInfo.label} — ${camInfo.hint}. Click (or C) for the next view`}>
+          <span className="dock-ico" aria-hidden>{camInfo.icon}</span><span className="dock-text">Camera</span>
+        </button>
         <button className={`dock-btn ${cinematic ? 'on' : ''}`} onClick={toggleCinematic} aria-pressed={cinematic}
-          title={cinematic ? 'Cinematic camera on — big moments get a close-up. Click to turn off' : 'Cinematic camera off — click to turn on'}>🎬</button>
+          title={cinematic ? 'Cinematic camera on — big moments get a close-up. Click to turn off' : 'Cinematic camera off — click to turn on'}>
+          <span className="dock-ico" aria-hidden>🎬</span><span className="dock-text">Cinematic</span>
+        </button>
         <button className="dock-btn" onClick={cycleQuality} aria-label={`${qualityInfo.label}. Change`}
-          title={`${qualityInfo.label} — ${qualityInfo.hint}. Click for the next setting`}>{qualityInfo.icon}</button>
-        <button className="dock-btn" onClick={() => window.open(`/r/${room.code}?tv=1`, '_blank', 'noopener')} title="Broadcast view — a clean TV / stream picture of this table, in a new tab" aria-label="Open broadcast view">📺</button>
-        <button className={`dock-btn ${helpOpen ? 'on' : ''}`} onClick={openHelp} title="How to play (?)" aria-label="How to play">?</button>
+          title={`${qualityInfo.label} — ${qualityInfo.hint}. Click for the next setting`}>
+          <span className="dock-ico" aria-hidden>{qualityInfo.icon}</span><span className="dock-text">Graphics</span>
+        </button>
+        <button className="dock-btn" onClick={() => window.open(`/r/${room.code}?tv=1`, '_blank', 'noopener')} title="Broadcast view — a clean TV / stream picture of this table, in a new tab" aria-label="Open broadcast view">
+          <span className="dock-ico" aria-hidden>📺</span><span className="dock-text">TV</span>
+        </button>
+        <button className={`dock-btn ${helpOpen ? 'on' : ''}`} onClick={openHelp} title="How to play (?)" aria-label="How to play">
+          <span className="dock-ico" aria-hidden>?</span><span className="dock-text">Help</span>
+        </button>
       </div>
       <SpectatorReactions reactions={social.reactions} />
       <PokeNotice poke={social.poke} game={game} me={me} />
@@ -245,7 +258,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
       {manage && amIn && (
         <ManagePanel game={game} me={me} mode={manage} onClose={() => setManage(null)} onPick={i => { setManage(null); setSelected(i); }} />
       )}
-      {helpOpen && <HowToPlay rules={game.rules} shortcuts={!!myPlayer} onClose={() => setHelpOpen(false)} />}
+      {helpOpen && <HowToPlay rules={game.rules} currency={theme.currency} shortcuts={!!myPlayer} onClose={() => setHelpOpen(false)} />}
       {over && <EndScreen room={room} game={game} me={me} onLeave={leave} />}
     </div>
   );

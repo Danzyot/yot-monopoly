@@ -4,7 +4,7 @@ import { call, useConnected, useRoomList } from '../net.ts';
 import { THEMES, getTheme } from '../../../shared/themes.ts';
 import { MAPS, getMap } from '../../../shared/maps.ts';
 import { BRAND } from '../../../shared/brand.ts';
-import { CHARACTER_DEFS } from '../../../shared/characters.ts';
+import { CHARACTER_DEFS, type CharacterDef, type CharacterId } from '../../../shared/characters.ts';
 import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { requirementBadge, requirementSentence } from '../community.tsx';
@@ -23,6 +23,8 @@ const DIORAMA: { themeId: string; mapId: string }[] = [
   { themeId: 'classic', mapId: 'classic' }, { themeId: 'chog', mapId: 'classic' }, { themeId: 'classic', mapId: 'speed' },
   { themeId: 'tptv', mapId: 'classic' }, { themeId: 'classic', mapId: 'metropolis' },
 ];
+/** The two characters the home page puts first. */
+const FEATURED: CharacterId[] = ['snacky', 'starer'];
 const DIORAMA_MS = 16000;
 const DIP_MS = 900;
 
@@ -76,8 +78,9 @@ export default function Home() {
 
   const live = rooms.filter(r => r.status !== 'lobby').length;
   const [scene, dim] = useDiorama();
-  // Twice over so the strip loops seamlessly; the copy is hidden from readers.
-  const marquee = [...CHARACTER_DEFS, ...CHARACTER_DEFS];
+  // Names come from the catalogue, so a rename there shows up here.
+  const featured = FEATURED.map(id => CHARACTER_DEFS.find(c => c.id === id)).filter((c): c is CharacterDef => !!c);
+  const others = CHARACTER_DEFS.filter(c => !FEATURED.includes(c.id));
 
   return (
     <div className="home">
@@ -113,16 +116,25 @@ export default function Home() {
         </p>
       </section>
 
-      {/* The cast, drifting by: tap any of them to meet them all. */}
-      <Link to="/characters" className="char-marquee" aria-label="Meet the 12 characters">
-        <div className="char-track">
-          {marquee.map((c, i) => (
-            <span key={`${c.id}${i}`} className="char-chip" aria-hidden={i >= CHARACTER_DEFS.length}>
-              <span className="char-chip-emoji">{c.emoji}</span>{c.name}
-            </span>
+      {/* The cast: the two stars up front, everyone else a tap away on /characters. */}
+      <section className="cast" aria-labelledby="cast-title">
+        <div className="cast-head">
+          <h2 id="cast-title">Meet the characters</h2>
+          <Link className="cast-all" to="/characters">See all characters →</Link>
+        </div>
+        <div className="cast-stars">
+          {featured.map(c => (
+            <Link key={c.id} to="/characters" className="cast-star" aria-label={`${c.name}: ${c.blurb}`}>
+              <span className="cast-emoji" aria-hidden>{c.emoji}</span>
+              <span className="cast-text"><b>{c.name}</b><span>{c.blurb}</span></span>
+            </Link>
           ))}
         </div>
-      </Link>
+        <p className="cast-more">
+          <span className="cast-dots" aria-hidden>{others.map(c => <i key={c.id} title={c.name}>{c.emoji}</i>)}</span>
+          <Link to="/characters">+ {others.length} more to play as</Link>
+        </p>
+      </section>
 
       <div className="home-body">
         <section className="panel how-panel" aria-labelledby="how-title">

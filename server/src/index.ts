@@ -19,6 +19,7 @@ import { adminRoutes } from './routes/admin.ts';
 import { authRoutes, mountInteractions } from './routes/auth.ts';
 import { mountMusic } from './routes/music.ts';
 import { mountGraphics } from './routes/graphics.ts';
+import { mountTextOverrides } from './routes/textOverrides.ts';
 import { attachSockets } from './sockets.ts';
 import { allResults, leaderboard, loadResults } from './stats.ts';
 import { buildProfile } from './profiles.ts';
@@ -118,6 +119,7 @@ app.use('/api/auth', authRoutes());
 app.use('/api/admin', adminRoutes(sockets, () => loopLagMs));
 mountMusic(app);
 mountGraphics(app, sockets);
+mountTextOverrides(app);
 
 app.get('/api/leaderboard', (_req, res) => {
   if (!isOn('leaderboard')) { res.status(404).json({ error: 'The leaderboard is switched off' }); return; }

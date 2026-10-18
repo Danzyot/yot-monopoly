@@ -173,7 +173,9 @@ export function QuickChatButton({ disabled }: { disabled?: boolean }) {
         </div>
       )}
       <button className={`dock-btn ${open ? 'on' : ''}`} disabled={disabled} onClick={() => setOpen(o => !o)}
-        title={disabled ? 'Chat is switched off' : 'Quick chat (Q)'} aria-label="Quick chat" aria-expanded={open} aria-haspopup="menu">💬</button>
+        title={disabled ? 'Chat is switched off' : 'Quick chat (Q)'} aria-label="Quick chat" aria-expanded={open} aria-haspopup="menu">
+        <span className="dock-ico" aria-hidden>💬</span><span className="dock-text">Quick chat</span>
+      </button>
     </div>
   );
 }

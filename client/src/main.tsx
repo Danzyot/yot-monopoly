@@ -6,6 +6,7 @@ import './fonts/fonts.css';
 import './index.css';
 import './styles/outfits.css';
 import './styles/turnflow.css';
+import './styles/ui-polish.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

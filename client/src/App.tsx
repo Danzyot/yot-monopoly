@@ -11,6 +11,7 @@ import { AuthModalHost } from './components/AuthModal.tsx';
 import { AuthProvider } from './auth.tsx';
 import { ToastHost } from './toast.tsx';
 import { DialogHost } from './components/Modal.tsx';
+import { TextEditHost } from './textEdit.tsx';
 
 function Shell() {
   // The game screen is full-bleed 3D; everything else gets the site header.
@@ -31,6 +32,7 @@ function Shell() {
       <BanScreen />
       <ToastHost />
       <DialogHost />
+      <TextEditHost />
     </>
   );
 }

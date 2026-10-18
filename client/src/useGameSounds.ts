@@ -8,7 +8,8 @@ import { resolveTheme } from '../../shared/themes.ts';
 import type { GameView } from '../../shared/types.ts';
 import {
   playArcadeStart, playBankrupt, playBid, playBuild, playBuy, playBuzz, playCardFlip, playDiceRoll, playDoubles,
-  playGoLight, playJail, playJailOpen, playPay, playReceive, playWin, playYourTurn,
+  playAuctionStart, playGoLight, playJail, playJailOpen, playOffer, playPay, playReceive, playTrade, playWin,
+  playYourTurn,
 } from './sound.ts';
 import * as PACE from '../../shared/pacing.ts';
 
@@ -88,7 +89,15 @@ export function useGameSounds(game: GameView | null, me: string): void {
       else if (delta < 0 && !iBought) playPay(landAt + cardExtra);
     }
 
-    // Auction: a new high bid ticks for everyone watching.
+    // Trades: an offer for me nudges; a deed changing owner (both before and
+    // after, so not a purchase) is a completed trade; a new debt of mine buzzes
+    // (no cash moved, so nothing above fired).
+    if (game.trades.some(t => t.to === me && !before.trades.some(b => b.id === t.id))) playOffer(0.1);
+    if (Object.entries(game.owned).some(([k, o]) => before.owned[Number(k)] && before.owned[Number(k)].owner !== o.owner)) playTrade(0.1);
+    if (game.debts.some(d => d.from === me) && !before.debts.some(d => d.from === me)) playBuzz(landAt);
+
+    // Auction: it opening, then each new high bid ticking for everyone watching.
+    if (game.auction && !before.auction) playAuctionStart(landAt);
     if (game.auction && before.auction && game.auction.space === before.auction.space
       && game.auction.highBid > before.auction.highBid) playBid();
 
