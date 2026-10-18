@@ -21,6 +21,9 @@
     "lightmapIntensity": 27.5562,
     "url": "/models/classic/room.glb?v=750098563e"
   },
+  "cops": {
+    "url": "/models/cops.glb?v=e3093d8ef5"
+  },
   "outfits": {
     "beanie": "/outfits/beanie.webp?v=8349641c97",
     "beanie-tint": "/outfits/beanie-tint.webp?v=cccc3a3e19",
@@ -55,9 +58,6 @@
     "yot_tee": "/outfits/yot_tee.webp?v=9124d5a408",
     "yot_tee-tint": "/outfits/yot_tee-tint.webp?v=0eefaa071b"
   },
-  "cops": {
-    "url": "/models/cops.glb?v=e3093d8ef5"
-  },
   "skylineEnv": {
     "url": "/models/skyline/set-env.webp?v=5f53f04cb3"
   },
@@ -78,11 +78,11 @@
     "url": "/models/table.glb?v=948e42f7ea"
   },
   "tptvEnv": {
-    "url": "/models/tptv/room-env.webp?v=29df2c1033"
+    "url": "/models/tptv/room-env.webp?v=1d5d093da6"
   },
   "tptvRoom": {
-    "lightmap": "/models/tptv/room-light.webp?v=cf38c8596c",
-    "lightmapIntensity": 12.3672,
-    "url": "/models/tptv/room.glb?v=91def4e109"
+    "lightmap": "/models/tptv/room-light.webp?v=f03c0a3247",
+    "lightmapIntensity": 12.4284,
+    "url": "/models/tptv/room.glb?v=ca37a91f9c"
   }
 }
