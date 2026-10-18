@@ -62,13 +62,22 @@ export function Environment({ kind, theme }: { kind: EnvironmentId; theme: Theme
       );
     case 'lounge':
     default:
-      // The Classic edition has its own modelled, light-baked room; other
-      // editions keep the drawn lounge in their palette until they get one.
+      // The Classic and Chog editions have their own modelled, light-baked
+      // rooms; other editions keep the drawn lounge in their palette until
+      // they get one.
       if (theme.id === 'classic') {
         return (
           <WithModel fallback={<Lounge theme={theme} />}>
             <ClassicRoom />
             <RoomLights />
+          </WithModel>
+        );
+      }
+      if (theme.id === 'chog') {
+        return (
+          <WithModel fallback={<Lounge theme={theme} />}>
+            <BakedScene asset={ASSETS.chogRoom} />
+            <ChogRoomLights />
           </WithModel>
         );
       }
@@ -83,6 +92,24 @@ function RoomLights() {
       <hemisphereLight args={['#ffe2bd', '#2a1a10', 0.6]} />
       <pointLight position={[13.6, FLOOR + 9.4, -10.5]} color="#ffb46b" intensity={260} decay={2} />
       <pointLight position={[-18, FLOOR + 2, 0]} color="#ff7a2e" intensity={220} decay={2} />
+    </>
+  );
+}
+
+/**
+ * Live light matching the baked Chog Poker lounge (tools/blender/chog_room.py):
+ * a warm pool over the table, the pink CHOG neon and portrait on the back
+ * wall, the bar's glowing shelves (back left) and the slots (back right).
+ */
+function ChogRoomLights() {
+  return (
+    <>
+      <hemisphereLight args={['#e6c8ff', '#2a1046', 0.55]} />
+      <pointLight position={[0, FLOOR + 13, -15]} color="#ff5fae" intensity={160} decay={2} />
+      <pointLight position={[-14, FLOOR + 9, -13]} color="#ff7ab8" intensity={110} decay={2} />
+      <pointLight position={[14, FLOOR + 8, -13]} color="#ffb0d8" intensity={90} decay={2} />
+      <pointLight position={[-14.6, FLOOR + 10.5, -1.8]} color="#ffcf9a" intensity={90} decay={2} />
+      <pointLight position={[14.6, FLOOR + 10.5, -1.4]} color="#ffcf9a" intensity={90} decay={2} />
     </>
   );
 }

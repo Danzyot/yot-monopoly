@@ -8,6 +8,14 @@ export const ASSETS = {
   "characters": {
     "url": "/models/characters.glb?v=6963602070"
   },
+  "chogEnv": {
+    "url": "/models/chog/room-env.webp?v=a984cb9f8d"
+  },
+  "chogRoom": {
+    "lightmap": "/models/chog/room-light.webp?v=dfaa3a6b22",
+    "lightmapIntensity": 5.7804,
+    "url": "/models/chog/room.glb?v=aae08b3b39"
+  },
   "classicEnv": {
     "url": "/models/classic/room-env.webp?v=7283a87788"
   },
