@@ -12,7 +12,8 @@ mini-games, music, and a full operator dashboard.
 - **Three maps**, each with its own 3D surroundings:
   - **Classic** — 40 spaces, the standard game, in a cosy lounge. With the Classic edition
     it's a modelled, light-baked study (fireplace, moonlit window, bookshelf, Chesterfield).
-  - **Speedway** — 32 spaces, two-street colour sets, two arcades; ~30-minute games at a racetrack.
+  - **Speedway** — 32 spaces, two-street colour sets, two arcades; ~30-minute games in the infield
+    of a modelled, light-baked race track at dusk (pits, grandstands, floodlights).
   - **Metropolis** — 48 spaces, ten colour sets, two arcades; built for 5–8 players, on a
     modelled, light-baked penthouse roof (string lights, fire pit, a lit city all around).
 - **Editions** (skins that work on any map): Classic, **Chog** (built from the Chog
