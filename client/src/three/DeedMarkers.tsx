@@ -2,7 +2,9 @@
 // edge in the owner's colour, with a little pennant on a pole at its corner
 // that flutters. Mortgaged deeds go grey and lose their flag, and the tile is
 // dimmed. Everything is instanced (one draw call for plaques, one for poles,
-// one for pennants), so a 48-space board full of deeds costs the same as one.
+// one for pennants, one each for the tile washes and frames), so a 48-space
+// board full of deeds costs the same as one. Owned tiles also get a light wash
+// of the owner's colour and a solid frame, so ownership reads at a glance.
 // A deed that changes hands pops in.
 
 import { useFrame } from '@react-three/fiber';
@@ -29,6 +31,13 @@ const plaqueMat = new MeshPhysicalMaterial({ color: '#ffffff', roughness: 0.3, c
 const poleMat = new MeshStandardMaterial({ color: '#d9c48a', metalness: 0.8, roughness: 0.35 });
 const pennantMat = new MeshBasicMaterial({ color: '#ffffff', side: DoubleSide, toneMapped: false });
 const dimGeo = new PlaneGeometry(1, 1);
+// The whole tile in the owner's colour: a light wash over the face and a
+// solid frame round the edge, so ownership reads from any camera.
+const washGeo = new PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+const washMat = new MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.2, depthWrite: false, toneMapped: false });
+const frameGeo = new BoxGeometry(1, 0.012, 1);
+const frameMat = new MeshBasicMaterial({ color: '#ffffff', toneMapped: false });
+const FRAME = 0.045;
 const dimMat = new MeshBasicMaterial({ color: '#000', transparent: true, opacity: 0.45, depthWrite: false });
 
 const dummy = new Object3D();
@@ -39,6 +48,8 @@ export function DeedMarkers({ game, n }: { game: GameView; n: number }) {
   const plaques = useRef<InstancedMesh>(null);
   const poles = useRef<InstancedMesh>(null);
   const pennants = useRef<InstancedMesh>(null);
+  const washes = useRef<InstancedMesh>(null);
+  const frames = useRef<InstancedMesh>(null);
   const T = tileWidth(n);
   const colorOf = useMemo(() => new Map(game.players.map(p => [p.id, p.color])), [game.players]);
 
@@ -70,11 +81,11 @@ export function DeedMarkers({ game, n }: { game: GameView; n: number }) {
   }, [deeds]);
 
   useFrame(({ clock }) => {
-    const P = plaques.current, L = poles.current, F = pennants.current;
-    if (!P || !L || !F) return;
+    const P = plaques.current, L = poles.current, F = pennants.current, W = washes.current, R = frames.current;
+    if (!P || !L || !F || !W || !R) return;
     const now = performance.now();
     const t = clock.elapsedTime;
-    let k = 0, f = 0;
+    let k = 0, f = 0, w = 0, r = 0;
     for (const d of deeds) {
       if (k >= MAX) break;
       const born = since.current.get(d.key) ?? 0;
@@ -91,6 +102,26 @@ export function DeedMarkers({ game, n }: { game: GameView; n: number }) {
       P.setMatrixAt(k, dummy.matrix);
       P.setColorAt(k, c);
       k++;
+
+      if (!d.mortgaged) {
+        // Wash over the tile face, then four frame strips round its edge.
+        dummy.position.set(d.cx, 0.008, d.cz);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(d.w * scale, 1, d.d * scale);
+        dummy.updateMatrix();
+        W.setMatrixAt(w, dummy.matrix);
+        W.setColorAt(w, c);
+        w++;
+        const hw = (d.w * scale) / 2 - FRAME / 2, hd = (d.d * scale) / 2 - FRAME / 2;
+        for (const [ox, oz, sx, sz] of [[0, -hd, d.w * scale, FRAME], [0, hd, d.w * scale, FRAME], [-hw, 0, FRAME, d.d * scale], [hw, 0, FRAME, d.d * scale]]) {
+          dummy.position.set(d.cx + ox, 0.012, d.cz + oz);
+          dummy.scale.set(sx, 1, sz);
+          dummy.updateMatrix();
+          R.setMatrixAt(r, dummy.matrix);
+          R.setColorAt(r, c);
+          r++;
+        }
+      }
 
       if (d.mortgaged) continue;
       if (f >= MAX) continue;
@@ -110,7 +141,11 @@ export function DeedMarkers({ game, n }: { game: GameView; n: number }) {
       F.setColorAt(f, c);
       f++;
     }
-    P.count = k; L.count = f; F.count = f;
+    P.count = k; L.count = f; F.count = f; W.count = w; R.count = r;
+    W.instanceMatrix.needsUpdate = true;
+    R.instanceMatrix.needsUpdate = true;
+    if (W.instanceColor) W.instanceColor.needsUpdate = true;
+    if (R.instanceColor) R.instanceColor.needsUpdate = true;
     P.instanceMatrix.needsUpdate = true;
     L.instanceMatrix.needsUpdate = true;
     F.instanceMatrix.needsUpdate = true;
@@ -123,6 +158,8 @@ export function DeedMarkers({ game, n }: { game: GameView; n: number }) {
       <instancedMesh ref={plaques} args={[plaqueGeo, plaqueMat, MAX]} count={0} castShadow receiveShadow frustumCulled={false} />
       <instancedMesh ref={poles} args={[poleGeo, poleMat, MAX]} count={0} castShadow frustumCulled={false} />
       <instancedMesh ref={pennants} args={[pennantGeo, pennantMat, MAX]} count={0} frustumCulled={false} />
+      <instancedMesh ref={washes} args={[washGeo, washMat, MAX]} count={0} frustumCulled={false} renderOrder={1} />
+      <instancedMesh ref={frames} args={[frameGeo, frameMat, MAX * 4]} count={0} frustumCulled={false} />
       {deeds.filter(d => d.mortgaged).map(d => (
         <mesh key={`m${d.i}`} geometry={dimGeo} material={dimMat} position={[d.cx, 0.006, d.cz]} rotation={[-Math.PI / 2, 0, 0]} scale={[d.w, d.d, 1]} />
       ))}

@@ -303,6 +303,17 @@ function Players({ game, room, me, onTrade, reactions, onPortfolio }: {
                   {owes > 0 && <span className="pchip warn" title="Owes money">owes {theme.currency}{owes.toLocaleString()}</span>}
                 </>}
               </div>
+              {!p.bankrupt && props > 0 && (
+                <div className="pdeed-strip" aria-label={`${p.name}'s deeds`}>
+                  {Object.entries(game.owned).filter(([, o]) => o.owner === p.id).map(([k, o]) => [Number(k), o] as const)
+                    .sort((a, b) => a[0] - b[0]).map(([i, o]) => {
+                      const sp = theme.spaces[i];
+                      const c = sp.group ? theme.groupColors[sp.group] : sp.kind === 'railroad' ? '#2f3340' : '#a9b3c6';
+                      return <i key={i} className={o.mortgaged ? 'mort' : undefined} style={{ background: c }}
+                        title={`${sp.name}${o.houses === 5 ? ' · hotel' : o.houses ? ` · ${o.houses} house${o.houses > 1 ? 's' : ''}` : ''}${o.mortgaged ? ' · mortgaged' : ''}`} />;
+                    })}
+                </div>
+              )}
             </div>
             {amIn && p.id !== me && !p.bankrupt && game.phase !== 'over' && (
               <button className="btn tiny ptrade" onClick={() => onTrade(p.id)} title={`Trade with ${p.name}`} aria-label={`Trade with ${p.name}`}>⇄</button>

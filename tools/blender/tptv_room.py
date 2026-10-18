@@ -47,7 +47,7 @@ DESK_R = 14.4     # the anchor desk's arc (centre line)
 OUT = 'models/tptv'
 SCRATCH = os.environ.get('TPTV_PREVIEW_DIR', '/tmp')
 FONTS = os.path.join(blib.REPO, 'client', 'src', 'fonts')
-LOGO = os.path.join(blib.PUBLIC, 'editions', 'tptv', 'logo.png')
+LOGO = os.path.join(blib.HERE, 'assets', 'tptv-logo.png')  # the real mark (client/public/editions/tptv/logo.svg, rasterised)
 
 rng = np.random.default_rng(7)
 
