@@ -14,12 +14,12 @@
     "url": "/models/classic/room.glb?v=750098563e"
   },
   "speedwayEnv": {
-    "url": "/models/speedway/set-env.webp?v=19edd13b16"
+    "url": "/models/speedway/set-env.webp?v=2f0e62282c"
   },
   "speedwaySet": {
-    "lightmap": "/models/speedway/set-light.webp?v=92f72b805c",
-    "lightmapIntensity": 7.3796,
-    "url": "/models/speedway/set.glb?v=c9d2e261c4"
+    "lightmap": "/models/speedway/set-light.webp?v=19f881f69a",
+    "lightmapIntensity": 4.8866,
+    "url": "/models/speedway/set.glb?v=73c37c803a"
   },
   "table": {
     "url": "/models/table.glb?v=948e42f7ea"
