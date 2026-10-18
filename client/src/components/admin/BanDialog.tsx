@@ -46,6 +46,7 @@ export default function BanDialog({ target, onClose, onDone }: {
   const [preset, setPreset] = useState('');
   const [details, setDetails] = useState('');
   const [busy, setBusy] = useState(false);
+  const [touched, setTouched] = useState(false);
 
   const hours = duration === 'custom' ? (Number(customHours) > 0 ? Number(customHours) : null) : DURATIONS[Number(duration)].hours;
   const reason = [preset, details.trim()].filter(Boolean).join(' — ');
@@ -62,6 +63,7 @@ export default function BanDialog({ target, onClose, onDone }: {
   const invalid = !value.trim() ? (kind === 'ip' ? 'Which address?' : 'Which account?')
     : scope === 'room' && !gameId.trim() ? 'Which room?'
     : duration === 'custom' && !hours ? 'How many hours?'
+    : reason.length < 3 ? 'Give a reason (pick one or write at least 3 characters)'
     : null;
 
   const submit = async () => {
@@ -109,25 +111,29 @@ export default function BanDialog({ target, onClose, onDone }: {
         </div>
 
         <div className="adm-field">
-          <span>How long</span>
-          <div className="row">
-            <select value={duration} onChange={e => setDuration(e.target.value)}>
-              {DURATIONS.map((d, i) => <option key={d.label} value={String(i)}>{d.label}</option>)}
-              <option value="custom">Custom…</option>
-            </select>
+          <span id="ban-dur">How long</span>
+          <div className="row wrap">
+            <div className="adm-seg" role="group" aria-labelledby="ban-dur">
+              {DURATIONS.map((d, i) => (
+                <button key={d.label} type="button" className={duration === String(i) ? 'on' : ''} aria-pressed={duration === String(i)} onClick={() => setDuration(String(i))}>{d.label}</button>
+              ))}
+              <button type="button" className={duration === 'custom' ? 'on' : ''} aria-pressed={duration === 'custom'} onClick={() => setDuration('custom')}>Custom…</button>
+            </div>
             {duration === 'custom' && (
-              <input type="number" min={1} step={1} value={customHours} placeholder="hours" onChange={e => setCustomHours(e.target.value)} style={{ width: 110 }} />
+              <input type="number" min={1} step={1} value={customHours} placeholder="hours" aria-label="Hours" onChange={e => setCustomHours(e.target.value)} style={{ width: 110 }} />
             )}
           </div>
         </div>
 
         <div className="adm-field">
-          <span>Reason</span>
-          <select value={preset} onChange={e => setPreset(e.target.value)}>
-            <option value="">— pick a reason (optional) —</option>
+          <span id="ban-why">Reason <em className="adm-req">required</em></span>
+          <select value={preset} aria-labelledby="ban-why" onChange={e => setPreset(e.target.value)}>
+            <option value="">— pick a reason —</option>
             {BAN_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
-          <input value={details} maxLength={150} placeholder="Details (optional)" onChange={e => setDetails(e.target.value)} />
+          <input value={details} maxLength={150} placeholder={preset ? 'Details (optional)' : 'Or write the reason (3+ characters)'} aria-label="Reason details"
+            aria-invalid={touched && reason.length < 3} onBlur={() => setTouched(true)} onChange={e => setDetails(e.target.value)} />
+          {touched && reason.length < 3 && <small className="adm-field-error" role="alert">A reason is required — the player reads it.</small>}
         </div>
 
         <div className="adm-field">

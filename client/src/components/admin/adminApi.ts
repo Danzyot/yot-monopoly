@@ -41,7 +41,14 @@ export interface AdminRoom {
   code: string;
   status: 'lobby' | 'playing' | 'finished';
   map: string;
+  /** Map id, for `/maps/<id>.webp`. */
+  mapId: string;
   edition: string;
+  /** What the table is waiting on (null in a lobby / when finished). */
+  phase: string | null;
+  /** Outstanding debts and the earliest deadline to settle one. */
+  debts: number;
+  debtDeadline: number | null;
   private: boolean;
   hostId: string;
   hostName: string;
@@ -117,6 +124,13 @@ export interface GraphicRow {
   url: string;
 }
 
+/** A value that only settles `ms` after the last change (search boxes). */
+export function useDebounced<T>(value: T, ms = 250): T {
+  const [v, setV] = useState(value);
+  useEffect(() => { const t = setTimeout(() => setV(value), ms); return () => clearTimeout(t); }, [value, ms]);
+  return v;
+}
+
 /**
  * GET a path now and every `ms` after (0 = once). Polling pauses while the tab
  * is hidden, so a dashboard left open in the background costs nothing.
@@ -125,6 +139,8 @@ export function usePoll<T>(path: string | null, ms = 0) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  /** When the data last landed, for the "updated 3s ago" indicator. */
+  const [at, setAt] = useState<number | null>(null);
   // Only the newest request may land, so switching quickly never shows stale data.
   const seq = useRef(0);
 
@@ -133,7 +149,7 @@ export function usePoll<T>(path: string | null, ms = 0) {
     const mine = ++seq.current;
     setLoading(true);
     return api<T>(path)
-      .then(d => { if (mine === seq.current) { setData(d); setError(null); } })
+      .then(d => { if (mine === seq.current) { setData(d); setError(null); setAt(Date.now()); } })
       .catch((e: Error) => { if (mine === seq.current) setError(e.message); })
       .finally(() => { if (mine === seq.current) setLoading(false); });
   }, [path]);
@@ -148,7 +164,42 @@ export function usePoll<T>(path: string | null, ms = 0) {
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', wake); };
   }, [reload, ms]);
 
-  return { data, error, loading, reload };
+  return { data, error, loading, reload, at };
+}
+
+/** Save `data` as a JSON file in the browser (client-side export). */
+export function downloadJson(name: string, data: unknown) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name.endsWith('.json') ? name : `${name}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Copy text to the clipboard with a toast either way. */
+export async function copyText(text: string, what = 'Copied') {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(what);
+  } catch {
+    toastError(new Error('Could not copy — select it and copy by hand.'));
+  }
+}
+
+/** Sort state for a table: click a column once for descending, again to flip. */
+export function useSort<K extends string>(initial: K, initialDir: 1 | -1 = -1) {
+  const [key, setKey] = useState<K>(initial);
+  const [dir, setDir] = useState<1 | -1>(initialDir);
+  const toggle = (k: K) => {
+    if (k === key) setDir(d => (d === 1 ? -1 : 1));
+    else { setKey(k); setDir(-1); }
+  };
+  const aria = (k: K): 'ascending' | 'descending' | 'none' => (k !== key ? 'none' : dir === 1 ? 'ascending' : 'descending');
+  return { key, dir, toggle, aria };
 }
 
 /**
@@ -184,6 +235,21 @@ export function ago(ts: number | null | undefined): string {
   if (s < 86_400) return `${Math.floor(s / 3600)}h ago`;
   return `${Math.floor(s / 86_400)}d ago`;
 }
+
+/** "3 min ago" with the exact time on hover. */
+export function ago2(ts: number | null | undefined): string {
+  if (!ts) return '—';
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (s < 5) return 'just now';
+  if (s < 60) return `${s} sec ago`;
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86_400) return `${Math.floor(s / 3600)} h ago`;
+  return `${Math.floor(s / 86_400)} d ago`;
+}
+
+export const full = (ts: number) => new Date(ts).toLocaleString(undefined, {
+  year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit',
+});
 
 export function span(sec: number): string {
   if (sec < 60) return `${Math.round(sec)}s`;

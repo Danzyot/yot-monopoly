@@ -63,7 +63,12 @@ export function adminRoutes(sockets: SocketLayer, loopLag: () => number): expres
       code: x.code,
       status: x.status,
       map: getMap(x.mapId).name,
+      mapId: x.mapId,
       edition: getTheme(x.themeId).name,
+      // What the table is waiting on, so the dashboard can flag a stuck game.
+      phase: x.game?.phase ?? null,
+      debts: x.game?.debts.length ?? 0,
+      debtDeadline: x.game ? (Object.values(x.game.debtEndsAt).sort((a, b) => a - b)[0] ?? null) : null,
       private: x.private,
       hostId: x.hostId,
       hostName: x.hostName(),
@@ -200,7 +205,8 @@ export function adminRoutes(sockets: SocketLayer, loopLag: () => number): expres
     if (!id) { res.status(400).json({ error: 'Who?' }); return; }
     const minutes = req.body?.minutes === null ? null : Number(req.body?.minutes ?? 60);
     setMute(id, String(req.body?.name ?? id), minutes, who(res).name);
-    adminLog(who(res), minutes === 0 ? `unmuted ${id}` : `muted ${id} ${minutes ? `for ${minutes} min` : 'indefinitely'}`);
+    const reason = String(req.body?.reason ?? '').slice(0, 120);
+    adminLog(who(res), minutes === 0 ? `unmuted ${id}` : `muted ${id} ${minutes ? `for ${minutes} min` : 'indefinitely'}${reason ? `: ${reason}` : ''}`);
     res.json({ ok: true });
   });
 
