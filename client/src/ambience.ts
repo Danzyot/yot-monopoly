@@ -451,5 +451,7 @@ export function useAmbience(game: Pick<GameView, 'mapId' | 'themeId'> | null): v
 // Like the renderer's __yotGl: with ?perf in the URL the bed can be driven and
 // counted from the console (and from the e2e check).
 if (typeof window !== 'undefined' && location.search.includes('perf')) {
-  Object.assign(window, { __yotAmbience: { start: startAmbience, stats: ambienceStats, context: audioContext } });
+  Object.assign(window, {
+    __yotAmbience: { start: startAmbience, enable: setAmbienceEnabled, stats: ambienceStats, context: audioContext },
+  });
 }
