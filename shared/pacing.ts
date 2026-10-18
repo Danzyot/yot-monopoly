@@ -43,6 +43,34 @@ export function walkMs(steps: number, jailed = false): number {
   return !jailed && steps <= MAX_HOPS ? steps * HOP_MS : FLY_MS;
 }
 
+/** The bits of a move leg the timing depends on (shared/types.ts MoveLeg). */
+export interface LegTiming { kind: 'roll' | 'card' | 'jail' | 'teleport'; steps?: number; leap?: boolean; card?: unknown }
+
+/**
+ * How long one leg of a move takes to play: a hop per space (backwards too),
+ * one extra hop's time for a leap out of the cell; jail, teleports and long
+ * jumps fly straight.
+ */
+export function legWalkMs(leg: LegTiming): number {
+  if (leg.kind === 'jail' || leg.kind === 'teleport' || leg.steps === undefined) return FLY_MS;
+  const steps = Math.abs(leg.steps);
+  if (steps === 0) return 0;
+  if (steps > MAX_HOPS) return FLY_MS;
+  return steps * HOP_MS + (leg.leap ? HOP_MS : 0);
+}
+
+/**
+ * How long a whole move plays after the dice (if any): every leg walks, and a
+ * card drawn at the end of a leg is turned over and read before the next leg
+ * starts. The client schedules exactly this (three/sequence.ts) and the
+ * server's bots wait for it (rooms.ts sceneMs).
+ */
+export function moveMs(legs: readonly LegTiming[]): number {
+  let ms = 0;
+  for (const l of legs) ms += legWalkMs(l) + (l.card ? CARD_MS : 0);
+  return ms;
+}
+
 /** An auction runs this long when nobody bids... */
 export const AUCTION_MS = 12_000;
 /** ...and each bid puts at least this long back on the clock for someone to answer. */

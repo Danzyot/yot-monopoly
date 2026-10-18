@@ -1,9 +1,12 @@
 // Short notices for the moments that matter to you, picked out of the game
 // log as it grows: rent paid to you or by you, trade answers, someone going
 // bankrupt. Everything else stays in the Log tab. At most three at a time,
-// each for a few seconds, so a busy turn never buries the board.
-import { useStagedLog } from '../three/sequence.ts';
+// each for a few seconds, so a busy turn never buries the board. Money lines
+// are matched on the player ids the engine puts on them (LogEntry from/to),
+// never on names in the text: two players can share a name.
+import { stageView, useStagedLog } from '../three/sequence.ts';
 import { useEffect, useRef, useState } from 'react';
+import { resolveTheme } from '../../../shared/themes.ts';
 import type { GameView, LogEntry, Trade } from '../../../shared/types.ts';
 
 type Tone = 'good' | 'bad' | 'info';
@@ -33,7 +36,22 @@ export function classify(l: LogEntry, game: GameView, me: string, prevTrades: Tr
   }
   const M = esc(myName);
   let m: RegExpMatchArray | null;
-  // Money in and out.
+  // Money in and out, by player id.
+  if (l.amount !== undefined) {
+    const sum = `${resolveTheme(game.themeId, game.mapId).currency}${l.amount.toLocaleString()}`;
+    const what = l.reason?.startsWith('rent') ? 'rent' : l.reason ?? '';
+    const payer = name(l.from) ?? 'Someone';
+    if (l.owed) {
+      return l.to === me && l.from !== me ? { icon: '⏳', text: `${payer} owes you ${sum} — they're raising cash`, tone: 'info' } : null;
+    }
+    if (l.from && l.to === me && l.from !== me) return { icon: '💰', text: `${payer} paid you ${sum} ${what}`.trimEnd(), tone: 'good' };
+    if (l.from === me) {
+      return { icon: '💸', text: l.to ? `You paid ${name(l.to) ?? 'someone'} ${sum} ${what}`.trimEnd() : `You paid ${sum}${what ? ` (${what})` : ''}`, tone: 'bad' };
+    }
+    // Salary, a card's prize: the board shows those (MoneyFX). A won jackpot still earns a notice below.
+    if (!(l.who === me && / scooped the /.test(t))) return null;
+  }
+  // Lines from older servers (no ids on them).
   if ((m = t.match(new RegExp(`^(.+) paid (\\S+) to ${M} \\((.+)\\)\\.$`)))) {
     const what = m[3].startsWith('rent') ? 'rent' : m[3];
     return { icon: '💰', text: `${m[1]} paid you ${m[2]} ${what}`, tone: 'good' };
@@ -64,6 +82,8 @@ export function classify(l: LogEntry, game: GameView, me: string, prevTrades: Tr
 }
 
 export default function EventFeed({ game, me }: { game: GameView; me: string }) {
+  // Plan this view's move before the lines it brought are staged.
+  stageView(game);
   const [items, setItems] = useState<Notice[]>([]);
   // The newest log line already looked at, and the offers open before this update.
   const log = useStagedLog(game.log);

@@ -1,10 +1,12 @@
 // The Chance and Community Chest piles, sitting on their spots in the middle
 // of the board. When someone draws, the top card lifts off its pile, turns
 // over and flies up to the camera; the card's text then takes over on screen
-// (CardPopup waits CARD_FLIGHT_MS for it).
+// (CardPopup waits CARD_FLIGHT_MS for it). When is up to the move's plan
+// (three/sequence.ts): as the piece arrives on the square, and before any
+// move the card makes.
 
 import { useFrame, useThree } from '@react-three/fiber';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CanvasTexture, Euler, Group, MeshStandardMaterial, PlaneGeometry, Quaternion,
   SRGBColorSpace, Vector3, type Mesh, type Texture,
@@ -13,7 +15,7 @@ import type { Theme } from '../../../shared/themes.ts';
 import type { DeckId } from '../../../shared/cards.ts';
 import type { CardShown } from '../../../shared/types.ts';
 import { W } from './layout.ts';
-import { CARD_FLIGHT_MS, useSceneBusy } from './sequence.ts';
+import { CARD_FLIGHT_MS, useCardCue } from './sequence.ts';
 import { boxesSidesTop } from './boxParts.ts';
 
 
@@ -132,21 +134,20 @@ const tmpV = new Vector3();
 const tmpQ = new Quaternion();
 
 /** The card in flight: a two-sided card from the pile to just in front of the camera. */
-function Flyer({ theme, card, from, back }: { theme: Theme; card: CardShown | null; from: Vector3; back: Texture }) {
+function Flyer({ theme, card, at, from, back }: { theme: Theme; card: CardShown | null; at: number; from: Vector3; back: Texture }) {
   const group = useRef<Group>(null);
   const front = useRef<Mesh>(null);
   const backMesh = useRef<Mesh>(null);
-  const start = useRef(0);
   const { camera } = useThree();
   const startQ = useMemo(() => FRAME.clone().multiply(LIE), []);
   const faceTex = useMemo(() => (card ? texture(cardCanvas(theme, card.deck, card.text)) : null), [card, theme]);
   useEffect(() => () => faceTex?.dispose(), [faceTex]);
-  useEffect(() => { if (card) start.current = performance.now(); }, [card]);
 
   useFrame(() => {
     const g = group.current;
     if (!g) return;
-    const t = card ? (performance.now() - start.current) / CARD_FLIGHT_MS : 2;
+    // On the clock from its planned start: a slow frame rate skips ahead, it never runs late.
+    const t = card ? Math.max(0, performance.now() - at) / CARD_FLIGHT_MS : 2;
     g.visible = t < 1.15;
     if (!g.visible) return;
     const k = Math.min(1, t);
@@ -176,7 +177,11 @@ function Flyer({ theme, card, from, back }: { theme: Theme; card: CardShown | nu
   );
 }
 
-export function CardDecks({ theme, withLogo, lastCard }: { theme: Theme; withLogo: boolean; lastCard: CardShown | null }) {
+export function CardDecks({ theme, withLogo }: {
+  theme: Theme; withLogo: boolean;
+  /** The game's last card (unused: the cards come from the move plans, sequence.ts useCardCue). */
+  lastCard?: CardShown | null;
+}) {
   const backs = useMemo(() => ({
     chance: texture(cardCanvas(theme, 'chance')),
     chest: texture(cardCanvas(theme, 'chest')),
@@ -184,15 +189,11 @@ export function CardDecks({ theme, withLogo, lastCard }: { theme: Theme; withLog
   useEffect(() => () => { backs.chance.dispose(); backs.chest.dispose(); }, [backs]);
   const at = useMemo(() => spots(withLogo), [withLogo]);
 
-  // Fly a card once the piece has arrived; ignore whatever card was showing when we mounted.
-  const busy = useSceneBusy();
-  const seen = useRef(lastCard?.seq ?? 0);
-  const flying = useRef<CardShown | null>(null);
-  if (lastCard && lastCard.seq > seen.current && !busy) {
-    seen.current = lastCard.seq;
-    flying.current = lastCard;
-  }
-  const card = flying.current;
+  // Fly each card at its cue (the piece has just arrived); one cued before we mounted is history.
+  const cue = useCardCue();
+  const [mountedAt] = useState(() => performance.now());
+  const card = cue && cue.at + CARD_FLIGHT_MS > mountedAt ? cue.card : null;
+  const flyAt = cue?.at ?? 0;
   const from = useMemo(() => {
     if (!card) return new Vector3();
     const [x, z] = at[card.deck];
@@ -208,7 +209,7 @@ export function CardDecks({ theme, withLogo, lastCard }: { theme: Theme; withLog
           </group>
         ))}
       </group>
-      <Flyer theme={theme} card={card} from={from} back={card ? backs[card.deck] : backs.chance} />
+      <Flyer theme={theme} card={card} at={flyAt} from={from} back={card ? backs[card.deck] : backs.chance} />
     </>
   );
 }

@@ -115,6 +115,55 @@ export interface LogEntry {
   text: string;
   /** Optional player id the entry is about, for colouring. */
   who?: string;
+  /**
+   * A line about money: `amount` went from `from` to `to` (player ids; absent
+   * means the bank or the Free Parking pot). Clients read these instead of
+   * matching names in `text` (names are not safe to match on). Absent on
+   * lines from older servers.
+   */
+  amount?: number;
+  from?: string;
+  to?: string;
+  /** What the money was for, as the engine words it ('rent on Boardwalk', 'salary', 'card', ...). */
+  reason?: string;
+  /** Owed rather than paid: the payer has to raise the cash first. */
+  owed?: boolean;
+  /** The move (GameView.lastMove.seq) this line came with, so it can be shown when that move has played. */
+  move?: number;
+}
+
+/**
+ * How a piece got somewhere: on the dice ('roll', also the Bus and Mr.
+ * Monopoly), sent by a card ('card'), to jail ('jail') or jumped straight
+ * there (the Speed Die's triples, 'teleport').
+ */
+export type MoveLegKind = 'roll' | 'card' | 'jail' | 'teleport';
+
+/** One stretch of a move: where the piece went, and how. */
+export interface MoveLeg {
+  to: number;
+  kind: MoveLegKind;
+  /** Spaces walked (negative: backwards, "go back 3"). Absent for jail and teleports, which fly. */
+  steps?: number;
+  /** The first hop is a leap out of the jail cell (out on doubles or after paying). */
+  leap?: boolean;
+  /** The card drawn on arriving at the end of this leg; it is shown before the next leg plays. */
+  card?: CardShown;
+}
+
+/**
+ * The latest move as a sequence of legs, so clients can stage it (walk to the
+ * Chance square, turn the card over, walk on to GO) instead of jumping
+ * straight to where the piece ended up.
+ */
+export interface LastMove {
+  player: string;
+  /** Bumps for every move. */
+  seq: number;
+  /** The rollSeq of the throw that started this move (absent: no dice, e.g. a Bus choice or jail by an operator). */
+  roll?: number;
+  /** Empty when a roll moved nothing (a failed jail roll). */
+  legs: MoveLeg[];
 }
 
 export interface CardShown {
@@ -152,6 +201,8 @@ export interface GameView {
   housesLeft: number;
   hotelsLeft: number;
   lastCard: CardShown | null;
+  /** The latest move, leg by leg (absent from servers that predate it). */
+  lastMove?: LastMove | null;
   winner: string | null;
   log: LogEntry[];
   turnNumber: number;
