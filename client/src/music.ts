@@ -211,9 +211,15 @@ function teardown(L: Running, fade: number) {
   L.stopped = true;
   fading.add(L);
   const now = L.ac.currentTime;
-  L.out.gain.cancelScheduledValues(now);
-  L.out.gain.setValueAtTime(L.out.gain.value, now);
-  L.out.gain.linearRampToValueAtTime(0.0001, now + fade);
+  try {
+    const g = L.out.gain;
+    g.cancelScheduledValues(now);
+    // Mid-ramp the current value can read back as NaN in some browsers;
+    // the fade then simply starts from full.
+    const cur = g.value;
+    g.setValueAtTime(Number.isFinite(cur) && cur > 0 ? cur : 1, now);
+    g.linearRampToValueAtTime(0.0001, now + fade);
+  } catch (e) { errors += 1; console.error('music: fade failed', e); }
   window.setTimeout(() => {
     fading.delete(L);
     for (const n of [...L.nodes]) {
@@ -231,7 +237,10 @@ function scheduleAhead(L: Running) {
   // After the tab slept the clock jumped: skip ahead rather than firing every
   // missed bar at once.
   if (L.nextBarAt < ac.currentTime - 1) L.nextBarAt = ac.currentTime + 0.05;
-  while (!L.stopped && L.nextBarAt < ac.currentTime + barLen * 1.2) {
+  // Just in time: a bar's nodes exist from the moment it is scheduled, so
+  // building it half a second ahead (the timer runs every 200 ms) keeps the
+  // live node count to roughly one bar's worth.
+  while (!L.stopped && L.nextBarAt < ac.currentTime + Math.min(0.5, barLen)) {
     try { piece.bar(L, Math.max(L.nextBarAt, ac.currentTime + 0.02), L.bar); } catch (e) {
       errors += 1;
       if (errors < 4) console.error('music: bar failed', e);
@@ -255,7 +264,7 @@ function switchTo(piece: Piece) {
   live = startLayer(piece, fade);
   if (old) teardown(old, fade);
   if (live) {
-    if (timer === null) timer = window.setInterval(tick, 250);
+    if (timer === null) timer = window.setInterval(tick, 200);
     scheduleAhead(live);
   }
 }

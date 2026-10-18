@@ -106,11 +106,17 @@ export function chord(
   if (L.stopped) return null;
   const { ac } = L;
   const g = mk(L, ac.createGain());
-  const lp = mk(L, ac.createBiquadFilter());
-  lp.type = 'lowpass';
-  lp.frequency.value = o.cutoff ?? 1200;
-  if (o.q) lp.Q.value = o.q;
-  lp.connect(g).connect(o.into ?? L.out);
+  // cutoff 0: no filter of its own (the destination already has one).
+  let lp: BiquadFilterNode | null = null;
+  if (o.cutoff !== 0) {
+    lp = mk(L, ac.createBiquadFilter());
+    lp.type = 'lowpass';
+    lp.frequency.value = o.cutoff ?? 1200;
+    if (o.q) lp.Q.value = o.q;
+    lp.connect(g);
+  }
+  g.connect(o.into ?? L.out);
+  const input: AudioNode = lp ?? g;
   const attack = o.attack ?? 0.02;
   const release = o.release ?? 0.1;
   g.gain.setValueAtTime(0, at);
@@ -128,7 +134,7 @@ export function chord(
       osc.type = o.type ?? 'triangle';
       osc.frequency.value = f;
       osc.detune.value = o.spread ? (c === 0 ? -o.spread : o.spread) + rnd(-3, 3) : rnd(-4, 4);
-      osc.connect(lp);
+      osc.connect(input);
       osc.start(at);
       osc.stop(at + dur + 0.05);
       oscs.push(osc);
@@ -136,8 +142,9 @@ export function chord(
   }
   // Free the whole bundle when the last oscillator ends.
   const last = oscs[oscs.length - 1];
-  if (last) last.onended = () => { for (const n of [...oscs, lp, g]) drop(L, n); };
-  else { drop(L, lp); drop(L, g); }
+  const owned: AudioNode[] = lp ? [...oscs, lp, g] : [...oscs, g];
+  if (last) last.onended = () => { for (const n of owned) drop(L, n); };
+  else for (const n of owned) drop(L, n);
   return g;
 }
 
@@ -164,6 +171,34 @@ export function hit(
   voice(L, src, [bq, g], at, at + dur + 0.02);
 }
 
+/**
+ * A hat / tick / crack: a noise burst through a persistent highpass shared by
+ * every hit at that frequency, so each one is two nodes (source and envelope)
+ * rather than three. Hats are the most numerous voice in every piece.
+ */
+export function perc(L: Layer, at: number, dur: number, vol: number, hp: number, attack = 0.003) {
+  if (L.stopped) return;
+  const { ac } = L;
+  const key = `hp${hp}`;
+  let bus = L.send[key];
+  if (!bus) {
+    const f = keep(L, ac.createBiquadFilter());
+    f.type = 'highpass';
+    f.frequency.value = hp;
+    f.connect(L.out);
+    bus = L.send[key] = f;
+  }
+  const src = ac.createBufferSource();
+  const g = ac.createGain();
+  src.buffer = noise(ac);
+  src.loop = true;
+  g.gain.setValueAtTime(0, at);
+  g.gain.linearRampToValueAtTime(vol, at + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+  src.connect(g).connect(bus);
+  voice(L, src, [g], at, at + dur + 0.02);
+}
+
 /** A kick drum: a sine dropping in pitch, with a short click on top for the hard ones. */
 export function kick(L: Layer, at: number, vol: number, o: { from?: number; to?: number; dur?: number; click?: number } = {}) {
   const { ac } = L;
@@ -176,14 +211,14 @@ export function kick(L: Layer, at: number, vol: number, o: { from?: number; to?:
   g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
   osc.connect(g).connect(L.out);
   voice(L, osc, [g], at, at + dur + 0.05);
-  if (o.click) hit(L, at, 0.02, o.click, 'highpass', 2500);
+  if (o.click) perc(L, at, 0.02, o.click, 2500);
 }
 
 /** A snare: a noise body plus a short tonal knock. */
 export function snare(L: Layer, at: number, vol: number, o: { tone?: number; bright?: number; dur?: number } = {}) {
   const dur = o.dur ?? 0.16;
   hit(L, at, dur, vol, 'bandpass', o.bright ?? 1800, { q: 0.7 });
-  hit(L, at, dur * 0.6, vol * 0.5, 'highpass', 5000);
+  perc(L, at, dur * 0.6, vol * 0.5, 5000);
   note(L, o.tone ?? 190, at, 0.09, vol * 0.6, { type: 'triangle', glideTo: (o.tone ?? 190) * 0.6 });
 }
 

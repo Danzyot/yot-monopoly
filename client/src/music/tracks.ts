@@ -6,7 +6,7 @@
 // arrangement (which bars the lead plays, which fills land, which chord
 // tones the arp picks) that the loop never quite repeats.
 import {
-  chance, chord, driveCurve, hit, keep, kick, midi, note, pick, rnd, snare, swing, type Layer,
+  chance, chord, driveCurve, hit, keep, kick, midi, note, perc, pick, rnd, snare, swing, type Layer,
 } from './synth.ts';
 import { noise } from '../sound.ts';
 
@@ -74,7 +74,7 @@ const study: Piece = {
     kick(L, when, 0.22);
     if (chance(0.5)) kick(L, when + beat * 2.5, 0.12);
     for (let s = 0; s < 8; s++) {
-      hit(L, when + (beat / 2) * s + swing(s, beat, 0.16), 0.06, s % 2 === 0 ? 0.03 : 0.018, 'highpass', 6500);
+      perc(L, when + (beat / 2) * s + swing(s, beat, 0.16), 0.06, s % 2 === 0 ? 0.03 : 0.018, 6500);
     }
     hit(L, when + beat * 2, 0.09, 0.05, 'bandpass', 1900);
   },
@@ -123,7 +123,8 @@ const pokerRoom: Piece = {
     const dir = bar % 2 === 0 ? 1 : -1;
     for (let s = 0; s < 8; s++) {
       if (chance(0.18)) continue;
-      const idx = dir > 0 ? s % arpTones.length : (arpTones.length - 1 - s) % arpTones.length;
+      const n = arpTones.length;
+      const idx = dir > 0 ? s % n : (((n - 1 - s) % n) + n) % n;
       const t = when + (beat / 2) * s + swing(s, beat, sw);
       note(L, midi(root + 12 + arpTones[idx]), t, beat * 0.55, 0.05, { type: 'square', cutoff: 1800, q: 2, attack: 0.004 });
     }
@@ -134,7 +135,7 @@ const pokerRoom: Piece = {
     kick(L, when + beat * 2, 0.2, { from: 95, to: 42, dur: 0.3 });
     if (bar % 2 === 1 && chance(0.7)) kick(L, when + beat * 1.5 + beat * sw * 0.5, 0.13, { from: 95, to: 42, dur: 0.25 });
     for (let s = 0; s < 8; s++) {
-      hit(L, when + (beat / 2) * s + swing(s, beat, sw), 0.05, s % 2 === 0 ? 0.022 : 0.014, 'highpass', 7500);
+      perc(L, when + (beat / 2) * s + swing(s, beat, sw), 0.05, s % 2 === 0 ? 0.022 : 0.014, 7500);
     }
     hit(L, when + beat, 0.1, 0.04, 'bandpass', 1400, { q: 1.2 });
     hit(L, when + beat * 3, 0.1, 0.04, 'bandpass', 1400, { q: 1.2 });
@@ -207,8 +208,7 @@ const ticker: Piece = {
     const bp = TICKER.bassPatterns[(bar + Math.floor(bar / 4)) % TICKER.bassPatterns.length];
     for (let s = 0; s < 8; s++) {
       const iv = bp[s];
-      note(L, midi(bass + iv), when + (beat / 2) * s, beat * 0.42, iv === 0 ? 0.17 : 0.13, { type: 'square', cutoff: 420, q: 1.5, attack: 0.004 });
-      note(L, midi(bass + iv), when + (beat / 2) * s, beat * 0.42, 0.1, { type: 'sine', attack: 0.004 });
+      note(L, midi(bass + iv), when + (beat / 2) * s, beat * 0.42, iv === 0 ? 0.2 : 0.15, { type: 'square', cutoff: 380, q: 1.8, attack: 0.004 });
     }
 
     // Lead motif: the second half of each eight-bar section, with a quieter
@@ -220,8 +220,7 @@ const ticker: Piece = {
         if (Math.floor(step / 16) !== half) continue;
         const t = when + (beat / 4) * (step % 16);
         const f = midi(TICKER.key + 12 + oct + semi);
-        note(L, f, t, (beat / 4) * len * 0.85, 0.06, { type: 'square', cutoff: 2600, attack: 0.003 });
-        note(L, f, t, (beat / 4) * len * 0.85, 0.035, { type: 'triangle', attack: 0.003 });
+        note(L, f, t, (beat / 4) * len * 0.85, 0.07, { type: 'square', cutoff: 2600, attack: 0.003 });
         note(L, f, t + beat / 4, (beat / 4) * 0.8, 0.018, { type: 'square', cutoff: 2000, attack: 0.003 });
       }
     } else if (bar % 8 === 3 && chance(0.7)) {
@@ -233,14 +232,13 @@ const ticker: Piece = {
     // off-beats accented, an open hat on the "and" of 4 every other bar.
     for (let b = 0; b < 4; b++) kick(L, when + beat * b, 0.3, { from: 150, to: 48, dur: 0.22, click: 0.05 });
     for (const b of [1, 3]) {
-      hit(L, when + beat * b, 0.12, 0.07, 'bandpass', 2200, { q: 0.9 });
-      hit(L, when + beat * b + 0.012, 0.09, 0.04, 'bandpass', 2600, { q: 0.9 });
+      hit(L, when + beat * b, 0.12, 0.08, 'bandpass', 2200, { q: 0.9 });
     }
     for (let s = 0; s < 16; s++) {
       const off = s % 4 === 2;
-      hit(L, when + (beat / 4) * s, off ? 0.07 : 0.035, off ? 0.035 : s % 2 === 0 ? 0.02 : 0.012, 'highpass', 8500);
+      perc(L, when + (beat / 4) * s, off ? 0.07 : 0.035, off ? 0.035 : s % 2 === 0 ? 0.02 : 0.012, 8500);
     }
-    if (bar % 2 === 1) hit(L, when + beat * 3.5, 0.22, 0.03, 'highpass', 7000);
+    if (bar % 2 === 1) perc(L, when + beat * 3.5, 0.22, 0.03, 7000);
     // A riser into each new eight-bar section.
     if (bar % 8 === 7) hit(L, when, barLen, 0.02, 'bandpass', 500, { q: 1.5, sweepTo: 7000, attack: barLen * 0.6 });
   },
@@ -288,6 +286,13 @@ const pitLane: Piece = {
     amp.gain.value = 0.42;
     shaper.connect(cab).connect(amp).connect(L.out);
     L.send.amp = shaper;
+    // The bass cabinet: one dark lowpass shared by every bass note.
+    const bassLp = keep(L, L.ac.createBiquadFilter());
+    bassLp.type = 'lowpass';
+    bassLp.frequency.value = 320;
+    bassLp.Q.value = 1.2;
+    bassLp.connect(L.out);
+    L.send.bass = bassLp;
   },
   bar(L, when, bar) {
     const beat = 60 / this.bpm;
@@ -305,14 +310,14 @@ const pitLane: Piece = {
       const t = when + (beat / 2) * s;
       const dur = kind === 2 ? beat * 0.95 : beat * 0.28;
       chord(L, [root, root + 7, root + 12].map(midi), t, dur, kind === 2 ? 0.3 : 0.2, {
-        type: 'sawtooth', cutoff: 5000, attack: 0.004, release: kind === 2 ? 0.1 : 0.05, spread: 6, into: amp,
+        type: 'sawtooth', cutoff: 0, attack: 0.004, release: kind === 2 ? 0.1 : 0.05, spread: kind === 2 ? 6 : 0, into: amp,
       });
     }
 
     // Bass: chugging eighths an octave under the guitars, tight and dark.
     for (let s = 0; s < 8; s++) {
       const iv = s === 7 && chance(0.5) ? 7 : 0;
-      note(L, midi(root - 12 + iv), when + (beat / 2) * s, beat * 0.4, 0.2, { type: 'sawtooth', cutoff: 320, q: 1.2, attack: 0.004 });
+      note(L, midi(root - 12 + iv), when + (beat / 2) * s, beat * 0.4, 0.2, { type: 'sawtooth', attack: 0.004, into: L.send.bass });
     }
 
     // Drums: kick on 1 and 3 and the "and" of 4, snare on 2 and 4, driving
@@ -324,8 +329,8 @@ const pitLane: Piece = {
     if (bar % 4 === 1 && chance(0.5)) kick(L, when + beat * 1.5, 0.22, { from: 160, to: 50, dur: 0.18 });
     snare(L, when + beat, 0.11, { tone: 200, bright: 1900 });
     snare(L, when + beat * 3, 0.11, { tone: 200, bright: 1900 });
-    for (let s = 0; s < 8; s++) hit(L, when + (beat / 2) * s, 0.06, s % 2 === 0 ? 0.035 : 0.022, 'highpass', 7000);
-    if (bar % 8 === 0) hit(L, when, 1.4, 0.05, 'highpass', 4500, { attack: 0.005 });
+    for (let s = 0; s < 8; s++) perc(L, when + (beat / 2) * s, 0.06, s % 2 === 0 ? 0.035 : 0.022, 7000);
+    if (bar % 8 === 0) perc(L, when, 1.4, 0.05, 4500, 0.005);
     if (bar % 8 === 7) {
       for (let s = 0; s < 4; s++) snare(L, when + beat * 3 + (beat / 4) * s, 0.06 + s * 0.015, { tone: 210, bright: 2000, dur: 0.1 });
     }
@@ -337,8 +342,8 @@ const pitLane: Piece = {
         if (Math.floor(step / 8) !== half) continue;
         const t = when + (beat / 2) * (step % 8);
         const f = midi(PIT.key + 24 + semi);
-        note(L, f, t, (beat / 2) * len * 0.9, 0.11, { type: 'square', cutoff: 2800, q: 1, attack: 0.005, into: amp });
-        note(L, f, t, (beat / 2) * len * 0.9, 0.06, { type: 'sawtooth', cutoff: 2200, attack: 0.005, detune: 8, into: amp });
+        note(L, f, t, (beat / 2) * len * 0.9, 0.11, { type: 'square', attack: 0.005, into: amp });
+        note(L, f, t, (beat / 2) * len * 0.9, 0.06, { type: 'sawtooth', attack: 0.005, detune: 8, into: amp });
       }
     }
   },
@@ -406,7 +411,7 @@ const rooftop: Piece = {
     if (chance(0.3)) kick(L, when + beat * 3.5, 0.1, { from: 90, to: 40, dur: 0.2 });
     for (const b of [1, 3]) {
       hit(L, when + beat * b + lazy, 0.14, 0.09, 'bandpass', 1500, { q: 0.8 });
-      hit(L, when + beat * b + lazy, 0.05, 0.05, 'highpass', 4000);
+      perc(L, when + beat * b + lazy, 0.05, 0.05, 4000);
     }
     for (let s = 0; s < 8; s++) {
       if (s % 2 === 1 && chance(0.2)) continue;
