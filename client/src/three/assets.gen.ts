@@ -14,6 +14,7 @@ export const ASSETS = {
   "chogRoom": {
     "lightmap": "/models/chog/room-light.webp?v=873c3c79f1",
     "lightmapIntensity": 6.6179,
+    "lightmapLow": "/models/chog/room-light-1k.webp?v=2ab08c3e9c",
     "url": "/models/chog/room.glb?v=32ae4809a8"
   },
   "classicEnv": {
@@ -22,6 +23,7 @@ export const ASSETS = {
   "classicRoom": {
     "lightmap": "/models/classic/room-light.webp?v=2c302deed5",
     "lightmapIntensity": 27.5562,
+    "lightmapLow": "/models/classic/room-light-1k.webp?v=0dea23864c",
     "url": "/models/classic/room.glb?v=750098563e"
   },
   "cops": {
@@ -67,6 +69,7 @@ export const ASSETS = {
   "skylineSet": {
     "lightmap": "/models/skyline/set-light.webp?v=22c43e0157",
     "lightmapIntensity": 15.5997,
+    "lightmapLow": "/models/skyline/set-light-1k.webp?v=092ddffdc5",
     "url": "/models/skyline/set.glb?v=0c9ebd0e74"
   },
   "speedwayEnv": {
@@ -75,6 +78,7 @@ export const ASSETS = {
   "speedwaySet": {
     "lightmap": "/models/speedway/set-light.webp?v=af6775c8a6",
     "lightmapIntensity": 4.7585,
+    "lightmapLow": "/models/speedway/set-light-1k.webp?v=bc0e7ba41f",
     "url": "/models/speedway/set.glb?v=0fb2bfbbfc"
   },
   "table": {
@@ -86,6 +90,7 @@ export const ASSETS = {
   "tptvRoom": {
     "lightmap": "/models/tptv/room-light.webp?v=f03c0a3247",
     "lightmapIntensity": 12.4284,
+    "lightmapLow": "/models/tptv/room-light-1k.webp?v=c469018233",
     "url": "/models/tptv/room.glb?v=ca37a91f9c"
   }
 } as const;

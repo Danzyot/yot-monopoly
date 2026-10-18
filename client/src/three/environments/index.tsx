@@ -6,7 +6,8 @@ import type { EnvironmentId } from '../../../../shared/maps.ts';
 import type { Theme } from '../../../../shared/themes.ts';
 import { FLOOR, LiveLight, mix } from './common.tsx';
 import { Lounge } from './Lounge.tsx';
-import { BakedScene, ClassicRoom, WithModel } from '../models.tsx';
+import { BakedScene, ClassicRoom, WithModel, lightmapFor, type BakedAsset } from '../models.tsx';
+import { liteAssets } from '../quality.ts';
 import { useGLTF, useTexture } from '@react-three/drei';
 import { ASSETS } from '../assets.gen.ts';
 import { NightSky, Skyline } from './Skyline.tsx';
@@ -40,14 +41,15 @@ export function envLook(kind: EnvironmentId, theme: Theme): EnvLook {
   }
 }
 
-export function Environment({ kind, theme }: { kind: EnvironmentId; theme: Theme }) {
+/** `lite`: the half-size lightmaps (Low graphics, or Auto on a weak device). */
+export function Environment({ kind, theme, lite = false }: { kind: EnvironmentId; theme: Theme; lite?: boolean }) {
   switch (kind) {
     case 'speedway':
       // A modelled, light-baked race track for every edition; the drawn one
       // shows while it loads (and stays if it cannot).
       return (
         <WithModel fallback={<Speedway theme={theme} />}>
-          <BakedScene asset={ASSETS.speedwaySet} />
+          <BakedScene asset={ASSETS.speedwaySet} lite={lite} />
           <SpeedwayLights />
         </WithModel>
       );
@@ -56,7 +58,7 @@ export function Environment({ kind, theme }: { kind: EnvironmentId; theme: Theme
       // roof stands in while it loads (and for good if it cannot).
       return (
         <WithModel fallback={<Skyline theme={theme} />}>
-          <BakedScene asset={ASSETS.skylineSet} />
+          <BakedScene asset={ASSETS.skylineSet} lite={lite} />
           <NightSky horizon={skylineHaze(theme)} />
           <SkylineLights />
         </WithModel>
@@ -69,7 +71,7 @@ export function Environment({ kind, theme }: { kind: EnvironmentId; theme: Theme
       if (theme.id === 'classic') {
         return (
           <WithModel fallback={<Lounge theme={theme} />}>
-            <ClassicRoom />
+            <ClassicRoom lite={lite} />
             <RoomLights />
           </WithModel>
         );
@@ -78,7 +80,7 @@ export function Environment({ kind, theme }: { kind: EnvironmentId; theme: Theme
       if (theme.id === 'tptv') {
         return (
           <WithModel fallback={<Lounge theme={theme} />}>
-            <BakedScene asset={ASSETS.tptvRoom} />
+            <BakedScene asset={ASSETS.tptvRoom} lite={lite} />
             <TptvRoomLights />
           </WithModel>
         );
@@ -87,7 +89,7 @@ export function Environment({ kind, theme }: { kind: EnvironmentId; theme: Theme
       if (theme.id === 'chog') {
         return (
           <WithModel fallback={<Lounge theme={theme} />}>
-            <BakedScene asset={ASSETS.chogRoom} />
+            <BakedScene asset={ASSETS.chogRoom} lite={lite} />
             <ChogRoomLights />
           </WithModel>
         );
@@ -174,7 +176,7 @@ function SpeedwayLights() {
 }
 
 /** The baked set a scene shows, if it has one. */
-function bakedFor(kind: EnvironmentId, themeId: string): { url: string; lightmap: string } | null {
+function bakedFor(kind: EnvironmentId, themeId: string): BakedAsset | null {
   if (kind === 'speedway') return ASSETS.speedwaySet;
   if (kind === 'skyline') return ASSETS.skylineSet;
   if (themeId === 'classic') return ASSETS.classicRoom;
@@ -188,5 +190,5 @@ export function preloadEnvironment(kind: EnvironmentId, themeId: string): void {
   const set = bakedFor(kind, themeId);
   if (!set) return;
   useGLTF.preload(set.url);
-  useTexture.preload(set.lightmap);
+  useTexture.preload(lightmapFor(set, liteAssets()));
 }

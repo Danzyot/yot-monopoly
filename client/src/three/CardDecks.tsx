@@ -6,7 +6,7 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import {
-  BoxGeometry, CanvasTexture, Euler, Group, MeshStandardMaterial, PlaneGeometry, Quaternion,
+  CanvasTexture, Euler, Group, MeshStandardMaterial, PlaneGeometry, Quaternion,
   SRGBColorSpace, Vector3, type Mesh, type Texture,
 } from 'three';
 import type { Theme } from '../../../shared/themes.ts';
@@ -14,6 +14,7 @@ import type { DeckId } from '../../../shared/cards.ts';
 import type { CardShown } from '../../../shared/types.ts';
 import { W } from './layout.ts';
 import { CARD_FLIGHT_MS, useSceneBusy } from './sequence.ts';
+import { boxesSidesTop } from './boxParts.ts';
 
 
 const S = 2048 / W; // board canvas pixels per world unit (boardTexture.ts)
@@ -107,24 +108,21 @@ function texture(cv: HTMLCanvasElement): Texture {
   return t;
 }
 
-const pileGeo = new BoxGeometry(CW, PILE, CD);
-const looseGeo = new BoxGeometry(CW, 0.008, CD);
+/** The pile and a couple of loose cards on top, not quite square, so it reads as a pile: one geometry, two draws. */
+const pileGeo = (jitter: [number, number]) => boxesSidesTop([
+  { size: [CW, PILE, CD], position: [0, PILE / 2, 0] },
+  { size: [CW, 0.008, CD], position: [0.02, PILE + 0.004, -0.015], rotY: jitter[0] },
+  { size: [CW, 0.008, CD], position: [-0.01, PILE + 0.012, 0.01], rotY: jitter[1] },
+]);
+const PILE_GEO = { chance: pileGeo([0.04, -0.03]), chest: pileGeo([-0.035, 0.05]) } as const;
 const faceGeo = new PlaneGeometry(CW, CD);
 const edgeMat = new MeshStandardMaterial({ color: '#f1ece0', roughness: 0.85 });
 
 function Pile({ theme, deck, back }: { theme: Theme; deck: DeckId; back: Texture }) {
   const top = useMemo(() => new MeshStandardMaterial({ map: back, roughness: 0.55 }), [back]);
   useEffect(() => () => top.dispose(), [top]);
-  const mats = [edgeMat, edgeMat, top, edgeMat, edgeMat, edgeMat];
-  // A couple of loose cards on top, not quite square, so it reads as a pile.
-  const jitter = deck === 'chance' ? [0.04, -0.03] : [-0.035, 0.05];
-  return (
-    <group>
-      <mesh castShadow receiveShadow geometry={pileGeo} material={mats} position={[0, PILE / 2, 0]} />
-      <mesh castShadow receiveShadow geometry={looseGeo} material={mats} position={[0.02, PILE + 0.004, -0.015]} rotation={[0, jitter[0], 0]} />
-      <mesh castShadow receiveShadow geometry={looseGeo} material={mats} position={[-0.01, PILE + 0.012, 0.01]} rotation={[0, jitter[1], 0]} />
-    </group>
-  );
+  const mats = useMemo(() => [edgeMat, top], [top]);
+  return <mesh castShadow receiveShadow geometry={PILE_GEO[deck]} material={mats} />;
 }
 
 const FRAME = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI / 4);

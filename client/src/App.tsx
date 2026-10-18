@@ -1,10 +1,6 @@
-import Gallery from './pages/Gallery.tsx';
+import { Suspense, lazy } from 'react';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import Home from './pages/Home.tsx';
-import RoomPage from './pages/RoomPage.tsx';
-import Leaderboard from './pages/Leaderboard.tsx';
-import Profile from './pages/Profile.tsx';
-import AdminPage from './pages/AdminPage.tsx';
 import Header from './components/Header.tsx';
 import BanScreen from './components/BanScreen.tsx';
 import { AuthModalHost } from './components/AuthModal.tsx';
@@ -13,12 +9,24 @@ import { ToastHost } from './toast.tsx';
 import { DialogHost } from './components/Modal.tsx';
 import { TextEditHost } from './textEdit.tsx';
 
+// Only the home page ships in the first download; every other page (and
+// three.js with it) loads when it is first opened.
+const RoomPage = lazy(() => import('./pages/RoomPage.tsx'));
+const Gallery = lazy(() => import('./pages/Gallery.tsx'));
+const Leaderboard = lazy(() => import('./pages/Leaderboard.tsx'));
+const Profile = lazy(() => import('./pages/Profile.tsx'));
+const AdminPage = lazy(() => import('./pages/AdminPage.tsx'));
+
+/** Shown for the moment a page's code is still on its way. */
+const PageLoading = () => <div className="center-msg"><p className="muted">Loading…</p></div>;
+
 function Shell() {
   // The game screen is full-bleed 3D; everything else gets the site header.
   const inRoom = useLocation().pathname.startsWith('/r/');
   return (
     <>
       {!inRoom && <Header />}
+      <Suspense fallback={<PageLoading />}>
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/r/:code" element={<RoomPage />} />
@@ -28,6 +36,7 @@ function Shell() {
         <Route path="/admin/*" element={<AdminPage />} />
         <Route path="*" element={<Home />} />
       </Routes>
+      </Suspense>
       <AuthModalHost />
       <BanScreen />
       <ToastHost />

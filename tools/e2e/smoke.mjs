@@ -52,7 +52,7 @@ for (const map of MAPS) {
       await page.click('.modal button:has-text("Play")');
       await page.waitForSelector('text=Sign out');
       await page.click('text=Create Game');
-      await page.waitForURL(/\/r\//);
+      await page.waitForURL(/\/r\//, { waitUntil: 'commit' });
       await page.waitForTimeout(4000);
       await page.click(`button.map-card:has-text("${map}")`);
       await page.click(`button.bp-theme:has-text("${edition}")`);

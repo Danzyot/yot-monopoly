@@ -34,7 +34,10 @@ function meshes(root: Object3D): Mesh[] {
 }
 
 /** A light-baked scene from tools/blender: its model, lightmap and lightmap strength (blib.bake_lightmap). */
-export interface BakedAsset { url: string; lightmap: string; lightmapIntensity: number }
+export interface BakedAsset { url: string; lightmap: string; lightmapIntensity: number; lightmapLow?: string }
+
+/** The lightmap a scene uses: the half-size one on Low (and Auto on weak devices), when it has one. */
+export const lightmapFor = (asset: BakedAsset, lite: boolean) => (lite && asset.lightmapLow) || asset.lightmap;
 
 /**
  * A light-baked room or set: every surface is unlit and multiplied by the
@@ -42,10 +45,10 @@ export interface BakedAsset { url: string; lightmap: string; lightmapIntensity: 
  * (fire, lamp shade, the night outside, neon) show their own colour at full
  * strength.
  */
-export function BakedScene({ asset }: { asset: BakedAsset }) {
-  const { url, lightmap, lightmapIntensity } = asset;
+export function BakedScene({ asset, lite = false }: { asset: BakedAsset; lite?: boolean }) {
+  const { url, lightmapIntensity } = asset;
   const gltf = useGLTF(url);
-  const light = useTexture(lightmap);
+  const light = useTexture(lightmapFor(asset, lite));
   const scene = useMemo(() => {
     // The lightmap rides on the second UV set; the plain-colour mesh has only that one.
     light.flipY = false;
@@ -82,7 +85,7 @@ export function BakedScene({ asset }: { asset: BakedAsset }) {
 }
 
 /** The Classic room (tools/blender/classic_room.py). */
-export const ClassicRoom = () => <BakedScene asset={ASSETS.classicRoom} />;
+export const ClassicRoom = ({ lite }: { lite?: boolean }) => <BakedScene asset={ASSETS.classicRoom} lite={lite} />;
 
 /** The round game table, its finish recoloured to the room's table style. */
 export function ModelTable({ color, roughness, metalness }: { color: string; roughness: number; metalness: number }) {
@@ -207,9 +210,14 @@ function Building({ proto, spot, drop }: { proto: Object3D; spot: BuildingSpot; 
   );
 }
 
-/** Start downloading the shared models before the first scene asks for them. */
-export function preloadModels() {
+/**
+ * Start downloading the shared models before the first scene asks for them.
+ * The pieces (1.6 MB) and houses only with `game`: the home page's turning
+ * board has neither, so a first visit does not wait on them.
+ */
+export function preloadModels(game: boolean) {
   useGLTF.preload(ASSETS.table.url);
+  if (!game) return;
   useGLTF.preload(ASSETS.buildings.url);
   useGLTF.preload(ASSETS.characters.url);
 }

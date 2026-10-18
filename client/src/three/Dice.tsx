@@ -8,7 +8,28 @@ import { DICE_MS, markRoll } from './sequence.ts';
 const SIZE = 0.5;
 const ROLL_MS = DICE_MS;
 // Rounded edges like a real die; keeps BoxGeometry's face groups and UVs.
-const DIE_GEO = new RoundedBoxGeometry(SIZE, SIZE, SIZE, 5, 0.085);
+// The six faces' artwork shares one texture (a 3×2 atlas of 128 px cells, in
+// face order), so a die is one draw call rather than six: each face's UVs are
+// moved into its cell and the groups dropped.
+const DIE_GEO = (() => {
+  const g = new RoundedBoxGeometry(SIZE, SIZE, SIZE, 5, 0.085);
+  const uv = g.attributes.uv;
+  const index = g.index;
+  const seen = new Set<number>();
+  for (const grp of g.groups) {
+    const cell = grp.materialIndex ?? 0;
+    const col = cell % 3, row = Math.floor(cell / 3);
+    for (let k = grp.start; k < grp.start + grp.count; k++) {
+      const vtx = index ? index.getX(k) : k;
+      if (seen.has(vtx)) continue;
+      seen.add(vtx);
+      uv.setXY(vtx, (col + uv.getX(vtx)) / 3, 1 - (row + 1 - uv.getY(vtx)) / 2);
+    }
+  }
+  g.clearGroups();
+  return g;
+})();
+const CELL = 128;
 // Where the dice come to rest. A die's footprint is at most SIZE·√2 across at
 // any yaw, so homes at least 0.75 apart can never overlap once settled.
 const HOME_A: [number, number] = [-0.5, 1.4];
@@ -49,11 +70,23 @@ const PIPS: Record<number, [number, number][]> = {
   6: [[0.28, 0.22], [0.72, 0.22], [0.28, 0.5], [0.72, 0.5], [0.28, 0.78], [0.72, 0.78]],
 };
 
-function canvasTexture(draw: (g: CanvasRenderingContext2D) => void): CanvasTexture {
+/** One 128 px cell per face, in BoxGeometry face order, three across and two down. */
+function atlasTexture(faces: ((g: CanvasRenderingContext2D) => void)[]): CanvasTexture {
   const c = document.createElement('canvas');
-  c.width = c.height = 128;
-  draw(c.getContext('2d')!);
+  c.width = CELL * 3;
+  c.height = CELL * 2;
+  const g = c.getContext('2d')!;
+  faces.forEach((draw, i) => {
+    g.save();
+    g.translate((i % 3) * CELL, Math.floor(i / 3) * CELL);
+    g.beginPath();
+    g.rect(0, 0, CELL, CELL);
+    g.clip();
+    draw(g);
+    g.restore();
+  });
   const t = new CanvasTexture(c);
+  // (The bump maps too, as they always were: it sets how deep the pips look.)
   t.colorSpace = SRGBColorSpace;
   return t;
 }
@@ -146,21 +179,26 @@ function drawBus(g: CanvasRenderingContext2D) {
   }
 }
 
-function speedMaterial(f: SpeedFace): MeshPhysicalMaterial {
-  if (typeof f === 'number') {
-    return dieMaterial(canvasTexture(g => drawPips(g, f, SPEED_INK, SPEED_BODY)), canvasTexture(g => drawPipBump(g, f)));
-  }
-  return dieMaterial(canvasTexture(g => {
+function speedMaterial(): MeshPhysicalMaterial {
+  const art = SPEED_LAYOUT.map(f => (g: CanvasRenderingContext2D) => {
+    if (typeof f === 'number') return drawPips(g, f, SPEED_INK, SPEED_BODY);
     g.fillStyle = SPEED_BODY;
     g.fillRect(0, 0, 128, 128);
     if (f === 'mr') drawHat(g);
     else drawBus(g);
-  }), null);
+  });
+  // The picture faces are flat: white (no dent) in the bump map.
+  const bump = SPEED_LAYOUT.map(f => (g: CanvasRenderingContext2D) => {
+    if (typeof f === 'number') return drawPipBump(g, f);
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, 128, 128);
+  });
+  return dieMaterial(atlasTexture(art), atlasTexture(bump));
 }
 
 function Die({ top, seq, home, delay, materials, rollOnMount = false }: {
   /** Box face index (BoxGeometry order) that should land on top. */
-  top: number; seq: number; home: [number, number]; delay: number; materials: MeshPhysicalMaterial[];
+  top: number; seq: number; home: [number, number]; delay: number; materials: MeshPhysicalMaterial;
   /** Tumble in when first shown (the Speed Die appears with the roll that brings it). */
   rollOnMount?: boolean;
 }) {
@@ -249,12 +287,15 @@ export function Dice({ dice, seq, pip = '#111', body = '#fbfbf7', speed = null }
   markRoll(seq, !mounted.current);
   mounted.current = true;
   const pipMaterials = useMemo(
-    () => FACE_VALUES.map(v => dieMaterial(canvasTexture(g => drawPips(g, v, pip, body)), canvasTexture(g => drawPipBump(g, v)))),
+    () => dieMaterial(
+      atlasTexture(FACE_VALUES.map(v => g => drawPips(g, v, pip, body))),
+      atlasTexture(FACE_VALUES.map(v => g => drawPipBump(g, v))),
+    ),
     [pip, body],
   );
-  const speedMaterials = useMemo(() => SPEED_LAYOUT.map(speedMaterial), []);
+  const speedMaterials = useMemo(speedMaterial, []);
   // Free the canvas textures and materials with the dice (scene changes, edition swaps).
-  const free = (ms: MeshPhysicalMaterial[]) => { for (const m of ms) { m.map?.dispose(); m.bumpMap?.dispose(); m.dispose(); } };
+  const free = (m: MeshPhysicalMaterial) => { m.map?.dispose(); m.bumpMap?.dispose(); m.dispose(); };
   useEffect(() => () => free(pipMaterials), [pipMaterials]);
   useEffect(() => () => free(speedMaterials), [speedMaterials]);
   return (

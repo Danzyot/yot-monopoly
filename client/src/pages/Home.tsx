@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { call, useConnected, useRoomList } from '../net.ts';
 import { THEMES, resolveTheme } from '../../../shared/themes.ts';
@@ -8,8 +8,13 @@ import { CHARACTER_DEFS, type CharacterDef, type CharacterId } from '../../../sh
 import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { requirementBadge, requirementSentence } from '../community.tsx';
-import BoardScene from '../three/BoardScene.tsx';
-import { preloadEnvironment } from '../three/environments/index.tsx';
+
+// The turning board behind the hero is three.js: it streams in after the page
+// itself, so the buttons are there before the 3D is.
+const BoardScene = lazy(() => import('../three/BoardScene.tsx'));
+const preloadEnvironment = (env: string, themeId: string) => {
+  void import('../three/environments/index.tsx').then(m => m.preloadEnvironment(env as Parameters<typeof m.preloadEnvironment>[0], themeId));
+};
 import { HowToPlayButton } from '../components/HowToPlay.tsx';
 
 const STEPS: { icon: string; title: string; body: string }[] = [
@@ -28,12 +33,20 @@ const FEATURED: CharacterId[] = ['snacky', 'starer'];
 const DIORAMA_MS = 16000;
 const DIP_MS = 900;
 
+/** Data saver on, or the browser reckons the connection is 3G or slower. */
+function slowConnection(): boolean {
+  const c = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+  return !!c && (c.saveData === true || /(^|-)(2g|3g)$/.test(c.effectiveType ?? ''));
+}
+
 function useDiorama(): [{ themeId: string; mapId: string }, boolean] {
   const [i, setI] = useState(0);
   const [dim, setDim] = useState(false);
   useEffect(() => {
-    // Stay on one room for people who have asked their system for less motion.
+    // Stay on one room for people who have asked their system for less motion,
+    // and on a slow or metered connection (each room is a ~1.5 MB download).
     if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (slowConnection()) return;
     let swap: ReturnType<typeof setTimeout> | null = null;
     let at = 0;
     // Fetch the next room while this one is on, so the swap is seamless.
@@ -85,7 +98,7 @@ export default function Home() {
   return (
     <div className="home">
       {/* A live board slowly turning behind the hero, touring every room: shows what the game is before a word is read. */}
-      <div className={`home-bg ${dim ? 'dim' : ''}`} aria-hidden><BoardScene themeId={scene.themeId} mapId={scene.mapId} game={null} spin /></div>
+      <div className={`home-bg ${dim ? 'dim' : ''}`} aria-hidden><Suspense fallback={null}><BoardScene themeId={scene.themeId} mapId={scene.mapId} game={null} spin /></Suspense></div>
 
       <section className="home-hero">
         <h1>{BRAND.name}</h1>

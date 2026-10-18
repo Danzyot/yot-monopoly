@@ -3,8 +3,9 @@
 // someone is let out, then clangs shut behind them.
 
 import { useFrame } from '@react-three/fiber';
-import { useEffect, useMemo, useRef } from 'react';
-import { BoxGeometry, CylinderGeometry, InstancedMesh, MeshStandardMaterial, Object3D, type Group } from 'three';
+import { useEffect, useRef } from 'react';
+import { BoxGeometry, CylinderGeometry, Euler, Matrix4, MeshStandardMaterial, Quaternion, Vector3, type BufferGeometry, type Group } from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { GameView } from '../../../shared/types.ts';
 import { C, tile } from './layout.ts';
 import { jailDoor } from './cinematics/store.ts';
@@ -21,36 +22,50 @@ const iron = new MeshStandardMaterial({ color: '#2f3238', metalness: 0.85, rough
 const barGeo = new CylinderGeometry(BAR_R, BAR_R, H, 8);
 const railGeo = new BoxGeometry(1, 0.03, 0.03);
 const postGeo = new BoxGeometry(0.04, H + 0.03, 0.04);
-const dummy = new Object3D();
+
+type Piece = { geo: BufferGeometry; p: [number, number, number]; ry?: number; s?: [number, number, number] };
+/** Bake each piece's placement into one geometry: the whole cage is one draw (two with shadows). */
+function merged(pieces: Piece[]): BufferGeometry {
+  const m = new Matrix4(), q = new Quaternion(), e = new Euler(), v = new Vector3(), sc = new Vector3();
+  return mergeGeometries(pieces.map(({ geo, p, ry = 0, s = [1, 1, 1] }) =>
+    geo.clone().applyMatrix4(m.compose(v.set(...p), q.setFromEuler(e.set(0, ry, 0)), sc.set(...s)))));
+}
+
+// Bars on all four sides, leaving a gap for the door in the middle of the -z
+// side; top rails and a lower rail just above the floor; a post at each corner.
+const CAGE = (() => {
+  const h = SIDE / 2;
+  const pieces: Piece[] = [];
+  for (let k = 1; k < PER_SIDE; k++) {
+    const t = -h + (SIDE * k) / PER_SIDE;
+    const spots: [number, number][] = [[-h, t], [h, t], [t, h]];
+    if (Math.abs(t) > DOOR_W / 2) spots.push([t, -h]);
+    for (const [x, z] of spots) pieces.push({ geo: barGeo, p: [x, H / 2, z] });
+  }
+  for (const y of [0.02, H]) {
+    pieces.push(
+      { geo: railGeo, p: [-h, y, 0], ry: Math.PI / 2, s: [SIDE, 1, 1] },
+      { geo: railGeo, p: [h, y, 0], ry: Math.PI / 2, s: [SIDE, 1, 1] },
+      { geo: railGeo, p: [0, y, h], s: [SIDE, 1, 1] },
+      { geo: railGeo, p: [-(h + DOOR_W / 2) / 2, y, -h], s: [h - DOOR_W / 2, 1, 1] },
+      { geo: railGeo, p: [(h + DOOR_W / 2) / 2, y, -h], s: [h - DOOR_W / 2, 1, 1] },
+    );
+  }
+  for (const [x, z] of [[-h, -h], [h, -h], [-h, h], [h, h]]) pieces.push({ geo: postGeo, p: [x, (H + 0.03) / 2, z] });
+  return merged(pieces);
+})();
+
+// The door's rails and bars, in the door's own frame (hinged at its left end).
+const DOOR = merged([
+  ...[0.02, H].map(y => ({ geo: railGeo, p: [DOOR_W / 2, y, 0] as [number, number, number], s: [DOOR_W, 1, 1] as [number, number, number] })),
+  ...[0.25, 0.5, 0.75].map(f => ({ geo: barGeo, p: [f * DOOR_W, H / 2, 0] as [number, number, number] })),
+]);
 
 export function JailCell({ game, n }: { game: GameView | null; n: number }) {
   const g = tile(n / 4, n);
   // The cell's centre; the corner's inner quadrant (toward +x, -z).
   const cx = g.x + STRIP / 2, cz = g.z - STRIP / 2;
-  const bars = useRef<InstancedMesh>(null);
   const door = useRef<Group>(null);
-
-  // Bars on all four sides, leaving a gap for the door in the middle of the -z side.
-  const spots = useMemo(() => {
-    const out: [number, number][] = [];
-    const h = SIDE / 2;
-    for (let k = 1; k < PER_SIDE; k++) {
-      const t = -h + (SIDE * k) / PER_SIDE;
-      out.push([-h, t], [h, t], [t, h]);
-      if (Math.abs(t) > DOOR_W / 2) out.push([t, -h]);
-    }
-    return out;
-  }, []);
-  useEffect(() => {
-    const m = bars.current;
-    if (!m) return;
-    spots.forEach(([x, z], i) => {
-      dummy.position.set(x, H / 2, z);
-      dummy.updateMatrix();
-      m.setMatrixAt(i, dummy.matrix);
-    });
-    m.instanceMatrix.needsUpdate = true;
-  }, [spots]);
 
   // Open the door when someone gets out.
   const jailed = useRef<Set<string> | null>(null);
@@ -75,29 +90,12 @@ export function JailCell({ game, n }: { game: GameView | null; n: number }) {
   });
 
   const h = SIDE / 2;
-  const doorBars = [0.25, 0.5, 0.75].map(f => f * DOOR_W);
   return (
     <group position={[cx, 0, cz]}>
-      <instancedMesh ref={bars} args={[barGeo, iron, spots.length]} castShadow frustumCulled={false} />
-      {/* Top rails, and a lower rail just above the floor. */}
-      {[0.02, H].map(y => (
-        <group key={y}>
-          <mesh geometry={railGeo} material={iron} position={[-h, y, 0]} rotation={[0, Math.PI / 2, 0]} scale={[SIDE, 1, 1]} castShadow />
-          <mesh geometry={railGeo} material={iron} position={[h, y, 0]} rotation={[0, Math.PI / 2, 0]} scale={[SIDE, 1, 1]} castShadow />
-          <mesh geometry={railGeo} material={iron} position={[0, y, h]} scale={[SIDE, 1, 1]} castShadow />
-          <mesh geometry={railGeo} material={iron} position={[-(h + DOOR_W / 2) / 2, y, -h]} scale={[h - DOOR_W / 2, 1, 1]} castShadow />
-          <mesh geometry={railGeo} material={iron} position={[(h + DOOR_W / 2) / 2, y, -h]} scale={[h - DOOR_W / 2, 1, 1]} castShadow />
-        </group>
-      ))}
-      {[[-h, -h], [h, -h], [-h, h], [h, h]].map(([x, z]) => (
-        <mesh key={`${x},${z}`} geometry={postGeo} material={iron} position={[x, (H + 0.03) / 2, z]} castShadow />
-      ))}
+      <mesh geometry={CAGE} material={iron} castShadow />
       {/* The door, hinged on its left post, opening outward. */}
       <group ref={door} position={[-DOOR_W / 2, 0, -h]}>
-        {[0.02, H].map(y => (
-          <mesh key={y} geometry={railGeo} material={iron} position={[DOOR_W / 2, y, 0]} scale={[DOOR_W, 1, 1]} castShadow />
-        ))}
-        {doorBars.map(x => <mesh key={x} geometry={barGeo} material={iron} position={[x, H / 2, 0]} castShadow />)}
+        <mesh geometry={DOOR} material={iron} castShadow />
         <mesh material={iron} position={[DOOR_W - 0.02, H * 0.55, 0.012]}>
           <boxGeometry args={[0.04, 0.05, 0.02]} />
         </mesh>
