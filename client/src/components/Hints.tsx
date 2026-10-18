@@ -1,7 +1,8 @@
 // First-time tips: a speech bubble over the action bar the first time a
 // player can do something new (build, trade, raise cash). Each tip shows once
-// per browser and goes away for good on "Got it" or when its action is used.
-import { useEffect, useState } from 'react';
+// per browser and goes away for good on "Got it" or when its action is used
+// (the welcome tip also by itself, after the first turn or 30 s).
+import { useEffect, useRef, useState } from 'react';
 import { groupIndices } from '../../../shared/board.ts';
 import { resolveTheme } from '../../../shared/themes.ts';
 import type { GameView } from '../../../shared/types.ts';
@@ -62,6 +63,43 @@ export function CoachHint({ game, me, busy, onHelp, onBuild, onRaise, onTrade }:
   onHelp: () => void; onBuild: () => void; onRaise: () => void; onTrade: () => void;
 }) {
   const seen = useSeen();
+  // The welcome tip is for a first look: it retires itself once my first turn
+  // is done (the turn passes on from me) or after 30 s on screen, whichever is first.
+  const wasMine = useRef(game.current === me);
+  useEffect(() => {
+    if (wasMine.current && game.current !== me && !seen.has('welcome')) markHint('welcome');
+    wasMine.current = game.current === me;
+  }, [game.current, me, seen]);
+  const hint = pickHint(game, me, busy, seen, { onHelp, onBuild, onRaise, onTrade });
+  const welcomeShowing = hint?.id === 'welcome';
+  useEffect(() => {
+    if (!welcomeShowing) return;
+    const t = setTimeout(() => markHint('welcome'), WELCOME_MS);
+    return () => clearTimeout(t);
+  }, [welcomeShowing]);
+  if (!hint) return null;
+  const h = hint;
+  return (
+    <div className="coach" role="note" key={h.id}>
+      <span className="coach-icon" aria-hidden>{h.icon}</span>
+      <span className="coach-text">{h.text}</span>
+      <span className="coach-actions">
+        {h.action && <button className="btn tiny gold" onClick={() => { markHint(h.id); h.action![1](); }}>{h.action[0]}</button>}
+        <button className="btn tiny ghost" onClick={() => markHint(h.id)} aria-label="Dismiss tip">Got it</button>
+      </span>
+    </div>
+  );
+}
+
+/** How long the welcome tip stays before it goes away by itself. */
+const WELCOME_MS = 30_000;
+
+type Hint = { id: HintId; icon: string; text: string; action?: [string, () => void] };
+
+/** The one tip worth showing right now, if any. */
+function pickHint(game: GameView, me: string, busy: boolean, seen: Set<string>, { onHelp, onBuild, onRaise, onTrade }: {
+  onHelp: () => void; onBuild: () => void; onRaise: () => void; onTrade: () => void;
+}): Hint | null {
   const p = game.players.find(x => x.id === me);
   if (!p || p.bankrupt || game.phase === 'over' || game.paused || busy) return null;
   const theme = resolveTheme(game.themeId, game.mapId);
@@ -70,7 +108,7 @@ export function CoachHint({ game, me, busy, onHelp, onBuild, onRaise, onTrade }:
 
   const price = game.phase === 'buy' && mine ? theme.spaces[p.position].price ?? 0 : 0;
   const cantAfford = price > p.cash && ownedBy(game, me).some(i => !game.owned[i].mortgaged);
-  let hint: { id: HintId; icon: string; text: string; action?: [string, () => void] } | null = null;
+  let hint: Hint | null = null;
   if ((debtOf(game, me) > p.cash || cantAfford) && !seen.has('raise')) {
     hint = {
       id: 'raise', icon: '💸', action: ['Raise cash', onRaise],
@@ -84,16 +122,5 @@ export function CoachHint({ game, me, busy, onHelp, onBuild, onRaise, onTrade }:
   } else if (!seen.has('welcome') && !howToSeen()) {
     hint = { id: 'welcome', icon: '👋', text: 'New here? The rules fit on one short page.', action: ['How to play', onHelp] };
   }
-  if (!hint) return null;
-  const h = hint;
-  return (
-    <div className="coach" role="note" key={h.id}>
-      <span className="coach-icon" aria-hidden>{h.icon}</span>
-      <span className="coach-text">{h.text}</span>
-      <span className="coach-actions">
-        {h.action && <button className="btn tiny gold" onClick={() => { markHint(h.id); h.action![1](); }}>{h.action[0]}</button>}
-        <button className="btn tiny ghost" onClick={() => markHint(h.id)} aria-label="Dismiss tip">Got it</button>
-      </span>
-    </div>
-  );
+  return hint;
 }

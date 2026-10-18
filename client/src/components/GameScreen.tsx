@@ -65,8 +65,18 @@ export default function GameScreen({ room, game, me, chat, skew }: {
     const id = tradePartnerFor(game, me) ?? game.players.find(x => x.id !== me && !x.bankrupt)?.id;
     if (id) { setTradeWith(id); markHint('trade'); }
   };
-  // Phones start with the side panel folded so the board stays visible.
-  const [panelOpen, setPanelOpen] = useState(() => window.innerWidth > 760);
+  // Phones (held either way) start with the side panel folded so the board stays visible.
+  const [panelOpen, setPanelOpen] = useState(() => window.innerWidth > 760 && window.innerHeight > 500);
+  /** Landscape phones: the dock's secondary buttons live in a small "⋯" sheet. */
+  const [dockMore, setDockMore] = useState(false);
+  const dockRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!dockMore) return;
+    const away = (e: PointerEvent) => { if (!dockRef.current?.contains(e.target as Node)) setDockMore(false); };
+    document.addEventListener('pointerdown', away);
+    return () => document.removeEventListener('pointerdown', away);
+  }, [dockMore]);
+  useEffect(() => { if (helpOpen) setDockMore(false); }, [helpOpen]);
   const pickTab = (t: typeof tab) => {
     setPanelOpen(open => !(open && t === tab));
     setTab(t);
@@ -180,6 +190,14 @@ export default function GameScreen({ room, game, me, chat, skew }: {
         onHelp={openHelp} onBuild={() => openManage('build')} onRaise={() => openManage('raise')} onTrade={openTrade} />
       <aside className={`sidepanel ${panelOpen ? '' : 'closed'}`}>
         <TradeOffers game={game} me={me} onCounter={t => setCounter(counterDraft(t))} />
+        {/* Landscape phones: the folded panel is one small button (with the unread count). */}
+        {!panelOpen && (
+          <button className="panel-toggle" onClick={() => setPanelOpen(true)} aria-expanded={false}
+            aria-label={config.features.chat ? `Open chat and log${unread ? ` (${unread} unread)` : ''}` : 'Open the game log'}>
+            <span aria-hidden>{config.features.chat ? '💬' : '📜'}</span> {config.features.chat ? 'Chat' : 'Log'}
+            {unread > 0 && <span className="tab-badge" aria-hidden>{unread > 9 ? '9+' : unread}</span>}
+          </button>
+        )}
         <div className="tabs" role="tablist">
           {config.features.chat && (
             <button role="tab" aria-selected={tab === 'chat' && panelOpen} className={tab === 'chat' && panelOpen ? 'on' : ''} onClick={() => pickTab('chat')}>
@@ -189,6 +207,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
           <button role="tab" aria-selected={tab === 'log' && panelOpen} className={tab === 'log' && panelOpen ? 'on' : ''} onClick={() => pickTab('log')}>Log</button>
           {myPlayer && !myPlayer.bankrupt && <button role="tab" aria-selected={tab === 'mine' && panelOpen} className={tab === 'mine' && panelOpen ? 'on' : ''} onClick={() => pickTab('mine')}>Deeds</button>}
           <button role="tab" aria-selected={tab === 'table' && panelOpen} className={tab === 'table' && panelOpen ? 'on' : ''} onClick={() => pickTab('table')}>Players</button>
+          {panelOpen && <button className="tab-close" onClick={() => setPanelOpen(false)} aria-label="Close the panel" title="Close">✕</button>}
         </div>
         <div className="tab-body">
           {(tab === 'log' || (tab === 'chat' && !config.features.chat)) && <Log game={game} />}
@@ -216,10 +235,17 @@ export default function GameScreen({ room, game, me, chat, skew }: {
       <PausedBanner game={game} />
       {theme.logoUrl && <img className="corner-mark" src={theme.logoUrl} alt={theme.name} />}
 
-      <div className="social-dock">
+      <div className={`social-dock ${dockMore ? 'more-open' : ''}`} ref={dockRef}>
         {me && reactionsOn && <ReactionPicker sentSeq={social.sentSeq} />}
         {me && config.features.chat && <QuickChatButton />}
         {reactionsOn && !over && <PokeButton room={room} game={game} me={me} skew={skew} />}
+        {/* Only shown on landscape phones: the rest of the dock folds into this sheet. */}
+        <button className={`dock-btn dock-more ${dockMore ? 'on' : ''}`} onClick={() => setDockMore(o => !o)}
+          aria-expanded={dockMore} aria-label="More: camera, graphics, alerts, help" title="More">
+          <span className="dock-ico" aria-hidden>⋯</span><span className="dock-text">More</span>
+        </button>
+        {/* On desktop and portrait phones this wrapper is transparent to layout. */}
+        <div className="dock-extra">
         {myPlayer && !over && (
           <button className={`dock-btn ${notify ? 'on' : ''}`} onClick={toggleNotify}
             title={notify ? 'Turn alerts on — click to turn off' : 'Notify me when it\'s my turn (while this tab is hidden)'}
@@ -245,6 +271,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
         <button className={`dock-btn ${helpOpen ? 'on' : ''}`} onClick={openHelp} title="How to play (?)" aria-label="How to play">
           <span className="dock-ico" aria-hidden>?</span><span className="dock-text">Help</span>
         </button>
+        </div>
       </div>
       <SpectatorReactions reactions={social.reactions} />
       <PokeNotice poke={social.poke} game={game} me={me} />
@@ -270,24 +297,37 @@ function Players({ game, room, me, onTrade, reactions, onPortfolio }: {
 }) {
   const theme = resolveTheme(game.themeId, game.mapId);
   const amIn = game.players.some(p => p.id === me && !p.bankrupt);
+  // Portrait phones with a full table: each player is a compact chip (avatar,
+  // cash, turn ring, deed strip); tapping one opens it into the full card.
+  const portraitPhone = useMedia('(max-width: 760px) and (orientation: portrait)');
+  const chips = portraitPhone && game.players.length >= 4;
+  const [expanded, setExpanded] = useState<string | null>(null);
+  useEffect(() => { if (!chips) setExpanded(null); }, [chips]);
   return (
-    <div className="players">
+    <div className={`players ${chips ? 'compact' : ''}`}>
       {game.players.map(p => {
         const seat = room.seats.find(s => s.id === p.id);
         const props = Object.values(game.owned).filter(o => o.owner === p.id).length;
         const owes = game.debts.filter(d => d.from === p.id).reduce((a, d) => a + d.amount, 0);
         const reaction = latestReaction(reactions, p.id);
         const worth = game.netWorth?.[p.id];
+        const chip = chips && expanded !== p.id;
+        // A chip opens into the full card first; the full card opens the portfolio.
+        const open = () => (chip ? setExpanded(p.id) : onPortfolio(p.id));
         return (
-          <div key={p.id} className={`player ${p.id === game.current ? 'turn' : ''} ${p.bankrupt ? 'out' : ''}`} style={{ borderColor: p.color }}
+          <div key={p.id} className={`player ${p.id === game.current ? 'turn' : ''} ${p.bankrupt ? 'out' : ''} ${chip ? 'mini' : ''} ${chips && !chip ? 'expanded' : ''}`}
+            style={{ borderColor: p.color }}
             title={!p.bankrupt && worth !== undefined ? `Net worth ${theme.currency}${worth.toLocaleString()}` : undefined}>
             {p.id === game.current && !p.bankrupt && game.phase !== 'over' && <span className="turn-ribbon">{p.id === me ? 'Your turn' : 'Playing'}</span>}
-            <span className="token-badge" style={{ background: p.color }}>
+            <span className="token-badge" style={{ background: p.color }}
+              onClick={chips && !chip ? () => setExpanded(null) : chip ? open : undefined}>
               {characterEmoji(p.character)}
               {reaction && <span key={reaction.seq} className="row-react" aria-label={`${p.name} reacted ${reaction.emoji}`}>{reaction.emoji}</span>}
             </span>
-            <div className="grow pf-open" role="button" tabIndex={0} title={`${p.name}'s portfolio`}
-              onClick={() => onPortfolio(p.id)} onKeyDown={e => { if (e.key === 'Enter') onPortfolio(p.id); }}>
+            <div className="grow pf-open" role="button" tabIndex={0}
+              title={chip ? `${p.name}${p.id === game.current ? ' — playing' : ''}. Tap for more` : `${p.name}'s portfolio`}
+              aria-label={chip ? `${p.name}, ${p.bankrupt ? 'bankrupt' : `${theme.currency}${p.cash.toLocaleString()}`}${p.id === game.current ? ', playing now' : ''}` : undefined}
+              onClick={open} onKeyDown={e => { if (e.key === 'Enter') open(); }}>
               <div className="pname">
                 <span className="pname-text">{p.name}</span>{p.id === me && <em className="tag you">you</em>}
                 {p.isBot && <em className="tag">bot</em>}
@@ -345,6 +385,13 @@ function ActionBar({ game, me, skew, selected, onManage, onLeave, onTrade }: {
   const dice = <DiceRead game={game} />;
 
   if (game.phase === 'over') return null;
+  const auctionBar = () => {
+    const lot = game.auction ? theme.spaces[game.auction.space]?.name : null;
+    return <div className="actionbar"><span className="ab-status">🔨 {lot ? <><b>{lot}</b> is up for auction</> : 'Auction on!'} — bid in the auction panel</span>{dice}</div>;
+  };
+  // An open auction is the news, even while the last walk is still settling
+  // (a debt of mine still comes first, below).
+  if (game.phase === 'auction' && !game.paused && !(p && !p.bankrupt && debtOf(game, me) > 0)) return auctionBar();
   // Roll → result → walk: hold my buttons while the dice tumble, the score shows and the piece moves.
   if (sceneBusy && game.current === me && !game.paused) {
     return <div className="actionbar mine"><span className="ab-status rolling">{diceShown ? '🚶 Moving…' : '🎲 Rolling…'}</span>{dice}</div>;
@@ -412,10 +459,7 @@ function ActionBar({ game, me, skew, selected, onManage, onLeave, onTrade }: {
 
   if (game.phase === 'minigame') return <div className="actionbar"><span className="ab-status">🎮 Mini-game time!</span>{dice}</div>;
   if (game.phase === 'choose') return <ChooseBar game={game} me={me} selected={selected} />;
-  if (game.phase === 'auction') {
-    const lot = game.auction ? theme.spaces[game.auction.space]?.name : null;
-    return <div className="actionbar"><span className="ab-status">🔨 {lot ? <><b>{lot}</b> is up for auction</> : 'Auction on!'} — bid in the auction panel</span>{dice}</div>;
-  }
+  if (game.phase === 'auction') return auctionBar();
   if (game.current !== me) {
     // While their roll plays out, say so rather than giving away what it led to.
     const what = sceneBusy ? (diceShown ? 'is on the move' : 'is rolling')
@@ -480,13 +524,18 @@ function ActionBar({ game, me, skew, selected, onManage, onLeave, onTrade }: {
         </span>
         <button className="btn primary chunky" disabled={busy || !afford} onClick={() => run({ type: 'buy' })} aria-keyshortcuts="b"
           title={afford ? undefined : 'Not enough cash — mortgage something first, or auction it'}>Buy it · {cur(price)}</button>
-        <button className="btn" disabled={busy} onClick={() => run({ type: 'decline' })} aria-keyshortcuts="a">{game.rules.auctions ? 'Auction it' : 'Skip'}</button>
+        {/* Not buying always says where the deed goes: to auction (when the rules have
+            auctions) or back to the bank. The second button does the same and hands
+            the turn over once it's settled (doubles still roll again, so it's hidden then). */}
+        <button className="btn" disabled={busy} onClick={() => run({ type: 'decline' })} aria-keyshortcuts="a"
+          title={game.rules.auctions ? `Don't buy: everyone (you too) bids on ${s.name}, highest bid wins. Then finish your turn` : `Don't buy ${s.name}; it stays with the bank. Then finish your turn`}>
+          {game.rules.auctions ? '🔨 Auction it' : 'Don\'t buy'}
+        </button>
         {!afford && owns && <button className="btn small ghost" onClick={() => onManage('raise')}>💸 Raise cash</button>}
-        {/* Pass and hand over in one tap (after the auction, when auctions are on). Doubles still roll again. */}
         {!game.extraRoll && (
           <button className="btn ghost" disabled={busy} onClick={() => run({ type: 'decline', endTurn: true })}
-            title={game.rules.auctions ? 'Skip it: it goes to auction, then your turn ends' : 'Skip it and end your turn'}>
-            End turn
+            title={game.rules.auctions ? `Send ${s.name} to auction; your turn ends when the auction does` : `Don't buy ${s.name} and end your turn`}>
+            {game.rules.auctions ? 'Auction & end turn' : 'Don\'t buy & end turn'}
           </button>
         )}
       </div>
@@ -572,6 +621,19 @@ function Log({ game }: { game: GameView }) {
       <div ref={end} />
     </div>
   );
+}
+
+/** Whether a CSS media query matches, kept up to date (rotation, resizing). */
+function useMedia(query: string): boolean {
+  const [on, setOn] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const m = window.matchMedia(query);
+    const f = () => setOn(m.matches);
+    f();
+    m.addEventListener('change', f);
+    return () => m.removeEventListener('change', f);
+  }, [query]);
+  return on;
 }
 
 function MyDeeds({ game, me, onPick, onManage }: { game: GameView; me: string; onPick: (i: number) => void; onManage: () => void }) {
