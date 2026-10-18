@@ -1,0 +1,86 @@
+/* ==========================================================================
+   Boards and themes: the lobby's Board → Theme → Table steps
+   (components/BoardPicker.tsx), the painted board previews
+   (three/BoardPreview.tsx) and the Takeprofit TV brand marks.
+   ========================================================================== */
+
+/* ---- numbered steps ---- */
+.bp-step { display: flex; align-items: center; gap: 9px; }
+.bp-step small { font: 600 12px var(--font, Inter), system-ui, sans-serif; letter-spacing: 0.02em; }
+.bp-num {
+  display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 50%;
+  font: 400 14px/1 var(--display, 'Lilita One'), sans-serif; color: #1b1300;
+  background: var(--hi, var(--accent)); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+
+/* ---- the two pickers ---- */
+.bp .edition-pick { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.bp .map-card .map-thumb { aspect-ratio: 16 / 10; }
+.bp-facts { font-weight: 800; letter-spacing: 0.01em; }
+
+.bp-theme { gap: 5px; }
+.bp-theme .bp-name { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.bp-theme .bp-name b { white-space: normal; line-height: 1.05; }
+.bp-theme .edition-logo { width: 28px; height: 28px; flex: none; }
+.bp-look {
+  align-self: flex-start; padding: 2px 9px 3px; border-radius: 99px; font: 700 11px/1.3 var(--font, Inter), system-ui, sans-serif;
+  letter-spacing: 0.06em; text-transform: uppercase; border: 1.5px solid currentColor; opacity: 0.9;
+}
+.bp-rules { font-style: italic; opacity: 0.85; }
+.bp-summary {
+  margin: 10px 0 2px; padding: 8px 12px; border-radius: 10px; line-height: 1.4;
+  background: rgba(0, 0, 0, 0.22); border-left: 4px solid var(--hi, var(--accent));
+}
+
+/* ---- a painted board, tilted like it lies on the table ---- */
+.board-preview {
+  position: relative; display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 10; margin-bottom: 4px;
+  border-radius: 10px; overflow: hidden; perspective: 520px;
+  background:
+    radial-gradient(ellipse at 50% 70%, rgba(255, 255, 255, 0.10), transparent 65%),
+    rgba(0, 0, 0, 0.28);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.08);
+}
+.board-preview:not(.ready)::after {
+  content: ''; width: 46%; aspect-ratio: 1; border-radius: 6px;
+  transform: rotateX(54deg) rotateZ(45deg); background: rgba(255, 255, 255, 0.08);
+  animation: bp-wait 1.1s ease-in-out infinite alternate;
+}
+.board-preview img {
+  width: 62%; aspect-ratio: 1; border-radius: 3px; transform: translateY(6%) rotateX(54deg) rotateZ(45deg);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.45), 0 18px 24px rgba(0, 0, 0, 0.5);
+  animation: bp-in 0.35s ease-out;
+}
+@keyframes bp-in { from { opacity: 0; transform: translateY(12%) rotateX(54deg) rotateZ(45deg); } }
+@keyframes bp-wait { to { opacity: 0.4; } }
+@media (prefers-reduced-motion: reduce) {
+  .board-preview img, .board-preview:not(.ready)::after { animation: none; }
+}
+
+@media (max-width: 520px) {
+  .bp .edition-pick { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .bp-theme .small:not(.bp-rules) { display: none; }
+}
+
+/* ---- Takeprofit TV: the mark is shown bare, as on the site (no disc) ---- */
+img.brand-mark[src$='/tptv/logo.svg'],
+img.bc-logo[src$='/tptv/logo.svg'],
+img.edition-logo[src$='/tptv/logo.svg'] { border-radius: 0; background: none; box-shadow: none; }
+
+/* The wordmark: "Takeprofit" in Big Shoulders, "TV" knocked out of a bone box. */
+.tptv-wordmark {
+  display: inline-flex; align-items: center; gap: 0.18em; white-space: nowrap;
+  font: 900 22px/1 'Big Shoulders', Impact, sans-serif; text-transform: uppercase; letter-spacing: -0.01em; color: #f2f0ea;
+}
+.tptv-wordmark span { background: #f2f0ea; color: #0b0b0d; padding: 0.06em 0.16em 0.04em; }
+/* SMPTE bars at 75%, the site's divider. */
+.tptv-bars { display: flex; height: 4px; width: 100%; }
+.tptv-bars i { flex: 1; }
+.tptv-bars i:nth-child(1) { background: #c0c0c0; }
+.tptv-bars i:nth-child(2) { background: #c0c000; }
+.tptv-bars i:nth-child(3) { background: #00c0c0; }
+.tptv-bars i:nth-child(4) { background: #00c000; }
+.tptv-bars i:nth-child(5) { background: #c000c0; }
+.tptv-bars i:nth-child(6) { background: #c00000; }
+.tptv-bars i:nth-child(7) { background: #0000c0; }
+.bc-tptv .bc-top > .tptv-bars { position: absolute; left: 0; right: 0; bottom: -4px; }

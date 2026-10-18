@@ -4,7 +4,7 @@
 
 import { CLASSIC_GROUP_COLORS, type SpaceDef } from './board.ts';
 import { cardText, type CardDef } from './cards.ts';
-import { getMap } from './maps.ts';
+import { getMap, type BoardArt } from './maps.ts';
 
 export interface RuleConfig {
   startingCash: number;
@@ -80,6 +80,8 @@ export interface ThemePalette {
   /** House / hotel colours. */
   house?: string;
   hotel?: string;
+  /** Lacquered rim and board sides (defaults to boardLine). */
+  rim?: string;
 }
 
 /** Optional reskin of the HTML interface (lobby + HUD) while this edition is played. */
@@ -119,22 +121,31 @@ export interface Edition {
   ui?: ThemeUi;
   /** Artwork drawn in the middle of the board and on the edition's cards (path under client/public). */
   logoUrl?: string;
+  /** The board art this theme brings; absent = the map's own look (Original). */
+  art?: BoardArt;
   rules: Partial<RuleConfig>;
 }
 
 /** An edition resolved onto a map: everything the engine and renderer need. */
 export interface Theme extends Edition {
   mapId: string;
+  /** How the board face is drawn: the map's own look, or the branded theme's. */
+  art: BoardArt;
+  /** Name of that look ("Rainbow Road"); the theme's own name for branded themes. */
+  lookName: string;
   spaces: SpaceDef[];
   /** Card text already filled in for this board. */
   chance: CardDef[];
   chest: CardDef[];
 }
 
+// The Original theme has no look of its own: each map brings one (Heritage,
+// Rainbow Road, Night City; see MapLook in maps.ts). The palette below is
+// only the fallback for a map without one.
 export const CLASSIC: Edition = {
   id: 'classic',
-  name: 'Classic',
-  tagline: 'The original Atlantic City board.',
+  name: 'Original',
+  tagline: 'The familiar game, in each board’s own look.',
   centerTitle: 'MONOPOLY',
   currency: '$',
   groupColors: CLASSIC_GROUP_COLORS,
@@ -142,10 +153,10 @@ export const CLASSIC: Edition = {
   palette: {
     sky: '#1b2330',
     table: '#3a2718',
-    board: '#cde6d0',
-    boardLine: '#1a1a1a',
-    boardText: '#111111',
-    accent: '#e1251b',
+    board: '#f7f0dd',
+    boardLine: '#251e18',
+    boardText: '#251e18',
+    accent: '#ba2b28',
   },
   rules: {},
 };
@@ -175,7 +186,8 @@ export const TPTV: Edition = edition(CLASSIC, {
   tagline: 'Takeprofit TV, on air. Futures, funded accounts and code TP — now as a board.',
   centerTitle: 'TPTV',
   currency: '$',
-  logoUrl: '/editions/tptv/logo.png',
+  logoUrl: '/editions/tptv/logo.svg',
+  art: 'tptv',
   deckNames: { chance: 'Breaking News', chest: 'Payout' },
   names: {
     0: 'GO LIVE', 1: 'Pre-Market', 3: 'Paper Lane', 4: 'Eval Fee', 5: 'CH 01 Discord',
@@ -188,8 +200,10 @@ export const TPTV: Edition = edition(CLASSIC, {
     34: 'The Studio', 35: 'CH 04 Live', 37: 'Take Profit Tower', 38: 'Commission', 39: 'TPTV HQ',
   },
   // The test-card bars (75%), nudged brighter where they sit on the dark board.
+  // The first set takes the site's --dim grey rather than the 75% grey bar, so
+  // it does not read as the cyan beside it to protan/deutan eyes.
   groupColors: {
-    brown: '#c0c0c0',
+    brown: '#8e8b84',
     lightblue: '#00c0c0',
     pink: '#c000c0',
     orange: '#ff9e2c',
@@ -239,6 +253,7 @@ export const CHOG: Edition = edition(CLASSIC, {
   centerTitle: 'CHOG',
   currency: '$',
   logoUrl: '/editions/chog/logo.png',
+  art: 'chog',
   deckNames: { chance: 'Chog Luck', chest: 'Chog Stash' },
   names: {
     0: 'START', 1: 'Cream Alley', 3: 'Blush Lane', 4: 'Rake', 5: 'Pink Line',
@@ -313,9 +328,14 @@ export function resolveTheme(themeId: string, mapId: string): Theme {
     return name === s.name ? s : { ...s, name };
   });
   const fill = (cards: CardDef[]) => cards.map(c => ({ ...c, text: cardText(c.text, spaces, ed.currency) }));
+  // Original takes the map's own look; branded themes keep theirs everywhere.
+  const look = ed.id === CLASSIC.id ? map.look : null;
   const theme: Theme = {
     ...ed,
-    groupColors: { ...CLASSIC_GROUP_COLORS, ...ed.groupColors },
+    groupColors: { ...CLASSIC_GROUP_COLORS, ...ed.groupColors, ...look?.groupColors },
+    palette: { ...ed.palette, ...look?.palette },
+    art: look?.art ?? ed.art ?? 'heritage',
+    lookName: look?.name ?? ed.name,
     mapId: map.id,
     spaces,
     chance: fill(map.chance),

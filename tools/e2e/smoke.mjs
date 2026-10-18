@@ -1,6 +1,6 @@
 // Smoke test: play a few bot games in a real browser and look for trouble.
 //
-// For every map × edition it signs in (DEMO_MODE), creates a table, adds bots,
+// For every board × theme it signs in (DEMO_MODE), creates a table, adds bots,
 // starts, plays the given number of rounds (rolling, buying, ending turns,
 // dropping out of auctions, tapping through mini-games), cycles the camera
 // views and screenshots each one. It fails on any page error or console
@@ -8,7 +8,7 @@
 //
 //   DEMO_MODE=1 DATA_DIR=$(mktemp -d) PORT=8090 node --import tsx server/src/index.ts &
 //   node tools/e2e/smoke.mjs [--base http://localhost:8090] [--rounds 12] [--out /tmp/smoke]
-//                            [--maps Classic,Speedway] [--editions Classic,Chog] [--phone]
+//                            [--maps Classic,Speedway] [--editions Original,Chog] [--phone]
 //
 // Needs Playwright with Chromium: `npm i -g playwright && npx playwright install chromium`.
 // Software GL works (slowly): the script already passes the flags for it.
@@ -28,7 +28,7 @@ const BASE = arg('base', 'http://localhost:8090');
 const ROUNDS = Number(arg('rounds', 12));
 const OUT = arg('out', '/tmp/yot-smoke');
 const MAPS = arg('maps', 'Classic,Speedway,Metropolis').split(',');
-const EDITIONS = arg('editions', 'Classic,Takeprofit,Chog').split(',');
+const EDITIONS = arg('editions', 'Original,Takeprofit,Chog').split(',');
 const PHONE = process.argv.includes('--phone');
 mkdirSync(OUT, { recursive: true });
 
@@ -55,7 +55,7 @@ for (const map of MAPS) {
       await page.waitForURL(/\/r\//);
       await page.waitForTimeout(4000);
       await page.click(`button.map-card:has-text("${map}")`);
-      await page.click(`button.edition:not(.map-card):has-text("${edition}")`);
+      await page.click(`button.bp-theme:has-text("${edition}")`);
       await page.click('text=+ Add bot');
       await page.click('text=+ Add bot');
       await page.click('text=Start Game');

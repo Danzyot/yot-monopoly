@@ -75,8 +75,9 @@ function Board({ theme, customLogo, onPick, onHover }: {
   useEffect(() => () => tex.dispose(), [tex]);
 
   const materials = useMemo(() => {
-    const side = new MeshStandardMaterial({ color: theme.palette.boardLine, roughness: 0.6 });
-    const top = new MeshStandardMaterial({ map: tex, roughness: 0.75 });
+    const side = new MeshStandardMaterial({ color: theme.palette.rim ?? theme.palette.boardLine, roughness: 0.6 });
+    // Printed card is matt; the neon and night looks are lacquered.
+    const top = new MeshStandardMaterial({ map: tex, roughness: theme.art === 'heritage' ? 0.75 : 0.55 });
     return [side, side, top, side, side, side];
   }, [tex, theme]);
   useEffect(() => () => { materials[0].dispose(); materials[2].dispose(); }, [materials]);
@@ -101,8 +102,8 @@ const RIM_UP = 0.035;
 /** A lacquered rim round the board's edge, standing a hair proud of the printed face. */
 function BoardRim({ theme }: { theme: Theme }) {
   const mat = useMemo(() => new MeshPhysicalMaterial({
-    color: theme.palette.boardLine, roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.15,
-  }), [theme.palette.boardLine]);
+    color: theme.palette.rim ?? theme.palette.boardLine, roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.15,
+  }), [theme.palette.rim, theme.palette.boardLine]);
   const geo = useMemo(() => new RoundedBoxGeometry(W + RIM * 2, THICK + RIM_UP + 0.02, RIM, 2, 0.03), []);
   useEffect(() => () => mat.dispose(), [mat]);
   useEffect(() => () => geo.dispose(), [geo]);

@@ -1,4 +1,4 @@
-// Every live room, refreshed every few seconds: map, edition, phase, who is
+// Every live room, refreshed every few seconds: board, theme, phase, who is
 // in it and their cash, and the levers — spectate, pause, fix the game, end,
 // close, remove or ban a player. Every destructive action confirms in-style.
 import { useState } from 'react';
@@ -52,7 +52,7 @@ export default function RoomsTab() {
         </div>
         <label className="adm-search grow">
           <span className="sr-only">Search rooms by code, host or map</span>
-          <input type="search" value={q} placeholder="Search code, host, map or edition…" onChange={e => search(e.target.value)} />
+          <input type="search" value={q} placeholder="Search code, host, board or theme…" onChange={e => search(e.target.value)} />
           {needle && <span className="muted small nowrap">{rooms.length} match{rooms.length === 1 ? '' : 'es'}</span>}
         </label>
       </div>
@@ -107,8 +107,8 @@ function RoomCard({ room: r, reload, onBan }: { room: AdminRoom; reload: () => u
             {stuck && <em className="tag warn" title="A debt has been outstanding past its deadline for over 5 minutes">stuck?</em>}
           </div>
           <div className="row wrap small adm-room-meta">
-            <span className="adm-chip map">{r.map}</span>
-            <span className="adm-chip edition">{r.edition}</span>
+            <span className="adm-chip map" title="Board">{r.map}</span>
+            <span className="adm-chip edition" title="Theme">{r.edition}</span>
             {r.status === 'playing' && r.phase && <span className="adm-chip phase" title="Current phase">{PHASE[r.phase] ?? r.phase}</span>}
           </div>
         </div>

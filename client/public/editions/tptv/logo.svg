@@ -1,0 +1,13 @@
+<!-- TPTV mark on transparent, copied from the takeprofit-tv site (public/tptv-logo.svg,
+     mirrors src/components/tptv-logo.tsx). Sized 512 so canvases rasterise it crisply. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="512" height="512" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <g stroke="#ff9e2c" stroke-width="3">
+    <rect x="4" y="9" width="56" height="40" rx="11"/>
+    <path d="M32 49v7"/>
+    <path d="M22 56h20"/>
+  </g>
+  <g stroke="#f2f0ea" stroke-width="3.2">
+    <path d="M16 38l9-9 7 5 13-14"/>
+    <path d="M37 20h8v8"/>
+  </g>
+</svg>
