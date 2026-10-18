@@ -41,7 +41,7 @@ export function GoConfetti({ n }: { n: number }) {
       colored.current = true;
     }
     const now = performance.now();
-    bursts = bursts.filter(t => now - t < LIFE_MS);
+    if (bursts.length) bursts = bursts.filter(t => now - t < LIFE_MS);
     const t0 = bursts[bursts.length - 1];
     if (t0 === undefined || now < t0) { m.count = 0; return; }
     const t = (now - t0) / 1000;

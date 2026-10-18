@@ -13,6 +13,35 @@ export const QUALITY_LEVELS: { id: Quality; icon: string; label: string; hint: s
 
 const KEY = 'yot:quality';
 
+/** The stored setting (Auto when none). */
+export function readQuality(): Quality {
+  return read();
+}
+
+/**
+ * A device that should start light under Auto rather than wait for the frame
+ * rate to sag: few CPU cores, little memory (Chrome's deviceMemory, rounded,
+ * capped at 8), or the browser's data saver on. Checked once per page.
+ */
+let weak: boolean | null = null;
+export function weakDevice(): boolean {
+  if (weak !== null) return weak;
+  try {
+    const nav = navigator as Navigator & { deviceMemory?: number; connection?: { saveData?: boolean } };
+    const cores = nav.hardwareConcurrency || 8;
+    const memory = nav.deviceMemory ?? 8;
+    weak = cores <= 4 || memory <= 4 || nav.connection?.saveData === true;
+  } catch {
+    weak = false;
+  }
+  return weak;
+}
+
+/** Low, or Auto on a weak device: download and hold the half-size lightmaps. */
+export function liteAssets(q: Quality = read()): boolean {
+  return q === 'low' || (q === 'auto' && weakDevice());
+}
+
 function read(): Quality {
   try {
     const v = localStorage.getItem(KEY);

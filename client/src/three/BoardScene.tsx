@@ -1,8 +1,10 @@
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { OrbitControls, PerformanceMonitor } from '@react-three/drei';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { MeshPhysicalMaterial, MeshStandardMaterial, Vector3, type Group, type Mesh } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { boxesSidesTop } from './boxParts.ts';
 import { resolveTheme, type Theme } from '../../../shared/themes.ts';
 import { getMap } from '../../../shared/maps.ts';
 import type { GameView } from '../../../shared/types.ts';
@@ -21,17 +23,22 @@ import { GoConfetti, celebrateGo } from './GoConfetti.tsx';
 import { DeedPop } from './DeedPop.tsx';
 import { DeedMarkers } from './DeedMarkers.tsx';
 import { SceneEnv } from './SceneEnv.tsx';
-import { Cutscenes } from './cinematics/Cutscenes.tsx';
+// The cutscene director and its cast only matter once a game is on: fetched
+// then (the home page's turning board never needs them).
+const Cutscenes = lazy(() => import('./cinematics/Cutscenes.tsx').then(m => ({ default: m.Cutscenes })));
 import { CutsceneOverlay } from './cinematics/Overlay.tsx';
 import { sequenceDebug, useSceneBusy } from './sequence.ts';
 import { isDirectorActive, pieceObjects, type CameraMode } from './camera.ts';
-import type { Quality } from './quality.ts';
+import { liteAssets, readQuality, weakDevice, type Quality } from './quality.ts';
 import { ASSETS } from './assets.gen.ts';
 import { ModelBuildings, ModelTable, WithModel, preloadModels, type BuildingSpot } from './models.tsx';
 
-preloadModels();
+// The table is in every scene; the pieces and houses only once there is a game.
+preloadModels(false);
 
 const THICK = 0.28;
+/** The board slab: printed top plus sides, two draw calls (boxParts.ts). */
+const BOARD_GEO = boxesSidesTop([{ size: [W, THICK, W] }]);
 
 function Board({ theme, customLogo, onPick, onHover }: {
   theme: Theme;
@@ -80,9 +87,9 @@ function Board({ theme, customLogo, onPick, onHover }: {
     const side = new MeshStandardMaterial({ color: theme.palette.rim ?? theme.palette.boardLine, roughness: 0.6 });
     // Printed card is matt; the neon and night looks are lacquered.
     const top = new MeshStandardMaterial({ map: tex, roughness: theme.art === 'heritage' ? 0.75 : 0.55 });
-    return [side, side, top, side, side, side];
+    return [side, top];
   }, [tex, theme]);
-  useEffect(() => () => { materials[0].dispose(); materials[2].dispose(); }, [materials]);
+  useEffect(() => () => { materials[0].dispose(); materials[1].dispose(); }, [materials]);
 
   const pick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
@@ -91,10 +98,8 @@ function Board({ theme, customLogo, onPick, onHover }: {
   const hover = (e: ThreeEvent<PointerEvent>) => onHover?.(tileAt(e.point.x, e.point.z, theme.spaces.length));
 
   return (
-    <mesh receiveShadow material={materials} position={[0, -THICK / 2, 0]}
-      onClick={pick} onPointerMove={hover} onPointerOut={() => onHover?.(null)}>
-      <boxGeometry args={[W, THICK, W]} />
-    </mesh>
+    <mesh receiveShadow geometry={BOARD_GEO} material={materials} position={[0, -THICK / 2, 0]}
+      onClick={pick} onPointerMove={hover} onPointerOut={() => onHover?.(null)} />
   );
 }
 
@@ -106,19 +111,22 @@ function BoardRim({ theme }: { theme: Theme }) {
   const mat = useMemo(() => new MeshPhysicalMaterial({
     color: theme.palette.rim ?? theme.palette.boardLine, roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.15,
   }), [theme.palette.rim, theme.palette.boardLine]);
-  const geo = useMemo(() => new RoundedBoxGeometry(W + RIM * 2, THICK + RIM_UP + 0.02, RIM, 2, 0.03), []);
+  // The four sides as one geometry: one draw call instead of four.
+  const geo = useMemo(() => {
+    const side = new RoundedBoxGeometry(W + RIM * 2, THICK + RIM_UP + 0.02, RIM, 2, 0.03);
+    const y = (RIM_UP - THICK - 0.02) / 2 + 0.01;
+    const off = W / 2 + RIM / 2;
+    const sides = [0, 1, 2, 3].map(k => side.clone()
+      .rotateY((k * Math.PI) / 2)
+      .translate(k % 2 ? (k === 1 ? off : -off) : 0, y, k % 2 ? 0 : (k === 0 ? off : -off)));
+    side.dispose();
+    const all = mergeGeometries(sides);
+    sides.forEach(g => g.dispose());
+    return all;
+  }, []);
   useEffect(() => () => mat.dispose(), [mat]);
   useEffect(() => () => geo.dispose(), [geo]);
-  const y = (RIM_UP - THICK - 0.02) / 2 + 0.01;
-  const off = W / 2 + RIM / 2;
-  return (
-    <group>
-      {[0, 1, 2, 3].map(k => (
-        <mesh key={k} geometry={geo} material={mat} receiveShadow castShadow
-          rotation={[0, (k * Math.PI) / 2, 0]} position={[k % 2 ? (k === 1 ? off : -off) : 0, y, k % 2 ? 0 : (k === 0 ? off : -off)]} />
-      ))}
-    </group>
-  );
+  return <mesh geometry={geo} material={mat} receiveShadow castShadow />;
 }
 
 function Table({ theme, presetId }: { theme: Theme; presetId?: string }) {
@@ -376,7 +384,7 @@ function Spinner({ children, spin }: { children: React.ReactNode; spin?: boolean
   return <group ref={ref}>{children}</group>;
 }
 
-export default function BoardScene({ themeId, mapId, game, selected, onSelect, spin, tableStyle, reactions, me, cinematic = false, cameraMode = 'table', quality = 'auto' }: {
+export default function BoardScene({ themeId, mapId, game, selected, onSelect, spin, tableStyle, reactions, me, cinematic = false, cameraMode = 'table', quality: qualityProp }: {
   themeId: string;
   mapId: string;
   game: GameView | null;
@@ -393,9 +401,13 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
   cinematic?: boolean;
   /** The viewer's chosen view (table, follow, overhead, free). */
   cameraMode?: CameraMode;
-  /** The viewer's graphics setting (three/quality.ts). */
+  /** The viewer's graphics setting (three/quality.ts); the stored one when not given (home, lobby). */
   quality?: Quality;
 }) {
+  const [storedQuality] = useState(readQuality);
+  const quality = qualityProp ?? storedQuality;
+  const playing = !!game;
+  useEffect(() => { if (playing) preloadModels(true); }, [playing]);
   const theme = resolveTheme(themeId, mapId);
   // Re-checked here as well as on the server: this string ends up in CSS.
   const backdrop = cleanAssetUrl(tableStyle?.backgroundUrl);
@@ -406,9 +418,13 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
   const liveMode = useAutoMode(cameraMode, !!game && game.phase !== 'over');
   // Adaptive resolution: start sharp, drop to 1× device pixels as soon as the
   // frame rate sags (phones, integrated GPUs), climb back when there is headroom.
-  const [autoDpr, setDpr] = useState(() => Math.min(1.5, window.devicePixelRatio || 1));
+  // A device that is plainly weak (few cores, little memory) starts light.
+  const [autoDpr, setDpr] = useState(() => (weakDevice() ? 1 : Math.min(1.5, window.devicePixelRatio || 1)));
   // Once a device has shown it struggles, keep the cheaper shadows for the session.
-  const [autoLow, setLowPower] = useState(false);
+  const [autoLow, setLowPower] = useState(weakDevice);
+  // Half-size lightmaps on Low (or Auto on a weak device). Chosen once per scene:
+  // switching mid-game would blank the room while the other one loads.
+  const [lite] = useState(() => liteAssets(quality));
   // Low and High override what the frame-rate monitor decided.
   const dpr = quality === 'low' ? 1 : quality === 'high' ? Math.min(2, window.devicePixelRatio || 1) : autoDpr;
   const lowPower = quality === 'low' ? true : quality === 'high' ? false : autoLow;
@@ -430,7 +446,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
     <Canvas shadows dpr={dpr} frameloop={hidden ? 'never' : 'always'} camera={{ position: [0, 11.5, 10.5], fov: 45 }}
       onPointerMissed={() => onSelect?.(null)}
       // ?perf: expose the renderer and pieces so draw calls, triangles and positions can be read from the console.
-      onCreated={({ gl }) => { if (location.search.includes('perf')) Object.assign(window, { __yotGl: gl, __yotPieces: pieceObjects, __yotGo: celebrateGo, __yotSeq: sequenceDebug }); }}
+      onCreated={({ gl, scene }) => { if (location.search.includes('perf')) Object.assign(window, { __yotGl: gl, __yotScene: scene, __yotPieces: pieceObjects, __yotGo: celebrateGo, __yotSeq: sequenceDebug }); }}
       // A custom backdrop replaces the map's 3D surroundings: it is painted
       // behind a transparent canvas, keeps its aspect ratio on any screen and
       // needs no CORS, so any https image works.
@@ -440,7 +456,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
       {!backdrop && <fog attach="fog" args={[look.background, look.fogNear, look.fogFar]} />}
       {backdrop
         ? <hemisphereLight args={['#ffffff', theme.palette.table, 0.9]} />
-        : <Environment kind={env} theme={theme} />}
+        : <Environment kind={env} theme={theme} lite={lite} />}
       {/* Reflections for everything lit live: the baked sets reflect themselves (reflectionsFor). */}
       <SceneEnv {...(backdrop ? STUDIO : reflectionsFor(env, theme.id))} />
       {/* Devices that struggle drop live shadows (the baked sets keep theirs): it halves the draw calls. */}
@@ -463,9 +479,11 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
               <ParkingPot pot={game.pot} n={theme.spaces.length} />}
             <Pieces game={game} n={theme.spaces.length} reactions={reactions} me={me} />
             {!spin && (
-              <Cutscenes game={game} n={theme.spaces.length} enabled={cinematic} low={lowPower} currency={theme.currency}
-                houseColor={theme.palette.house ?? '#1f9d49'} hotelColor={theme.palette.hotel ?? '#d2202f'}
-                jailCell={theme.spaces[theme.spaces.length / 4]?.kind === 'jail'} />
+              <Suspense fallback={null}>
+                <Cutscenes game={game} n={theme.spaces.length} enabled={cinematic} low={lowPower} currency={theme.currency}
+                  houseColor={theme.palette.house ?? '#1f9d49'} hotelColor={theme.palette.hotel ?? '#d2202f'}
+                  jailCell={theme.spaces[theme.spaces.length / 4]?.kind === 'jail'} />
+              </Suspense>
             )}
             <MoneyFX game={game} n={theme.spaces.length} currency={theme.currency} />
             <GoConfetti n={theme.spaces.length} />
@@ -476,7 +494,8 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
         {!game && <Dice dice={[6, 6]} seq={0} body={theme.palette.die} pip={theme.palette.pip} />}
       </Spinner>
 
-      <PerformanceMonitor
+      {/* Auto backs off once frames run past ~24 ms (under 42 fps) for most of 1.5 s. */}
+      <PerformanceMonitor ms={250} iterations={6} bounds={hz => (hz > 100 ? [60, 100] : [42, 60])}
         onDecline={() => { setDpr(1); setLowPower(true); }}
         onIncline={() => setDpr(Math.min(1.5, window.devicePixelRatio || 1))}
         flipflops={3} onFallback={() => { setDpr(1); setLowPower(true); }} />

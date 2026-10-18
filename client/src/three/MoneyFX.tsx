@@ -4,13 +4,13 @@
 // green when it comes in, red when it goes out. It plays once the dice and
 // the walk are done, so rent lands after the piece does.
 
-import { Html } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { CylinderGeometry, InstancedMesh, MeshStandardMaterial, Object3D, Vector3 } from 'three';
 import type { GameView } from '../../../shared/types.ts';
 import { tile } from './layout.ts';
 import { sceneFreeAt } from './sequence.ts';
+import { usePins } from './overlay.ts';
 
 const MAX_COINS = 64;
 const FLIGHT_MS = 650;
@@ -18,14 +18,14 @@ const STAGGER_MS = 55;
 const LABEL_MS = 1700;
 
 interface Flight { from: Vector3; to: Vector3; coins: number; start: number }
-interface Label { id: number; pos: [number, number, number]; text: string; gain: boolean; start: number }
+interface Label { pos: [number, number, number]; text: string; gain: boolean }
 
 const coinGeo = new CylinderGeometry(0.085, 0.085, 0.022, 18);
 const coinMat = new MeshStandardMaterial({ color: '#f4c542', metalness: 0.8, roughness: 0.28, emissive: '#5a3c00', emissiveIntensity: 0.4 });
 const dummy = new Object3D();
 const BANK = new Vector3(0, 0.35, 0);
-const SLOTS = [0, 1, 2, 3, 4, 5, 6, 7];
-const HIDDEN: [number, number, number] = [0, -50, 0];
+/** At most this many amounts float at once; a new one retires the oldest. */
+const MAX_LABELS = 8;
 
 const coinsFor = (amount: number) => Math.max(3, Math.min(12, Math.round(Math.log2(Math.max(2, amount / 5)) + 1)));
 
@@ -35,11 +35,33 @@ export function MoneyFX({ game, n, currency }: { game: GameView; n: number; curr
   // it), not for later moves: a bot's purchase must not wait behind the next
   // player's dice and then pop up beside them. `frames` counts frames since it
   // arrived; on the second the pieces have reported their walk and `at` is fixed.
-  const pending = useRef<{ flights: Omit<Flight, 'start'>[]; labels: Omit<Label, 'start' | 'id'>[]; frames: number; at: number }[]>([]);
+  const pending = useRef<{ flights: Omit<Flight, 'start'>[]; labels: Label[]; frames: number; at: number }[]>([]);
   const flights = useRef<Flight[]>([]);
-  const [labels, setLabels] = useState<Label[]>([]);
   const mesh = useRef<InstancedMesh>(null);
-  const labelSeq = useRef(0);
+  // The floating amounts: plain DOM pinned over the board (three/overlay.ts),
+  // there only while they show.
+  const pins = usePins();
+  const shown = useRef<{ pin: ReturnType<typeof pins.add>; timer: ReturnType<typeof setTimeout> }[]>([]);
+  useEffect(() => () => { for (const l of shown.current) clearTimeout(l.timer); shown.current = []; }, []);
+  const showLabel = (l: Label) => {
+    if (shown.current.length >= MAX_LABELS) {
+      const old = shown.current.shift()!;
+      clearTimeout(old.timer);
+      pins.remove(old.pin);
+    }
+    const el = document.createElement('span');
+    el.className = `fx-money ${l.gain ? 'gain' : 'loss'}`;
+    el.textContent = l.text;
+    const pin = pins.add(el, new Vector3(...l.pos), [4, 0]);
+    const entry = {
+      pin,
+      timer: setTimeout(() => {
+        pins.remove(pin);
+        shown.current = shown.current.filter(x => x !== entry);
+      }, LABEL_MS + 50),
+    };
+    shown.current.push(entry);
+  };
 
   const spotOf = useMemo(() => (pos: number) => {
     const g = tile(pos, n);
@@ -79,23 +101,23 @@ export function MoneyFX({ game, n, currency }: { game: GameView; n: number; curr
   }, [game.players, game.phase, spotOf, currency]);
 
   useFrame(() => {
+    const m = mesh.current;
+    // Nothing waiting and nothing in the air: no work, no buffer upload.
+    if (!pending.current.length && !flights.current.length && (!m || m.count === 0)) return;
     const now = performance.now();
     // Start each batch once the scene it arrived with is over.
     for (const b of pending.current) if (++b.frames === 2) b.at = sceneFreeAt();
     if (pending.current.some(b => now >= b.at)) {
       const batch = pending.current.filter(b => now >= b.at);
       pending.current = pending.current.filter(b => now < b.at);
-      const newLabels: Label[] = [];
       for (const b of batch) {
         for (const f of b.flights) flights.current.push({ ...f, start: now });
-        for (const l of b.labels) newLabels.push({ ...l, id: ++labelSeq.current, start: now });
+        for (const l of b.labels) showLabel(l);
       }
-      if (newLabels.length) setLabels(ls => [...ls, ...newLabels]);
     }
-    const m = mesh.current;
     if (!m) return;
     let k = 0;
-    flights.current = flights.current.filter(f => now - f.start < FLIGHT_MS + f.coins * STAGGER_MS + 50);
+    if (flights.current.length) flights.current = flights.current.filter(f => now - f.start < FLIGHT_MS + f.coins * STAGGER_MS + 50);
     for (const f of flights.current) {
       for (let c = 0; c < f.coins && k < MAX_COINS; c++) {
         const t = (now - f.start - c * STAGGER_MS) / FLIGHT_MS;
@@ -118,29 +140,5 @@ export function MoneyFX({ game, n, currency }: { game: GameView; n: number; curr
     m.instanceMatrix.needsUpdate = true;
   });
 
-  // Labels clean themselves up.
-  useEffect(() => {
-    if (!labels.length) return;
-    const t = setTimeout(() => {
-      const now = performance.now();
-      setLabels(ls => ls.filter(l => now - l.start < LABEL_MS));
-    }, LABEL_MS + 50);
-    return () => clearTimeout(t);
-  }, [labels]);
-
-  return (
-    <>
-      <instancedMesh ref={mesh} args={[coinGeo, coinMat, MAX_COINS]} count={0} castShadow frustumCulled={false} />
-      {/* A fixed pool of label slots that stay mounted (only their content changes):
-          mounting and unmounting drei portals mid-update can trip React's DOM bookkeeping. */}
-      {SLOTS.map(k => {
-        const l = labels.find(x => x.id % SLOTS.length === k);
-        return (
-          <Html key={k} center position={l?.pos ?? HIDDEN} zIndexRange={[4, 0]} pointerEvents="none">
-            {l && <span key={l.id} className={`fx-money ${l.gain ? 'gain' : 'loss'}`}>{l.text}</span>}
-          </Html>
-        );
-      })}
-    </>
-  );
+  return <instancedMesh ref={mesh} args={[coinGeo, coinMat, MAX_COINS]} count={0} castShadow frustumCulled={false} />;
 }

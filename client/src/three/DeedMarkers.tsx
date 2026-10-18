@@ -56,6 +56,8 @@ export function DeedMarkers({ game, n }: { game: GameView; n: number }) {
   // Each deed's geometry, plus when its current owner took it (for the pop-in).
   const since = useRef(new Map<string, number>());
   const first = useRef(true);
+  const dirty = useRef(true);
+  const popEnd = useRef(0);
   const deeds = useMemo(() => Object.entries(game.owned).map(([k, o]) => {
     const i = Number(k);
     const g = tile(i, n);
@@ -78,13 +80,34 @@ export function DeedMarkers({ game, n }: { game: GameView; n: number }) {
     for (const d of deeds) if (!seen.has(d.key)) seen.set(d.key, first.current ? 0 : now);
     for (const k of [...seen.keys()]) if (!deeds.some(d => d.key === k)) seen.delete(k);
     first.current = false;
-  }, [deeds]);
+    // Rewrite every instance until the pop-ins are over; after that only the pennants move.
+    dirty.current = true;
+    popEnd.current = now + POP_MS;
+  }, [deeds, colorOf]);
 
   useFrame(({ clock }) => {
     const P = plaques.current, L = poles.current, F = pennants.current, W = washes.current, R = frames.current;
     if (!P || !L || !F || !W || !R) return;
     const now = performance.now();
     const t = clock.elapsedTime;
+    if (!dirty.current && now >= popEnd.current) {
+      // Settled: the plaques, poles, washes and frames stand still, so only the
+      // pennants are rewritten (and only their matrices go up to the GPU).
+      let f = 0, k = 0;
+      for (const d of deeds) {
+        if (k++ >= MAX) break;
+        if (d.mortgaged || f >= MAX) continue;
+        const flutter = Math.sin(t * 5.5 + d.i * 1.3) * 0.22 + Math.sin(t * 9.1 + d.i) * 0.08;
+        dummy.position.set(d.fx, POLE_H - 0.115, d.fz);
+        dummy.rotation.set(0, (d.horiz ? 0 : Math.PI / 2) + flutter, 0);
+        dummy.scale.setScalar(1);
+        dummy.updateMatrix();
+        F.setMatrixAt(f++, dummy.matrix);
+      }
+      if (f) F.instanceMatrix.needsUpdate = true;
+      return;
+    }
+    if (now >= popEnd.current) dirty.current = false;
     let k = 0, f = 0, w = 0, r = 0;
     for (const d of deeds) {
       if (k >= MAX) break;
@@ -113,9 +136,11 @@ export function DeedMarkers({ game, n }: { game: GameView; n: number }) {
         W.setColorAt(w, c);
         w++;
         const hw = (d.w * scale) / 2 - FRAME / 2, hd = (d.d * scale) / 2 - FRAME / 2;
-        for (const [ox, oz, sx, sz] of [[0, -hd, d.w * scale, FRAME], [0, hd, d.w * scale, FRAME], [-hw, 0, FRAME, d.d * scale], [hw, 0, FRAME, d.d * scale]]) {
-          dummy.position.set(d.cx + ox, 0.012, d.cz + oz);
-          dummy.scale.set(sx, 1, sz);
+        for (let e = 0; e < 4; e++) {
+          // Top, bottom, left, right strips.
+          const side = e < 2;
+          dummy.position.set(d.cx + (side ? 0 : e === 2 ? -hw : hw), 0.012, d.cz + (side ? (e === 0 ? -hd : hd) : 0));
+          dummy.scale.set(side ? d.w * scale : FRAME, 1, side ? FRAME : d.d * scale);
           dummy.updateMatrix();
           R.setMatrixAt(r, dummy.matrix);
           R.setColorAt(r, c);

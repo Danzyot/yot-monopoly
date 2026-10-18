@@ -21,6 +21,7 @@ import { mountMusic } from './routes/music.ts';
 import { mountGraphics } from './routes/graphics.ts';
 import { mountTextOverrides } from './routes/textOverrides.ts';
 import { attachSockets } from './sockets.ts';
+import { staticClient } from './staticFiles.ts';
 import { allResults, leaderboard, loadResults } from './stats.ts';
 import { buildProfile } from './profiles.ts';
 import { devFakeDiscord, gateInfo } from './requirements.ts';
@@ -168,7 +169,7 @@ app.use('/api', (_req, res) => { res.status(404).json({ error: 'Not found' }); }
 // In production the server also serves the built client.
 const dist = join(__dir, '../../client/dist');
 if (existsSync(dist)) {
-  app.use(express.static(dist, { index: false, maxAge: '1h' }));
+  app.use(staticClient(dist));
   app.get(/^\/(?!api|socket\.io).*/, (_req, res) => res.sendFile(join(dist, 'index.html')));
 }
 

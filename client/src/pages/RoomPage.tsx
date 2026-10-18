@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useMyId, useRoom } from '../net.ts';
 import { useAuth } from '../auth.tsx';
 import Lobby from '../components/Lobby.tsx';
 import GameScreen from '../components/GameScreen.tsx';
-import BroadcastScreen from '../components/BroadcastScreen.tsx';
 import RequirementsModal from '../components/RequirementsModal.tsx';
 import { requirementBadge, useHostNotice } from '../community.tsx';
+
+/** The ?tv=1 broadcast view: only TVs and stream overlays need its code. */
+const BroadcastScreen = lazy(() => import('../components/BroadcastScreen.tsx'));
 
 export default function RoomPage() {
   const { code = '' } = useParams();
@@ -37,7 +39,7 @@ export default function RoomPage() {
     );
   }
   if (!room) return <div className="center-msg"><p className="muted">Joining {code}…</p></div>;
-  if (tv) return <BroadcastScreen room={room} me={me} />;
+  if (tv) return <Suspense fallback={null}><BroadcastScreen room={room} me={me} /></Suspense>;
 
   const signInBar = !profile && (
     <div className="signin-bar">
