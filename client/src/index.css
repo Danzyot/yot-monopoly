@@ -2678,6 +2678,7 @@ a:focus-visible, .navlink:focus-visible, .brand:focus-visible, .edition:focus-vi
 }
 @media (prefers-reduced-motion: reduce) {
   .react-pop, .react-pop .react-opt, .react-btn.burst, .react-burst i, .social-toast, .social-toast-emoji, .chat-new, .poke-btn.ready .poke-face { animation: none; }
+}
 
 /* ==========================================================================
    Phone & landscape pass — a QA sweep at 360×740, 390×844, 430×932, phones
