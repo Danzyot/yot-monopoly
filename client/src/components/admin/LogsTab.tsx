@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getMap } from '../../../../shared/maps.ts';
-import { getTheme } from '../../../../shared/themes.ts';
+import { getTheme, tableLabel } from '../../../../shared/themes.ts';
 import { Refresh, RelTime, Th } from './bits.tsx';
 import { ago, clock, downloadJson, full, useDebounced, usePoll, useSort, type GameEvent, type GameRecord, type LoggedGame } from './adminApi.ts';
 
@@ -163,7 +163,7 @@ function Results() {
                 <tr>
                   <Th k="endedAt" sort={sort}>Ended</Th>
                   <Th k="code" sort={sort}>Room</Th>
-                  <Th k="map" sort={sort}>Board / theme</Th>
+                  <Th k="map" sort={sort}>Board / look</Th>
                   <Th k="turns" sort={sort}>Turns</Th>
                   <Th k="winner" sort={sort}>Standings</Th>
                 </tr>
@@ -173,7 +173,7 @@ function Results() {
                   <tr key={`${r.code}${r.endedAt}`}>
                     <td data-label="Ended" className="nowrap"><RelTime ts={r.endedAt} /></td>
                     <td data-label="Room" className="mono">{r.code}</td>
-                    <td data-label="Board">{getMap(r.mapId).name} · {getTheme(r.themeId).name}</td>
+                    <td data-label="Board">{tableLabel(getMap(r.mapId).name, getTheme(r.themeId).name)}</td>
                     <td data-label="Turns">{r.turns}</td>
                     <td data-label="Standings" className="adm-c-reason">{r.places.map((p, i) => <span key={p.id} className={i === 0 ? 'accent' : ''}>{i ? ', ' : '🏆 '}{p.name}{p.isBot ? ' 🤖' : ''}</span>)}</td>
                   </tr>

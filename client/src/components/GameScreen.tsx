@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { resolveTheme } from '../../../shared/themes.ts';
+import { resolveTheme, tableLabel } from '../../../shared/themes.ts';
 import { getMap } from '../../../shared/maps.ts';
 import type { GameView, RoomView } from '../../../shared/types.ts';
 import { act, call, useConnected, type ChatMsg } from '../net.ts';
@@ -149,7 +149,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
         <div className="tb-left">
           {theme.logoUrl && <img className="brand-mark" src={theme.logoUrl} alt="" />}
           <b className="mono accent tb-code">{room.code}</b>
-          <span className="tb-meta">{getMap(game.mapId).name === theme.name ? theme.name : `${getMap(game.mapId).name} · ${theme.name}`}</span>
+          <span className="tb-meta">{tableLabel(getMap(game.mapId).name, theme.name)}</span>
           <span className="tb-turn">Turn {game.turnNumber}</span>
           {!connected && <span className="tag warn">reconnecting…</span>}
           {!myPlayer && <span className="tag watch-tag" title="You are watching this game">👀 Watching</span>}

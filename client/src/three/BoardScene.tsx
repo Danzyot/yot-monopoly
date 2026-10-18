@@ -24,7 +24,7 @@ import { SceneEnv } from './SceneEnv.tsx';
 import { Cutscenes } from './cinematics/Cutscenes.tsx';
 import { CutsceneOverlay } from './cinematics/Overlay.tsx';
 import { sequenceDebug, useSceneBusy } from './sequence.ts';
-import { isDirectorActive, pieceObjects, type CameraMode } from './camera.ts';
+import { fitBoardDistance, isDirectorActive, pieceObjects, type CameraMode } from './camera.ts';
 import type { Quality } from './quality.ts';
 import { ASSETS } from './assets.gen.ts';
 import { ModelBuildings, ModelTable, WithModel, preloadModels, type BuildingSpot } from './models.tsx';
@@ -234,6 +234,9 @@ function DrawnBuildings({ spots, house, hotel }: { spots: BuildingSpot[]; house:
  * of view glide rather than cut, and a cinematic shot (CameraDirector) owns
  * the camera while it plays.
  */
+const PORTRAIT_TABLE = new Vector3(0, 15.5, 5);
+const TOP_DIR = new Vector3(0, 17.5, 1.6);
+
 function CameraRig({ hud, fogNear, fogFar, mode, followId }: {
   hud: boolean; fogNear: number; fogFar: number; mode: CameraMode; followId?: string;
 }) {
@@ -245,7 +248,13 @@ function CameraRig({ hud, fogNear, fogFar, mode, followId }: {
   // HUD panels eat the sides on desktop, so frame a little wider there.
   const need = hud && size.width > 760 ? 1.45 : 1.1;
   const k = Math.max(1, need / aspect) * (hud ? 1.05 : 1);
-  const tablePos = useMemo(() => (aspect < 1 ? new Vector3(0, 15.5 * k, 5 * k) : new Vector3(0, 13 * k, 11.5 * k)), [aspect, k]);
+  // Portrait: the board edge to edge across the width; otherwise as framed by k.
+  const tablePos = useMemo(() => (aspect < 1
+    ? PORTRAIT_TABLE.clone().setLength(fitBoardDistance(PORTRAIT_TABLE, aspect, camera.fov, W / 2 + RIM))
+    : new Vector3(0, 13 * k, 11.5 * k)), [aspect, k, camera]);
+  const topPos = useMemo(() => (aspect < 1
+    ? TOP_DIR.clone().setLength(fitBoardDistance(TOP_DIR, aspect, camera.fov, W / 2 + RIM))
+    : TOP_DIR.clone()), [aspect, camera]);
   const glide = useRef<{ from: Vector3; fromT: Vector3; to: Vector3; toT: Vector3; t0: number } | null>(null);
   const first = useRef(true);
 
@@ -306,7 +315,7 @@ function CameraRig({ hud, fogNear, fogFar, mode, followId }: {
         target = tmpTarget.set(p.x - out.x * 0.15, 0.3, p.z - out.z * 0.15);
       } else {
         // Nearly straight down; the slight tilt keeps the board square to the screen (straight down has no 'up').
-        pos = tmpPos.set(0, 17.5 * Math.max(1, 1 / aspect), 1.6);
+        pos = tmpPos.copy(topPos);
         target = tmpTarget.set(0, 0, 0);
       }
       const f = 1 - Math.exp(-3.2 * dt);

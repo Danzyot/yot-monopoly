@@ -29,12 +29,9 @@ export default function RequirementsPicker({ room, canEdit }: { room: RoomView; 
   };
 
   if (!canEdit || !info?.available) {
-    if (!req) {
-      // Only an operator is told why the option is missing; hosts never see a dead control.
-      return canEdit && profile?.isAdmin && info && !info.available
-        ? <p className="muted small">Set DISCORD_GUILD_ID to let hosts require Discord membership.</p>
-        : null;
-    }
+    // Nothing to show: no dead control, and no setup hint for players (the
+    // DISCORD_GUILD_ID setting is documented in DEPLOY.md for operators).
+    if (!req) return null;
     return (
       <div className="req-summary">
         <span className="req-lock" aria-hidden>🔒</span>

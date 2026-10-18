@@ -25,7 +25,7 @@ export interface TablePreset {
 }
 
 export const TABLE_PRESETS: readonly TablePreset[] = [
-  { id: 'edition', name: 'Edition default', color: null, roughness: 0.85, metalness: 0, swatch: 'linear-gradient(135deg, #555 0 50%, #999 50% 100%)' },
+  { id: 'edition', name: 'Default', color: null, roughness: 0.85, metalness: 0, swatch: 'linear-gradient(135deg, #555 0 50%, #999 50% 100%)' },
   { id: 'walnut', name: 'Walnut', color: '#5a3a22', roughness: 0.55, metalness: 0.05, swatch: 'linear-gradient(135deg, #6e4a2c, #3e2615)' },
   { id: 'felt', name: 'Felt green', color: '#1d6b3a', roughness: 1, metalness: 0, swatch: 'radial-gradient(circle at 40% 35%, #2a8a4d, #145028)' },
   { id: 'midnight', name: 'Midnight', color: '#16203a', roughness: 0.5, metalness: 0.2, swatch: 'radial-gradient(circle at 40% 35%, #26345c, #0b1122)' },

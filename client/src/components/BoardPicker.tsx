@@ -2,20 +2,21 @@
 //
 //   1. Board — the layout and the world around it (Classic, Speedway,
 //      Metropolis): how many spaces, the economy, the 3D setting.
-//   2. Theme — what is printed on it (Original, Chog, Takeprofit TV): names,
-//      colours, money, cards. Original keeps each board's own look (Heritage,
-//      Rainbow Road, Night City); a branded theme reskins any board.
+//   2. Look — how it is printed (Original, Takeprofit TV, Chog): names,
+//      colours, money, cards. Original is each board's own look; a branded
+//      look reskins any board.
 //
-// Each theme card shows that theme on the chosen board, painted by the same
+// Each look card shows that look on the chosen board, painted by the same
 // code as the 3D board, so the pair is visible before the game starts.
-// (In code a board is a map, `mapId`, and a theme an edition, `themeId`.)
+// (In code a board is a map, `mapId`, and a look a theme/edition, `themeId`;
+// tableLabel() in shared/themes.ts has the words players see.)
 
-import { THEMES, resolveTheme, type RuleConfig } from '../../../shared/themes.ts';
+import { THEMES, resolveTheme, tableLabel, type RuleConfig } from '../../../shared/themes.ts';
 import { MAPS, getMap } from '../../../shared/maps.ts';
 import type { RoomView } from '../../../shared/types.ts';
 import BoardPreview from '../three/BoardPreview.tsx';
 
-/** House rules a theme switches on by default, in a few words. */
+/** House rules a look switches on by default, in a few words. */
 const RULE_WORDS: Partial<Record<keyof RuleConfig, string>> = {
   freeParkingPot: 'Free Parking jackpot',
   doubleOnGo: 'double on GO',
@@ -60,11 +61,11 @@ export default function BoardPicker({ room, isHost, configure }: {
         })}
       </div>
 
-      <h3 className="bp-step"><span className="bp-num" aria-hidden>2</span>Theme</h3>
+      <h3 className="bp-step"><span className="bp-num" aria-hidden>2</span>Look</h3>
       <p className="pick-hint muted small">
-        What is printed on the {map.name} board: names, colours, money and cards. Original keeps the board’s own look.{hostOnly}
+        How the {map.name} board is printed: names, colours, money and cards. Original is the board’s own look; the others reskin it.{hostOnly}
       </p>
-      <div className="edition-pick bp-themes" role="group" aria-label="Theme">
+      <div className="edition-pick bp-themes" role="group" aria-label="Look">
         {THEMES.map(t => {
           const on = t.id === room.themeId;
           const rt = resolveTheme(t.id, room.mapId);
@@ -79,7 +80,6 @@ export default function BoardPicker({ room, isHost, configure }: {
                 {t.logoUrl && <img className="edition-logo" src={t.logoUrl} alt="" />}
                 <b>{t.name}</b>
               </span>
-              {rt.lookName !== t.name && <span className="bp-look">{rt.lookName}</span>}
               <span className="swatches" aria-hidden>
                 {groups.map(g => <i key={g} style={{ background: rt.groupColors[g] }} />)}
               </span>
@@ -90,7 +90,7 @@ export default function BoardPicker({ room, isHost, configure }: {
         })}
       </div>
       <p className="bp-summary small" aria-live="polite">
-        Playing <b>{map.name}</b> in <b>{current.name}{current.lookName !== current.name ? ` · ${current.lookName}` : ''}</b>
+        <b>{tableLabel(map.name, current.name)}</b>
         {' '}— {map.spaces.length} spaces, {current.deckNames.chance} &amp; {current.deckNames.chest} cards.
       </p>
     </div>

@@ -131,7 +131,8 @@ export interface Theme extends Edition {
   mapId: string;
   /** How the board face is drawn: the map's own look, or the branded theme's. */
   art: BoardArt;
-  /** Name of that look ("Rainbow Road"); the theme's own name for branded themes. */
+  /** The art's own name ("Rainbow Road"), for code and comments only: players
+   *  see the theme's name as the look ("Original"), see tableLabel(). */
   lookName: string;
   spaces: SpaceDef[];
   /** Card text already filled in for this board. */
@@ -183,7 +184,7 @@ function edition(
 export const TPTV: Edition = edition(CLASSIC, {
   id: 'tptv',
   name: 'Takeprofit TV',
-  tagline: 'Takeprofit TV, on air. Futures, funded accounts and code TP — now as a board.',
+  tagline: 'Takeprofit TV, on air. Futures, funded accounts and code TP — on any board.',
   centerTitle: 'TPTV',
   currency: '$',
   logoUrl: '/editions/tptv/logo.svg',
@@ -248,8 +249,8 @@ export const TPTV: Edition = edition(CLASSIC, {
 // client/src/index.css so the two sites read as one brand.
 export const CHOG: Edition = edition(CLASSIC, {
   id: 'chog',
-  name: 'Chog Edition',
-  tagline: 'Chog Poker’s purple room, now as a board. Jackpot on, double on START.',
+  name: 'Chog',
+  tagline: 'Chog Poker’s purple room, on any board. Jackpot on, double on START.',
   centerTitle: 'CHOG',
   currency: '$',
   logoUrl: '/editions/chog/logo.png',
@@ -305,6 +306,17 @@ export const CHOG: Edition = edition(CLASSIC, {
 });
 
 export const THEMES: Edition[] = [CLASSIC, TPTV, CHOG];
+
+/**
+ * The words players see, the same in the lobby, top bar, broadcast view and
+ * admin: a *board* is the layout and its world (Classic, Speedway,
+ * Metropolis; a map in code) and a *look* is how it is printed (Original,
+ * Takeprofit TV, Chog; an edition or theme in code). Original is each
+ * board's own look. → "Classic board · Original look".
+ */
+export function tableLabel(boardName: string, lookName: string): string {
+  return `${boardName} board · ${lookName} look`;
+}
 
 export function getTheme(id: string): Edition {
   return THEMES.find(t => t.id === id) ?? CLASSIC;
