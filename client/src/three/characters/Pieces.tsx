@@ -51,6 +51,11 @@ interface Anim {
   to: [number, number];
   t0: number;
   dur: number;
+  /** Was behind bars when the last state arrived (the first hop out is a leap over them). */
+  jailed: boolean;
+  /** The next hop to start is the leap out of the cell; the one under way is. */
+  leapNext: boolean;
+  leap: boolean;
 }
 
 /** Everything the frame loop eases between; lives in a ref, not React state. */
@@ -118,7 +123,7 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
   // prop here would snap the piece and kill the hop animation).
   const [initial] = useState<[number, number, number]>(() => [target[0], 0, target[1]]);
   if (!anim.current) {
-    anim.current = { shown: p.position, queue: [], from: target, to: target, t0: 0, dur: HOP_MS };
+    anim.current = { shown: p.position, queue: [], from: target, to: target, t0: 0, dur: HOP_MS, jailed: p.inJail, leapNext: false, leap: false };
   } else if (anim.current.queue.at(-1) !== p.position && anim.current.shown !== p.position) {
     const a = anim.current;
     const start = a.queue.at(-1) ?? a.shown;
@@ -126,7 +131,10 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
     // Teleports (jail, "go back 3") fly straight; normal moves hop tile by tile.
     if (p.inJail || steps > 12 || steps === 0) a.queue.push(p.position);
     else for (let k = 1; k <= steps; k++) a.queue.push((start + k) % n);
+    // Out of jail on a roll: the first hop clears the bars.
+    a.leapNext = a.jailed && !p.inJail && steps > 0 && steps <= 12;
   }
+  if (anim.current) anim.current.jailed = p.inJail;
   if (!motion.current) {
     // Someone already out when we arrive (reload mid-game) is simply not drawn.
     const out = p.bankrupt ? 1 : 0;
@@ -165,9 +173,11 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
       const next = a.queue.shift()!;
       m.hops++;
       const final = a.queue.length === 0;
+      a.leap = a.leapNext;
+      a.leapNext = false;
       a.from = chained ? a.to : [g.position.x, g.position.z];
       a.to = final ? tokenSpot(next, slot, count, p.inJail, n) : tokenSpot(next, 0, 1, false, n);
-      a.dur = Math.hypot(a.to[0] - a.from[0], a.to[1] - a.from[1]) > 2 ? 750 : HOP_MS;
+      a.dur = Math.hypot(a.to[0] - a.from[0], a.to[1] - a.from[1]) > 2 ? 750 : a.leap ? HOP_MS * 2 : HOP_MS;
       a.shown = next;
       a.t0 = chained ? prevEnd : now;
       // Onto or over GO: confetti as the hop lands.
@@ -189,7 +199,8 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
       const e = k * k * (3 - 2 * k);
       g.position.x = a.from[0] + (a.to[0] - a.from[0]) * e;
       g.position.z = a.from[1] + (a.to[1] - a.from[1]) * e;
-      lift = Math.sin(Math.PI * k) * (long ? 1.6 : 0.3);
+      // A leap out of the cell goes high enough to clear the bars (JailCell is 0.42 tall).
+      lift = Math.sin(Math.PI * k) * (long ? 1.6 : a.leap ? 1.1 : 0.3);
       // Stretch in the air, a quick squash on take-off.
       squash = 1 + Math.sin(Math.PI * k) * 0.2 - Math.max(0, 1 - k / 0.15) * 0.18;
       if (long) { handsUp = Math.sin(Math.PI * k); spin = k * Math.PI * 2; } else walk = k;

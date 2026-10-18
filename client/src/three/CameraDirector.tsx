@@ -5,6 +5,7 @@
 //   - you build a house or a hotel  -> down on the street as it goes up
 //   - anyone builds a hotel         -> the same, for everyone
 //   - anyone is sent to jail        -> the cell
+//   - anyone gets out of jail       -> the door and the leap over the bars
 //   - anyone lands on a big rent bill -> the street that's charging it
 //   - anyone goes bankrupt          -> their piece falling over
 //   - the game is won               -> a slow circle round the winner's victory dance
@@ -94,6 +95,10 @@ export function CameraDirector({ game, me, n, enabled, mode }: { game: GameView;
       const was = before.players.find(x => x.id === p.id);
       if (!was) continue;
       if (p.inJail && !was.inJail) shots.push(tileShot(p.position, n, { height: 1.4, dist: 2.1, side: -0.7, hold: 1800 }));
+      // Out on a roll: the door swings and the piece leaps the bars.
+      if (was.inJail && !p.inJail && !p.bankrupt && p.position !== was.position) {
+        shots.push(tileShot(n / 4, n, { height: 1.3, dist: 2.0, side: -0.9, hold: 1500 }));
+      }
       // Landed on a street with three houses or more and paid up big: the ouch moment.
       const o = game.owned[p.position];
       if (o && o.owner !== p.id && o.houses >= 3 && was.cash - p.cash >= 400 && p.position !== was.position) {
