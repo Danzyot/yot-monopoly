@@ -179,6 +179,8 @@ export class Game {
   endAfter = false;
   debts: Debt[] = [];
   auction: Auction | null = null;
+  /** Bids placed in the running auction (for the one-line result; the log only keeps the notable ones). */
+  private auctionBids = 0;
   trades: Trade[] = [];
   pot = 0;
   housesLeft = 32;
@@ -832,11 +834,15 @@ export class Game {
     // What they already owe is spoken for: the winner must be able to pay.
     const owe = this.debtOf(p.id);
     if (amount > p.cash - owe) fail(owe ? `You cannot bid more than your cash less the ${this.money(owe)} you owe` : 'You cannot bid more than your cash');
+    const lead = a.highBidder;
+    this.auctionBids = lead ? this.auctionBids + 1 : 1;
     a.highBid = amount;
     a.highBidder = p.id;
     a.bids = [...(a.bids ?? []).filter(b => b.id !== p.id), { id: p.id, amount }];
     a.endsAt = Math.max(a.endsAt, this.now() + AUCTION_EXTEND_MS);
-    this.say(`${p.name} bid ${this.money(amount)}.`, p.id);
+    // Bots can trade bids all auction long: log the opening bid and anything a
+    // person is part of, and leave the rest to the live bid and the result.
+    if (!lead || !p.isBot || !this.player(lead).isBot) this.say(`${p.name} bid ${this.money(amount)}.`, p.id);
     // Deeds are locked and trades wait while an auction runs, so nobody's
     // spending money can grow: whoever can no longer top this bid is out,
     // rather than holding the clock open as a bidder in name only.
@@ -893,7 +899,7 @@ export class Game {
       this.bankPays(w, -paid, 'auction');
       this.owned[a.space] = { owner: w.id, houses: 0, mortgaged: false };
       this.stat(w.id).propertiesBought++;
-      this.say(`${w.name} won ${s.name} for ${this.money(a.highBid)}.`, w.id);
+      this.say(`${w.name} won ${s.name} for ${this.money(a.highBid)}${this.auctionBids > 2 ? ` after ${this.auctionBids} bids` : ''}.`, w.id);
       if (paid < a.highBid) this.charge(w, null, a.highBid - paid, `the rest of the ${s.name} auction`);
     } else {
       this.say(`Nobody bid on ${s.name}${a.bank ? ' — it stays with the bank' : ''}.`);

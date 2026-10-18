@@ -6,6 +6,7 @@ import { groupIndices, isOwnable, mortgageValue } from '../../../shared/board.ts
 import { liftCost } from '../../../shared/holdings.ts';
 import type { Action } from '../../../shared/types.ts';
 import type { Game } from './game.ts';
+import { hash } from './minigames/types.ts';
 
 /** Cash a bot likes to keep in hand; more once the board has houses on it (see reserve()). */
 const RESERVE = 150;
@@ -44,8 +45,19 @@ export function botAction(g: Game, id: string): Action | null {
   if (g.phase === 'auction' && a) {
     if (!a.bidders.includes(id) || a.highBidder === id) return null;
     const s = g.spaces[a.space];
-    const next = a.highBid + Math.max(5, Math.round((s.price ?? 100) * 0.05));
-    if (next <= auctionCeiling(g, id, a.space) && next <= me.cash - owe - reserve(g, id)) return { type: 'bid', amount: next };
+    const inc = Math.max(5, Math.round((s.price ?? 100) * 0.05));
+    const next = a.highBid + inc;
+    // Never past the bot's own valuation, nor past what it can pay.
+    const cap = Math.min(auctionCeiling(g, id, a.space), me.cash - owe - reserve(g, id));
+    if (next <= cap) {
+      // Well below the ceiling a bot sometimes jumps by a few increments
+      // instead of creeping up one at a time (seeded: the same auction state
+      // always gives the same bid).
+      const roll = hash('bid', a.space, id, a.highBid);
+      const room = Math.floor((cap - next) / inc);
+      const jump = room >= 2 && roll % 100 < 35 ? 1 + (roll >>> 8) % Math.min(4, room) : 0;
+      return { type: 'bid', amount: next + jump * inc };
+    }
     return { type: 'pass' };
   }
 
@@ -142,6 +154,17 @@ function valueOf(g: Game, id: string, space: number, leaving: number[] = []): nu
   }
   if (g.owned[space]?.mortgaged) v -= mortgageValue(s);
   return Math.round(v);
+}
+
+/**
+ * How long a computer player thinks before its next move, `base` ms normally.
+ * Auction decisions take 1.5-4 s, varied per bot and per bid (seeded by the
+ * auction state, so tests stay deterministic) and leaving a human time to bid.
+ */
+export function botThinkMs(g: Game, id: string, base: number): number {
+  const a = g.auction;
+  if (g.phase !== 'auction' || !a) return base;
+  return Math.max(base, 1500 + hash('think', a.space, id, a.highBid) % 2501);
 }
 
 /**

@@ -2,7 +2,8 @@
 // regression test per rule the engine once got wrong or left out.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { botAction } from '../src/engine/bot.ts';
+import { botAction, botThinkMs } from '../src/engine/bot.ts';
+import { AUCTION_EXTEND_MS } from '../../shared/pacing.ts';
 import { Room } from '../src/rooms.ts';
 import { resolveTheme } from '../../shared/themes.ts';
 import { SPEED_FACES, type Action } from '../../shared/types.ts';
@@ -326,6 +327,55 @@ test('auction: the player who declined may bid and win; nobody bidding leaves it
   dice(1, 2);
   act('p1', { type: 'roll' }); // 0 → 3 owned by p0: rent
   assert.equal(g.phase, 'done');
+});
+
+test('auction: bots think 1.5-4 s, jump now and then, stop at their valuation and keep the log short', () => {
+  const run = () => {
+    const { g, dice, act, tick } = scripted(3);
+    g.player('p1').isBot = true; g.player('p2').isBot = true;
+    dice(1, 2);
+    act('p0', { type: 'roll' });
+    act('p0', { type: 'decline' });
+    act('p0', { type: 'pass' }); // the human sits out; the two bots haggle over a $60 lot
+    const bids: number[] = [];
+    for (let i = 0; i < 100 && g.auction; i++) {
+      const who = ['p1', 'p2'].find(id => botAction(g, id)?.type === 'bid');
+      if (!who) break;
+      const delay = botThinkMs(g, who, 900);
+      assert.ok(delay >= 1500 && delay <= 4000, `think time ${delay}`);
+      tick(delay);
+      const a = botAction(g, who)!;
+      assert.equal(a.type, 'bid');
+      bids.push((a as { amount: number }).amount);
+      act(who, a);
+    }
+    return { g, bids };
+  };
+  const { g, bids } = run();
+  assert.deepEqual(run().bids, bids, 'seeded: the same auction plays out the same way');
+  const inc = 5; // a $60 lot: 5% rounds to $3, the floor is $5
+  assert.ok(bids.every((b, i) => b > (bids[i - 1] ?? 0)), 'bids only go up');
+  assert.ok(Math.max(...bids) <= 66, `stopped at the valuation (${Math.max(...bids)})`);
+  assert.ok(bids.some((b, i) => b - (bids[i - 1] ?? 0) > inc), `at least one jump bid in ${bids.join(',')}`);
+  assert.ok(bids.length < 14, 'far fewer bids than creeping up by the minimum');
+  // The auction ends on the clock; the log has the opening bid and the result, not every bid.
+  const lines = g.log.filter(l => / bid \$\d/.test(l.text));
+  assert.equal(lines.length, 1, 'only the opening bid is logged');
+  assert.equal(g.auctionTimeout(), false);
+  assert.ok(AUCTION_EXTEND_MS >= 5000, 'a human gets a few seconds after every bot bid');
+});
+
+test('auction: a human bid is always logged, and the think time is the usual one outside auctions', () => {
+  const { g, dice, act } = scripted(3);
+  g.player('p1').isBot = true;
+  dice(1, 2);
+  act('p0', { type: 'roll' });
+  assert.equal(botThinkMs(g, 'p1', 900), 900);
+  act('p0', { type: 'decline' });
+  act('p1', { type: 'bid', amount: 10 });
+  act('p0', { type: 'bid', amount: 15 });
+  act('p1', { type: 'bid', amount: 20 });
+  assert.equal(g.log.filter(l => / bid \$\d/.test(l.text)).length, 3);
 });
 
 test('cards: go back 3 spaces lands and resolves (Community Chest draws); repairs; pay each player short of cash', () => {

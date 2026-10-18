@@ -17,6 +17,9 @@ export interface SimStats {
   hotels: number;
   trades: number;
   auctions: number;
+  /** Bids placed, and log lines an auction produced (start, bids, drop-outs, result). */
+  bids: number;
+  auctionLines: number;
   bankruptcies: number;
   maxSteps: number;
   /** Seeds whose game hit the step cap. */
@@ -72,7 +75,7 @@ export function checkInvariants(g: Game, start: number, bank: number, where: str
 
 /** Play `games` all-bot games from `seed0`, every rule toggle varied by seed. */
 export function simulate(games: number, seed0 = 1): SimStats {
-  const st: SimStats = { games, finished: 0, byTime: 0, turns: 0, houses: 0, hotels: 0, trades: 0, auctions: 0, bankruptcies: 0, maxSteps: 0, unfinished: [] };
+  const st: SimStats = { games, finished: 0, byTime: 0, turns: 0, houses: 0, hotels: 0, trades: 0, auctions: 0, bids: 0, auctionLines: 0, bankruptcies: 0, maxSteps: 0, unfinished: [] };
   for (let seed = seed0; seed < seed0 + games; seed++) {
     const coin = seeded(seed * 104729);
     const map = MAPS[seed % MAPS.length];
@@ -101,6 +104,7 @@ export function simulate(games: number, seed0 = 1): SimStats {
       rng: seeded(seed),
       now: () => clock,
       onBank: (x: number) => { bank += x; },
+      onLog: (t: string) => { if (/is up for auction|is auctioning/.test(t)) st.auctions++; if (/ bid \$|is up for auction|is auctioning|Nobody bid|can't top|won .* for \$|auction/.test(t)) st.auctionLines++; },
     };
     let g = new Game({
       ...init,
@@ -121,6 +125,7 @@ export function simulate(games: number, seed0 = 1): SimStats {
         if (a && away) a = autopilotAction(g, p.id, a);
         if (!a) continue;
         if (a.type === 'acceptTrade') st.trades++;
+        if (a.type === 'bid') st.bids++;
         g.apply(p.id, a, { auto: away });
         acted = true;
         break;
@@ -160,9 +165,6 @@ export function simulate(games: number, seed0 = 1): SimStats {
     if (g.timeUp) st.byTime++;
     st.turns += g.turnNumber;
     st.bankruptcies += g.outOrder.length;
-    for (const line of g.log) {
-      if (line.text.includes('is up for auction') || line.text.includes('The bank is auctioning')) st.auctions++;
-    }
     st.houses += g.housesLeft < 32 ? 32 - g.housesLeft : 0;
     st.hotels += 12 - g.hotelsLeft;
   }

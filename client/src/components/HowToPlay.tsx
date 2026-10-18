@@ -24,7 +24,7 @@ export function howToSteps(rules?: Partial<RuleConfig>, cur = '$'): Step[] {
     {
       icon: '🏠', title: auctions ? 'Buy or auction' : 'Buy it',
       text: auctions
-        ? 'Land on a deed nobody owns? Buy it at the list price, or hit Auction it: everyone can bid, you included. The highest bid wins, each bid adds a few seconds, and you can never bid more than your cash.'
+        ? 'Land on a deed nobody owns? Buy it at the list price, or hit Auction it. Declining a deed in the buy phase always sends it to auction: everyone can bid, you included. The highest bid wins, each bid adds a few seconds, and you can never bid more than your cash.'
         : 'Land on a deed nobody owns? Buy it at the list price, or skip it and it stays with the bank.',
     },
     { icon: '💰', title: 'Rent', text: 'Land on someone else\'s deed and you pay them rent. A full colour set pays double, houses and hotels pay far more, stations pay more for each one owned, and utilities pay a multiple of your dice. Mortgaged deeds pay nothing.' },
@@ -81,7 +81,7 @@ function Extras({ rules }: { rules?: Partial<RuleConfig> }) {
           <ul className="howto-games">
             {MINIGAME_KINDS.map(k => <li key={k}><b>{MINIGAME_INFO[k].icon} {MINIGAME_INFO[k].title}</b> {MINIGAME_INFO[k].blurb}</li>)}
           </ul>
-          <p className="muted">Speed and Metropolis boards have arcades. On Classic the host can turn Free Parking into one.</p>
+          <p className="muted">The Speedway and Metropolis boards have arcade squares. On the Classic board the host can turn Free Parking into one.</p>
         </section>
       )}
       <section>

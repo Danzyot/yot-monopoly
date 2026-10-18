@@ -5,7 +5,7 @@
 
 import { randomInt } from 'node:crypto';
 import { EngineError, Game, type GameSnapshot } from './engine/game.ts';
-import { autopilotAction, botAction } from './engine/bot.ts';
+import { autopilotAction, botAction, botThinkMs } from './engine/bot.ts';
 import { isOn } from './features.ts';
 import { DEFAULT_RULES, getTheme, resolveTheme, type RuleConfig } from '../../shared/themes.ts';
 import { getMap } from '../../shared/maps.ts';
@@ -706,7 +706,7 @@ export class Room {
           }
         }
         this.hooks.onChange(this);
-      }), next.action.type === 'minigame' ? MINIGAME_BOT_DELAY_MS : Math.max(BOT_DELAY_MS, this.sceneUntil - now));
+      }), next.action.type === 'minigame' ? MINIGAME_BOT_DELAY_MS : Math.max(botThinkMs(g, next.id, BOT_DELAY_MS), this.sceneUntil - now));
       return;
     }
 
