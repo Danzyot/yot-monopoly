@@ -2568,6 +2568,16 @@ a:focus-visible, .navlink:focus-visible, .brand:focus-visible, .edition:focus-vi
   /* Long names and money never widen the page. */
   .pmoney { min-width: 0; }
   .pmoney .cash { white-space: nowrap; }
+  /* Lobby: colour swatches were 22px tall, seat buttons 27px, and character
+     names ran into an ellipsis in a 5-wide grid. */
+  .color-pick { height: 36px; border-radius: 10px; }
+  .lobby .btn.tiny { min-height: 36px; }
+  .lobby .audio-btn { width: 36px; height: 36px; }
+  .char-pick { min-height: 56px; }
+  .char-name { white-space: normal; overflow-wrap: anywhere; line-height: 1.1; }
+}
+@media (max-width: 400px) {
+  .char-grid { grid-template-columns: repeat(4, 1fr); }
 }
 @media (max-width: 400px) {
   .hud-bottom .actionbar { padding: 8px 8px; gap: 6px; }
