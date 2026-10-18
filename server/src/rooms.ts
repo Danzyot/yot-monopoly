@@ -12,7 +12,7 @@ import { getMap } from '../../shared/maps.ts';
 import * as PACE from '../../shared/pacing.ts';
 import { DEFAULT_TABLE_STYLE, sanitizeTableStyle, type TableStyle } from '../../shared/tableStyles.ts';
 import { migrateCharacter } from '../../shared/characters.ts';
-import { parseOutfit, randomOutfit, sanitizeOutfit } from '../../shared/outfits.ts';
+import { defaultOutfit, outfitForCharacter, parseOutfit, randomOutfit, sanitizeOutfit } from '../../shared/outfits.ts';
 import { CUTSCENE_MS, cutsceneSnap, pickCutscene, type CutsceneSnap } from '../../shared/cutscenes.ts';
 import { sanitizeRequirements } from './requirements.ts';
 import {
@@ -202,9 +202,10 @@ export class Room {
     if (this.status !== 'lobby') fail('This game has already started — you can watch');
     if (this.kicked.has(m.id)) fail('You were removed from this room — you can watch');
     if (this.seats.length >= this.rules.maxPlayers) fail('The room is full — you can watch');
+    const character = this.freeCharacter();
     const s: Seat = {
       id: m.id, name: m.name, avatar: m.avatar, isBot: false, connected: true, disconnectedAt: null,
-      character: this.freeCharacter(), color: this.freeColor(), outfit: {},
+      character, color: this.freeColor(), outfit: defaultOutfit(character),
     };
     this.seats.push(s);
     if (!this.seat(this.hostId)) this.hostId = m.id;
@@ -389,6 +390,8 @@ export class Room {
     if (!CHARACTERS.includes(character)) fail('Unknown character');
     const s = this.seat(id) ?? fail('You are not seated');
     if (this.seats.some(o => o !== s && o.character === character)) fail('That character is taken');
+    // The outfit comes along, minus the old character's own clothes, plus the new one's.
+    if (character !== s.character) s.outfit = outfitForCharacter(s.outfit ?? {}, character);
     s.character = character;
   }
 
@@ -401,13 +404,16 @@ export class Room {
     s.color = color;
   }
 
-  /** What the seat wears over its character; any number of players may wear the same thing. */
+  /**
+   * What the seat wears over its character; any number of players may wear the
+   * same thing, but a character's signature items only that character.
+   */
   pickOutfit(id: string, raw: unknown) {
     this.dirty = true;
     this.requireLobby();
-    const r = parseOutfit(raw);
-    if (!r.ok) fail(r.error);
     const s = this.seat(id) ?? fail('You are not seated');
+    const r = parseOutfit(raw, s.character);
+    if (!r.ok) fail(r.error);
     s.outfit = r.outfit;
   }
 
@@ -418,9 +424,10 @@ export class Room {
     if (this.seats.length >= this.rules.maxPlayers) fail('The room is full');
     const used = new Set(this.seats.map(s => s.name));
     const name = BOT_NAMES.find(n => !used.has(n)) ?? `Bot ${this.seats.length + 1}`;
+    const character = this.freeCharacter();
     this.seats.push({
       id: `bot-${this.code}-${randomInt(1e9)}`, name, avatar: '🤖', isBot: true, connected: true, disconnectedAt: null,
-      character: this.freeCharacter(), color: this.freeColor(), outfit: randomOutfit(n => randomInt(n)),
+      character, color: this.freeColor(), outfit: randomOutfit(n => randomInt(n), character),
     });
   }
 
@@ -855,7 +862,8 @@ export class Room {
     // maps those (and anything unknown) onto a character.
     const withCharacter = <T extends object>(x: T) => {
       const { token: _legacy, ...rest } = x as T & { token?: unknown };
-      return { ...rest, character: migrateCharacter(x), outfit: sanitizeOutfit((x as { outfit?: unknown }).outfit) };
+      const character = migrateCharacter(x);
+      return { ...rest, character, outfit: sanitizeOutfit((x as { outfit?: unknown }).outfit, character) };
     };
     r.seats = s.seats.map(x => ({ ...withCharacter(x), connected: x.isBot, disconnectedAt: x.isBot ? null : now }));
     if (s.game) {

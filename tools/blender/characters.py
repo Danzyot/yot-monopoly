@@ -8,7 +8,8 @@ out of its skull) and smoothed, so the figures read as moulded vinyl toys
 instead of stacked primitives. Small details (eyes, buttons, visors) stay
 crisp primitives.
 
-Output: models/characters.glb with nodes `<id>_Body|Head|HandL|HandR`, each
+Output: models/characters.glb with nodes `<id>_Body|Head|HandL|HandR|FootL|FootR`
+(plus `<id>_Top|Chain` for the garments a detailed character wears), each
 with its origin on the rig pivot Figure.tsx animates. Material names are
 `<id>:<key>`; the game swaps each for that figure's own material of that key
 (player colour on `main`, greying in jail, fading when bankrupt).
@@ -32,12 +33,17 @@ import blib  # noqa: E402
 import detailed  # noqa: E402
 
 PART_PIVOTS = {'Body': (0, 0, 0), 'Head': (0, 0.29, 0), 'HandL': (0.11, 0.115, 0.015), 'HandR': (-0.11, 0.115, 0.015),
-               'FootL': (0.042, 0.0, 0.012), 'FootR': (-0.042, 0.0, 0.012)}
+               'FootL': (0.042, 0.0, 0.012), 'FootR': (-0.042, 0.0, 0.012),
+               # A detailed character's own garments (its signature outfit items), in the body's frame.
+               'Top': (0, 0, 0), 'Chain': (0, 0, 0)}
 # Body pieces that belong to a foot (they step with it) and to a leg (the game
 # draws legs live, hip to ankle, so the static ones are dropped).
 FOOT_TOKENS = ('Shoe', 'Sole', 'Toe', 'Lace', 'Boot', 'Paw', 'Tabi', 'Foot', 'Slipper', 'Tread', 'Strap', 'Cuff')
 LEG_TOKENS = ('_Leg',)
-LEG_MATS = {'snacky': 'denim', 'starer': 'skin', 'robot': 'metal', 'knight': 'metal', 'astronaut': 'white', 'pirate': 'ink', 'chef': 'c1'}
+LEG_MATS = {'snacky': 'denim', 'starer': 'denim', 'robot': 'metal', 'knight': 'metal', 'astronaut': 'white', 'pirate': 'ink', 'chef': 'c1'}
+# Garment nodes (`<id>_Top`, `<id>_Chain`): a character's own clothes, shown or
+# hidden by the game as its signature outfit items (shared/outfits.ts).
+GARMENTS = ('Top', 'Chain')
 FUSE_MATS = {'main', 'skin', 'white', 'metal', 'wood'}
 VOXEL = 0.0024          # remesh resolution (figures are ~0.45 tall)
 MIN_FUSE_THICKNESS = 0.022
@@ -301,6 +307,10 @@ def preview(nodes_by_char, path, close=False):
         x = (i - (len(ids) - 1) / 2) * (0.36 if close else 0.32)
         for n in nodes_by_char[cid]:
             part = n.name.split('_', 1)[1]
+            if part in GARMENTS and os.environ.get('PREVIEW_BARE'):
+                # PREVIEW_BARE=1: the garments off, to check the base layer under them.
+                n.location = (100, 100, 0)
+                continue
             if part in ('LidL', 'LidR'):
                 # Hung from the head; shown half closed so the preview checks the fit.
                 (hx, hy, hz), (px, py, pz) = n['hinge'], PART_PIVOTS['Head']

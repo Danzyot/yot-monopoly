@@ -9,20 +9,35 @@ import { ASSETS } from '../three/assets.gen.ts';
 import { itemFits } from '../three/characters/Outfit.tsx';
 import { getCharacter, type CharacterId } from '../../../shared/characters.ts';
 import {
-  OUTFIT_ITEMS, OUTFIT_SLOTS, getOutfitItem, sanitizeOutfit, type Outfit, type OutfitSlot,
+  OUTFIT_SLOTS, defaultOutfit, getOutfitItem, outfitForCharacter, sanitizeOutfit, wearableItems, type Outfit, type OutfitSlot,
 } from '../../../shared/outfits.ts';
 
 const THUMBS = ASSETS.outfits as Record<string, string>;
 
-/** The outfit chosen on /characters or last worn, carried into the next lobby. */
+/** The outfit chosen on /characters or last worn, carried into the next lobby, and who it was chosen for. */
 export const OUTFIT_PREF_KEY = 'yot:outfit';
+const OUTFIT_FOR_KEY = 'yot:outfit-for';
 
-export function loadOutfitPref(): Outfit {
-  try { return sanitizeOutfit(JSON.parse(localStorage.getItem(OUTFIT_PREF_KEY) ?? '{}')); } catch { return {}; }
+/**
+ * The saved outfit, as worn by `character`: exactly as saved when it was chosen
+ * for them (an emptied slot stays empty), carried over otherwise (another
+ * character's own clothes come off, empty slots take this one's). Nothing
+ * saved: the character's own look.
+ */
+export function loadOutfitPref(character: CharacterId): Outfit {
+  try {
+    const raw = localStorage.getItem(OUTFIT_PREF_KEY);
+    if (raw === null) return defaultOutfit(character);
+    const saved = sanitizeOutfit(JSON.parse(raw));
+    return localStorage.getItem(OUTFIT_FOR_KEY) === character ? sanitizeOutfit(saved, character) : outfitForCharacter(saved, character);
+  } catch { return defaultOutfit(character); }
 }
 
-export function saveOutfitPref(o: Outfit) {
-  try { localStorage.setItem(OUTFIT_PREF_KEY, JSON.stringify(o)); } catch { /* private mode */ }
+export function saveOutfitPref(o: Outfit, character: CharacterId) {
+  try {
+    localStorage.setItem(OUTFIT_PREF_KEY, JSON.stringify(o));
+    localStorage.setItem(OUTFIT_FOR_KEY, character);
+  } catch { /* private mode */ }
 }
 
 export const sameOutfit = (a: Outfit | undefined, b: Outfit | undefined) =>
@@ -53,7 +68,8 @@ export default function OutfitPicker({ outfit, color, character, onChange, disab
     if (id) next[slot] = id; else delete next[slot];
     onChange(next);
   };
-  const items = OUTFIT_ITEMS.filter(i => i.slot === slot);
+  // The character's own clothes (signature items) first, then the shared ones.
+  const items = wearableItems(character).filter(i => i.slot === slot).sort((a, b) => Number(!a.only) - Number(!b.only));
   const tabId = (s: string) => `outfit-tab-${s}`;
   return (
     <div className="outfit-picker">

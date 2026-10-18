@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Group } from 'three';
 import { CHARACTER_DEFS, type CharacterId } from '../../../shared/characters.ts';
-import type { Outfit } from '../../../shared/outfits.ts';
+import { outfitForCharacter, type Outfit } from '../../../shared/outfits.ts';
 import { CHARACTER_PREF_KEY } from '../components/Lobby.tsx';
 import OutfitPicker, { loadOutfitPref, saveOutfitPref } from '../components/OutfitPicker.tsx';
 import { toast } from '../toast.tsx';
@@ -198,13 +198,19 @@ export default function Gallery() {
   const fromLink = Math.max(0, CHARACTER_DEFS.findIndex(c => c.id === params.get('c')));
   const [i, setI] = useState(fromLink);
   const [color, setColor] = useState(COLORS[1]);
-  const [outfit, setOutfit] = useState<Outfit>(loadOutfitPref);
+  const [outfit, setOutfit] = useState<Outfit>(() => loadOutfitPref(CHARACTER_DEFS[fromLink].id));
   // ?move=cheer opens on that move; ?strip=8 lays it out as a filmstrip of 8 frames (for reviewing timing).
   const linked = MOVES.find(m => m.id === params.get('move'))?.id;
   const strip = Math.min(12, Math.max(0, Number(params.get('strip')) || 0));
   const [move, setMove] = useState<Move>(linked ?? 'idle');
   const [startedAt, setStartedAt] = useState(() => performance.now());
   const def = CHARACTER_DEFS[i];
+  // Another character: the outfit carries over (their own clothes come off, the new one's go on).
+  const [dressedFor, setDressedFor] = useState<CharacterId>(def.id);
+  if (dressedFor !== def.id) {
+    setDressedFor(def.id);
+    setOutfit(o => outfitForCharacter(o, def.id));
+  }
   const pick = (m: Move) => { setMove(m); setStartedAt(performance.now()); };
   const go = (d: number) => setI(x => (x + d + CHARACTER_DEFS.length) % CHARACTER_DEFS.length);
   useEffect(() => {
@@ -214,11 +220,11 @@ export default function Gallery() {
   }, [def, params, setParams]);
   const playAs = () => {
     try { localStorage.setItem(CHARACTER_PREF_KEY, def.id); } catch { /* private mode */ }
-    saveOutfitPref(outfit);
+    saveOutfitPref(outfit, def.id);
     toast(`${def.emoji} You'll play as ${def.name}`);
     nav('/');
   };
-  const dress = (o: Outfit) => { setOutfit(o); saveOutfitPref(o); };
+  const dress = (o: Outfit) => { setOutfit(o); saveOutfitPref(o, def.id); };
   const thumb = (c: (typeof CHARACTER_DEFS)[number]) => {
     const k = CHARACTER_DEFS.indexOf(c);
     return (

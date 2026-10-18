@@ -21,11 +21,20 @@ Output
   and outfits/<id>-tint.webp: the mask of those parts, which the picker fills
   with the player's colour and multiplies over the thumbnail.
 
+Signature items (SIGNATURE: a character's own clothes, e.g. CJ WAWA's tee)
+are not modelled here: they are that character's garment nodes in
+characters.glb (`<id>_Top`, `<id>_Chain`), which the game shows or hides. Only
+their thumbnails are made here, from tools/blender/.cache/models/characters.glb,
+so build the characters first.
+
     tools/blender/run.sh outfits.py
+    tools/blender/run.sh outfits.py --signature-only   (just the signature thumbnails)
     tools/blender/run.sh outfits.py --preview out.png [--chars path/to/characters.glb] [--looks a,b,c|...]
 
 --preview renders every character wearing a few outfits (needs an
 uncompressed characters.glb, e.g. tools/blender/.cache/models/characters.glb).
+A character's own garments show unless the look puts another item in their
+slot; the look `bare` takes them all off.
 """
 
 import json
@@ -46,6 +55,15 @@ SLOTS = {
     'chain': 'neck', 'scarf': 'neck', 'bowtie': 'neck',
     'hoodie': 'body', 'jersey': 'body', 'suit': 'body', 'varsity': 'body',
 }
+# Signature items: id -> (character, garment node, slot). Ids match shared/outfits.ts.
+SIGNATURE = {
+    'wawa_tee': ('snacky', 'Top', 'body'),
+    'cuban_chain': ('snacky', 'Chain', 'neck'),
+    'yot_tee': ('starer', 'Top', 'body'),
+}
+SLOTS.update({k: v[2] for k, v in SIGNATURE.items()})
+GARMENT_SLOT = {'Top': 'body', 'Chain': 'neck'}
+CHARS_CACHE = os.path.join(blib.HERE, '.cache', 'models', 'characters.glb')
 # Thumbnail colours; `main` is white so the picker can tint it.
 COLORS = {
     'main': ('#eeeeee', 0.45, 0.0), 'ink': ('#22222a', 0.5, 0.0), 'white': ('#f7f5ef', 0.6, 0.0),
@@ -637,7 +655,7 @@ def thumbnails(objs, size=128):
 # ---- preview: every character wearing a few outfits ---------------------------
 
 PIVOTS = {'Body': (0, 0, 0), 'Head': (0, 0.29, 0), 'HandL': (0.11, 0.115, 0.015), 'HandR': (-0.11, 0.115, 0.015),
-          'FootL': (0.042, 0.0, 0.012), 'FootR': (-0.042, 0.0, 0.012)}
+          'FootL': (0.042, 0.0, 0.012), 'FootR': (-0.042, 0.0, 0.012), 'Top': (0, 0, 0), 'Chain': (0, 0, 0)}
 CANON = {'head': (0, 0, 0), 'eyes': (0, 0.015, 0.1), 'neck': (0, 0.2, 0), 'body': (0, 0.12, 0)}
 
 
@@ -658,13 +676,17 @@ def preview(items, out, chars_glb, looks):
                 o = src if row == 0 else src.copy()
                 if row:
                     blib.link(o)
+                # A garment comes off when another item takes its slot (or the look is bare).
+                slot = GARMENT_SLOT.get(part)
+                o.hide_render = bool(slot) and (look == ['bare'] or any(
+                    SLOTS.get(x) == slot and SIGNATURE.get(x, (cid, part))[:2] != (cid, part) for x in look))
                 o.parent = None
                 o.location = blib.V(piv[0] + ox, piv[1], piv[2] + oz)
                 o.rotation_euler = (0, 0, 0) if o.rotation_mode != 'QUATERNION' else o.rotation_euler
                 o.rotation_quaternion = (1, 0, 0, 0)
                 o.scale = (1, 1, 1)
             for iid in look:
-                if iid in fit['hide'].get(cid, []):
+                if iid in fit['hide'].get(cid, []) or iid not in items:
                     continue
                 slot = SLOTS[iid]
                 anc = fit['chars'][cid][slot]
@@ -704,8 +726,54 @@ def preview(items, out, chars_glb, looks):
         blib.log('preview', sc.render.filepath)
 
 
+def signature_objects(chars_glb=CHARS_CACHE):
+    """The signature items as objects named by item id: copies of the garment nodes in characters.glb.
+
+    Their `main` parts take the thumbnail's white `outfit:main` (so the picker tints them);
+    the rest keep the character's own colours. Everything else imported stays out of the render."""
+    if not os.path.exists(chars_glb):
+        raise SystemExit(f'{chars_glb} missing: build the characters first (run.sh characters.py)')
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=chars_glb)
+    imported = [o for o in bpy.data.objects if o not in before]
+    by_name = {o.name: o for o in imported}
+    for o in imported:
+        o.hide_render = True
+    out = []
+    for iid, (cid, node, _slot) in SIGNATURE.items():
+        src = by_name[f'{cid}_{node}']
+        o = src.copy()
+        o.data = src.data.copy()
+        o.name = iid
+        o.parent = None
+        o.matrix_world = src.matrix_world.copy()
+        o.hide_render = False
+        blib.link(o)
+        for i, m in enumerate(o.data.materials):
+            if m and m.name.split(':')[-1].split('.')[0] == 'main':
+                o.data.materials[i] = mat_for('main')
+        out.append(o)
+    return out
+
+
+def record_thumbs(entry, objs, tinted):
+    for o in objs:
+        entry[o.name] = f'/outfits/{o.name}.webp'
+        entry.pop(f'{o.name}-tint', None)
+        if tinted[o.name]:
+            entry[f'{o.name}-tint'] = f'/outfits/{o.name}-tint.webp'
+
+
 def main():
     blib.reset()
+    if '--signature-only' in sys.argv:
+        # Re-render only the signature thumbnails, keeping every other entry as it is.
+        with open(blib.MANIFEST) as f:
+            entry = {k: v.split('?')[0] for k, v in json.load(f)['outfits'].items()}
+        sig = signature_objects()
+        record_thumbs(entry, sig, thumbnails(sig))
+        blib.record('outfits', entry)
+        return
     objs = [b() for b in BUILDERS]
     for o in objs:
         blib.log(o.name, f'{len(o.data.polygons)} faces', ', '.join(m.name.split(':')[1] for m in o.data.materials))
@@ -719,12 +787,10 @@ def main():
         preview({o.name: o for o in objs}, out, chars, looks)
         return
     blib.export_glb(objs, 'models/outfits.glb', images='NONE')
-    tinted = thumbnails(objs)
     entry = {'url': '/models/outfits.glb'}
-    for o in objs:
-        entry[o.name] = f'/outfits/{o.name}.webp'
-        if tinted[o.name]:
-            entry[f'{o.name}-tint'] = f'/outfits/{o.name}-tint.webp'
+    record_thumbs(entry, objs, thumbnails(objs))
+    sig = signature_objects()
+    record_thumbs(entry, sig, thumbnails(sig))
     blib.record('outfits', entry)
 
 
