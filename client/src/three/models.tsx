@@ -6,7 +6,8 @@ import { Component, Suspense, useEffect, useMemo, useRef, type ReactNode } from 
 import { useFrame } from '@react-three/fiber';
 import { useGLTF, useTexture } from '@react-three/drei';
 import {
-  Color, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, SRGBColorSpace, type Material, type Mesh, type Object3D,
+  Color, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, RingGeometry, SRGBColorSpace,
+  type Material, type Mesh, type Object3D,
 } from 'three';
 import { ASSETS } from './assets.gen.ts';
 
@@ -158,18 +159,27 @@ export function ModelBuildings({ spots, house, hotel }: { spots: BuildingSpot[];
 }
 
 const DROP_MS = 620;
+// The dust ring kicked up on landing (starts at the half-way impact, gone before the drop ends).
+const PUFF_MS = 300;
+const PUFF_GEO = new RingGeometry(0.55, 1, 28);
 
 function Building({ proto, spot, drop }: { proto: Object3D; spot: BuildingSpot; drop: boolean }) {
   // One clone per building, kept across re-renders (geometry and materials are shared).
   const obj = useMemo(() => proto.clone(), [proto]);
   const start = useRef(drop ? performance.now() : 0);
-  // Falls onto the lot, then squashes and settles.
+  const puff = useRef<Mesh>(null);
+  const puffMat = useMemo(() => new MeshBasicMaterial({ color: '#e9e2d2', transparent: true, opacity: 0, depthWrite: false }), []);
+  useEffect(() => () => puffMat.dispose(), [puffMat]);
+  const puffSize = spot.hotel ? 0.3 : 0.17;
+  // Falls onto the lot, then squashes and settles while a puff of dust spreads and fades.
   useFrame(() => {
     if (!start.current) return;
     const t = (performance.now() - start.current) / DROP_MS;
+    const ring = puff.current;
     if (t >= 1) {
       obj.position.y = 0;
       obj.scale.set(1, 1, 1);
+      if (ring) ring.visible = false;
       start.current = 0;
     } else if (t < 0.5) {
       const k = t / 0.5;
@@ -180,9 +190,21 @@ function Building({ proto, spot, drop }: { proto: Object3D; spot: BuildingSpot; 
       const s = Math.sin(k * Math.PI * 2) * (1 - k) * 0.24;
       obj.position.y = 0;
       obj.scale.set(1 + s * 0.5, 1 - s, 1 + s * 0.5);
+      if (ring) {
+        const p = Math.min(1, (t - 0.5) * DROP_MS / PUFF_MS);
+        const grow = 1 - (1 - p) ** 2;
+        ring.visible = p < 1;
+        ring.scale.setScalar(puffSize * (0.5 + grow));
+        puffMat.opacity = 0.55 * (1 - p);
+      }
     }
   });
-  return <primitive object={obj} position={[spot.x, 0, spot.z]} rotation={[0, spot.rotY, 0]} />;
+  return (
+    <group position={[spot.x, 0, spot.z]} rotation={[0, spot.rotY, 0]}>
+      <primitive object={obj} />
+      {drop && <mesh ref={puff} geometry={PUFF_GEO} material={puffMat} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.004, 0]} visible={false} />}
+    </group>
+  );
 }
 
 /** Start downloading the shared models before the first scene asks for them. */

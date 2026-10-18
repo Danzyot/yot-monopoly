@@ -1,6 +1,6 @@
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
-import { CanvasTexture, Euler, MeshStandardMaterial, Quaternion, SRGBColorSpace, type Mesh } from 'three';
+import { CanvasTexture, Euler, MeshPhysicalMaterial, Quaternion, SRGBColorSpace, type Mesh } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { SpeedFace } from '../../../shared/types.ts';
 import { DICE_MS, markRoll } from './sequence.ts';
@@ -8,7 +8,15 @@ import { DICE_MS, markRoll } from './sequence.ts';
 const SIZE = 0.5;
 const ROLL_MS = DICE_MS;
 // Rounded edges like a real die; keeps BoxGeometry's face groups and UVs.
-const DIE_GEO = new RoundedBoxGeometry(SIZE, SIZE, SIZE, 4, 0.07);
+const DIE_GEO = new RoundedBoxGeometry(SIZE, SIZE, SIZE, 5, 0.085);
+// Where the dice come to rest. A die's footprint is at most SIZE·√2 across at
+// any yaw, so homes at least 0.75 apart can never overlap once settled.
+const HOME_A: [number, number] = [-0.5, 1.4];
+const HOME_B: [number, number] = [0.45, 1.72];
+const HOME_SPEED: [number, number] = [-0.1, 2.4];
+// Pips are dished into the face: the bump map does the shading, so the
+// painted pip only needs a darker rim where the dent turns away from the light.
+const PIP_BUMP = 0.012;
 // Scratch objects for the frame loop (nothing is allocated per frame).
 const qTarget = new Quaternion();
 const qFace = new Quaternion();
@@ -50,27 +58,57 @@ function canvasTexture(draw: (g: CanvasRenderingContext2D) => void): CanvasTextu
   return t;
 }
 
+const pipRadius = (v: number) => (v === 1 ? 16 : 12);
+
 function drawPips(g: CanvasRenderingContext2D, v: number, pip: string, body: string) {
   g.fillStyle = body;
   g.fillRect(0, 0, 128, 128);
   for (const [x, y] of PIPS[v]) {
-    // Drilled pips: a darker rim and a lit lower edge read as a dent.
-    const r = v === 1 ? 16 : 12;
+    // Drilled pips: the paint sits in the dish, with a dark ring at the rim.
+    const r = pipRadius(v);
     const cx = x * 128, cy = y * 128;
-    const grad = g.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.1, cx, cy, r);
+    const grad = g.createRadialGradient(cx - r * 0.25, cy - r * 0.3, r * 0.1, cx, cy, r);
     grad.addColorStop(0, pip);
-    grad.addColorStop(0.75, pip);
-    grad.addColorStop(1, 'rgba(0,0,0,0.85)');
+    grad.addColorStop(0.7, pip);
+    grad.addColorStop(0.88, 'rgba(0,0,0,0.7)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.9)');
     g.fillStyle = grad;
     g.beginPath();
     g.arc(cx, cy, r, 0, Math.PI * 2);
     g.fill();
-    g.strokeStyle = 'rgba(255,255,255,0.35)';
-    g.lineWidth = 2;
+    g.strokeStyle = 'rgba(255,255,255,0.3)';
+    g.lineWidth = 1.5;
     g.beginPath();
-    g.arc(cx, cy, r + 1, Math.PI * 0.15, Math.PI * 0.85);
+    g.arc(cx, cy, r + 1, Math.PI * 0.2, Math.PI * 0.8);
     g.stroke();
   }
+}
+
+/** Height map for the dished pips: white is the face, each pip a soft hollow with a crisp rim. */
+function drawPipBump(g: CanvasRenderingContext2D, v: number) {
+  g.fillStyle = '#ffffff';
+  g.fillRect(0, 0, 128, 128);
+  for (const [x, y] of PIPS[v]) {
+    const r = pipRadius(v) + 1;
+    const cx = x * 128, cy = y * 128;
+    const grad = g.createRadialGradient(cx, cy, 0, cx, cy, r);
+    grad.addColorStop(0, '#707070');
+    grad.addColorStop(0.55, '#808080');
+    grad.addColorStop(0.92, '#f0f0f0');
+    grad.addColorStop(1, '#ffffff');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(cx, cy, r, 0, Math.PI * 2);
+    g.fill();
+  }
+}
+
+/** Glossy moulded resin with a clear lacquer, so the dice catch the room's reflections. */
+function dieMaterial(map: CanvasTexture, bump: CanvasTexture | null): MeshPhysicalMaterial {
+  return new MeshPhysicalMaterial({
+    map, bumpMap: bump, bumpScale: bump ? PIP_BUMP : 0, roughness: 0.32, metalness: 0,
+    clearcoat: 0.6, clearcoatRoughness: 0.18,
+  });
 }
 
 /** Mr. Monopoly's top hat, drawn (emoji fonts are not guaranteed everywhere). */
@@ -108,19 +146,21 @@ function drawBus(g: CanvasRenderingContext2D) {
   }
 }
 
-function speedTexture(f: SpeedFace): CanvasTexture {
-  return canvasTexture(g => {
-    if (typeof f === 'number') return drawPips(g, f, SPEED_INK, SPEED_BODY);
+function speedMaterial(f: SpeedFace): MeshPhysicalMaterial {
+  if (typeof f === 'number') {
+    return dieMaterial(canvasTexture(g => drawPips(g, f, SPEED_INK, SPEED_BODY)), canvasTexture(g => drawPipBump(g, f)));
+  }
+  return dieMaterial(canvasTexture(g => {
     g.fillStyle = SPEED_BODY;
     g.fillRect(0, 0, 128, 128);
     if (f === 'mr') drawHat(g);
     else drawBus(g);
-  });
+  }), null);
 }
 
 function Die({ top, seq, home, delay, materials, rollOnMount = false }: {
   /** Box face index (BoxGeometry order) that should land on top. */
-  top: number; seq: number; home: [number, number]; delay: number; materials: MeshStandardMaterial[];
+  top: number; seq: number; home: [number, number]; delay: number; materials: MeshPhysicalMaterial[];
   /** Tumble in when first shown (the Speed Die appears with the roll that brings it). */
   rollOnMount?: boolean;
 }) {
@@ -177,22 +217,20 @@ export function Dice({ dice, seq, pip = '#111', body = '#fbfbf7', speed = null }
   markRoll(seq, !mounted.current);
   mounted.current = true;
   const pipMaterials = useMemo(
-    () => FACE_VALUES.map(v => new MeshStandardMaterial({ map: canvasTexture(g => drawPips(g, v, pip, body)), roughness: 0.35 })),
+    () => FACE_VALUES.map(v => dieMaterial(canvasTexture(g => drawPips(g, v, pip, body)), canvasTexture(g => drawPipBump(g, v)))),
     [pip, body],
   );
-  const speedMaterials = useMemo(
-    () => SPEED_LAYOUT.map(f => new MeshStandardMaterial({ map: speedTexture(f), roughness: 0.3 })),
-    [],
-  );
+  const speedMaterials = useMemo(() => SPEED_LAYOUT.map(speedMaterial), []);
   // Free the canvas textures and materials with the dice (scene changes, edition swaps).
-  useEffect(() => () => { for (const m of pipMaterials) { m.map?.dispose(); m.dispose(); } }, [pipMaterials]);
-  useEffect(() => () => { for (const m of speedMaterials) { m.map?.dispose(); m.dispose(); } }, [speedMaterials]);
+  const free = (ms: MeshPhysicalMaterial[]) => { for (const m of ms) { m.map?.dispose(); m.bumpMap?.dispose(); m.dispose(); } };
+  useEffect(() => () => free(pipMaterials), [pipMaterials]);
+  useEffect(() => () => free(speedMaterials), [speedMaterials]);
   return (
     <group>
-      <Die top={FACE_VALUES.indexOf(a)} seq={seq} home={[-0.45, 1.4]} delay={0} materials={pipMaterials} />
-      <Die top={FACE_VALUES.indexOf(b)} seq={seq} home={[0.4, 1.7]} delay={60} materials={pipMaterials} />
+      <Die top={FACE_VALUES.indexOf(a)} seq={seq} home={HOME_A} delay={0} materials={pipMaterials} />
+      <Die top={FACE_VALUES.indexOf(b)} seq={seq} home={HOME_B} delay={60} materials={pipMaterials} />
       {speed !== null && (
-        <Die top={SPEED_LAYOUT.indexOf(speed)} seq={seq} home={[-0.1, 2.35]} delay={120} materials={speedMaterials} rollOnMount />
+        <Die top={SPEED_LAYOUT.indexOf(speed)} seq={seq} home={HOME_SPEED} delay={120} materials={speedMaterials} rollOnMount />
       )}
     </group>
   );
