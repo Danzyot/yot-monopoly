@@ -31,6 +31,7 @@ import { useShortcuts } from './Shortcuts.tsx';
 import ManagePanel, { type ManageMode } from './ManagePanel.tsx';
 import HowToPlay, { markHowToSeen } from './HowToPlay.tsx';
 import { AuctionPanel, SoldBanner } from './Auction.tsx';
+import { RollResult, useDiceShown } from './RollResult.tsx';
 import EventFeed from './EventFeed.tsx';
 import { CoachHint, markHint, tradePartnerFor } from './Hints.tsx';
 import { askConfirm } from './Modal.tsx';
@@ -207,6 +208,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
       <AuctionPanel game={game} me={me} skew={skew} />
       <SoldBanner game={game} me={me} />
       <MinigamePanel game={game} me={me} skew={skew} />
+      <RollResult game={game} me={me} />
       <CardPopup game={game} />
       {myPlayer && <TurnBanner game={game} me={me} />}
       <TurnClock game={game} me={me} skew={skew} />
@@ -315,12 +317,13 @@ function ActionBar({ game, me, skew, selected, onManage, onLeave, onTrade }: {
   };
 
   const sceneBusy = useSceneBusy();
+  const diceShown = useDiceShown(game);
   const dice = <DiceRead game={game} />;
 
   if (game.phase === 'over') return null;
-  // Roll → walk → result: hold my buttons while the dice tumble and the piece moves.
+  // Roll → result → walk: hold my buttons while the dice tumble, the score shows and the piece moves.
   if (sceneBusy && game.current === me && !game.paused) {
-    return <div className="actionbar mine"><span className="ab-status rolling">🎲 Rolling…</span></div>;
+    return <div className="actionbar mine"><span className="ab-status rolling">{diceShown ? '🚶 Moving…' : '🎲 Rolling…'}</span>{dice}</div>;
   }
   if (game.paused) return <div className="actionbar"><span className="ab-status">⏸️ Game paused</span>{dice}</div>;
   if (!p || p.bankrupt) {
@@ -385,9 +388,14 @@ function ActionBar({ game, me, skew, selected, onManage, onLeave, onTrade }: {
 
   if (game.phase === 'minigame') return <div className="actionbar"><span className="ab-status">🎮 Mini-game time!</span>{dice}</div>;
   if (game.phase === 'choose') return <ChooseBar game={game} me={me} selected={selected} />;
+  if (game.phase === 'auction') {
+    const lot = game.auction ? theme.spaces[game.auction.space]?.name : null;
+    return <div className="actionbar"><span className="ab-status">🔨 {lot ? <><b>{lot}</b> is up for auction</> : 'Auction on!'} — bid in the auction panel</span>{dice}</div>;
+  }
   if (game.current !== me) {
-    if (game.phase === 'auction') return <div className="actionbar"><span className="ab-status">🔨 Auction on!</span>{dice}</div>;
-    const what = game.phase === 'buy' ? 'is eyeing a property' : game.phase === 'done' ? 'is wheeling and dealing' : 'is rolling';
+    // While their roll plays out, say so rather than giving away what it led to.
+    const what = sceneBusy ? (diceShown ? 'is on the move' : 'is rolling')
+      : game.phase === 'buy' ? 'is eyeing a property' : game.phase === 'done' ? 'is wheeling and dealing' : 'is rolling';
     return (
       <div className="actionbar">
         <span className="ab-status"><b style={{ color: current.color }}>{current.name}</b> {what}…</span>

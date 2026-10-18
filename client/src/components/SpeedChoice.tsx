@@ -6,14 +6,20 @@ import { resolveTheme } from '../../../shared/themes.ts';
 import type { GameView, SpeedFace } from '../../../shared/types.ts';
 import { act } from '../net.ts';
 import { toastError } from '../toast.tsx';
+import { useDiceShown } from './RollResult.tsx';
 
 export function speedLabel(f: SpeedFace): string {
   return f === 'mr' ? '🎩 Mr. Monopoly' : f === 'bus' ? '🚌 Bus' : String(f);
 }
 
-/** "🎲 3 + 4 + 2 = 9" — the third die only when it was rolled. */
+/**
+ * "🎲 3 + 4 + 2 = 9" — the third die only when it was rolled. Only this turn's
+ * roll, and only once its result has popped up and flown down here: nothing
+ * before the current player rolls (or while the dice are still in the air).
+ */
 export function DiceRead({ game }: { game: GameView }) {
-  if (!game.dice) return null;
+  const shown = useDiceShown(game);
+  if (!shown || !game.dice) return null;
   const [a, b] = game.dice;
   const s = game.speed;
   const triples = s !== null && a === b && s === a;

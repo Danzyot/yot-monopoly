@@ -9,6 +9,7 @@ import { autopilotAction, botAction } from './engine/bot.ts';
 import { isOn } from './features.ts';
 import { DEFAULT_RULES, getTheme, resolveTheme, type RuleConfig } from '../../shared/themes.ts';
 import { getMap } from '../../shared/maps.ts';
+import * as PACE from '../../shared/pacing.ts';
 import { DEFAULT_TABLE_STYLE, sanitizeTableStyle, type TableStyle } from '../../shared/tableStyles.ts';
 import { migrateCharacter } from '../../shared/characters.ts';
 import { parseOutfit, randomOutfit, sanitizeOutfit } from '../../shared/outfits.ts';
@@ -19,16 +20,40 @@ import {
 
 const BOT_DELAY_MS = 900;
 /**
- * How long clients take to stage what just happened (client three/sequence.ts,
- * characters/Pieces.tsx, CardDecks.tsx): the dice tumble, then the piece hops
- * tile by tile (or flies when it teleports), then a drawn card flies up. Bots
- * wait for it, so they don't roll again while the last piece is still walking.
+ * How long clients take to stage what just happened (shared/pacing.ts, which
+ * the client's three/sequence.ts, Dice.tsx and characters/Pieces.tsx read
+ * too): the dice tumble, the result pops up and flies to the action bar, then
+ * the piece hops tile by tile (or flies when it teleports), then a drawn card
+ * flies up. Bots wait for it, so they never act while the scene is still playing.
  */
-const SCENE_DICE_MS = 1100;
-const SCENE_HOP_MS = 190;
-const SCENE_FLY_MS = 750;
-const SCENE_CARD_MS = 1600;
-const SCENE_SETTLE_MS = 350;
+export const SCENE_DICE_MS = PACE.DICE_MS;
+export const SCENE_RESULT_MS = PACE.RESULT_MS;
+export const SCENE_HOP_MS = PACE.HOP_MS;
+export const SCENE_FLY_MS = PACE.FLY_MS;
+export const SCENE_CARD_MS = PACE.CARD_MS;
+export const SCENE_SETTLE_MS = PACE.SETTLE_MS;
+
+/** What the clients last staged: the roll, the card and where each piece stood. */
+export interface SceneMark { roll: number; card: number; at: Map<string, number> }
+
+/**
+ * How long clients spend animating the change from `seen` to `g`: a new roll
+ * plays its dice and its result beat, the longest move walks (or flies), and a
+ * new card flies up. 0 when nothing visible happened.
+ */
+export function sceneMs(seen: SceneMark, g: Pick<Game, 'rollSeq' | 'lastCard' | 'players' | 'spaces'>): number {
+  const n = g.spaces.length;
+  let ms = g.rollSeq !== seen.roll ? SCENE_DICE_MS + SCENE_RESULT_MS : 0;
+  let walk = 0;
+  for (const p of g.players) {
+    const was = seen.at.get(p.id);
+    if (was === undefined || was === p.position) continue;
+    walk = Math.max(walk, PACE.walkMs((p.position - was + n) % n, p.inJail));
+  }
+  ms += walk;
+  if ((g.lastCard?.seq ?? 0) !== seen.card) ms += SCENE_CARD_MS;
+  return ms ? ms + SCENE_SETTLE_MS : 0;
+}
 /** Mini-game moves bring their own human-like delay (see the modules' bot()); this is just a nudge. */
 const MINIGAME_BOT_DELAY_MS = 60;
 /** How often to look in on bots waiting to make a mini-game move. */
@@ -141,7 +166,7 @@ export class Room {
   private failedMoves = new Map<string, string>();
   /** When clients should be done animating the latest roll, walk and card (see SCENE_*). */
   private sceneUntil = 0;
-  private seen: { roll: number; card: number; at: Map<string, number> } | null = null;
+  private seen: SceneMark | null = null;
   /** Players who left a running game for good; they keep their seat but can't host. */
   private departed = new Set<string>();
   /** Players removed by the host or an operator: never seated here again (watching is fine). */
@@ -590,18 +615,8 @@ export class Room {
     const seen = this.seen;
     this.seen = { roll: g.rollSeq, card: g.lastCard?.seq ?? 0, at: new Map(g.players.map(p => [p.id, p.position])) };
     if (!seen) return;
-    const n = g.spaces.length;
-    let ms = g.rollSeq !== seen.roll ? SCENE_DICE_MS : 0;
-    let walk = 0;
-    for (const p of g.players) {
-      const was = seen.at.get(p.id);
-      if (was === undefined || was === p.position) continue;
-      const steps = (p.position - was + n) % n;
-      walk = Math.max(walk, !p.inJail && steps <= 12 ? steps * SCENE_HOP_MS : SCENE_FLY_MS);
-    }
-    ms += walk;
-    if ((g.lastCard?.seq ?? 0) !== seen.card) ms += SCENE_CARD_MS;
-    if (ms) this.sceneUntil = Date.now() + ms + SCENE_SETTLE_MS;
+    const ms = sceneMs(seen, g);
+    if (ms) this.sceneUntil = Date.now() + ms;
   }
 
   /** Re-arm timers after any change. */

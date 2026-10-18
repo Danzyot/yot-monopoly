@@ -9,14 +9,16 @@ import {
   playArcadeStart, playBankrupt, playBid, playBuild, playBuy, playBuzz, playCardFlip, playDiceRoll, playDoubles,
   playGoLight, playHop, playJail, playJailOpen, playPay, playReceive, playWin, playYourTurn,
 } from './sound.ts';
+import * as PACE from '../../shared/pacing.ts';
 
-// Keep in step with the board animation (three/sequence.ts DICE_MS and
-// three/characters/Pieces.tsx HOP_MS) so ticks land with the piece, which
-// waits for the dice to settle before it walks.
-const DICE_S = 1.1;
-const HOP_S = 0.19;
-/** Longer moves (and jail) fly straight in Tokens.tsx rather than hopping. */
-const MAX_HOPS = 12;
+// In step with the board animation (shared/pacing.ts) so ticks land with the
+// piece, which waits for the dice to settle and the result to show before it walks.
+const DICE_S = PACE.DICE_MS / 1000;
+const WALK_S = PACE.WALK_DELAY_MS / 1000;
+const HOP_S = PACE.HOP_MS / 1000;
+const FLY_S = PACE.FLY_MS / 1000;
+/** Longer moves (and jail) fly straight in Pieces.tsx rather than hopping. */
+const MAX_HOPS = PACE.MAX_HOPS;
 
 export function useGameSounds(game: GameView | null, me: string): void {
   const prev = useRef<GameView | null>(null);
@@ -34,7 +36,7 @@ export function useGameSounds(game: GameView | null, me: string): void {
 
     if (rolled) {
       playDiceRoll();
-      if (game.dice && game.dice[0] === game.dice[1]) playDoubles(DICE_S * 0.8);
+      if (game.dice && game.dice[0] === game.dice[1]) playDoubles(DICE_S);
     }
 
     for (const p of game.players) {
@@ -42,16 +44,16 @@ export function useGameSounds(game: GameView | null, me: string): void {
       if (!was) continue;
       if (p.position !== was.position) {
         const steps = (p.position - was.position + n) % n;
-        const start = rolled ? DICE_S : 0;
+        const start = rolled ? WALK_S : 0;
         if (!p.inJail && steps > 0 && steps <= MAX_HOPS) {
           for (let k = 0; k < steps; k++) playHop(start + k * HOP_S + 0.05);
           landAt = Math.max(landAt, start + steps * HOP_S + 0.1);
         } else {
-          landAt = Math.max(landAt, start + 0.75);
+          landAt = Math.max(landAt, start + FLY_S);
         }
       }
       if (p.inJail && !was.inJail) playJail(Math.max(landAt, rolled ? 0.4 : 0));
-      if (!p.inJail && was.inJail && !p.bankrupt) playJailOpen(rolled ? DICE_S : 0);
+      if (!p.inJail && was.inJail && !p.bankrupt) playJailOpen(rolled ? WALK_S : 0);
       if (p.bankrupt && !was.bankrupt) playBankrupt(landAt);
     }
 

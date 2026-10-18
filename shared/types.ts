@@ -135,6 +135,11 @@ export interface GameView {
   dice: [number, number] | null;
   /** Bumps on every roll so clients animate even when the value repeats. */
   rollSeq: number;
+  /**
+   * Turn number of the last roll. The dice belong to the current turn only
+   * when this equals turnNumber (absent from servers that predate it).
+   */
+  rollTurn?: number;
   doublesCount: number;
   /** Current player rolled doubles and gets another roll after this one resolves. */
   extraRoll: boolean;

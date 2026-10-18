@@ -179,7 +179,8 @@ function Die({ top, seq, home, delay, materials, rollOnMount = false }: {
       s.seq = seq;
       s.t0 = first ? 0 : now + delay;
       s.yaw = Math.random() * Math.PI * 2;
-      s.spin.set(6 + Math.random() * 8, 4 + Math.random() * 6, 5 + Math.random() * 8);
+      // A full, lively tumble: several turns on each axis, unwinding as it slows.
+      s.spin.set(9 + Math.random() * 8, 6 + Math.random() * 6, 8 + Math.random() * 8);
       s.from = [home[0] + 2.2, home[1] + 2.2];
       s.settled = false;
     }
@@ -196,8 +197,8 @@ function Die({ top, seq, home, delay, materials, rollOnMount = false }: {
     const e = 1 - (1 - k) ** 3;
     m.position.x = s.from[0] + (home[0] - s.from[0]) * e;
     m.position.z = s.from[1] + (home[1] - s.from[1]) * e;
-    // Two diminishing bounces.
-    m.position.y = SIZE / 2 + Math.abs(Math.sin(k * Math.PI * 2.5)) * (1 - k) * 1.4;
+    // Three diminishing bounces, the last a small skip before it rests.
+    m.position.y = SIZE / 2 + Math.abs(Math.sin(k * Math.PI * 3)) * (1 - k) ** 1.5 * 1.5;
     m.quaternion.copy(target).multiply(qTumble.setFromEuler(eTmp.set(s.spin.x * (1 - e), s.spin.y * (1 - e), s.spin.z * (1 - e))));
   });
 
