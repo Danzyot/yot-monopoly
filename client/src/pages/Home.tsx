@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { call, useConnected, useRoomList } from '../net.ts';
-import { THEMES, getTheme } from '../../../shared/themes.ts';
+import { THEMES, resolveTheme } from '../../../shared/themes.ts';
 import { MAPS, getMap } from '../../../shared/maps.ts';
 import { BRAND } from '../../../shared/brand.ts';
 import { CHARACTER_DEFS } from '../../../shared/characters.ts';
@@ -13,7 +13,7 @@ import { preloadEnvironment } from '../three/environments/index.tsx';
 import { HowToPlayButton } from '../components/HowToPlay.tsx';
 
 const STEPS: { icon: string; title: string; body: string }[] = [
-  { icon: '🎲', title: 'Create a table', body: 'Pick a board, an edition and your house rules. Sign in with just a name.' },
+  { icon: '🎲', title: 'Create a table', body: 'Pick a board, a theme and your house rules. Sign in with just a name.' },
   { icon: '🔗', title: 'Share the code', body: 'Friends join with the five-letter code or the invite link — phones welcome. Short on people? Bots fill in.' },
   { icon: '🚀', title: 'Roll', body: 'Buy, build, trade and auction your way to the last player standing.' },
 ];
@@ -144,7 +144,7 @@ export default function Home() {
             <ul className="room-cards">
               {rooms.map(r => {
                 const map = getMap(r.mapId);
-                const theme = getTheme(r.themeId);
+                const theme = resolveTheme(r.themeId, r.mapId);
                 const open = r.status === 'lobby';
                 return (
                   <li key={r.code} className={`room-card ${r.status}`}>
@@ -182,11 +182,12 @@ export default function Home() {
                 <img className="map-thumb" src={`/maps/${m.id}.webp`} alt="" loading="lazy" />
                 <b>{m.name}</b>
                 <span className="small muted">{m.description}</span>
-                <span className="info-meta">{m.spaces.length} spaces · {m.players[0]}–{m.players[1]} players</span>
+                <span className="info-meta">{m.spaces.length} spaces · {m.players[0]}–{m.players[1]} players · {m.look.name} look</span>
               </div>
             ))}
           </div>
-          <h2 className="mt" id="editions-title">Editions</h2>
+          <h2 className="mt" id="editions-title">Themes</h2>
+          <p className="muted small">Any theme on any board. Original keeps each board’s own look.</p>
           <div className="card-grid">
             {THEMES.map(t => (
               <div key={t.id} className="info-card edition-card" style={{ background: t.palette.board, color: t.palette.boardText, borderColor: t.palette.boardLine }}>

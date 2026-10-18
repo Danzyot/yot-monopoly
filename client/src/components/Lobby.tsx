@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type InputHTMLAttributes } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { call, type ChatMsg } from '../net.ts';
-import { THEMES, TIME_LIMIT_CHOICES, TURN_SECONDS_CHOICES, getTheme, type RuleConfig } from '../../../shared/themes.ts';
-import { MAPS, getMap } from '../../../shared/maps.ts';
+import { TIME_LIMIT_CHOICES, TURN_SECONDS_CHOICES, getTheme, type RuleConfig } from '../../../shared/themes.ts';
+import { getMap } from '../../../shared/maps.ts';
 import { PLAYER_COLORS, type RoomView } from '../../../shared/types.ts';
 import { CHARACTER_DEFS, getCharacter, isCharacterId } from '../../../shared/characters.ts';
 import { characterEmoji } from '../format.ts';
@@ -13,6 +13,7 @@ import MusicPlayer from './MusicPlayer.tsx';
 import { Avatar } from './Avatar.tsx';
 import BoardScene from '../three/BoardScene.tsx';
 import TableStylePicker from './TableStylePicker.tsx';
+import BoardPicker from './BoardPicker.tsx';
 import CharacterPreview from '../three/characters/CharacterPreview.tsx';
 import { themeStyle } from '../themeStyle.ts';
 import RequirementsPicker from './RequirementsPicker.tsx';
@@ -45,7 +46,7 @@ function rulesSummary(r: RuleConfig): string {
   ].join(' · ');
 }
 
-/** A select's options, keeping a value set some other way (e.g. an edition) visible. */
+/** A select's options, keeping a value set some other way (e.g. a theme's default) visible. */
 const withCurrent = (choices: number[], v: number) => (choices.includes(v) ? choices : [...choices, v].sort((a, b) => a - b));
 
 /**
@@ -241,43 +242,9 @@ export default function Lobby({ room, me, spectating, chat }: {
         </section>
 
         <section className="panel">
-          <h3>Board</h3>
-          <p className="pick-hint muted small">The map: how many spaces there are and the 3D setting around the table.{!isHost && ' Only the host can change it.'}</p>
-          <div className="edition-pick" role="group" aria-label="Board">
-            {MAPS.map(m => (
-              <button key={m.id} disabled={!isHost} className={`edition small map-card ${m.id === room.mapId ? 'on' : ''}`}
-                aria-pressed={m.id === room.mapId} onClick={() => configure({ mapId: m.id })}>
-                {m.id === room.mapId && <span className="pick-selected">✓ Selected</span>}
-                <img className="map-thumb" src={`/maps/${m.id}.webp`} alt="" loading="lazy" />
-                <b>{m.name}</b>
-                <span className="small muted">{m.description}</span>
-                <span className="small">{m.spaces.length} spaces · best with {m.players[0]}–{m.players[1]}</span>
-              </button>
-            ))}
-          </div>
+          <BoardPicker room={room} isHost={isHost} configure={configure} />
 
-          <h3>Edition</h3>
-          <p className="pick-hint muted small">The skin: property names, colours, money and cards. Some editions bring their own house rules.{!isHost && ' Only the host can change it.'}</p>
-          <div className="edition-pick" role="group" aria-label="Edition">
-            {THEMES.map(t => (
-              <button key={t.id} disabled={!isHost}
-                className={`edition small ${t.id === room.themeId ? 'on' : ''}`} aria-pressed={t.id === room.themeId}
-                style={{ background: t.palette.board, color: t.palette.boardText, borderColor: t.id === room.themeId ? t.palette.accent : t.palette.boardLine }}
-                onClick={() => configure({ themeId: t.id })}>
-                {t.id === room.themeId && <span className="pick-selected">✓ Selected</span>}
-                <span className="row">
-                  {t.logoUrl && <img className="edition-logo" src={t.logoUrl} alt="" />}
-                  <b>{t.name}</b>
-                </span>
-                <span className="swatches" aria-hidden>
-                  {Object.values(t.groupColors).slice(0, 8).map((c, i) => <i key={`${c}${i}`} style={{ background: c }} />)}
-                </span>
-                <span className="small">{t.tagline}</span>
-              </button>
-            ))}
-          </div>
-
-          <h3>Table style</h3>
+          <h3 className="bp-step"><span className="bp-num" aria-hidden>3</span>Table <small className="muted">optional</small></h3>
           <TableStylePicker style={room.style} canEdit={isHost} />
 
           <div className="rules-head">
