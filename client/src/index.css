@@ -2395,11 +2395,11 @@ a:focus-visible, .navlink:focus-visible, .brand:focus-visible, .edition:focus-vi
 }
 
 /* ---- corner chips: who just reacted or poked (besides the 3D bubble) ---- */
-.social-toasts { position: fixed; top: 56px; right: 14px; z-index: 49; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: none; }
+.social-toasts { position: fixed; top: 56px; right: 326px; z-index: 49; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: none; }
 .social-toast {
   display: flex; align-items: center; gap: 7px; padding: 4px 10px 4px 4px; border-radius: 99px;
   background: var(--panel-solid); border: 2px solid var(--line); box-shadow: 0 4px 0 rgba(0,0,0,0.25), 0 10px 24px rgba(0,0,0,0.4);
-  animation: socialChipIn 0.28s cubic-bezier(.2,1.5,.4,1), socialChipOut 0.3s ease-in 2.5s forwards;
+  animation: socialChipIn 0.28s cubic-bezier(.2,1.5,.4,1), socialChipOut 0.3s ease-in 2.9s forwards;
 }
 .social-toast.poke { border-color: var(--warn); }
 @keyframes socialChipIn { from { opacity: 0; transform: translateX(30px) scale(0.8); } }
@@ -2487,7 +2487,7 @@ a:focus-visible, .navlink:focus-visible, .brand:focus-visible, .edition:focus-vi
   .chat .quick-chat { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; margin: 0 -4px; padding-left: 4px; padding-right: 4px; -webkit-overflow-scrolling: touch; }
   .chat .quick-chat::-webkit-scrollbar { display: none; }
   .chat .quick-chip { flex: none; }
-  .social-toasts { top: auto; bottom: calc(86px + 34vh + 8px); right: auto; left: 12px; align-items: flex-start; }
+  .social-toasts { top: 172px; right: auto; left: 12px; align-items: flex-start; max-width: calc(100vw - 80px); }
   .chat-time { opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {

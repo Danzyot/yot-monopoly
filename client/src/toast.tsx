@@ -24,7 +24,7 @@ export interface SocialToast {
   text?: string;
 }
 const socialListeners = new Set<(t: SocialToast) => void>();
-export const SOCIAL_TOAST_MS = 2_800;
+export const SOCIAL_TOAST_MS = 3_200;
 /** At most this many chips at once; older ones drop off so a burst stays readable. */
 export const SOCIAL_TOAST_MAX = 3;
 
