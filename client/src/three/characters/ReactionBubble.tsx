@@ -4,10 +4,13 @@
 // the piece's group. The pop/float animation is CSS (.react-3d).
 import { Html } from '@react-three/drei';
 
-export function ReactionBubble({ emoji, seq }: { emoji: string; seq: number }) {
+// The <Html> stays mounted for the piece's lifetime and only its content
+// changes: mounting and unmounting drei portals mid-update can trip React's
+// DOM bookkeeping ("removeChild … not a child").
+export function ReactionBubble({ emoji, seq }: { emoji?: string; seq?: number }) {
   return (
-    <Html key={seq} center position={[0, 1.65, 0]} zIndexRange={[5, 0]} pointerEvents="none">
-      <div className="react-3d" aria-hidden>{emoji}</div>
+    <Html center position={[0, 1.65, 0]} zIndexRange={[5, 0]} pointerEvents="none">
+      {emoji && <div key={seq} className="react-3d" aria-hidden>{emoji}</div>}
     </Html>
   );
 }

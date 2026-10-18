@@ -309,7 +309,7 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId }: {
           <meshBasicMaterial color={p.color} transparent opacity={0} depthWrite={false} />
         </mesh>
       </group>
-      {reaction && !p.bankrupt && <ReactionBubble emoji={reaction.emoji} seq={reaction.seq} />}
+      <ReactionBubble emoji={reaction && !p.bankrupt ? reaction.emoji : undefined} seq={reaction?.seq} />
     </group>
   );
 }

@@ -24,6 +24,8 @@ const coinGeo = new CylinderGeometry(0.085, 0.085, 0.022, 18);
 const coinMat = new MeshStandardMaterial({ color: '#f4c542', metalness: 0.8, roughness: 0.28, emissive: '#5a3c00', emissiveIntensity: 0.4 });
 const dummy = new Object3D();
 const BANK = new Vector3(0, 0.35, 0);
+const SLOTS = [0, 1, 2, 3, 4, 5, 6, 7];
+const HIDDEN: [number, number, number] = [0, -50, 0];
 
 const coinsFor = (amount: number) => Math.max(3, Math.min(12, Math.round(Math.log2(Math.max(2, amount / 5)) + 1)));
 
@@ -126,11 +128,16 @@ export function MoneyFX({ game, n, currency }: { game: GameView; n: number; curr
   return (
     <>
       <instancedMesh ref={mesh} args={[coinGeo, coinMat, MAX_COINS]} count={0} castShadow frustumCulled={false} />
-      {labels.map(l => (
-        <Html key={l.id} center position={l.pos} zIndexRange={[4, 0]} pointerEvents="none">
-          <span className={`fx-money ${l.gain ? 'gain' : 'loss'}`}>{l.text}</span>
-        </Html>
-      ))}
+      {/* A fixed pool of label slots that stay mounted (only their content changes):
+          mounting and unmounting drei portals mid-update can trip React's DOM bookkeeping. */}
+      {SLOTS.map(k => {
+        const l = labels.find(x => x.id % SLOTS.length === k);
+        return (
+          <Html key={k} center position={l?.pos ?? HIDDEN} zIndexRange={[4, 0]} pointerEvents="none">
+            {l && <span key={l.id} className={`fx-money ${l.gain ? 'gain' : 'loss'}`}>{l.text}</span>}
+          </Html>
+        );
+      })}
     </>
   );
 }
