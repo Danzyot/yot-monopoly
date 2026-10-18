@@ -10,8 +10,11 @@ mini-games, music, and a full operator dashboard.
 - **Many games at once** — every table is a room with a 5-letter code and an invite
   link; public or private; 2–8 players (default 6), plus spectators.
 - **Three maps**, each with its own 3D surroundings:
-  - **Classic** — 40 spaces, the standard game, in a cosy lounge. With the Classic edition
-    it's a modelled, light-baked study (fireplace, moonlit window, bookshelf, Chesterfield).
+  - **Classic** — 40 spaces, the standard game, in a room that suits the edition, each one
+    modelled and light-baked: a study for Classic (fireplace, moonlit window, bookshelf,
+    Chesterfield), a purple Chog Poker lounge (bar, slots, poker tables, pink neon, the
+    Chog portrait) and a Takeprofit TV broadcast studio (video wall of charts, anchor
+    desk, studio cameras, ON AIR).
   - **Speedway** — 32 spaces, two-street colour sets, two arcades; ~30-minute games in the infield
     of a modelled, light-baked race track at dusk (pits, grandstands, floodlights).
   - **Metropolis** — 48 spaces, ten colour sets, two arcades; built for 5–8 players, on a

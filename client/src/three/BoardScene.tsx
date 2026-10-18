@@ -359,6 +359,7 @@ function reflectionsFor(env: string, themeId: string): { url?: string; intensity
   const baked = (url: string, intensity: number) => ({ url, intensity, rotation: -Math.PI / 2 });
   if (env === 'lounge' && themeId === 'classic') return baked(ASSETS.classicEnv.url, 0.6);
   if (env === 'lounge' && themeId === 'tptv') return baked(ASSETS.tptvEnv.url, 0.6);
+  if (env === 'lounge' && themeId === 'chog') return baked(ASSETS.chogEnv.url, 0.6);
   if (env === 'skyline') return baked(ASSETS.skylineEnv.url, 0.7);
   if (env === 'speedway') return baked(ASSETS.speedwayEnv.url, 0.55);
   return STUDIO;
