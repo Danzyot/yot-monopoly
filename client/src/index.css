@@ -2704,3 +2704,13 @@ a:focus-visible, .navlink:focus-visible, .brand:focus-visible, .edition:focus-vi
 @media (prefers-reduced-motion: reduce) {
   .player, .players, .sidepanel, .actionbar, .social-dock { transition: none; }
 }
+/* ---- tablets (820×1180) and narrow desktop windows ---- */
+@media (min-width: 761px) and (max-width: 1100px) and (min-height: 501px) {
+  /* Between the two HUD columns there is ~280px for the action bar, so the
+     dock moves to the bottom-right (under the side panel, which stops 150px
+     short of the bottom) instead of colliding with the bar at bottom-left. */
+  .social-dock { left: auto; right: 12px; flex-direction: row-reverse; }
+  .react-bar, .kb-pop { left: auto; right: 0; }
+  .deed-float { bottom: 16px; }
+  .spec-reacts { right: 320px; }
+}
