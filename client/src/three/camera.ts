@@ -1,13 +1,15 @@
-// Shared camera state for the board scene: the player's chosen view, where
+// Shared camera state for the board scene: the player's chosen view (Auto picks
+// one from what's happening), where
 // each piece is right now (for the follow view), and whether a cinematic shot
 // owns the camera at the moment.
 
 import { useCallback, useState } from 'react';
 import type { Object3D } from 'three';
 
-export type CameraMode = 'table' | 'follow' | 'close' | 'top' | 'free';
+export type CameraMode = 'auto' | 'table' | 'follow' | 'close' | 'top' | 'free';
 
 export const CAMERA_MODES: { id: CameraMode; icon: string; label: string; hint: string }[] = [
+  { id: 'auto', icon: '✨', label: 'Auto', hint: 'Follows the action: trails whoever is moving, then pulls back to the table' },
   { id: 'table', icon: '🎲', label: 'Table', hint: 'The whole table, from your seat' },
   { id: 'follow', icon: '🏃', label: 'Follow', hint: 'Follows whoever is playing, around the board' },
   { id: 'close', icon: '🎥', label: 'Close-up', hint: 'Down at board level, just behind whoever is playing' },
@@ -20,9 +22,9 @@ const KEY = 'yot:camera';
 function read(): CameraMode {
   try {
     const v = localStorage.getItem(KEY);
-    return CAMERA_MODES.some(m => m.id === v) ? (v as CameraMode) : 'table';
+    return CAMERA_MODES.some(m => m.id === v) ? (v as CameraMode) : 'auto';
   } catch {
-    return 'table';
+    return 'auto';
   }
 }
 

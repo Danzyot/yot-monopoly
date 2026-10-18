@@ -21,6 +21,7 @@ import { GoConfetti, celebrateGo } from './GoConfetti.tsx';
 import { DeedPop } from './DeedPop.tsx';
 import { DeedMarkers } from './DeedMarkers.tsx';
 import { SceneEnv } from './SceneEnv.tsx';
+import { useSceneBusy } from './sequence.ts';
 import { isDirectorActive, pieceObjects, type CameraMode } from './camera.ts';
 import { ASSETS } from './assets.gen.ts';
 import { ModelBuildings, ModelTable, WithModel, preloadModels, type BuildingSpot } from './models.tsx';
@@ -340,6 +341,27 @@ function reflectionsFor(env: string, themeId: string): { url?: string; intensity
   return STUDIO;
 }
 
+/** How long Auto keeps trailing a piece after it lands, so the landing and any card are seen up close. */
+const AUTO_LINGER_MS = 2600;
+
+/**
+ * The Auto view: while the dice roll or a piece walks it trails the mover
+ * (Follow), lingers a beat on the landing, then pulls back to the table.
+ * Before the game, and whenever nobody is moving for a while, it's the table.
+ */
+function useAutoMode(mode: CameraMode, playing: boolean): CameraMode {
+  const busy = useSceneBusy();
+  const [trailing, setTrailing] = useState(false);
+  useEffect(() => {
+    if (mode !== 'auto' || !playing) { setTrailing(false); return; }
+    if (busy) { setTrailing(true); return; }
+    const t = setTimeout(() => setTrailing(false), AUTO_LINGER_MS);
+    return () => clearTimeout(t);
+  }, [mode, playing, busy]);
+  if (mode !== 'auto') return mode;
+  return trailing ? 'follow' : 'table';
+}
+
 const tmpOut = new Vector3();
 const tmpPos = new Vector3();
 const tmpTarget = new Vector3();
@@ -375,6 +397,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
   const env = getMap(mapId).environment;
   const look = envLook(env, theme);
   const [hover, setHover] = useState<number | null>(null);
+  const liveMode = useAutoMode(cameraMode, !!game && game.phase !== 'over');
   // Adaptive resolution: start sharp, drop to 1× device pixels as soon as the
   // frame rate sags (phones, integrated GPUs), climb back when there is headroom.
   const [dpr, setDpr] = useState(() => Math.min(1.5, window.devicePixelRatio || 1));
@@ -442,8 +465,8 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
         onDecline={() => { setDpr(1); setLowPower(true); }}
         onIncline={() => setDpr(Math.min(1.5, window.devicePixelRatio || 1))}
         flipflops={3} onFallback={() => { setDpr(1); setLowPower(true); }} />
-      <CameraRig hud={!!game} fogNear={look.fogNear} fogFar={look.fogFar} mode={spin ? 'table' : cameraMode} followId={game?.current} />
-      {game && !spin && <CameraDirector game={game} me={me} n={theme.spaces.length} enabled={cinematic} mode={cameraMode} />}
+      <CameraRig hud={!!game} fogNear={look.fogNear} fogFar={look.fogFar} mode={spin ? 'table' : liveMode} followId={game?.current} />
+      {game && !spin && <CameraDirector game={game} me={me} n={theme.spaces.length} enabled={cinematic} mode={liveMode} />}
       <OrbitControls makeDefault enablePan={false} enabled={!spin}
         minDistance={6} maxDistance={60} minPolarAngle={0.05} maxPolarAngle={Math.PI / 2.4}
         enableDamping dampingFactor={0.12}

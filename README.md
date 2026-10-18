@@ -40,9 +40,9 @@ mini-games, music, and a full operator dashboard.
   the board to finish animating before they move; a cinematic camera swoops in for buys,
   builds, hotels, big rent, jail, bankruptcies and the winner's dance (🎬 to turn it off);
   a "Your turn!" splash; End turn right from a property you don't want.
-- **Camera views** (the camera button, or C): Table, Follow (trails whoever is playing),
-  Close-up (at board level just behind them),
-  Overhead and Free (orbit, zoom, pan).
+- **Camera views** (the camera button, or C): Auto (the default: trails whoever is moving,
+  lingers on the landing, then pulls back to the table), Table, Follow (trails whoever is
+  playing), Close-up (at board level just behind them), Overhead and Free (orbit, zoom, pan).
 - **Helping hands**: a seven-step How to play, one-time tips (you own a set → Build;
   one trade from a set → Trade; short of cash → Raise cash), a Build & manage panel with
   rent before/after and the even-building rules, a trade builder that says why an offer
