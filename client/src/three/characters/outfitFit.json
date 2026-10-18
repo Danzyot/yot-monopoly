@@ -1,0 +1,98 @@
+{
+  "_doc": "How outfit items (tools/blender/outfits.py) sit on each character. Items are modelled once on a canonical figure; per character, each anchor gives where that canonical frame goes (p) and how it stretches (s, per axis). head/eyes are in the head's frame (rig.head), neck/body in the body's (rig.pose). 'hide' lists items that cannot fit a character (its own hat, helmet or visor is in the way); 'items' nudges one item on one character on top of its anchor (p adds, s multiplies). 'neckOverBody' widens the neck item when a body item is also worn, so it sits over the collar.",
+  "canonical": {
+    "head": { "p": [0, 0, 0], "s": [1, 1, 1], "note": "skull: sphere r 0.1 round the head pivot" },
+    "eyes": { "p": [0, 0.015, 0.1], "s": [1, 1, 1], "note": "eyes 0.04 either side of centre, lenses r 0.03" },
+    "neck": { "p": [0, 0.2, 0], "s": [1, 1, 1], "note": "collar ring r 0.055 where head meets body" },
+    "body": { "p": [0, 0.12, 0], "s": [1, 1, 1], "note": "egg body r (0.085, 0.095, 0.075)" }
+  },
+  "chars": {
+    "snacky": {
+      "head": { "p": [0, 0.004, -0.012], "s": [1.32, 1.36, 1.32] },
+      "eyes": { "p": [0, 0.0, 0.126], "s": [1.06, 1, 1] },
+      "neck": { "p": [0, 0.205, 0], "s": [1.2, 1, 1.05] },
+      "body": { "p": [0, 0.13, 0], "s": [1.1, 1.08, 0.98] }
+    },
+    "starer": {
+      "head": { "p": [0, 0.03, 0], "s": [1.12, 1.25, 1.1] },
+      "eyes": { "p": [0, 0.035, 0.127], "s": [1.25, 1.25, 1] },
+      "neck": { "p": [0, 0.2, 0], "s": [1.05, 1, 1] },
+      "body": { "p": [0, 0.125, 0], "s": [1.0, 1.02, 1.0] }
+    },
+    "spiky": {
+      "head": { "p": [0, 0, 0], "s": [1.12, 1.12, 1.12] },
+      "eyes": { "p": [0, 0.025, 0.112], "s": [0.95, 1.1, 1] },
+      "neck": { "p": [0, 0.2, 0], "s": [1, 1, 1] },
+      "body": { "p": [0, 0.12, 0], "s": [1, 1, 1] }
+    },
+    "robot": {
+      "head": { "p": [0, -0.005, 0], "s": [1.15, 0.92, 1.0] },
+      "eyes": { "p": [0, 0.005, 0.098], "s": [1.05, 0.8, 1] },
+      "neck": { "p": [0, 0.21, 0], "s": [1.1, 1, 1] },
+      "body": { "p": [0, 0.125, 0], "s": [1.12, 0.95, 0.95] }
+    },
+    "cat": {
+      "head": { "p": [0, 0, 0], "s": [1.16, 1.02, 1.08] },
+      "eyes": { "p": [0, 0.015, 0.103], "s": [1.05, 1, 1] },
+      "neck": { "p": [0, 0.2, 0], "s": [1, 1, 1] },
+      "body": { "p": [0, 0.12, 0], "s": [1, 1, 1] }
+    },
+    "knight": {
+      "head": { "p": [0, 0.01, 0], "s": [1.1, 1.16, 1.1] },
+      "eyes": { "p": [0, 0.012, 0.12], "s": [1, 1, 1] },
+      "neck": { "p": [0, 0.2, 0], "s": [1.1, 1, 1.05] },
+      "body": { "p": [0, 0.12, 0], "s": [1.1, 1, 1.05] }
+    },
+    "wizard": {
+      "head": { "p": [0, 0, 0], "s": [1, 1, 1] },
+      "eyes": { "p": [0, 0.02, 0.098], "s": [0.88, 0.85, 1] },
+      "neck": { "p": [0, 0.2, 0], "s": [1, 1, 1] },
+      "body": { "p": [0, 0.11, 0], "s": [1.15, 1.05, 1.2] }
+    },
+    "astronaut": {
+      "head": { "p": [0, 0, 0], "s": [1.22, 1.22, 1.22] },
+      "eyes": { "p": [0, 0.005, 0.135], "s": [1.1, 1, 1] },
+      "neck": { "p": [0, 0.2, 0], "s": [1.15, 1, 1.15] },
+      "body": { "p": [0, 0.12, 0], "s": [1.05, 1, 1.05] }
+    },
+    "pirate": {
+      "head": { "p": [0, 0, 0], "s": [1.02, 1.02, 1.02] },
+      "eyes": { "p": [0, 0.015, 0.1], "s": [0.92, 0.9, 1] },
+      "neck": { "p": [0, 0.2, 0], "s": [1, 1, 1] },
+      "body": { "p": [0, 0.12, 0], "s": [1, 1, 1.05] }
+    },
+    "ninja": {
+      "head": { "p": [0, 0, 0], "s": [1.08, 1.08, 1.08] },
+      "eyes": { "p": [0, 0.014, 0.11], "s": [0.85, 0.85, 1] },
+      "neck": { "p": [0, 0.2, 0], "s": [1, 1, 1] },
+      "body": { "p": [0, 0.12, 0], "s": [1, 1, 1.05] }
+    },
+    "chef": {
+      "head": { "p": [0, 0, 0], "s": [1.02, 1.02, 1.02] },
+      "eyes": { "p": [0, 0.02, 0.098], "s": [0.9, 0.85, 1] },
+      "neck": { "p": [0, 0.2, 0], "s": [1, 1, 1] },
+      "body": { "p": [0, 0.12, 0], "s": [1, 1, 1] }
+    },
+    "alien": {
+      "head": { "p": [0, 0.015, 0], "s": [1.27, 1.12, 1.08] },
+      "eyes": { "p": [0, 0.0, 0.106], "s": [1.2, 1, 1] },
+      "neck": { "p": [0, 0.19, 0], "s": [0.85, 1, 0.85] },
+      "body": { "p": [0, 0.11, 0], "s": [0.84, 0.95, 0.88] }
+    }
+  },
+  "neckOverBody": [1.14, 1.02, 1.16],
+  "hide": {
+    "robot": ["cap", "beanie", "tophat", "specs"],
+    "cat": ["beanie", "tophat"],
+    "knight": ["cap", "beanie", "tophat", "headphones", "shades", "specs"],
+    "wizard": ["cap", "beanie", "tophat", "crown", "headphones"],
+    "astronaut": ["cap", "beanie", "tophat", "crown", "headphones", "shades", "specs"],
+    "pirate": ["cap", "beanie", "tophat", "crown", "headphones"],
+    "chef": ["cap", "beanie", "tophat", "crown", "headphones"],
+    "alien": ["beanie", "tophat"]
+  },
+  "items": {
+    "cap": { "snacky": { "s": 1.16, "p": [0, 0.014, -0.004] } },
+    "beanie": { "snacky": { "s": 1.16, "p": [0, 0.01, -0.004] } }
+  }
+}

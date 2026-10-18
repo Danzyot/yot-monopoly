@@ -1,5 +1,7 @@
 // The character gallery: every playable character on a turntable, with its
-// whole animation set on buttons — the same rig and poses the board uses.
+// whole animation set on buttons — the same rig and poses the board uses —
+// and the outfit picker, so a look can be tried on before a game. The page's
+// URL (/characters?c=<id>) is its link; there is nothing else to share.
 
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
@@ -7,7 +9,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Group } from 'three';
 import { CHARACTER_DEFS, type CharacterId } from '../../../shared/characters.ts';
+import type { Outfit } from '../../../shared/outfits.ts';
 import { CHARACTER_PREF_KEY } from '../components/Lobby.tsx';
+import OutfitPicker, { loadOutfitPref, saveOutfitPref } from '../components/OutfitPicker.tsx';
 import { toast } from '../toast.tsx';
 import {
   CharacterFigure, EMOTE_MS, EMOTE_OUT, emotePose, newRig, poseRig, useCharacterMaterials, type EmoteKind, type PoseInput,
@@ -40,9 +44,12 @@ const GALLERY_REST_MS = 520;
 const GALLERY_HOPS = 4;
 const GALLERY_WALK_MS = GALLERY_CROUCH_MS + GALLERY_HOPS * GALLERY_HOP_MS + GALLERY_REST_MS;
 
+/** Shown first, in their own section (internal ids; the names come from CHARACTER_DEFS). */
+const FEATURED: CharacterId[] = ['snacky', 'starer'];
+
 const COLORS = ['#e53935', '#1e88e5', '#43a047', '#fdd835', '#8e24aa', '#fb8c00', '#00acc1', '#ec407a'];
 
-function Turntable({ id, color, move, startedAt }: { id: CharacterId; color: string; move: Move; startedAt: number }) {
+function Turntable({ id, color, outfit, move, startedAt }: { id: CharacterId; color: string; outfit: Outfit; move: Move; startedAt: number }) {
   const spin = useRef<Group>(null);
   const body = useRef<Group>(null);
   const rig = useMemo(newRig, []);
@@ -109,7 +116,7 @@ function Turntable({ id, color, move, startedAt }: { id: CharacterId; color: str
   return (
     <group ref={spin}>
       <group ref={body}>
-        <CharacterFigure id={id} mats={mats} rig={rig} />
+        <CharacterFigure id={id} mats={mats} rig={rig} outfit={outfit} />
       </group>
     </group>
   );
@@ -122,6 +129,7 @@ export default function Gallery() {
   const fromLink = Math.max(0, CHARACTER_DEFS.findIndex(c => c.id === params.get('c')));
   const [i, setI] = useState(fromLink);
   const [color, setColor] = useState(COLORS[1]);
+  const [outfit, setOutfit] = useState<Outfit>(loadOutfitPref);
   const [move, setMove] = useState<Move>('idle');
   const [startedAt, setStartedAt] = useState(() => performance.now());
   const def = CHARACTER_DEFS[i];
@@ -134,16 +142,18 @@ export default function Gallery() {
   }, [def, params, setParams]);
   const playAs = () => {
     try { localStorage.setItem(CHARACTER_PREF_KEY, def.id); } catch { /* private mode */ }
+    saveOutfitPref(outfit);
     toast(`${def.emoji} You'll play as ${def.name}`);
     nav('/');
   };
-  const share = async () => {
-    const url = `${location.origin}/characters?c=${def.id}`;
-    const data = { title: `${def.name} · Yot Monopoly`, text: def.blurb, url };
-    try {
-      if (navigator.share && navigator.canShare?.(data)) { await navigator.share(data); return; }
-    } catch { /* cancelled: fall through to copy */ }
-    try { await navigator.clipboard.writeText(url); toast('Link copied!'); } catch { toast(url); }
+  const dress = (o: Outfit) => { setOutfit(o); saveOutfitPref(o); };
+  const thumb = (c: (typeof CHARACTER_DEFS)[number]) => {
+    const k = CHARACTER_DEFS.indexOf(c);
+    return (
+      <button key={c.id} className={`gallery-thumb ${k === i ? 'on' : ''}`} onClick={() => setI(k)} title={`${c.name} — ${c.blurb}`} aria-pressed={k === i}>
+        <span aria-hidden>{c.emoji}</span><small>{c.name}</small>
+      </button>
+    );
   };
   return (
     <div className="gallery">
@@ -159,7 +169,7 @@ export default function Gallery() {
             <cylinderGeometry args={[0.36, 0.4, 0.06, 64]} />
             <meshStandardMaterial color="#f4c542" metalness={0.6} roughness={0.35} />
           </mesh>
-          <Turntable key={`${def.id}`} id={def.id} color={color} move={move} startedAt={startedAt} />
+          <Turntable key={`${def.id}`} id={def.id} color={color} outfit={outfit} move={move} startedAt={startedAt} />
           <OrbitControls enablePan={false} target={[0, 0.22, 0]} minDistance={0.7} maxDistance={2.4}
             minPolarAngle={0.4} maxPolarAngle={Math.PI / 2.05} />
         </Canvas>
@@ -171,26 +181,30 @@ export default function Gallery() {
         <p className="gallery-blurb">{def.blurb}</p>
         <div className="gallery-cta">
           <button className="btn primary chunky" onClick={playAs}>Play as {def.name}</button>
-          <button className="btn ghost small" onClick={share} aria-label={`Share a link to ${def.name}`}>🔗 Share</button>
+        </div>
+        <h2 className="gallery-sub gallery-section-head">Featured</h2>
+        <div className="gallery-thumbs featured" role="group" aria-label="Featured characters">
+          {CHARACTER_DEFS.filter(c => FEATURED.includes(c.id)).map(thumb)}
+        </div>
+        <h2 className="gallery-sub gallery-section-head">Base characters</h2>
+        <div className="gallery-thumbs" role="group" aria-label="Base characters">
+          {CHARACTER_DEFS.filter(c => !FEATURED.includes(c.id)).map(thumb)}
+        </div>
+        <h2 className="gallery-sub">Outfit</h2>
+        <OutfitPicker outfit={outfit} color={color} character={def.id} onChange={dress} />
+        <div className="outfit-colors">
+          <span>Colour</span>
+          <div className="gallery-colors small" role="radiogroup" aria-label="Player colour">
+            {COLORS.map(c => (
+              <button key={c} className={`color-pick ${color === c ? 'on' : ''}`} style={{ background: c }}
+                aria-label={`Colour ${c}`} aria-checked={color === c} role="radio" onClick={() => setColor(c)} />
+            ))}
+          </div>
         </div>
         <h2 className="gallery-sub">Moves</h2>
         <div className="gallery-moves" role="group" aria-label="Moves">
           {MOVES.map(m => (
             <button key={m.id} className={`btn small ${move === m.id ? 'primary' : ''}`} aria-pressed={move === m.id} onClick={() => pick(m.id)}>{m.label}</button>
-          ))}
-        </div>
-        <div className="gallery-colors" role="radiogroup" aria-label="Player colour">
-          {COLORS.map(c => (
-            <button key={c} className={`color-pick ${color === c ? 'on' : ''}`} style={{ background: c }}
-              aria-label={`Colour ${c}`} aria-checked={color === c} role="radio" onClick={() => setColor(c)} />
-          ))}
-        </div>
-        <h2 className="gallery-sub">All characters</h2>
-        <div className="gallery-thumbs" role="group" aria-label="Characters">
-          {CHARACTER_DEFS.map((c, k) => (
-            <button key={c.id} className={`gallery-thumb ${k === i ? 'on' : ''}`} onClick={() => setI(k)} title={`${c.name} — ${c.blurb}`} aria-pressed={k === i}>
-              <span aria-hidden>{c.emoji}</span><small>{c.name}</small>
-            </button>
           ))}
         </div>
       </section>

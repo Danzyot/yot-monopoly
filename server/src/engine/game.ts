@@ -6,6 +6,7 @@ import {
   groupIndices, isOwnable, mortgageValue, type SpaceDef,
 } from '../../../shared/board.ts';
 import type { CardEffect, DeckId } from '../../../shared/cards.ts';
+import type { Outfit } from '../../../shared/outfits.ts';
 import {
   buildProblem, liftCost, manageProblem, mortgageProblem, sellProblem, unmortgageProblem,
 } from '../../../shared/holdings.ts';
@@ -49,6 +50,7 @@ export interface NewPlayer {
   name: string;
   character: CharacterId;
   color: string;
+  outfit?: Outfit;
   isBot: boolean;
 }
 

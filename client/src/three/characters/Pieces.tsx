@@ -331,7 +331,7 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
     <group ref={ref} position={initial}>
       <group ref={scaleRef}>
         <group ref={yawRef}>
-          <CharacterFigure id={p.character} mats={mats} rig={rig} />
+          <CharacterFigure id={p.character} mats={mats} rig={rig} outfit={p.outfit} />
           {winner && <Crown />}
         </group>
         <group ref={markerRef} visible={false}>
