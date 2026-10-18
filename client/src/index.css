@@ -308,6 +308,9 @@ button.edition:disabled { cursor: default; }
 .audio-field { display: flex; flex-direction: column; gap: 4px; }
 .audio-vol { display: flex; align-items: center; gap: 6px; }
 .audio-vol input[type="range"] { flex: 1; padding: 0; border: 0; background: transparent; accent-color: var(--accent); }
+/* Ambience switch (ambience.ts): a plain checkbox row at the foot of the panel. */
+.audio-check { flex-direction: row; align-items: center; gap: 8px; cursor: pointer; }
+.audio-check input { margin: 0; accent-color: var(--accent); }
 @media (max-width: 760px) { .audio-btn { width: 26px; height: 24px; } }
 /* Room lobby header: the controls drop under the room code when the panel is narrow. */
 .row.between:has(> .lobby-audio) { flex-wrap: wrap; row-gap: 6px; }

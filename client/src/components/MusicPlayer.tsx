@@ -5,6 +5,7 @@ import {
   setPlaylist, setVolume, togglePlay, type MusicState,
 } from '../music.ts';
 import { onSfxChange, primeAudio, setSfxMuted, setSfxVolume, sfxState, type SfxState } from '../sound.ts';
+import { ambienceEnabled, onAmbienceChange, setAmbienceEnabled } from '../ambience.ts';
 
 const Icon = ({ d, size = 15 }: { d: string; size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -33,10 +34,12 @@ export default function MusicPlayer() {
   const musicOn = config.features.music;
   const [m, setM] = useState<MusicState>(musicState);
   const [fx, setFx] = useState<SfxState>(sfxState);
+  const [amb, setAmb] = useState(ambienceEnabled);
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
 
   useEffect(() => onSfxChange(setFx), []);
+  useEffect(() => onAmbienceChange(setAmb), []);
   useEffect(() => {
     setMusicAllowed(musicOn);
     if (!musicOn) return;
@@ -147,6 +150,10 @@ export default function MusicPlayer() {
                 onChange={e => { primeAudio(); setSfxVolume(Number(e.target.value) / 100); if (fx.muted) setSfxMuted(false); }} />
             </div>
           </div>
+          <label className="audio-field audio-check" title="A quiet room tone for the scene, under the music">
+            <input type="checkbox" checked={amb} onChange={e => { primeAudio(); setAmbienceEnabled(e.target.checked); }} />
+            <span className="small">Ambience<span className="muted"> — room sounds with the music</span></span>
+          </label>
         </div>
       )}
     </div>
