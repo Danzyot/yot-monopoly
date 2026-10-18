@@ -3,7 +3,7 @@
 
 export const ASSETS = {
   "buildings": {
-    "url": "/models/buildings.glb?v=a06bfad5d1"
+    "url": "/models/buildings.glb?v=94108fccdf"
   },
   "characters": {
     "url": "/models/characters.glb?v=6963602070"
