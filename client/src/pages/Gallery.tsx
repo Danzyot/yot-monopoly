@@ -261,13 +261,13 @@ export default function Gallery() {
         <div className="gallery-cta">
           <button className="btn primary chunky" onClick={playAs}>Play as {def.name}</button>
         </div>
-        <h2 className="gallery-sub gallery-section-head">Featured</h2>
-        <div className="gallery-thumbs featured" role="group" aria-label="Featured characters">
-          {CHARACTER_DEFS.filter(c => FEATURED.includes(c.id)).map(thumb)}
-        </div>
         <h2 className="gallery-sub gallery-section-head">Base characters</h2>
         <div className="gallery-thumbs" role="group" aria-label="Base characters">
           {CHARACTER_DEFS.filter(c => !FEATURED.includes(c.id)).map(thumb)}
+        </div>
+        <h2 className="gallery-sub gallery-section-head">Featured</h2>
+        <div className="gallery-thumbs featured" role="group" aria-label="Featured characters">
+          {CHARACTER_DEFS.filter(c => FEATURED.includes(c.id)).map(thumb)}
         </div>
         <h2 className="gallery-sub">Outfit</h2>
         <OutfitPicker outfit={outfit} color={color} character={def.id} onChange={dress} />
