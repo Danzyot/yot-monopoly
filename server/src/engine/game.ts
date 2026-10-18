@@ -1564,6 +1564,17 @@ export class Game {
     }
   }
 
+  /**
+   * The room's players are still watching the last move play out until
+   * `until`: a turn step whose clock started before then starts at `until`
+   * instead, so nobody loses thinking time to the dice and the walk.
+   */
+  holdTurnClock(until: number) {
+    const ms = this.turnMs();
+    if (this.turnEndsAt === null || ms === 0 || this.paused) return;
+    if (this.turnEndsAt - ms < until) this.turnEndsAt = until + ms;
+  }
+
   /** When the room must call clockTimeout() next (turn step, a debt, or the game-length limit). */
   clockDeadline(): number | null {
     if (this.paused || this.phase === 'over') return null;

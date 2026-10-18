@@ -656,6 +656,9 @@ export class Room {
     if (cue) ms += CUTSCENE_MS[cue.kind] + (ms ? 0 : SCENE_SETTLE_MS);
     // A later, shorter scene never cuts short one still playing.
     if (ms) this.sceneUntil = Math.max(this.sceneUntil, Date.now() + ms);
+    // The turn clock starts once the players have seen the move, not while the
+    // dice and the walk are still playing.
+    if (ms) g.holdTurnClock(this.sceneUntil);
   }
 
   /** Re-arm timers after any change. */

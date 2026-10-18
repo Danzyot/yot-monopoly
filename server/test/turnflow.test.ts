@@ -135,3 +135,17 @@ test('rollBy names who threw the dice, even once the turn has moved on', () => {
   const init = { theme: resolveTheme('classic', 'classic'), rules: { ...DEFAULT_RULES } };
   assert.equal(Game.restore(init, g.snapshot()).view().rollBy, 'p0', 'saved with the game');
 });
+
+test('the turn clock starts once the move has played out', () => {
+  const { g, dice, act } = scripted();
+  g.rules.turnSeconds = 30;
+  dice(1, 2);
+  act('p0', { type: 'roll' });
+  const before = g.view().turnEndsAt!;
+  const sceneEnd = Date.now() + 5000;
+  g.holdTurnClock(sceneEnd);
+  assert.equal(g.view().turnEndsAt, sceneEnd + 30_000, 'the window starts at the end of the scene');
+  g.holdTurnClock(sceneEnd - 4000);
+  assert.equal(g.view().turnEndsAt, sceneEnd + 30_000, 'an earlier scene end never shortens it');
+  assert.ok(before <= sceneEnd + 30_000);
+});
