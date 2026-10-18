@@ -19,6 +19,7 @@ import { JailCell } from './JailCell.tsx';
 import { ParkingPot } from './ParkingPot.tsx';
 import { GoConfetti, celebrateGo } from './GoConfetti.tsx';
 import { DeedPop } from './DeedPop.tsx';
+import { DeedMarkers } from './DeedMarkers.tsx';
 import { SceneEnv } from './SceneEnv.tsx';
 import { isDirectorActive, pieceObjects, type CameraMode } from './camera.ts';
 import { ASSETS } from './assets.gen.ts';
@@ -173,35 +174,9 @@ function TileHighlight({ index, color, pulse, n }: { index: number | null; color
 }
 
 function Ownership({ game, theme }: { game: GameView; theme: Theme }) {
-  const colorOf = useMemo(() => Object.fromEntries(game.players.map(p => [p.id, p.color])), [game.players]);
-  const n = theme.spaces.length;
-  const T = tileWidth(n);
   return (
     <group>
-      {Object.entries(game.owned).map(([k, o]) => {
-        const i = Number(k);
-        const g = tile(i, n);
-        // A strip along the tile's outer edge in the owner's colour.
-        const inset = C / 2 - 0.06;
-        const x = g.x + g.out[0] * inset, z = g.z + g.out[1] * inset;
-        const horiz = g.out[0] === 0;
-        return (
-          <mesh key={i} position={[x, 0.02, z]}>
-            <boxGeometry args={horiz ? [T * 0.86, 0.04, 0.08] : [0.08, 0.04, T * 0.86]} />
-            <meshStandardMaterial color={o.mortgaged ? '#666' : colorOf[o.owner]} emissive={o.mortgaged ? '#000' : colorOf[o.owner]} emissiveIntensity={0.35} />
-          </mesh>
-        );
-      })}
-      {Object.entries(game.owned).filter(([, o]) => o.mortgaged).map(([k]) => {
-        const g = tile(Number(k), n);
-        const horiz = g.out[0] === 0;
-        return (
-          <mesh key={`m${k}`} position={[g.x, 0.006, g.z]} rotation={[-Math.PI / 2, 0, 0]}>
-            <planeGeometry args={horiz ? [T, C] : [C, T]} />
-            <meshBasicMaterial color="#000" transparent opacity={0.45} depthWrite={false} />
-          </mesh>
-        );
-      })}
+      <DeedMarkers game={game} n={theme.spaces.length} />
       <Buildings game={game} theme={theme} />
     </group>
   );
