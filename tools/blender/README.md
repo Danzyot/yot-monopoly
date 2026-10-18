@@ -7,6 +7,7 @@ keep in sync and no hand-editing: change the script, rebuild, commit the output.
 ```bash
 tools/blender/run.sh table.py                 # the game table (all maps)
 tools/blender/run.sh props.py                 # houses and hotels
+tools/blender/run.sh characters.py            # the twelve characters (~1.5 min)
 tools/blender/run.sh classic_room.py --draft  # Classic room, quick bake (~3 min)
 tools/blender/run.sh classic_room.py          # Classic room, final bake (~40 min on 4 cores)
 tools/blender/run.sh skyline_set.py --preview # Metropolis roof: Cycles renders of the game views, no bake
@@ -36,6 +37,9 @@ hash, so browsers never keep a stale model after a rebuild.
 | `table.py` | The round table; its finish is recoloured live from the room's table style |
 | `props.py` | Houses and hotels; body and roof take the edition's colours live |
 | `classic_room.py` | The Classic edition's room, light-baked |
+| `characters.py` | The twelve playable characters → `characters.glb`: one node per rig part (`<id>_Body`, `_Head`, `_HandL/R`, `_FootL/R`, and `_LidL/R` eyelids hinged from their `hinge` extra), material names `<id>:<key>` that the game swaps for each player's own materials. `--preview out.png [--only a,b]` renders a close lineup |
+| `detailed.py` | The hand-built character designs (one builder per character) and their shape helpers: ellipsoids, tubes and strands, rounded boxes, eyes with blinking lids, mittens, boots, piping, stars and moons |
+| `extract_characters.ts` | Dumps the code-drawn looks (client `looks.tsx`) that `characters.py` falls back to for anything without a hand-built design |
 | `skyline_set.py` | The Metropolis map's penthouse roof (every edition), light-baked, with the city round it |
 | `skyline_env.py` | A 360° panorama of the Metropolis roof, its environment map |
 | `classic_env.py` | 360° panorama of the Classic room (the environment map for reflections) |
