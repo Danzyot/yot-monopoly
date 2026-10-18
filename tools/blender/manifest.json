@@ -21,6 +21,9 @@
     "lightmapIntensity": 27.5562,
     "url": "/models/classic/room.glb?v=750098563e"
   },
+  "cops": {
+    "url": "/models/cops.glb?v=e3093d8ef5"
+  },
   "skylineEnv": {
     "url": "/models/skyline/set-env.webp?v=5f53f04cb3"
   },

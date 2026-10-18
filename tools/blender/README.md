@@ -8,6 +8,7 @@ keep in sync and no hand-editing: change the script, rebuild, commit the output.
 tools/blender/run.sh table.py                 # the game table (all maps)
 tools/blender/run.sh props.py                 # houses and hotels
 tools/blender/run.sh characters.py            # the twelve characters (~1.5 min)
+tools/blender/run.sh cops.py                  # the cutscene cast: cops, patrol car, tow truck, trophy, podium (~15 s)
 tools/blender/run.sh classic_room.py --draft  # Classic room, quick bake (~3 min)
 tools/blender/run.sh classic_room.py          # Classic room, final bake (~40 min on 4 cores)
 tools/blender/run.sh chog_room.py --preview   # Chog Poker lounge: Cycles renders of the game views, no bake
@@ -47,6 +48,7 @@ hash, so browsers never keep a stale model after a rebuild.
 | `classic_room.py` | The Classic edition's room, light-baked |
 | `chog_room.py` | The Chog edition's room on the Classic map: the Chog Poker lounge (velvet walls, bar, poker tables, slots and jackpot board, booths, neon), light-baked |
 | `characters.py` | The twelve playable characters → `characters.glb`: one node per rig part (`<id>_Body`, `_Head`, `_HandL/R`, `_FootL/R`, and `_LidL/R` eyelids hinged from their `hinge` extra), material names `<id>:<key>` that the game swaps for each player's own materials. `--preview out.png [--only a,b]` renders a close lineup |
+| `cops.py` | The cutscene cast → `cops.glb` (loaded only when a cutscene first needs it): two cops (`CopBody`, `CopHeadA/B`, `CopHandL/R`, `CopFootL/R`, `CopBaton`; arms and legs drawn live), the patrol car (`CarBody`, `CarSirenRed/Blue`, `CarWheel`), the tow truck (`TruckBody`, `TruckBeacon`), `Trophy` and `Podium`. No light bake. `--preview out.png` renders a lineup |
 | `detailed.py` | The hand-built character designs (one builder per character) and their shape helpers: ellipsoids, tubes and strands, rounded boxes, eyes with blinking lids, mittens, boots, piping, stars and moons |
 | `extract_characters.ts` | Dumps the code-drawn looks (client `looks.tsx`) that `characters.py` falls back to for anything without a hand-built design |
 | `skyline_set.py` | The Metropolis map's penthouse roof (every edition), light-baked, with the city round it |
