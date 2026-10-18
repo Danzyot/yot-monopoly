@@ -1742,3 +1742,197 @@ input.tr-slider { width: 100%; padding: 0; height: 26px; accent-color: var(--hi)
 /* Map cards: a picture of the map's 3D setting (captured in game, client/public/maps). */
 .map-thumb { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 10px; margin-bottom: 8px;
   border: 2px solid color-mix(in srgb, var(--line) 50%, transparent); background: rgba(0, 0, 0, 0.3); }
+
+/* ==========================================================================
+   Arcade polish — MinigamePanel.tsx. The five mini-games as arcade moments:
+   a real spinning wheel, tumbling dice, a card flip, traffic lights, a timer
+   bar. Appended last so it wins over the first .mg pass above; new classes
+   are prefixed mga-.
+   ========================================================================== */
+.mg { width: min(400px, calc(100vw - 24px)); padding: 14px 14px 16px; overflow-x: hidden; }
+.mg.mga-won { animation: mgIn 0.3s cubic-bezier(.2,1.3,.4,1), mgaWonFlash 1.2s ease-out; }
+.mg.mga-lost { animation: mgIn 0.3s cubic-bezier(.2,1.3,.4,1), mgaLostFlash 0.9s ease-out; }
+@keyframes mgaWonFlash { 0% { box-shadow: 0 0 0 2px var(--hi), 0 0 60px 10px color-mix(in srgb, var(--hi) 70%, transparent); } 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent), 0 18px 50px rgba(0,0,0,0.6); } }
+@keyframes mgaLostFlash { 0% { box-shadow: 0 0 0 2px #ff5a5a, 0 0 40px 6px rgba(255, 90, 90, 0.5); } 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent), 0 18px 50px rgba(0,0,0,0.6); } }
+.mg kbd {
+  font: 700 10px var(--font), sans-serif; letter-spacing: 0; text-shadow: none; opacity: 0.8;
+  background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.3); border-radius: 5px; padding: 1px 5px; margin-left: 4px; vertical-align: middle;
+}
+@media (hover: none) { .mg kbd { display: none; } }
+.mg-body { position: relative; }
+
+/* header: players + prize row, countdown ring */
+.mga-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mga-players { display: flex; gap: 5px; flex-wrap: wrap; flex: 1; min-width: 0; }
+.mga-chip {
+  --c: var(--muted);
+  font: 700 12px var(--font), sans-serif; padding: 3px 9px 3px 7px; border-radius: 99px; white-space: nowrap; max-width: 130px; overflow: hidden; text-overflow: ellipsis;
+  background: rgba(0,0,0,0.3); border: 1.5px solid color-mix(in srgb, var(--c) 70%, transparent); color: var(--text);
+}
+.mga-chip::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--c); margin-right: 5px; vertical-align: 0; }
+.mga-chip.me { background: color-mix(in srgb, var(--c) 28%, transparent); }
+.mga-chip.watch { border-style: dashed; color: var(--muted); }
+.mga-chip.watch::before, .mga-chip.crown::before { display: none; }
+.mga-chip.crown { background: linear-gradient(180deg, #ffe16a, #ffb81f); color: #5a3500; border-color: #b87400; animation: mgaPop 0.4s cubic-bezier(.2,1.6,.4,1); }
+.mga-prize { font: 400 14px var(--display); letter-spacing: 0.03em; color: var(--hi); text-shadow: var(--outline); white-space: nowrap; }
+.mga-ring { position: relative; width: 44px; height: 44px; flex: none; display: inline-grid; place-items: center; }
+.mga-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.mga-ring .track { fill: rgba(0,0,0,0.35); stroke: rgba(255,255,255,0.15); stroke-width: 4; }
+.mga-ring .arc { fill: none; stroke: var(--good); stroke-width: 4; stroke-linecap: round; transition: stroke-dashoffset 0.1s linear, stroke 0.3s; }
+.mga-ring b { font: 400 17px var(--display); font-variant-numeric: tabular-nums; text-shadow: var(--outline); position: relative; }
+.mga-ring.hot .arc { stroke: #ff5a5a; }
+.mga-ring.hot b { color: #ffb0b0; animation: mgaPulse 0.5s ease-in-out infinite alternate; }
+.mga-secret { font: 400 15px var(--display); padding: 4px 10px; border-radius: 99px; background: rgba(0,0,0,0.35); border: 1px solid var(--line); color: var(--muted); }
+@keyframes mgaPulse { to { transform: scale(1.18); } }
+@keyframes mgaPop { from { transform: scale(0.6); } }
+.mga-crown { position: absolute; top: -14px; right: 6px; font-size: 22px; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.5)); animation: mgaCrown 0.5s cubic-bezier(.2,1.6,.4,1); }
+@keyframes mgaCrown { from { transform: translateY(-20px) scale(0.3); opacity: 0; } }
+
+/* result + confetti */
+.mg-result { position: relative; overflow: visible; }
+.mg-headline { font: 400 20px var(--display); letter-spacing: 0.02em; text-shadow: var(--outline); }
+.mga-confetti { position: absolute; left: 0; right: 0; top: -40px; height: 0; pointer-events: none; z-index: 2; }
+.mga-confetti i {
+  position: absolute; top: 0; width: 8px; height: 12px; border-radius: 2px;
+  background: hsl(var(--h) 90% 60%); transform: scale(var(--s)) rotate(var(--r));
+  animation: mgaFall 1.8s cubic-bezier(.2,.6,.4,1) forwards; opacity: 0;
+}
+.mga-confetti i:nth-child(3n) { border-radius: 50%; width: 9px; height: 9px; }
+@keyframes mgaFall {
+  0% { opacity: 1; transform: translateY(-20px) scale(var(--s)) rotate(var(--r)); }
+  100% { opacity: 0; transform: translateY(260px) scale(var(--s)) rotate(calc(var(--r) + 540deg)); }
+}
+
+/* Dice Duel: dice tumble, duelists glow */
+.mg-duelist { padding: 14px 6px 12px; border-width: 2px; border-radius: 16px; background: rgba(0, 20, 70, 0.45); gap: 10px; }
+.mg-duelist.me { border-color: color-mix(in srgb, var(--hi) 60%, transparent); }
+.mg-duelist.win { border-color: var(--good); background: color-mix(in srgb, var(--good) 14%, rgba(0, 20, 70, 0.45)); box-shadow: 0 0 24px color-mix(in srgb, var(--good) 45%, transparent); animation: mgaPop 0.4s cubic-bezier(.2,1.6,.4,1); }
+.mg-duelist.tie { border-color: var(--hi); }
+.mg-vs { font-size: 14px; padding: 6px 7px; background: linear-gradient(180deg, #ffe16a, #ffb81f); color: #5a3500; box-shadow: 0 3px 0 #8a5600; text-shadow: none; }
+.mg-die {
+  width: 54px; height: 54px; border-radius: 12px; padding: 8px; gap: 3px;
+  background: linear-gradient(160deg, #ffffff 0%, #ece8dc 100%);
+  box-shadow: inset 0 -4px 0 rgba(0,0,0,0.16), inset 0 2px 0 rgba(255,255,255,0.9), 0 5px 10px rgba(0,0,0,0.45);
+  animation: mgaDieLand 0.35s cubic-bezier(.2,1.5,.4,1);
+}
+.mg-die i.on { background: radial-gradient(circle at 35% 35%, #3a4152, #0f1420); box-shadow: inset 0 1px 1px rgba(0,0,0,0.6); }
+.mg-die.tumble { animation: mgaTumble 0.3s linear infinite; }
+.mg-die.blank { font-size: 24px; border: 2px dashed rgba(255,255,255,0.25); }
+@keyframes mgaTumble { 0% { transform: rotate(-20deg) translateY(0) scale(1.05); } 50% { transform: rotate(10deg) translateY(-10px) scale(0.95); } 100% { transform: rotate(-20deg) translateY(0) scale(1.05); } }
+@keyframes mgaDieLand { from { transform: scale(1.3) rotate(15deg); } }
+.mg-total { font-size: 32px; text-shadow: var(--outline); }
+
+/* High or Low: card flip, pot counter, streak pips */
+.mg-cards { min-height: 112px; gap: 8px; }
+.mga-flip { width: 76px; height: 108px; perspective: 600px; display: inline-block; }
+.mga-flip-inner { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 0.55s cubic-bezier(.3,1.2,.5,1); }
+.mga-flip.flipped .mga-flip-inner { transform: rotateY(180deg); }
+.mga-back, .mga-face { position: absolute; inset: 0; border-radius: 9px; backface-visibility: hidden; -webkit-backface-visibility: hidden; box-shadow: 0 6px 16px rgba(0,0,0,0.5); }
+.mga-back {
+  background: repeating-linear-gradient(45deg, #1b47b8 0 6px, #244fd0 6px 12px), #1b47b8; border: 4px solid #fbfaf4;
+  background-clip: padding-box;
+}
+.mga-face { transform: rotateY(180deg); background: #fbfaf4; color: #161c2a; display: grid; place-items: center; font-family: var(--font), sans-serif; }
+.mga-face.red { color: #d11f1f; }
+.mga-face small { position: absolute; top: 5px; left: 7px; font: 800 13px/1 var(--font), sans-serif; text-align: center; }
+.mga-face small.flip { top: auto; left: auto; bottom: 5px; right: 7px; transform: rotate(180deg); }
+.mga-face b { font-size: 40px; line-height: 1; }
+.mga-flip.bust .mga-face { background: #ffd9d9; box-shadow: 0 0 0 3px #ff5a5a, 0 6px 16px rgba(0,0,0,0.5); animation: mgaShake 0.4s ease-out; }
+.mga-pot { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.mga-pot small { font-size: 11px; letter-spacing: 0.14em; color: var(--muted); }
+.mga-pot b { font: 400 34px/1 var(--display); color: var(--hi); text-shadow: var(--outline); font-variant-numeric: tabular-nums; min-width: 90px; text-align: center; }
+.mga-pot b.bust { color: #ff8a8a; text-decoration: line-through; }
+.mga-pot b.cashed { color: var(--good); }
+.mga-pips { display: inline-flex; gap: 5px; }
+.mga-pips i { width: 12px; height: 12px; border-radius: 50%; background: rgba(0,0,0,0.35); border: 1.5px solid rgba(255,255,255,0.3); }
+.mga-pips i.on { background: var(--good); border-color: transparent; box-shadow: 0 0 8px var(--good); animation: mgaPop 0.3s cubic-bezier(.2,1.6,.4,1); }
+.mga-pips i.bust { background: #ff5a5a; border-color: transparent; }
+.mg-ladder span { font-size: 13px; padding: 4px 0; }
+.btn.mga-up { --b: #2fb35e; }
+.btn.mga-down { --b: #e8433a; }
+
+/* Reaction Race: traffic lights + a big round pad */
+.mga-lights { display: flex; justify-content: center; gap: 10px; padding: 8px 14px; margin: 0 auto; width: max-content; border-radius: 99px; background: #0b0f18; box-shadow: inset 0 2px 6px rgba(0,0,0,0.8), 0 3px 0 rgba(0,0,0,0.4); }
+.mga-lights i { width: 22px; height: 22px; border-radius: 50%; background: #262b36; box-shadow: inset 0 2px 4px rgba(0,0,0,0.7); transition: background 0.15s, box-shadow 0.15s; }
+.mga-lights.wait i.red, .mga-lights.out i.red { background: #ff3b30; box-shadow: 0 0 14px #ff3b30, inset 0 -2px 3px rgba(0,0,0,0.3); animation: mgaLamp 1s ease-in-out infinite alternate; }
+.mga-lights.go i.green, .mga-lights.done i.green { background: #34e36b; box-shadow: 0 0 18px #34e36b, inset 0 -2px 3px rgba(0,0,0,0.3); }
+.mga-lights.done i.green { animation: none; filter: saturate(0.6); }
+@keyframes mgaLamp { to { filter: brightness(0.75); } }
+.mg-pad {
+  width: 190px; height: 190px; margin: 0 auto; border-radius: 50%; border: 5px solid rgba(255,255,255,0.85);
+  box-shadow: inset 0 6px 0 rgba(255,255,255,0.3), inset 0 -10px 0 rgba(0,0,0,0.25), 0 10px 0 rgba(0,0,0,0.35), 0 16px 30px rgba(0,0,0,0.5);
+  transition: background 0.1s, transform 0.08s;
+}
+.mg-pad .mga-pad-word { font: 400 34px/1 var(--display); letter-spacing: 0.04em; text-shadow: 0 3px 0 rgba(0,0,0,0.35); }
+.mg-pad small { font-size: 11px; max-width: 130px; text-align: center; line-height: 1.2; }
+.mg-pad.wait { background: radial-gradient(circle at 50% 30%, #d8433a, #8e1e17); }
+.mg-pad.go { background: radial-gradient(circle at 50% 30%, #5ff08a, #1fae5b); animation: mgaGoPulse 0.35s ease-out infinite alternate; cursor: pointer; }
+.mg-pad.go:active { transform: translateY(6px); box-shadow: inset 0 6px 0 rgba(255,255,255,0.3), 0 2px 0 rgba(0,0,0,0.35), 0 6px 12px rgba(0,0,0,0.5); }
+.mg-pad.out { background: radial-gradient(circle at 50% 30%, #5a6170, #2b303c); animation: mgaShake 0.5s cubic-bezier(.36,.07,.19,.97); }
+.mg-pad.out .mga-pad-word { font-size: 26px; color: #ff9b9b; }
+.mg-pad.done { background: radial-gradient(circle at 50% 30%, #4a5262, #2b303c); }
+.mg-pad.done .mga-pad-word { font-size: 28px; }
+@keyframes mgaGoPulse { from { scale: 1; filter: brightness(1); } to { scale: 1.05; filter: brightness(1.2); } }
+@keyframes mgaShake { 10%, 90% { transform: translateX(-2px); } 20%, 80% { transform: translateX(4px); } 30%, 50%, 70% { transform: translateX(-8px); } 40%, 60% { transform: translateX(8px); } }
+.mga-times { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.mga-times li { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; border-radius: 10px; background: rgba(0,0,0,0.28); border: 1.5px solid var(--line); font-size: 13px; }
+.mga-times li b { font-variant-numeric: tabular-nums; color: var(--muted); }
+.mga-times li.win { background: linear-gradient(180deg, #ffe16a, #ffb81f); border-color: #b87400; color: #5a3500; }
+.mga-times li.win b, .mga-times li.win span b { color: #5a3500 !important; text-shadow: none; }
+.mga-times li.early { opacity: 0.7; }
+.mga-times li.early b { color: #ff9b9b; }
+
+/* Quick Math: equation card with a draining timer bar */
+.mga-eq { position: relative; border-radius: 16px; background: rgba(0, 20, 70, 0.45); border: 2px solid var(--line); padding: 10px 12px 14px; overflow: hidden; }
+.mga-eq .mg-question { display: block; font-size: 42px; text-shadow: var(--outline); padding: 0; }
+.mga-eq .mg-question .q { color: var(--hi); }
+.mga-eq .mg-question .a { color: var(--good); animation: mgaPop 0.4s cubic-bezier(.2,1.6,.4,1); display: inline-block; }
+.mga-eq.good { animation: mgaGoodFlash 0.8s ease-out; border-color: var(--good); }
+.mga-eq.bad { animation: mgaBadFlash 0.6s ease-out, mgaShake 0.5s cubic-bezier(.36,.07,.19,.97); border-color: #ff5a5a; }
+@keyframes mgaGoodFlash { 0% { background: color-mix(in srgb, var(--good) 55%, transparent); } }
+@keyframes mgaBadFlash { 0% { background: rgba(255, 90, 90, 0.6); } }
+.mga-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 7px; background: rgba(0,0,0,0.4); }
+.mga-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--good), #b9ff5b); transition: width 0.1s linear, background 0.3s; border-radius: 0 4px 4px 0; }
+.mga-bar i.low { background: linear-gradient(90deg, #ff5a5a, #ffb020); }
+.mg-options .btn { font-size: 26px; min-height: 60px; position: relative; }
+.mg-options .btn kbd { position: absolute; left: 8px; top: 8px; margin: 0; }
+.mg-options .btn.right { --b: #2fb35e; filter: none; animation: mgaPop 0.4s cubic-bezier(.2,1.6,.4,1); }
+.mg-options .btn.wrong { --b: #e8433a; filter: none; }
+
+/* Wheel Spin: rim lights, a pointer, the winning wedge lit */
+.mg-wheel { width: min(250px, 66vw); margin: 10px auto 4px; }
+.mg-wheel svg { box-shadow: 0 0 0 4px #ffd23f, 0 0 0 7px #0b0f18, 0 12px 34px rgba(0,0,0,0.55); transition: none; will-change: transform; }
+.mg-pointer {
+  top: -16px; width: 0; height: 0; font-size: 0; transform-origin: 50% 20%; transition: transform 0.06s;
+  border-left: 13px solid transparent; border-right: 13px solid transparent; border-top: 30px solid #fff;
+  filter: drop-shadow(0 3px 3px rgba(0,0,0,0.6));
+}
+.mg-pointer::after { content: ''; position: absolute; left: -7px; top: -30px; border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 17px solid #e8433a; }
+.mga-bulb { fill: #ffd23f; }
+.mg-wheel.spinning .mga-bulb.a { animation: mgaBulb 0.3s steps(1) infinite; }
+.mg-wheel.spinning .mga-bulb.b { animation: mgaBulb 0.3s steps(1) infinite reverse; }
+.mg-wheel.landed .mga-bulb { animation: mgaBulbAll 0.4s steps(1) infinite; }
+@keyframes mgaBulb { 50% { fill: #6b5a12; } }
+@keyframes mgaBulbAll { 50% { fill: #fff6c8; } }
+.mg-wheel svg g.dim path { filter: brightness(0.55); }
+.mg-wheel svg g.hit path { stroke: #fff; stroke-width: 3; filter: brightness(1.15) drop-shadow(0 0 6px #fff); }
+.mga-hit {
+  position: absolute; left: 50%; bottom: -14px; transform: translateX(-50%); z-index: 2; white-space: nowrap;
+  font: 400 18px var(--display); letter-spacing: 0.03em; padding: 5px 16px 6px; border-radius: 99px;
+  background: var(--c); color: #0b0f18; border: 3px solid #fff; box-shadow: 0 4px 0 rgba(0,0,0,0.4), 0 0 18px var(--c);
+  animation: mgaPop 0.45s cubic-bezier(.2,1.6,.4,1);
+}
+
+@media (max-width: 760px) {
+  .mg { padding: 12px 12px 14px; }
+  .mg-pad { width: 170px; height: 170px; }
+  .mg-pad .mga-pad-word { font-size: 30px; }
+  .mga-eq .mg-question { font-size: 36px; }
+  .mg-die { width: 48px; height: 48px; }
+  .mga-pot b { font-size: 30px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mg, .mg *, .mg *::before, .mg *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  .mga-confetti { display: none; }
+}
