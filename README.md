@@ -140,6 +140,17 @@ npm run build && npm start   # production: the server serves the built client on
 
 Deploying (Railway + Discord setup, every environment variable): **[DEPLOY.md](DEPLOY.md)**.
 
+## Smoke test in a real browser
+
+`tools/e2e/smoke.mjs` plays bot games on every map and edition in headless Chromium,
+cycles the camera views, screenshots each, and fails on any page or console error:
+
+```bash
+npm i -g playwright && npx playwright install chromium   # once
+DEMO_MODE=1 DATA_DIR=$(mktemp -d) PORT=8090 node --import tsx server/src/index.ts &
+node tools/e2e/smoke.mjs --rounds 12 --out /tmp/yot-smoke        # add --phone for 390×844
+```
+
 ## Adding an edition
 
 Everything an edition changes lives in [`shared/themes.ts`](shared/themes.ts) — copy the
