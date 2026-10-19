@@ -649,7 +649,8 @@ button.edition:disabled { cursor: default; }
 .actionbar select { width: auto; max-width: 240px; }
 @media (max-width: 760px) {
   .turn-clock { top: 112px; }
-  .time-left { padding: 2px 7px; font-size: 11px; letter-spacing: 0; }
+  /* `.topbar` so it outranks the later `.pill` restyle, which undid it. */
+  .topbar .time-left { padding: 2px 7px; font-size: 11px; letter-spacing: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .turn-clock.urgent { animation: none; } }
 
@@ -960,6 +961,9 @@ kbd { font: 600 11px ui-monospace, Menlo, monospace; background: rgba(255,255,25
   .tb-meta, .tb-bank { display: none; }
   .tb-turn { font-size: 10px; padding: 1px 6px; }
   .tb-right { gap: 4px; }
+  /* The right cluster (clocks, pause, sound, Leave) never shrinks; the left
+     one gives way and clips rather than running under it. */
+  .tb-left { flex: 1 1 0; overflow: hidden; padding-block: 3px; margin-block: -3px; }
 
   .players, .players:has(.pmenu-btn) {
     top: 44px; left: 0; right: 0; width: auto; padding: 0 8px 2px; flex-direction: row; gap: 6px;
@@ -989,6 +993,11 @@ kbd { font: 600 11px ui-monospace, Menlo, monospace; background: rgba(255,255,25
   .hud-bottom .actionbar { position: static; transform: none; left: auto; bottom: auto; width: 100%; max-width: none; padding: 8px 10px; gap: 8px; }
   .hud-bottom .actionbar .btn.big { flex: 1 1 auto; }
   .spec-reacts { bottom: 170px; }
+}
+/* Narrow phones with a game clock: the right cluster fills the bar, so the
+   room code steps aside instead of being clipped to a sliver. */
+@media (max-width: 460px) {
+  .topbar:has(.time-left) .tb-code { display: none; }
 }
 @media (min-width: 761px) { .players, .players:has(.pmenu-btn) { width: 268px; } }
 .ptrade { width: 28px; height: 26px; padding: 0; font-size: 15px; flex: none; }

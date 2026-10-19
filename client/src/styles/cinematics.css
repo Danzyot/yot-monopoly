@@ -91,6 +91,16 @@
   .cine { --cine-bar: clamp(26px, 8vh, 64px); }
   .cine-title { top: calc(var(--cine-bar) + 2vh); }
   .cine-beat { left: 50%; top: 56%; padding: 16px 22px; }
+
+  /* The cutscene is the moment: the player strip and the turn clock sat on
+     the title card and the action bar on the skip hint, so they step out
+     while it plays (taps then land on the picture and skip) and come back
+     as the letterbox starts to leave. */
+  .game .players, .game .turn-clock, .game .actionbar { transition: opacity 0.3s ease, visibility 0s; }
+  .game:has(> .scene > .cine:not(.leaving)) :is(.players, .turn-clock, .actionbar) {
+    opacity: 0; visibility: hidden; pointer-events: none;
+    transition: opacity 0.25s ease, visibility 0s linear 0.25s;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
