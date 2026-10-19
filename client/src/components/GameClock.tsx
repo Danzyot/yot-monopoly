@@ -64,7 +64,7 @@ export function TurnClock({ game, me, skew }: { game: GameView; me: string; skew
           strokeDasharray={C} strokeDashoffset={C * (1 - frac)} transform="rotate(-90 16 16)" />
       </svg>
       <span className="turn-clock-text">
-        <b style={{ color: urgent ? undefined : cur.color }}>{cur.id === me ? 'Your turn' : cur.name}</b>
+        <b style={{ color: urgent ? undefined : cur.color }} data-user-text>{cur.id === me ? 'Your turn' : cur.name}</b>
         <span className="mono">{left}s</span>
       </span>
     </div>

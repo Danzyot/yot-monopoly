@@ -1,9 +1,9 @@
-// GET is public so every visitor sees the edits; PUT is for signed-in players
-// and only exists while DEMO_MODE=1.
+// GET is public so every visitor sees the edits; PUT is for operators only
+// (with ADMIN_DISCORD_IDS unset that is every signed-in account outside
+// production) and only exists while DEMO_MODE=1.
 import express from 'express';
 import { demoMode } from '../auth.ts';
-import { authed, fail, rateLimit } from '../http.ts';
-import { findBan, banMessage } from '../bans.ts';
+import { fail, rateLimit, requireAdmin } from '../http.ts';
 import { getTextOverrides, loadTextOverrides, setTextOverride } from '../textOverrides.ts';
 
 export function mountTextOverrides(app: express.Express): void {
@@ -15,10 +15,8 @@ export function mountTextOverrides(app: express.Express): void {
 
   app.put('/api/text-overrides', rateLimit(30, 60_000), (req, res) => {
     if (!demoMode()) { res.status(404).json({ error: 'Not found' }); return; }
-    const p = authed(req);
-    if (!p) { res.status(401).json({ error: 'Sign in first' }); return; }
-    const ban = findBan({ id: p.id, discordId: p.discord?.id, ip: req.ip });
-    if (ban) { res.status(403).json({ error: banMessage(ban) }); return; }
+    // Overrides rewrite the site for every visitor, so only operators may save them.
+    if (!requireAdmin(req, res)) return;
     try {
       const body = (req.body ?? {}) as { original?: unknown; text?: unknown };
       res.json({ overrides: setTextOverride(body.original, body.text) });

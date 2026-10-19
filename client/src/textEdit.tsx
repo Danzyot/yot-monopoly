@@ -9,8 +9,18 @@ import { useAuth } from './auth.tsx';
 import { toast, toastError } from './toast.tsx';
 
 const CACHE_KEY = 'yot:text-overrides';
-/** Never rewritten or editable: form fields, the 3D canvas, code, and our own UI. */
-const SKIP = 'script,style,noscript,textarea,input,select,option,canvas,svg,[data-te-ui],[data-no-edit],[contenteditable="true"]';
+/**
+ * Never rewritten or editable: form fields, the 3D canvas and the labels pinned
+ * over it (money, reactions), code, our own UI, and anything players wrote or
+ * that changes as they play (chat, the feed and log, names). An edit there
+ * would put words in someone's mouth for every visitor.
+ */
+const SKIP = [
+  'script,style,noscript,textarea,input,select,option,canvas,svg,[data-te-ui],[contenteditable="true"]',
+  '.chat,.feed,.log,.players,.player-card,[data-user-text],[data-no-edit]',
+  '.scene,.lobby-bg,.fx-money,.react-3d,.name-tag',
+  '.seat-name,.podium-name,.end-name,.end-badge-who,.ax-by,.bc-row-name',
+].join(',');
 /** Something worth editing has at least a couple of letters ("7", "$1,500" are data). */
 const WORDY = /\p{L}{2}/u;
 export const MAX_TEXT = 300;
@@ -165,18 +175,18 @@ function pickText(target: EventTarget | null, x: number, y: number): Text | null
 
 // ---- UI ---------------------------------------------------------------------
 
-/** The header switch. Only demo servers, only signed-in players. */
+/** The header switch. Only demo servers, only operators (the server checks too). */
 export function EditTextToggle() {
   const { config, profile } = useAuth();
   const { editing } = useTextEdit();
-  if (!config.demoMode || !profile) return null;
+  if (!config.demoMode || !profile?.isAdmin) return null;
   return (
     <button
       className={`btn tiny ghost te-toggle ${editing ? 'on' : ''}`}
       aria-pressed={editing}
       data-te-ui
       onClick={() => setTextEditing(!editing)}
-      title="Demo mode: click any text on the site to rewrite it for everyone"
+      title="Demo mode (operators): click any text on the site to rewrite it for everyone"
     >
       ✏️ {editing ? 'Editing text' : 'Edit text'}
     </button>
@@ -194,7 +204,7 @@ export function TextEditHost() {
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
   const hoverEl = useRef<Element | null>(null);
-  const allowed = config.demoMode && !!profile;
+  const allowed = config.demoMode && !!profile?.isAdmin;
 
   useEffect(() => {
     startObserver();
@@ -204,7 +214,7 @@ export function TextEditHost() {
     return () => window.removeEventListener('focus', onFocus);
   }, []);
 
-  // Signing out (or demo mode ending) ends edit mode.
+  // Signing out, losing operator rights or demo mode ending ends edit mode.
   useEffect(() => { if (editing && !allowed) setTextEditing(false); }, [editing, allowed]);
   useEffect(() => { if (!editing) setTarget(null); }, [editing]);
 

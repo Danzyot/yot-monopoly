@@ -438,12 +438,14 @@ export function attachSockets(io: Server): SocketLayer {
       // only the canned phrases may claim, so the flag just styles it.
       const quick = p.quick === true && isQuickChat(text);
       const seat = r.seat(prof.id);
+      // The seat's name, so the lobby's de-duplicated "Alice 2" is who speaks.
+      const name = seat?.name ?? prof.name;
       const msg = {
-        t: Date.now(), id: prof.id, name: prof.name, color: seat?.color ?? '#aaa', text,
+        t: Date.now(), id: prof.id, name, color: seat?.color ?? '#aaa', text,
         spectator: !seat, admin: !!prof.isAdmin, ...(quick ? { quick } : {}),
       };
       io.to(`room:${r.code}`).emit('chat', msg);
-      logGameEvent(r.code, getMap(r.mapId).name, `💬 ${prof.name}: ${text}`);
+      logGameEvent(r.code, getMap(r.mapId).name, `💬 ${name}: ${text}`);
     });
 
     // ---- table social: reactions, pokes, rematch ----

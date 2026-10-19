@@ -452,7 +452,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
 
   return (
     <>
-    <Canvas shadows dpr={dpr} frameloop={hidden ? 'never' : 'always'} camera={{ position: [0, 11.5, 10.5], fov: 45 }}
+    <Canvas shadows dpr={dpr} frameloop={hidden ? 'never' : 'always'} camera={{ position: [0, 11.5, 10.5], fov: 45 }} data-no-edit
       onPointerMissed={() => onSelect?.(null)}
       // ?perf: expose the renderer and pieces so draw calls, triangles and positions can be read from the console.
       onCreated={({ gl, scene }) => { if (location.search.includes('perf')) Object.assign(window, { __yotGl: gl, __yotScene: scene, __yotPieces: pieceObjects, __yotGo: celebrateGo, __yotSeq: sequenceDebug }); }}

@@ -188,7 +188,7 @@ function LowerThird({ game, room, theme }: { game: GameView; room: RoomView; the
       </div>
       <div className="bc-lt-main">
         <span className="bc-lt-kicker">{game.winner ? '🏆 Champion' : game.phase === 'over' ? 'Final turn' : 'Now playing'}{p.isBot ? ' · bot' : ''}</span>
-        <b className="bc-lt-name">{p.name}</b>
+        <b className="bc-lt-name" data-user-text>{p.name}</b>
         <span className="bc-lt-sub">{doing(game, theme)}</span>
       </div>
       <div className="bc-lt-stats">

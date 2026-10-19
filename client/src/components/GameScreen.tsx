@@ -434,7 +434,7 @@ function ActionBar({ game, me, skew, selected, onManage, onLeave, onTrade }: {
       <div className="actionbar watching">
         <span className="ab-status">
           {p ? <><b className="ab-big out-big">You're out!</b> Keep watching &amp; chatting · </> : '👀 Watching · '}
-          <b style={{ color: current.color }}>{current.name}</b>'s turn
+          <b style={{ color: current.color }} data-user-text>{current.name}</b>'s turn
         </span>
         {dice}
         {p && <button className="btn small ghost" onClick={onLeave}>Leave table</button>}
@@ -498,7 +498,7 @@ function ActionBar({ game, me, skew, selected, onManage, onLeave, onTrade }: {
       : game.phase === 'buy' ? 'is eyeing a property' : game.phase === 'done' ? 'is wheeling and dealing' : 'is rolling';
     return (
       <div className="actionbar">
-        <span className="ab-status"><b style={{ color: current.color }}>{current.name}</b> {what}…</span>
+        <span className="ab-status"><b style={{ color: current.color }} data-user-text>{current.name}</b> {what}…</span>
         {dice}
         {buildable && buildBtn(false)}
       </div>

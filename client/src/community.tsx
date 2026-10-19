@@ -17,9 +17,9 @@ export function ProfileLink({ id, isBot, newTab, children, className }: {
   id: string; isBot?: boolean; newTab?: boolean; children: ReactNode; className?: string;
 }) {
   const { config } = useAuth();
-  if (isBot || id.startsWith('bot-') || !config.features.leaderboard) return <span className={className}>{children}</span>;
+  if (isBot || id.startsWith('bot-') || !config.features.leaderboard) return <span className={className} data-user-text>{children}</span>;
   return (
-    <Link className={`plink ${className ?? ''}`} to={profilePath(id)}
+    <Link className={`plink ${className ?? ''}`} to={profilePath(id)} data-user-text
       {...(newTab ? { target: '_blank', rel: 'noopener' } : {})}>{children}</Link>
   );
 }

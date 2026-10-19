@@ -55,9 +55,12 @@ export function verifyToken(token: unknown): PlayerProfile | null {
     if (!provider) return null;
     const iat = typeof data.iat === 'number' ? data.iat : 0;
     if (!iat || Date.now() - iat > MAX_TOKEN_AGE_MS) return null;
+    // Re-cleaned on every read, so tokens signed before cleanName still render safely.
+    const name = cleanName(data.name);
+    if (!name) return null;
     const profile: PlayerProfile = {
       id: String(data.id),
-      name: String(data.name).slice(0, 24),
+      name,
       avatar: String(data.avatar ?? '🎩').slice(0, 200),
       provider,
     };
@@ -91,6 +94,42 @@ export function verifyState(state: unknown): Record<string, string> | null {
   }
 }
 
+// ---- names -------------------------------------------------------------------
+
+/** Blank-looking letters (Hangul fillers, the braille blank) that pass as nothing. */
+const BLANK_LETTERS = /[\u115f\u1160\u3164\uffa0\u2800]/g;
+
+/**
+ * Removes characters that change nothing on screen: format characters
+ * (zero-width spaces and joiners, bidi overrides and isolates, the BOM),
+ * controls (as a space, so "a\nb" stays two words), private-use and lone
+ * surrogates. A joiner between two emoji is kept so 👨‍👩‍👧 stays one family.
+ */
+export function stripInvisible(s: string): string {
+  return s.replace(
+    /(\p{Extended_Pictographic}\p{M}*)\u200d(?=\p{Extended_Pictographic})|[\p{Cc}]|[\p{Cf}\p{Co}\p{Cs}]/gu,
+    (m, emoji?: string) => emoji ? `${emoji}\u200d` : /\p{Cc}/u.test(m) ? ' ' : '',
+  );
+}
+
+/**
+ * A display name that cannot pass for someone else's: NFKC (fullwidth and
+ * styled letters become plain ones), invisible characters removed, at most two
+ * combining marks in a row, whitespace collapsed, `max` characters. Returns ''
+ * when fewer than two visible characters are left; callers refuse or fall back.
+ */
+export function cleanName(raw: unknown, max = 24): string {
+  const s = stripInvisible(String(raw ?? '').normalize('NFKC'))
+    .replace(BLANK_LETTERS, '')
+    .replace(/(\p{M}{2})\p{M}+/gu, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+  // By code point, so an emoji is never cut in half.
+  const name = Array.from(s).slice(0, max).join('').trim();
+  const visible = name.replace(/[\s\p{M}]/gu, '');
+  return Array.from(visible).length >= 2 ? name : '';
+}
+
 /** Sign-in without Discord, for local development and demos. Off unless DEMO_MODE=1. */
 export function demoMode(): boolean {
   return process.env.DEMO_MODE === '1';
@@ -98,15 +137,15 @@ export function demoMode(): boolean {
 
 export function makeDemoProfile(name: string): PlayerProfile {
   if (!demoMode()) throw new Error('Demo sign-in is not enabled');
-  const clean = name.replace(/[\u0000-\u001f]/g, '').trim().slice(0, 20);
-  if (clean.length < 2) throw new Error('Name must be at least 2 characters');
+  const clean = cleanName(name, 20);
+  if (!clean) throw new Error('Name must be at least 2 characters');
   return withAdminFlag({ id: `demo_${randomUUID().slice(0, 12)}`, name: clean, avatar: '🎩', provider: 'demo' });
 }
 
 export function makeDiscordProfile(d: { id: string; username: string; avatarUrl?: string | null }): PlayerProfile {
   return withAdminFlag({
     id: `dc_${d.id}`,
-    name: d.username.slice(0, 24),
+    name: cleanName(d.username) || 'Player',
     avatar: d.avatarUrl ?? '🎩',
     provider: 'discord',
     discord: { id: d.id, username: d.username },

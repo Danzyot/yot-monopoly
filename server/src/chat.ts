@@ -1,6 +1,7 @@
 // Chat rules shared by every room: rate limit, length, blocked language and
 // per-player mutes (set by operators).
 import { CHAT_COOLDOWN_MS, QUICK_CHAT } from '../../shared/types.ts';
+import { stripInvisible } from './auth.ts';
 import { readJson, writeJson } from './jsonstore.ts';
 
 const SEP = '[^a-z0-9]{0,3}';
@@ -22,7 +23,8 @@ const lastSent = new Map<string, number>();
 /** Throws with a human-readable reason when the message may not be sent. */
 export function checkChat(playerId: string, raw: unknown): string {
   if (isMuted(playerId)) throw new ChatError('You are muted');
-  const text = String(raw ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 300);
+  // Bidi overrides and zero-width characters could disguise a line or a name in it.
+  const text = stripInvisible(String(raw ?? '')).trim().slice(0, 300);
   if (!text) throw new ChatError('Empty message');
   if (isBlocked(text)) throw new ChatError('That message was blocked');
   const now = Date.now();
