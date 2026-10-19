@@ -25,8 +25,8 @@ const STEPS: { icon: string; title: string; body: string }[] = [
   { icon: '🚀', title: 'Roll', body: 'Buy, build, trade and auction your way to the last player standing.' },
 ];
 
-/** The two characters the home page puts first. */
-const FEATURED: CharacterId[] = ['snacky', 'starer'];
+/** The characters the home page puts first. */
+const FEATURED: CharacterId[] = ['chog', 'snacky', 'starer'];
 
 /** The hero's "How to play" button; the same as components/HowToPlay's HowToPlayButton, without its code in the page. */
 function HowToButton({ label }: { label: string }) {
