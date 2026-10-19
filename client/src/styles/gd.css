@@ -1,0 +1,60 @@
+/* A Geometry Dash look, tried on the home page hero only (.home-hero.gd):
+   gold lettering in a thick black outline, chunky outlined buttons that
+   squash when pressed. Titan One stands in for GD's own font (Pusab);
+   SIL Open Font License 1.1, see ../fonts/OFL.txt. */
+@font-face {
+  font-family: 'Titan One';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/titan-one-400.woff2') format('woff2');
+}
+
+.home-hero.gd h1 {
+  font: 400 clamp(48px, 8.5vw, 100px)/1 'Titan One', var(--display);
+  background: linear-gradient(180deg, #fffbd0 0%, #ffe94a 34%, #ffb300 66%, #ff7a00 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  -webkit-text-stroke: 5px #000; paint-order: stroke fill;
+  text-shadow: none;
+  filter: drop-shadow(0 6px 0 #000) drop-shadow(0 14px 22px rgba(0, 0, 0, 0.45));
+  transform: none;
+  letter-spacing: 0.02em;
+}
+.home-hero.gd h1 .h1-accent { color: transparent; }
+.home-hero.gd .home-tag {
+  font: 400 clamp(16px, 2.1vw, 22px) 'Titan One', var(--display);
+  color: #fff; -webkit-text-stroke: 3px #000; paint-order: stroke fill; text-shadow: 0 3px 0 #000;
+}
+
+.home-hero.gd .hero-cta,
+.home-hero.gd .hero-join .btn {
+  font: 400 24px 'Titan One', var(--display);
+  color: #fff; -webkit-text-stroke: 4px #000; paint-order: stroke fill; text-shadow: 0 3px 0 #000;
+  border: 4px solid #000; border-radius: 16px;
+  background: linear-gradient(180deg, #b6ff5c 0%, #63e021 48%, #2fae12 52%, #1f8f08 100%);
+  box-shadow: inset 0 4px 0 rgba(255, 255, 255, 0.45), inset 0 -5px 0 rgba(0, 0, 0, 0.25), 0 6px 0 #000;
+  transition: transform 0.12s cubic-bezier(.3, 1.8, .5, 1);
+  box-sizing: border-box; max-width: 100%;
+}
+.home-hero.gd .hero-join .btn {
+  font-size: 20px; border-radius: 13px;
+  background: linear-gradient(180deg, #fff27a 0%, #ffd21f 48%, #ffae00 52%, #f08a00 100%);
+}
+.home-hero.gd .hero-cta:hover:not(:disabled),
+.home-hero.gd .hero-join .btn:hover { transform: scale(1.06); }
+.home-hero.gd .hero-cta:active:not(:disabled),
+.home-hero.gd .hero-join .btn:active { transform: scale(0.94) translateY(3px); box-shadow: inset 0 4px 0 rgba(255, 255, 255, 0.45), 0 2px 0 #000; }
+.home-hero.gd .hero-join {
+  border: 4px solid #000; border-radius: 18px; box-shadow: 0 6px 0 #000;
+  background: linear-gradient(180deg, #2a5bd7, #1a3a9c);
+  box-sizing: border-box; max-width: 100%;
+}
+.home-hero.gd .hero-join .code-input {
+  font: 400 20px 'Titan One', var(--display); color: #fff;
+  -webkit-text-stroke: 2px #000; paint-order: stroke fill;
+}
+.home-hero.gd .hero-join .code-input::placeholder { color: rgba(255, 255, 255, 0.55); -webkit-text-stroke: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .home-hero.gd .hero-cta, .home-hero.gd .hero-join .btn { transition: none; }
+}

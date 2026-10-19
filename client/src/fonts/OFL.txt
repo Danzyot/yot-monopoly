@@ -3,6 +3,7 @@ Copyright 2014 The Nunito Project Authors (https://github.com/googlefonts/nunito
 Copyright (c) 2011 Juan Montoreano (juan@remolacha.biz), with Reserved Font Names "Lilita One"
 Copyright 2019 The Big Shoulders Project Authors (https://github.com/xotypeco/big_shoulders)
 Copyright 2016 The Space Mono Project Authors (https://github.com/googlefonts/spacemono)
+Copyright (c) 2011 Rodrigo Fuenzalida (hello@rfuenzalida.com), with Reserved Font Name "Titan One"
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

@@ -1,7 +1,7 @@
 // The character gallery: every playable character on a turntable, with its
 // whole animation set on buttons — the same rig and poses the board uses —
 // and the outfit picker, so a look can be tried on before a game. The page's
-// URL (/characters?c=<id>) is its link; there is nothing else to share.
+// URL (/characters?c=<name slug>) is its link; there is nothing else to share.
 
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
@@ -191,11 +191,14 @@ function StripCamera({ n }: { n: number }) {
   return null;
 }
 
+/** A character's name in links: "CJ WAWA" → cj-wawa, "Yot" → yot. */
+const slugOf = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
 export default function Gallery() {
   const nav = useNavigate();
   const [params, setParams] = useSearchParams();
-  // A shared link (/characters?c=robot) opens on that character.
-  const fromLink = Math.max(0, CHARACTER_DEFS.findIndex(c => c.id === params.get('c')));
+  // A shared link (/characters?c=cj-wawa) opens on that character; links made with the old ids still work.
+  const fromLink = Math.max(0, CHARACTER_DEFS.findIndex(c => slugOf(c.name) === params.get('c') || c.id === params.get('c')));
   const [i, setI] = useState(fromLink);
   const [color, setColor] = useState(COLORS[1]);
   const [outfit, setOutfit] = useState<Outfit>(() => loadOutfitPref(CHARACTER_DEFS[fromLink].id));
@@ -215,7 +218,8 @@ export default function Gallery() {
   const go = (d: number) => setI(x => (x + d + CHARACTER_DEFS.length) % CHARACTER_DEFS.length);
   useEffect(() => {
     document.title = `${def.name} · Characters`;
-    if (params.get('c') !== def.id) setParams(p => { p.set('c', def.id); return p; }, { replace: true });
+    const slug = slugOf(def.name);
+    if (params.get('c') !== slug) setParams(p => { p.set('c', slug); return p; }, { replace: true });
     return () => { document.title = 'Yot Monopoly'; };
   }, [def, params, setParams]);
   const playAs = () => {

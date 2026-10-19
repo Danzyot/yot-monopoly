@@ -70,7 +70,9 @@ export function staticClient(dist: string): RequestHandler[] {
     index: false,
     maxAge: '1h',
     setHeaders: (res, path) => {
-      if (path.startsWith(join(root, 'assets') + sep)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      // Hashed bundles, and models and lightmaps asked for with their content hash (?v=…), never change.
+      const hashed = typeof res.req?.query?.v === 'string' && res.req.query.v.length > 0;
+      if (hashed || path.startsWith(join(root, 'assets') + sep)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     },
   });
   return [precompressed, serve];

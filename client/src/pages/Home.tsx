@@ -100,7 +100,7 @@ export default function Home() {
       {/* A live board slowly turning behind the hero, touring every room: shows what the game is before a word is read. */}
       <div className={`home-bg ${dim ? 'dim' : ''}`} aria-hidden><Suspense fallback={null}><BoardScene themeId={scene.themeId} mapId={scene.mapId} game={null} spin /></Suspense></div>
 
-      <section className="home-hero">
+      <section className="home-hero gd">
         <h1>{BRAND.name}</h1>
         <p className="home-tag">Roll the dice. Buy it all. Bankrupt your friends!</p>
         <div className="hero-actions">

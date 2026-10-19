@@ -11,6 +11,7 @@ import './styles/boards.css';
 import './styles/tooltip.css';
 import './styles/manage.css';
 import './styles/phone.css';
+import './styles/gd.css';
 import { installTooltips } from './tooltip.ts';
 
 installTooltips();
