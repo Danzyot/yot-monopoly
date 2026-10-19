@@ -5,6 +5,7 @@ import {
   chogArtUrl, chogLook, isChogTokenId, traitsOf,
 } from '../../shared/chogs/traits.ts';
 import { Registry, Room, type RoomHooks } from '../src/rooms.ts';
+import { CHOG_SEASON, SEASON_BOT_NAMES, SEASON_THEME_ID, characterShared } from '../../shared/season.ts';
 
 const hooks = (holds: (user: string, token: number) => boolean): RoomHooks => ({
   onChange() {}, onEvent(_r: Room, _t: string) {}, onFinished() {}, holdsChog: holds,
@@ -102,7 +103,7 @@ test('chogs: only a verified holder of the token may play as it', () => {
   assert.throws(() => r.pickCharacter('alice', 'chog', 0), /Unknown Chog token/);
   assert.throws(() => r.pickCharacter('alice', 'chog', 1.5), /Unknown Chog token/);
   assert.throws(() => r.pickCharacter('alice', 'chog', 99999), /Unknown Chog token/);
-  assert.throws(() => r.pickCharacter('alice', 'spiky', 1), /Only Chog/);
+  assert.throws(() => r.pickCharacter('alice', 'spiky', 1), /Only Chog|Chog season/);
 
   r.pickCharacter('alice', 'chog', 420);
   assert.equal(r.seat('alice')!.character, 'chog');
@@ -115,11 +116,12 @@ test('chogs: only a verified holder of the token may play as it', () => {
   wallet.bob = [420];
   assert.throws(() => r.pickCharacter('bob', 'chog', 420), /taken/);
 
-  // Picking another character drops the token (the base Chog is bob's now, so that one is taken).
-  assert.throws(() => r.pickCharacter('alice', 'chog'), /taken/);
+  // Going back to the base Chog drops the token (in the Chog season everyone may share the base Chog;
+  // otherwise it is bob's now, so alice moves to another character instead).
   r.pickCharacter('alice', 'chog', 1969);
   assert.equal(r.seat('alice')!.chogToken, 1969);
-  r.pickCharacter('alice', 'robot');
+  if (characterShared('chog')) r.pickCharacter('alice', 'chog');
+  else r.pickCharacter('alice', 'robot');
   assert.equal(r.seat('alice')!.chogToken, undefined);
 
   // The token rides into the game and through a snapshot.
@@ -150,4 +152,91 @@ test('chogs: only a verified holder of the token may play as it', () => {
   b.join(m('alice'));
   assert.throws(() => b.pickCharacter('alice', 'chog', 1), /not in a wallet linked/);
   b.dispose();
+});
+
+test('chog season: Chogs only, shared by colour, a Chog table, bots as real tokens', { skip: !CHOG_SEASON && 'the Chog season is off' }, () => {
+  const wallet: Record<string, number[]> = { alice: [1] };
+  const reg = new Registry(hooks((user, token) => wallet[user]?.includes(token) ?? false), 1e9);
+  const r = reg.create('alice');
+  try {
+    assert.equal(r.themeId, SEASON_THEME_ID, 'a new table wears the season look');
+    assert.equal(r.rules.freeParkingPot, true, 'with the house rules it brings');
+    r.join(m('alice')); r.join(m('bob')); r.join(m('carol'));
+    assert.deepEqual(r.seats.map(s => s.character), ['chog', 'chog', 'chog'], 'everyone sits down as Chog');
+    assert.equal(new Set(r.seats.map(s => s.color)).size, 3, 'told apart by colour');
+    assert.throws(() => r.pickCharacter('bob', 'snacky'), /Chog season/);
+    assert.throws(() => r.pickCharacter('bob', 'robot'), /Chog season/);
+    r.pickCharacter('bob', 'chog');
+
+    r.configure('alice', false, { themeId: 'classic' });
+    assert.equal(r.themeId, SEASON_THEME_ID, 'another look is not on offer');
+    r.configure('alice', false, { themeId: 'tptv', mapId: 'speed' });
+    assert.equal(r.themeId, SEASON_THEME_ID);
+    assert.equal(r.mapId, 'speed', 'the board is still the host\'s choice');
+    r.configure('alice', false, { mapId: 'classic' });
+
+    while (r.seats.length < r.rules.maxPlayers) r.addBot('alice', false);
+    const bots = r.seats.filter(s => s.isBot);
+    assert.ok(bots.every(b => b.character === 'chog'));
+    assert.ok(bots.every(b => SEASON_BOT_NAMES.some(n => b.name.startsWith(n))), 'Chog-flavoured bot names');
+    const tokens = bots.map(b => b.chogToken!);
+    assert.equal(new Set(tokens).size, bots.length, 'each bot is a different real Chog');
+    for (const t of tokens) {
+      const look = chogLook(t)!;
+      assert.ok(look && !look.legendary && !look.fallback, `#${t} has every trait modelled`);
+    }
+    assert.ok(bots.every(b => !b.outfit?.eyes), 'no glasses over a token\'s own eyes');
+
+    // A holder takes their token from a bot that drew it.
+    const bot = bots[0];
+    wallet.alice.push(bot.chogToken!);
+    const theirs = bot.chogToken!;
+    r.pickCharacter('alice', 'chog', theirs);
+    assert.equal(r.seat('alice')!.chogToken, theirs);
+    assert.notEqual(bot.chogToken, theirs, 'the bot plays another Chog');
+    assert.ok(bot.chogToken);
+
+    r.start('alice', false);
+    const players = r.view().game!.players;
+    assert.ok(players.filter(p => p.isBot).every(p => p.chogToken), 'bots carry their token into the game');
+  } finally {
+    r.dispose();
+  }
+});
+
+test('chog season: a lobby saved before the season comes back as Chogs; a game in progress keeps its cast', { skip: !CHOG_SEASON && 'the Chog season is off' }, () => {
+  const reg = new Registry(hooks(() => false), 1e9);
+  const r = reg.create('a');
+  r.join(m('a')); r.join(m('b'));
+  r.addBot('a', false);
+  const lobby = JSON.parse(JSON.stringify(r.snapshot()));
+  lobby.themeId = 'classic';
+  lobby.seats[0].character = 'snacky';
+  lobby.seats[0].outfit = { neck: 'cuban_chain', body: 'wawa_tee' };
+  lobby.seats[1].character = 'robot';
+  lobby.seats[2].character = 'pirate';
+  delete lobby.seats[2].chogToken;
+  const back = Room.restore(lobby, hooks(() => false));
+  try {
+    assert.equal(back.themeId, SEASON_THEME_ID);
+    assert.deepEqual(back.seats.map(s => s.character), ['chog', 'chog', 'chog']);
+    assert.deepEqual(back.seat('a')!.outfit, {}, 'CJ WAWA\'s own clothes come off');
+    assert.ok(back.seats[2].chogToken, 'the bot draws a token');
+  } finally {
+    back.dispose();
+  }
+
+  r.start('a', false);
+  const game = JSON.parse(JSON.stringify(r.snapshot()));
+  r.dispose();
+  game.themeId = 'classic';
+  game.seats[0].character = 'snacky';
+  game.game.players.find((p: { id: string }) => p.id === 'a').character = 'snacky';
+  const playing = Room.restore(game, hooks(() => false));
+  try {
+    assert.equal(playing.themeId, 'classic', 'a game already under way keeps its look');
+    assert.equal(playing.game!.view().players.find(p => p.id === 'a')!.character, 'snacky', 'and its characters');
+  } finally {
+    playing.dispose();
+  }
 });

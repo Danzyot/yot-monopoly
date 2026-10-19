@@ -18,6 +18,7 @@ import { liteAssets } from '../quality.ts';
 import { characterModel, figureMeshes, type CharacterModel } from './merged.ts';
 import { chogLook, isChogTokenId, type ChogLook } from '../../../../shared/chogs/traits.ts';
 import { chogTokenModel } from './chogToken.ts';
+import { characterShared } from '../../../../shared/season.ts';
 import { ChogAura } from './ChogAura.tsx';
 
 export interface Rig {
@@ -46,12 +47,15 @@ export function tokenLook(id: CharacterId, chogToken?: number): ChogLook | null 
 /**
  * Per-figure materials in the player's colour, freed when the figure goes. A
  * Chog Genesis token recolours them to its traits (skin, mane, lenses, lasers)
- * and a Radioactive one glows from its skin and mane.
+ * and a Radioactive one glows from its skin and mane. When players share a
+ * character (the Chog season), its clothes take the player's colour as well as
+ * its shoes, so no two of them look alike.
  */
 export function useCharacterMaterials(id: CharacterId, color: string, chogToken?: number): Mats {
   const look = useMemo(() => tokenLook(id, chogToken), [id, chogToken]);
   const mats = useMemo(() => {
-    const m = makeMaterials(color, look ? { ...LOOKS[id]?.colors, ...look.colors } : LOOKS[id]?.colors);
+    const colors = { ...LOOKS[id]?.colors, ...look?.colors, ...(characterShared(id) ? { cloth: color } : {}) };
+    const m = makeMaterials(color, colors);
     if (look?.base === 'radioactive') {
       for (const k of ['skin', 'hair'] as const) {
         m[k].emissive.copy(m[k].color);
@@ -87,7 +91,7 @@ export function CharacterFigure({ outfit, lite, chogToken, ...props }: {
   /** Chog only: the holder's own Chog Genesis token, assembled from its traits (mats must come from the same token). */
   chogToken?: number;
 }) {
-  const look = tokenLook(props.id, chogToken);
+  const look = useMemo(() => tokenLook(props.id, chogToken), [props.id, chogToken]);
   return (
     <>
       <WithModel fallback={<DrawnFigure {...props} />}>

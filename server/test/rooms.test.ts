@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Registry, Room, sanitizeRules, type RoomHooks } from '../src/rooms.ts';
+import { SEASON_THEME_ID, characterShared, themeAvailable } from '../../shared/season.ts';
 
 const hooks = (): RoomHooks & { events: string[]; finished: number } => {
   const h = {
@@ -24,7 +25,10 @@ test('rooms: many at once, unique codes, lobby rules', () => {
   assert.doesNotThrow(() => a.configure('bob', true, { mapId: 'speed' }), 'operators can configure any room');
   assert.equal(a.mapId, 'speed');
   assert.equal(a.rules.startingCash, 1200, 'map brings its starting cash');
-  assert.throws(() => a.pickCharacter('bob', a.seat('host-a')!.character), /taken/);
+  const hostChar = a.seat('host-a')!.character;
+  // Characters are each one player's, except in the Chog season, when everyone shares the Chog.
+  if (characterShared(hostChar)) assert.doesNotThrow(() => a.pickCharacter('bob', hostChar));
+  else assert.throws(() => a.pickCharacter('bob', hostChar), /taken/);
   a.configure('host-a', false, { themeId: 'chog' });
   assert.equal(a.rules.freeParkingPot, true, 'edition brings its house rules');
   a.configure('host-a', false, { rules: { maxPlayers: 3 } });
@@ -116,8 +120,13 @@ test('lobby: switching board or look resets what the last one brought', () => {
   assert.equal(r.rules.freeParkingPot, true);
   assert.equal(r.rules.doubleOnGo, true);
   r.configure('h', false, { themeId: 'classic' });
-  assert.equal(r.rules.freeParkingPot, false, 'back to the Original look: no jackpot');
-  assert.equal(r.rules.doubleOnGo, false);
+  if (themeAvailable('classic')) {
+    assert.equal(r.rules.freeParkingPot, false, 'back to the Original look: no jackpot');
+    assert.equal(r.rules.doubleOnGo, false);
+  } else {
+    assert.equal(r.themeId, SEASON_THEME_ID, 'the season keeps its look');
+    assert.equal(r.rules.freeParkingPot, true);
+  }
   r.configure('h', false, { rules: { maxPlayers: 8 } });
   r.configure('h', false, { mapId: 'speed' });
   assert.equal(r.rules.maxPlayers, 5, 'Speedway seats five');

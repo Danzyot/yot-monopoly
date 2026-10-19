@@ -4,7 +4,7 @@ import { call, type ChatMsg } from '../net.ts';
 import { TIME_LIMIT_CHOICES, TURN_SECONDS_CHOICES, getTheme, resolveTheme, type RuleConfig } from '../../../shared/themes.ts';
 import { getMap } from '../../../shared/maps.ts';
 import { PLAYER_COLORS, type RoomSeat, type RoomView } from '../../../shared/types.ts';
-import { CHARACTER_DEFS, getCharacter, isCharacterId, type CharacterId } from '../../../shared/characters.ts';
+import { getCharacter, isCharacterId, type CharacterId } from '../../../shared/characters.ts';
 import { characterEmoji } from '../format.ts';
 import { toast, toastError } from '../toast.tsx';
 import { useAuth } from '../auth.tsx';
@@ -13,7 +13,8 @@ import MusicPlayer from './MusicPlayer.tsx';
 import { Avatar } from './Avatar.tsx';
 import BoardScene from '../three/BoardScene.tsx';
 import TableStylePicker from './TableStylePicker.tsx';
-import BoardPicker from './BoardPicker.tsx';
+import BoardPicker, { LOOK_STEP } from './BoardPicker.tsx';
+import { availableCharacters, characterAvailable, characterShared } from '../../../shared/season.ts';
 import CharacterPreview from '../three/characters/CharacterPreview.tsx';
 import { preloadCharacters, preloadChogTraits } from '../three/characters/Figure.tsx';
 import { themeStyle } from '../themeStyle.ts';
@@ -148,9 +149,10 @@ function CharacterPicker({ room, me, seat, onWear }: {
           </div>
         </div>
         <div className="char-grid">
-          {CHARACTER_DEFS.map(c => {
-            // A token Chog is its own character: the base Chog stays free for someone else.
-            const holder = room.seats.find(s => s.character === c.id && !s.chogToken && s.id !== me);
+          {availableCharacters().map(c => {
+            // A token Chog is its own character: the base Chog stays free for someone else. A shared
+            // character (everyone is a Chog in the Chog season) is never taken; colours tell players apart.
+            const holder = characterShared(c.id) ? undefined : room.seats.find(s => s.character === c.id && !s.chogToken && s.id !== me);
             const on = seat.character === c.id && !token;
             return (
               <button key={c.id} disabled={!!holder} aria-pressed={on}
@@ -342,8 +344,10 @@ export default function Lobby({ room, me, spectating, chat }: {
     try { pref = localStorage.getItem(CHARACTER_PREF_KEY); } catch { /* private mode */ }
     // "Play as Chog #n" from the gallery: the token comes along (the server checks we hold it).
     const token = pref === 'chog' ? loadChogTokenPref() : null;
-    if (!isCharacterId(pref) || (pref === mySeat.character && (token ?? undefined) === mySeat.chogToken)) return;
-    if (room.seats.some(s => s.character === pref && s.id !== me && (s.chogToken ?? 0) === (token ?? 0))) return;
+    if (!isCharacterId(pref) || !characterAvailable(pref)) return;
+    if (pref === mySeat.character && (token ?? undefined) === mySeat.chogToken) return;
+    const clash = (s: RoomSeat) => s.character === pref && s.id !== me && (s.chogToken ?? 0) === (token ?? 0);
+    if ((token || !characterShared(pref)) && room.seats.some(clash)) return;
     call('room:seat', { character: pref, ...(token ? { chogToken: token } : {}) }).catch(() => {});
   }, [mySeat, room.code, room.seats, me]);
 
@@ -355,7 +359,8 @@ export default function Lobby({ room, me, spectating, chat }: {
     dressed.current = room.code;
     let prefChar: string | null = null;
     try { prefChar = localStorage.getItem(CHARACTER_PREF_KEY); } catch { /* private mode */ }
-    const free = isCharacterId(prefChar) && !room.seats.some(s => s.character === prefChar && s.id !== me);
+    const free = isCharacterId(prefChar) && characterAvailable(prefChar)
+      && (characterShared(prefChar) || !room.seats.some(s => s.character === prefChar && s.id !== me));
     const pref = loadOutfitPref(free ? prefChar as CharacterId : mySeat.character);
     if (!sameOutfit(pref, mySeat.outfit)) call('room:seat', { outfit: pref }).catch(() => {});
   }, [mySeat, room.code, room.seats, me]);
@@ -442,7 +447,7 @@ export default function Lobby({ room, me, spectating, chat }: {
         <section className="panel">
           <BoardPicker room={room} isHost={isHost} configure={configure} />
 
-          <h3 className="bp-step"><span className="bp-num" aria-hidden>3</span>Table <small className="muted">optional</small></h3>
+          <h3 className="bp-step"><span className="bp-num" aria-hidden>{LOOK_STEP ? 3 : 2}</span>Table <small className="muted">optional</small></h3>
           <TableStylePicker style={room.style} canEdit={isHost} />
 
           <div className="rules-head">

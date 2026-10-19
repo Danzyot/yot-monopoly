@@ -8,7 +8,8 @@ import { OrbitControls } from '@react-three/drei';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Group } from 'three';
-import { CHARACTER_DEFS, type CharacterId } from '../../../shared/characters.ts';
+import { type CharacterId } from '../../../shared/characters.ts';
+import { availableCharacters } from '../../../shared/season.ts';
 import { outfitForCharacter, type Outfit } from '../../../shared/outfits.ts';
 import { CHARACTER_PREF_KEY } from '../components/Lobby.tsx';
 import OutfitPicker, { loadOutfitPref, saveOutfitPref } from '../components/OutfitPicker.tsx';
@@ -60,8 +61,11 @@ const GALLERY_REST_MS = 520;
 const GALLERY_HOPS = 4;
 const GALLERY_WALK_MS = GALLERY_CROUCH_MS + GALLERY_HOPS * GALLERY_HOP_MS + GALLERY_REST_MS;
 
-/** Shown first, in their own section (internal ids; the names come from CHARACTER_DEFS). */
-const FEATURED: CharacterId[] = ['chog', 'snacky', 'starer'];
+/** The characters on show: those on offer this season (shared/season.ts). */
+const CHARS = availableCharacters();
+
+/** Shown first, in their own section (internal ids; the names come from CHARS). */
+const FEATURED: CharacterId[] = (['chog', 'snacky', 'starer'] as CharacterId[]).filter(id => CHARS.some(c => c.id === id));
 
 const COLORS = ['#e53935', '#1e88e5', '#43a047', '#fdd835', '#8e24aa', '#fb8c00', '#00acc1', '#ec407a'];
 
@@ -203,7 +207,7 @@ export default function Gallery() {
   const nav = useNavigate();
   const [params, setParams] = useSearchParams();
   // A shared link (/characters?c=cj-wawa) opens on that character; links made with the old ids still work.
-  const fromLink = Math.max(0, CHARACTER_DEFS.findIndex(c => slugOf(c.name) === params.get('c') || c.id === params.get('c')));
+  const fromLink = Math.max(0, CHARS.findIndex(c => slugOf(c.name) === params.get('c') || c.id === params.get('c')));
   const [i, setI] = useState(fromLink);
   // A holder's own Chog Genesis token on the Chog (?t=<id>, or the last one chosen).
   const [token, setToken] = useState<number | null>(() => {
@@ -211,13 +215,13 @@ export default function Gallery() {
     return isChogTokenId(t) ? t : loadChogTokenPref();
   });
   const [color, setColor] = useState(COLORS[1]);
-  const [outfit, setOutfit] = useState<Outfit>(() => loadOutfitPref(CHARACTER_DEFS[fromLink].id));
+  const [outfit, setOutfit] = useState<Outfit>(() => loadOutfitPref(CHARS[fromLink].id));
   // ?move=cheer opens on that move; ?strip=8 lays it out as a filmstrip of 8 frames (for reviewing timing).
   const linked = MOVES.find(m => m.id === params.get('move'))?.id;
   const strip = Math.min(12, Math.max(0, Number(params.get('strip')) || 0));
   const [move, setMove] = useState<Move>(linked ?? 'idle');
   const [startedAt, setStartedAt] = useState(() => performance.now());
-  const def = CHARACTER_DEFS[i];
+  const def = CHARS[i];
   const chogToken = def.id === 'chog' && token && isChogTokenId(token) ? token : undefined;
   const look = chogToken ? chogLook(chogToken) : null;
   const title = chogToken ? chogName(chogToken) : def.name;
@@ -228,7 +232,7 @@ export default function Gallery() {
     setOutfit(o => outfitForCharacter(o, def.id));
   }
   const pick = (m: Move) => { setMove(m); setStartedAt(performance.now()); };
-  const go = (d: number) => setI(x => (x + d + CHARACTER_DEFS.length) % CHARACTER_DEFS.length);
+  const go = (d: number) => setI(x => (x + d + CHARS.length) % CHARS.length);
   useEffect(() => {
     document.title = `${title} · Characters`;
     const slug = slugOf(def.name);
@@ -248,8 +252,8 @@ export default function Gallery() {
   /** The token's traits in a line (pass 1 renders Skin, Eyes, Mouth, Aura and Background; Head, Body and Accessory are pass 2). */
   const traitLine = chogToken ? (t => t && [t.Skin, t.Eyes, t.Mouth, t.Aura, t.Background].filter(Boolean).join(' · '))(traitsOf(chogToken)) : '';
   const dress = (o: Outfit) => { setOutfit(o); saveOutfitPref(o, def.id); };
-  const thumb = (c: (typeof CHARACTER_DEFS)[number]) => {
-    const k = CHARACTER_DEFS.indexOf(c);
+  const thumb = (c: (typeof CHARS)[number]) => {
+    const k = CHARS.indexOf(c);
     return (
       <button key={c.id} className={`gallery-thumb ${k === i ? 'on' : ''}`} onClick={() => setI(k)} title={`${c.name} — ${c.blurb}`} aria-pressed={k === i}>
         <span aria-hidden>{c.emoji}</span><small>{c.name}</small>
@@ -283,8 +287,10 @@ export default function Gallery() {
               minPolarAngle={0.4} maxPolarAngle={Math.PI / 2.05} />
           )}
         </Canvas>
-        <button className="btn gallery-arrow left" onClick={() => go(-1)} aria-label="Previous character">‹</button>
-        <button className="btn gallery-arrow right" onClick={() => go(1)} aria-label="Next character">›</button>
+        {CHARS.length > 1 && <>
+          <button className="btn gallery-arrow left" onClick={() => go(-1)} aria-label="Previous character">‹</button>
+          <button className="btn gallery-arrow right" onClick={() => go(1)} aria-label="Next character">›</button>
+        </>}
       </div>
       <section className="panel gallery-panel" aria-live="polite">
         <h1 className="gallery-title">
@@ -300,14 +306,19 @@ export default function Gallery() {
           {chogToken && <button className="btn" onClick={() => setToken(null)}>Base Chog</button>}
         </div>
         {def.id === 'chog' && <ChogPicker selected={chogToken ?? null} onPick={id => setToken(t => (t === id ? null : id))} label="Show" />}
-        <h2 className="gallery-sub gallery-section-head">Base characters</h2>
-        <div className="gallery-thumbs" role="group" aria-label="Base characters">
-          {CHARACTER_DEFS.filter(c => !FEATURED.includes(c.id)).map(thumb)}
-        </div>
-        <h2 className="gallery-sub gallery-section-head">Featured</h2>
-        <div className="gallery-thumbs featured" role="group" aria-label="Featured characters">
-          {FEATURED.map(id => CHARACTER_DEFS.find(c => c.id === id)!).map(thumb)}
-        </div>
+        {/* With one character on offer (the Chog season) there is nothing to choose between. */}
+        {CHARS.some(c => !FEATURED.includes(c.id)) && <>
+          <h2 className="gallery-sub gallery-section-head">Base characters</h2>
+          <div className="gallery-thumbs" role="group" aria-label="Base characters">
+            {CHARS.filter(c => !FEATURED.includes(c.id)).map(thumb)}
+          </div>
+        </>}
+        {CHARS.length > 1 && FEATURED.length > 0 && <>
+          <h2 className="gallery-sub gallery-section-head">Featured</h2>
+          <div className="gallery-thumbs featured" role="group" aria-label="Featured characters">
+            {FEATURED.map(id => CHARS.find(c => c.id === id)!).map(thumb)}
+          </div>
+        </>}
         <h2 className="gallery-sub">Outfit</h2>
         <OutfitPicker outfit={outfit} color={color} character={def.id} onChange={dress} />
         <div className="outfit-colors">

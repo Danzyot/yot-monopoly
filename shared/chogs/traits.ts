@@ -310,5 +310,17 @@ export function chogLook(tokenId: number): ChogLook | null {
   };
 }
 
+let resolved: number[] | null = null;
+/**
+ * Tokens whose every trait has a part of its own (no 1:1s, no fallbacks):
+ * the ones bots play as, so a table of bots looks like a crowd of real Chogs.
+ */
+export function resolvedChogTokens(): number[] {
+  return (resolved ??= CHOG_TOKEN_IDS.filter(id => {
+    const look = chogLook(id);
+    return !!look && !look.legendary && !look.fallback;
+  }));
+}
+
 /** Which of a holder's tokens are 1:1 Legendaries (shown as the base Chog with a badge). */
 export const isLegendary = (tokenId: number) => traitsOf(tokenId)?.Base === '1:1';

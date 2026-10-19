@@ -303,7 +303,7 @@ def eyes_retro_glass(m):
 
 
 def eyes_btc_glass(m):
-    return eyes_round_glasses(m, 'gold', lens_glint=False, bar='gold')
+    return eyes_round_glasses(m, 'gold', lens_glint=False, bar='white')
 
 
 def eyes_glasses_3d(m):
