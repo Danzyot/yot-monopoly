@@ -1,0 +1,9 @@
+# Railway builds this service with Root Directory = poker/, so this file is
+# read from here and every path below is relative to poker/.
+# The Dockerfile runs `npm ci` and the client build itself.
+**/node_modules
+client/dist
+server/data
+.env
+.env.*
+*.log

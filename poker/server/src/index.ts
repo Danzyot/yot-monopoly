@@ -25,6 +25,7 @@ import {
   saveAudit, suspiciousPairs, standingIdentities,
 } from './audit.ts';
 import { BRAND } from '../../shared/brand.ts';
+import { HUB_READABLE, hubUrl, isHubOrigin } from './hub.ts';
 import { registry } from './registry.ts';
 import { DEFAULT_BET_CAP_MINUTES, parseLateClock } from './tournament/tournament.ts';
 import { loadInviteLog } from './invitelog.ts';
@@ -290,9 +291,31 @@ app.use('/api', rateLimit(600, 60_000));
 app.use('/api/auth', rateLimit(30, 60_000));
 app.use(['/api/tables', '/api/tournaments'], rateLimit(20, 60_000));
 
-// Dev CORS (Vite runs on another port).
+// CORS. The built client is served by this same process, so in production no
+// browser needs to call /api cross-origin — except the Chog Games hub, which
+// shows this room's leaderboard and results on player profiles. Only the hub's
+// origins (HUB_URL + HUB_ORIGINS) are allowed, only on those read-only GETs,
+// and never with credentials. Outside production the old reflect-everything
+// behaviour stays, because Vite serves the client from another port.
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin ?? '*');
+  const origin = req.headers.origin;
+  const production = process.env.NODE_ENV === 'production';
+  if (production) {
+    // Nothing a browser on another site can use is sent unless it is the hub
+    // reading one of the public endpoints.
+    if (isHubOrigin(origin) && HUB_READABLE.test(req.path) && (req.method === 'GET' || req.method === 'OPTIONS')) {
+      res.header('Access-Control-Allow-Origin', origin!);
+      res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Content-Type');
+      res.header('Access-Control-Max-Age', '600');
+    }
+    res.header('Vary', 'Origin');
+    if (req.method === 'OPTIONS') { res.sendStatus(204); return; }
+    next();
+    return;
+  }
+  // Dev CORS (Vite runs on another port).
+  res.header('Access-Control-Allow-Origin', origin ?? '*');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   if (req.method === 'OPTIONS') { res.sendStatus(204); return; }
@@ -375,6 +398,8 @@ app.get('/api/config', (_req, res) => {
     codeVerify: codeVerifyAvailable(),
     codeVerifyChannel: verifyChannelName(),
     codeVerifyButton: buttonFlowAvailable(),
+    // The Chog Games hub this room belongs to (null on a standalone deployment).
+    hubUrl: hubUrl(),
     features: getFeatures(),
     discord: {
       botEnabled: botEnabled(),
@@ -613,7 +638,22 @@ app.get('/api/health', (_req, res) => {
     finishedTournaments: recordCount(),
     rssMb: Math.round(mem.rss / 1024 / 1024),
     build: buildStamp(),
+    // True only when DATA_DIR names a mounted path: the Railway volume is
+    // what keeps results, bans and the login secret across deploys, and the
+    // handover docs say to check this field before every event.
+    persistentDisk: !!(process.env.DATA_DIR && process.env.DATA_DIR.trim() && existsSync(process.env.DATA_DIR.trim())),
   });
+});
+
+// Who the bearer token says you are, as the server sees it. The client reads
+// a profile straight out of the token payload, but a token minted by the hub
+// carries no operator flag (rights are re-derived from ADMIN_DISCORD_IDS on
+// every read, never trusted from the payload), so after arriving via the hub
+// the client asks here and gets the real answer.
+app.get('/api/auth/me', (req, res) => {
+  const me = authed(req);
+  if (!me) { res.status(401).json({ error: 'Not signed in' }); return; }
+  res.json({ profile: me });
 });
 
 function requireAdmin(req: express.Request, res: express.Response) {

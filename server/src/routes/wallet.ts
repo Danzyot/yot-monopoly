@@ -5,6 +5,7 @@ import { verifyMessage } from 'viem';
 import { authed, fail, rateLimit } from '../http.ts';
 import { consumeNonce, issueNonce } from '../wallet/nonce.ts';
 import { holderStatus, takeRefresh, verifyWallet } from '../wallet/holders.ts';
+import { getHoldings } from '../wallet/store.ts';
 import { linkWallet, normalizeAddress, unlinkWallet, walletOwner, walletsOf } from '../wallet/store.ts';
 import type { PlayerProfile } from '../../../shared/types.ts';
 
@@ -41,9 +42,10 @@ export function walletRoutes(): express.Router {
       const ok = await verifyMessage({ address: address as `0x${string}`, message: c.message, signature: signature as `0x${string}` });
       if (!ok) throw new Error('The signature does not match that wallet');
       const link = linkWallet(address, p.id);
-      // A fresh read, and it counts as the player's re-check for the cooldown.
-      takeRefresh(p.id);
-      const wallet = await verifyWallet(link, true);
+      // A fresh read for a wallet we have never seen; re-linking a known one counts as a re-check,
+      // so it cannot be used to read the chain faster than the cooldown allows.
+      const force = takeRefresh(p.id) || !getHoldings(address);
+      const wallet = await verifyWallet(link, force);
       const status = await holderStatus(p.id);
       res.json({ wallet, ...status });
     } catch (e) { fail(res, e); }

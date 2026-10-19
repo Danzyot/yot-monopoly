@@ -495,6 +495,17 @@ export class CardsGame {
     return !!top && matches(c, top, this.color);
   }
 
+  /**
+   * May `p` play `c` straight from a draw? A Wild Draw Four turned up by the draw is only
+   * playable when the player holds none of the current colour (the official rule): otherwise
+   * it stays in hand and the turn passes, rather than forcing a bluff that can be challenged.
+   */
+  private drawnPlayable(p: CardsPlayerState, c: Card): boolean {
+    if (!this.matchesNow(c)) return false;
+    if (c.kind === 'wild4' && !this.rules.noBluff && p.hand.some(x => x !== c && x.color === this.color)) return false;
+    return true;
+  }
+
   private stacksOn(c: Card): boolean {
     const pd = this.pending!;
     if (pd.kind === 'draw2') return c.kind === 'draw2' || (this.rules.stackMixed && c.kind === 'wild4');
@@ -718,7 +729,7 @@ export class CardsGame {
     this.begin(p);
     if (this.pending) return this.takePending(p);
     const until = this.rules.drawUntilPlayable;
-    const got = this.drawCards(p, until ? Infinity : 1, 'turn', until ? c => this.matchesNow(c) : undefined);
+    const got = this.drawCards(p, until ? Infinity : 1, 'turn', until ? c => this.drawnPlayable(p, c) : undefined);
     if (!got.length) {
       // Nothing left anywhere to draw. If nobody can play either, the round is stuck.
       if (!p.hand.some(c => this.matchesNow(c))) this.stall++;
@@ -730,7 +741,7 @@ export class CardsGame {
     }
     this.say(`${p.name} draws ${this.plural(got.length)}.`, p.id, { amount: got.length, reason: 'turn' });
     const last = got.at(-1)!;
-    if (this.matchesNow(last)) {
+    if (this.drawnPlayable(p, last)) {
       this.phase = 'drawn';
       this.drawnCard = last.id;
     } else {
@@ -1161,7 +1172,8 @@ export class CardsGame {
       canDraw: acting && mine && this.phase === 'play',
       canPass: acting && mine && this.phase === 'drawn' && !this.rules.forcedPlay,
       canChallenge: acting && mine && this.phase === 'play' && !!this.pending?.check,
-      canCallLastCard: acting && ((n === 1 && oc?.calledAt == null) || (n === 2 && !this.preCall.includes(me.id))),
+      // (A single card handed over by a 7-0 swap carries no call duty: no window, so no prompt.)
+      canCallLastCard: acting && ((n === 1 && !!oc && oc.calledAt == null) || (n === 2 && !this.preCall.includes(me.id))),
       canCatch: acting
         ? Object.entries(this.oneCard)
           .filter(([id, o]) => id !== me.id && o.calledAt === null && o.closedAt === null && now >= o.since + LAST_CARD_GRACE_MS)

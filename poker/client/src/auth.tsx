@@ -16,6 +16,10 @@ interface AuthCtx {
   // configured rather than a URL baked into the build.
   discordInviteUrl: string | null;
   signInDiscord: (returnPath?: string) => void;
+  // The Chog Games hub this room is part of (null on a standalone deployment).
+  // Signing in there signs you in here: same Discord app, same token secret.
+  hubUrl: string | null;
+  signInViaHub: (returnPath?: string) => void;
   linkDiscord: (returnPath?: string) => void;
   // Accept a token minted by another flow (e.g. code verification).
   acceptAuth: (token: string, profile: PlayerProfile) => void;
@@ -49,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [codeVerifyChannel, setCodeVerifyChannel] = useState<string | null>(null);
   const [codeVerifyButton, setCodeVerifyButton] = useState(false);
   const [discordInviteUrl, setDiscordInviteUrl] = useState<string | null>(null);
+  const [hubUrl, setHubUrl] = useState<string | null>(null);
   const [chatEnabled, setChatEnabled] = useState(true);
 
   useEffect(() => {
@@ -59,11 +64,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setCodeVerifyChannel(c.codeVerifyChannel ?? null);
       setCodeVerifyButton(!!c.codeVerifyButton);
       setDiscordInviteUrl(c.discord?.inviteUrl ?? null);
+      setHubUrl(c.hubUrl ?? null);
       setChatEnabled(c.chatEnabled !== false);
     }).catch(() => {});
   }, []);
 
   // Catch the refreshed token after the Discord OAuth redirect (#dtoken=...).
+  // This provider mounts above the router, so the hash is read on whichever
+  // route the browser lands on — a table link, the leaderboard, anywhere —
+  // and the hub's /sso can send people straight back to where they were.
   useEffect(() => {
     const hash = window.location.hash;
     if (hash.startsWith('#dtoken=')) {
@@ -73,6 +82,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         saveAuth(token, p);
         resetSocket();
         setProfile(p);
+        // The payload is only a first guess: a token minted by the hub carries
+        // no operator flag, and this room never trusts the flag from a payload
+        // anyway. Ask the server, which re-derives it from ADMIN_DISCORD_IDS.
+        api.me().then(({ profile }) => {
+          saveAuth(token, profile);
+          setProfile(profile);
+        }).catch(() => { /* a refused token is already handled by the api layer */ });
       }
       history.replaceState(null, '', window.location.pathname + window.location.search);
     }
@@ -90,6 +106,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const ret = returnPath ?? window.location.pathname;
     window.location.href = `/api/auth/discord/start?return=${encodeURIComponent(ret)}`;
   }, []);
+
+  // Sign in on the hub and come back: the hub answers with the same
+  // `#dtoken=` this page already reads, on the exact page you left.
+  const signInViaHub = useCallback((returnPath?: string) => {
+    if (!hubUrl) return;
+    const ret = returnPath ?? (window.location.pathname + window.location.search);
+    const back = `${window.location.origin}${ret.startsWith('/') ? ret : '/'}`;
+    window.location.href = `${hubUrl}/sso?return=${encodeURIComponent(back)}`;
+  }, [hubUrl]);
 
   const linkDiscord = useCallback((returnPath?: string) => {
     const token = getToken();
@@ -121,8 +146,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ profile, chatEnabled, discordEnabled, demoMode, signInDemo, codeVerify, codeVerifyChannel, codeVerifyButton, discordInviteUrl, signInDiscord, linkDiscord, acceptAuth, signOut }),
-    [profile, chatEnabled, discordEnabled, demoMode, signInDemo, codeVerify, codeVerifyChannel, codeVerifyButton, discordInviteUrl, signInDiscord, linkDiscord, acceptAuth, signOut]);
+    () => ({ profile, chatEnabled, discordEnabled, demoMode, signInDemo, codeVerify, codeVerifyChannel, codeVerifyButton, discordInviteUrl, signInDiscord, hubUrl, signInViaHub, linkDiscord, acceptAuth, signOut }),
+    [profile, chatEnabled, discordEnabled, demoMode, signInDemo, codeVerify, codeVerifyChannel, codeVerifyButton, discordInviteUrl, signInDiscord, hubUrl, signInViaHub, linkDiscord, acceptAuth, signOut]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -111,6 +111,7 @@ if (restored) console.log(`Restored ${restored} live room(s) from the last snaps
 armPersistence(sockets.registry);
 // Chog Cards tables: their own registry and events (cards:*), same server and sign-in.
 const cards = attachCardsSockets(io, { taken: code => !!sockets.registry.get(code) });
+sockets.registry.taken = code => !!cards.registry.get(code);
 const restoredCards = restoreCardsLive(cards.registry);
 if (restoredCards) console.log(`Restored ${restoredCards} live card table(s) from the last snapshot`);
 armCardsPersistence(cards.registry);

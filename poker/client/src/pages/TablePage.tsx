@@ -224,7 +224,7 @@ export default function TablePage() {
     // Re-assert the title every update: unrelated broadcasts re-run this
     // effect, and a transition-only write would let them wipe the bell while
     // the player is tabbed away with their clock running.
-    document.title = myTurn ? `🔔 Your turn — ${BRAND.name}` : BRAND.name;
+    document.title = myTurn ? `🔔 Your turn — ${BRAND.name}` : BRAND.title;
     wasMyTurn.current = myTurn;
 
     if (view.community.length > lastBoardLen.current) {
@@ -279,7 +279,7 @@ export default function TablePage() {
     return () => { sock.off('table:reaction', onReact); };
   }, []);
   // Leaving the page resets the title once — not on every state update.
-  useEffect(() => () => { document.title = BRAND.name; }, []);
+  useEffect(() => () => { document.title = BRAND.title; }, []);
   // The action dock publishes its own height, the way the header already
   // does. Anything pinned to the bottom of a phone screen — the chat toasts,
   // the floating chat button — has to sit clear of the buttons a player acts

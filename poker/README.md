@@ -175,7 +175,13 @@ automatically.
 
 Other environment variables:
 - `PORT` — HTTP port (default 8080)
-- `CHOG_SECRET` — HMAC secret for auth tokens (default: generated and stored in `server/data/`)
+- `CHOG_SECRET` — HMAC secret for auth tokens (default: generated and stored in `server/data/`).
+  Must equal the Chog Games hub's `APP_SECRET` for one sign-in across the games (`APP_SECRET`
+  is read here too when `CHOG_SECRET` is unset)
+- `HUB_URL` — the Chog Games hub (default `https://choggames.com`): header link + "Sign in via
+  Chog Games". `off` for a standalone room
+- `HUB_ORIGINS` — extra browser origins, comma separated, allowed to read the public leaderboard
+  and results endpoints (the hub's Railway domain during cutover)
 - `DISCORD_REDIRECT_URI` — override the computed OAuth redirect URI
 
 ## Architecture

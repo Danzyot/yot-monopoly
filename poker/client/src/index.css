@@ -2926,6 +2926,14 @@ input:focus, select:focus, textarea:focus, .input:focus {
 }
 .navlink.active svg { color: var(--gold); }
 
+/* ---- back to the hub: a navlink that leaves the site ------------------ */
+.hub-link { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; text-decoration: none; }
+.hub-link span[aria-hidden] { opacity: 0.7; }
+@media (max-width: 560px) {
+  /* The arrow alone says "home" once the word would crowd the chip. */
+  .hub-link { padding-inline: 8px; }
+}
+
 /* ---- Discord, top right of every page --------------------------------- */
 /* The mark carries itself — it is Discord's own tile, so it gets no box, no
    border and no label around it. */

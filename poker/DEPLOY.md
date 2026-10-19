@@ -7,6 +7,31 @@ tournament in progress.
 
 Railway is the path below (~$5/month Hobby). Any always-on VPS works too.
 
+> **Part of Chog Games.** This room now lives in the Chog Games repo under
+> `poker/` and runs as its own Railway service (Root Directory `poker`) at
+> `poker.choggames.com`, next to the hub at `choggames.com`. The owner's
+> step-by-step for the pair — both services, DNS, the one shared Discord
+> application and the cutover — is **[`docs/CHOGGAMES-DEPLOY.md`](../docs/CHOGGAMES-DEPLOY.md)**
+> at the repo root. The rest of this file still applies to the poker service
+> on its own.
+>
+> **One sign-in across the games.** The hub and this room share one Discord
+> application and one token secret, so a player signed in on the hub is signed
+> in here. There is no `TRUST_HUB_TOKENS` switch and nothing to turn on: both
+> sides mint the same token (`base64url(JSON profile + iat).HMAC-SHA256`), and
+> this room accepts the hub's tokens exactly when the secret matches — the
+> hub's `APP_SECRET` must equal this service's `CHOG_SECRET` (or `APP_SECRET`,
+> which this room reads when `CHOG_SECRET` is unset). `server/test/hubtoken.test.ts`
+> signs a token the hub's way and checks it is accepted with the shared secret
+> and refused with any other. The hub bounces players back here through
+> `GET <HUB_URL>/sso?return=<this page's URL>`, landing them on the same
+> `#dtoken=` the Discord callback uses, which the client reads on every route.
+>
+> | Variable | Value |
+> |---|---|
+> | `HUB_URL` | `https://choggames.com` (the default). Puts the "Chog Games" link in the header and "Sign in via Chog Games" in the sign-in box. `off` hides both. |
+> | `HUB_ORIGINS` | Extra origins, comma separated, allowed to read `/api/leaderboard` and `/api/results/:id` from a browser — the hub's `*.up.railway.app` domain during cutover. `HUB_URL` is always allowed. Nothing else on `/api` is reachable cross-origin in production. |
+
 > **If a Vercel project has already been created for this site**, it cannot
 > host it. Vercel runs serverless functions with no long-lived process and no
 > persistent disk, so the socket connection every table depends on has nothing
