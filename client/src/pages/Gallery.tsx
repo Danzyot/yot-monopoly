@@ -59,7 +59,7 @@ const GALLERY_HOPS = 4;
 const GALLERY_WALK_MS = GALLERY_CROUCH_MS + GALLERY_HOPS * GALLERY_HOP_MS + GALLERY_REST_MS;
 
 /** Shown first, in their own section (internal ids; the names come from CHARACTER_DEFS). */
-const FEATURED: CharacterId[] = ['snacky', 'starer'];
+const FEATURED: CharacterId[] = ['chog', 'snacky', 'starer'];
 
 const COLORS = ['#e53935', '#1e88e5', '#43a047', '#fdd835', '#8e24aa', '#fb8c00', '#00acc1', '#ec407a'];
 
@@ -279,7 +279,7 @@ export default function Gallery() {
         </div>
         <h2 className="gallery-sub gallery-section-head">Featured</h2>
         <div className="gallery-thumbs featured" role="group" aria-label="Featured characters">
-          {CHARACTER_DEFS.filter(c => FEATURED.includes(c.id)).map(thumb)}
+          {FEATURED.map(id => CHARACTER_DEFS.find(c => c.id === id)!).map(thumb)}
         </div>
         <h2 className="gallery-sub">Outfit</h2>
         <OutfitPicker outfit={outfit} color={color} character={def.id} onChange={dress} />

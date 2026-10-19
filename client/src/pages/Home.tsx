@@ -35,8 +35,8 @@ function liveLine(connected: boolean, open: number, playing: number): string {
   return `${open} table${open === 1 ? '' : 's'} open now${playing ? ` · ${playing} playing` : ''}`;
 }
 
-/** The two characters the home page puts first. */
-const FEATURED: CharacterId[] = ['snacky', 'starer'];
+/** The characters the home page puts first. */
+const FEATURED: CharacterId[] = ['chog', 'snacky', 'starer'];
 
 /** The hero's "How to play" button; the same as components/HowToPlay's HowToPlayButton, without its code in the page. */
 function HowToButton({ label }: { label: string }) {

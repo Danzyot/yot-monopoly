@@ -390,7 +390,8 @@ export class Room {
     if (p.rules) this.rules = sanitizeRules({ ...this.rules, ...p.rules });
     // A board seats at most its own maximum (Speedway: 5).
     const most = getMap(this.mapId).players[1];
-    if (this.rules.maxPlayers > most) this.rules = { ...this.rules, maxPlayers: Math.max(most, this.seats.length) };
+    // (Counting people only, so the loop below sheds bots down to the cap; people are never removed.)
+    if (this.rules.maxPlayers > most) this.rules = { ...this.rules, maxPlayers: Math.max(most, this.seats.filter(s => !s.isBot).length) };
     if (typeof p.private === 'boolean') this.private = p.private;
     while (this.seats.length > this.rules.maxPlayers) {
       const bot = [...this.seats].reverse().find(s => s.isBot);
@@ -1012,6 +1013,9 @@ export class Registry {
     setInterval(() => this.sweep(), sweepEveryMs).unref();
   }
 
+  /** Codes in use elsewhere (the card tables): logs and room bans are keyed by code alone. */
+  taken: (code: string) => boolean = () => false;
+
   /** `exempt`: operators open as many rooms as they like. */
   create(hostId: string, exempt = false): Room {
     if (this.rooms.size >= MAX_ROOMS) throw new RoomError('The server is at its room limit — try again later');
@@ -1024,7 +1028,7 @@ export class Registry {
     }
     let code: string;
     do code = Array.from({ length: 5 }, () => CODE_CHARS[randomInt(CODE_CHARS.length)]).join('');
-    while (this.rooms.has(code));
+    while (this.rooms.has(code) || this.taken(code));
     const room = new Room(code, hostId, this.hooks);
     this.rooms.set(code, room);
     this.dirty = true;
