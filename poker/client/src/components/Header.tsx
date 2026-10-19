@@ -24,7 +24,7 @@ const SpadeLogo = () => (
 
 export default function Header() {
   const music = useFeature('music');
-  const { profile, signOut, discordEnabled, linkDiscord, discordInviteUrl, demoMode } = useAuth();
+  const { profile, signOut, discordEnabled, linkDiscord, discordInviteUrl, demoMode, hubUrl } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
   const ref = useRef<HTMLElement>(null);
 
@@ -55,6 +55,13 @@ export default function Header() {
         <span className="logo-word">Poker</span>
       </NavLink>
       <nav>
+        {/* Home is the hub, not this room: poker is one game of Chog Games.
+            Hidden on a standalone deployment (HUB_URL=off). */}
+        {hubUrl && (
+          <a className="navlink hub-link" href={hubUrl} title={`${BRAND.hub} — all the games`}>
+            <span aria-hidden>←</span> {BRAND.hub}
+          </a>
+        )}
         {profile?.isAdmin && (
           <NavLink to="/lobby" className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}>
             Dashboard

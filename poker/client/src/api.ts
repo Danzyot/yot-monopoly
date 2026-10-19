@@ -63,6 +63,8 @@ export interface AppConfig {
   codeVerify: boolean;
   codeVerifyChannel: string | null;
   codeVerifyButton: boolean;
+  // The Chog Games hub this room belongs to; null on a standalone deployment.
+  hubUrl?: string | null;
   discord: {
     botEnabled: boolean;
     guildId: string | null;
@@ -73,6 +75,8 @@ export interface AppConfig {
 
 export const api = {
   config: () => request<AppConfig>('/api/config'),
+  // The profile as the server sees it (operator flag included).
+  me: () => request<{ profile: PlayerProfile }>('/api/auth/me'),
   discordRoles: (guildId?: string) =>
     request<{ roles: { id: string; name: string }[] }>(
       `/api/discord/roles${guildId ? `?guildId=${encodeURIComponent(guildId)}` : ''}`),

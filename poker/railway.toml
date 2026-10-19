@@ -1,6 +1,16 @@
+# Chog Poker on Railway, as its own service inside the Chog Games repo.
+#
+# The service's Root Directory is `poker` (Service → Settings → Source), so
+# Railway reads THIS file and builds from THIS Dockerfile; dockerfilePath is
+# relative to that root. The hub (Monopoly + Chog Cards) is a separate
+# service built from the repo root, whose own .dockerignore leaves poker/ out.
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
+# Only a change under poker/ is a reason to rebuild this service. Paths here
+# are relative to the repository root, not to poker/. (Auto-deploy should be
+# off anyway — deploy by hand, between tournaments. See docs/CHOGGAMES-DEPLOY.md.)
+watchPatterns = ["poker/**"]
 
 [deploy]
 healthcheckPath = "/api/health"

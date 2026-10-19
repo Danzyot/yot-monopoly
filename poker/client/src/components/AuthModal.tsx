@@ -12,7 +12,7 @@ const DiscordMark = () => (
 );
 
 export default function AuthModal({ onClose }: { onClose: () => void }) {
-  const { signInDiscord, discordEnabled, demoMode, signInDemo, codeVerify, codeVerifyChannel, codeVerifyButton, acceptAuth } = useAuth();
+  const { signInDiscord, discordEnabled, demoMode, signInDemo, codeVerify, codeVerifyChannel, codeVerifyButton, acceptAuth, hubUrl, signInViaHub } = useAuth();
   const [demoName, setDemoName] = useState('');
   const [joining, setJoining] = useState(false);
   const toast = useToast();
@@ -160,6 +160,14 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
             <button className="btn btn-discord btn-lg" onClick={() => signInDiscord()}>
               <DiscordMark /> Log in with Discord
             </button>
+            {/* One sign-in for every Chog game: the hub shares this room's
+                Discord app and token secret, so a session started there is
+                good here. It sends you straight back to this page. */}
+            {hubUrl && (
+              <button className="btn btn-lg" onClick={() => signInViaHub()}>
+                Sign in via {BRAND.hub}
+              </button>
+            )}
             {codeVerify && (
               <button className="btn btn-lg" onClick={() => void beginCode()}>
                 Verify with a code
