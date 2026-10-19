@@ -45,13 +45,29 @@ export function mountInteractions(app: express.Express) {
   });
 }
 
+/**
+ * Where sign-in may send a player back to: a path on this site, never anywhere else. Browsers read
+ * `/\\host` and `//host` as another site, so the check is "resolves to our own origin", not a prefix
+ * test; backslashes and control characters are refused outright.
+ */
+export function localPath(raw: unknown): string {
+  const ret = typeof raw === 'string' ? raw : '';
+  if (!ret.startsWith('/') || /[\\\u0000-\u001f\u007f]/.test(ret)) return '/';
+  try {
+    const u = new URL(ret, 'https://local.invalid');
+    return u.origin === 'https://local.invalid' ? `${u.pathname}${u.search}` : '/';
+  } catch {
+    return '/';
+  }
+}
+
 export function authRoutes(): express.Router {
   const r = express.Router();
 
   r.get('/discord/start', (req, res) => {
     if (!discordEnabled()) { res.status(400).send('Discord sign-in is not configured'); return; }
     const ret = String(req.query.return ?? '/');
-    const state = signState({ return: ret.startsWith('/') && !ret.startsWith('//') ? ret : '/' });
+    const state = signState({ return: localPath(ret) });
     res.redirect(authorizeUrl(state, redirectUriFor(requestBase(req))));
   });
 
@@ -80,7 +96,7 @@ export function authRoutes(): express.Router {
       const profile = makeDiscordProfile(d);
       const ban = findBan({ id: profile.id, discordId: d.id, ip: req.ip });
       if (ban) throw new Error(banMessage(ban));
-      const ret = state.return?.startsWith('/') && !state.return.startsWith('//') ? state.return : '/';
+      const ret = localPath(state.return);
       res.redirect(`${ret}#dtoken=${encodeURIComponent(signToken(profile))}`);
     } catch (e) {
       res.redirect(`/#derror=${encodeURIComponent(e instanceof Error ? e.message : 'Discord sign-in failed')}`);

@@ -13,7 +13,8 @@ import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { requirementBadge, requirementSentence } from '../community.tsx';
 import { useCardsRoomList } from '../cards/net.ts';
-import { pokerHref } from '../pokerLink.ts';
+import { openPoker } from '../pokerLink.ts';
+import { POKER_URL } from '../../../shared/brand.ts';
 
 // The home page has no WebGL at all: the board behind the hero is a still
 // (client/public/home/, drifted by styles/home.css), so the page is up at once
@@ -178,7 +179,7 @@ export default function Home() {
               <span className="hub-live">{profile || checking ? 'You stay signed in there' : 'On its own site'}</span>
             </div>
             <div className="hub-actions">
-              <a className="btn primary hub-play" href={pokerHref(profile ? getToken() : null)}>Play Poker</a>
+              <a className="btn primary hub-play" href={POKER_URL} onClick={e => openPoker(e, !!profile)}>Play Poker</a>
             </div>
           </li>
         </ul>

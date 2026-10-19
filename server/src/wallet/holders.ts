@@ -102,7 +102,18 @@ export function isChogHolder(userId: string): boolean {
   return walletsOf(userId).some(l => (getHoldings(l.address)?.balance ?? 0) > 0);
 }
 
-/** Whether a linked wallet of this account was last seen holding this very token (cache only; never trusts the client). */
+/**
+ * Whether a linked wallet of this account holds this very token, by a reading no older than
+ * HOLDINGS_TTL_MS (cache only; never trusts the client). A stale reading counts for nothing (the
+ * Chog may have been sold) and starts a fresh one in the background, so asking again shortly after
+ * gets the answer; the pickers re-check on open, so a real holder rarely sees the wait.
+ */
 export function holdsChog(userId: string, tokenId: number): boolean {
-  return walletsOf(userId).some(l => getHoldings(l.address)?.tokenIds.includes(tokenId) ?? false);
+  const now = clock();
+  return walletsOf(userId).some(l => {
+    const h = getHoldings(l.address);
+    if (h && now - h.checkedAt < HOLDINGS_TTL_MS) return h.tokenIds.includes(tokenId);
+    void verifyWallet(l).catch(() => {});
+    return false;
+  });
 }

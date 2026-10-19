@@ -18,9 +18,17 @@ export function withToken(url: string, token: string): string {
   return u.href;
 }
 
-/** The poker site, carrying the current sign-in when there is one. */
-export function pokerHref(token: string | null = getToken()): string {
-  return token ? withToken(POKER_URL, token) : POKER_URL;
+/**
+ * Click handler for links to poker (their href is the bare POKER_URL). On a plain click by a
+ * signed-in player it goes there carrying the sign-in. The token never sits in the page's links,
+ * so copying, dragging or sharing the link can't hand someone the account; middle-click or
+ * modifier-click opens the plain link and poker asks them to sign in.
+ */
+export function openPoker(e: { button: number; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; preventDefault(): void }, signedIn: boolean): void {
+  const token = signedIn ? getToken() : null;
+  if (!token || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  location.assign(withToken(POKER_URL, token));
 }
 
 /**

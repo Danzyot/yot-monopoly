@@ -10,7 +10,7 @@ import { Avatar } from '../components/Avatar.tsx';
 import { profilePath } from '../community.tsx';
 import { getCharacter } from '../../../shared/characters.ts';
 import { BRAND, GAMES, POKER_URL } from '../../../shared/brand.ts';
-import { pokerHref } from '../pokerLink.ts';
+import { openPoker } from '../pokerLink.ts';
 
 interface Row {
   id: string; name: string; games: number; wins: number; points: number;
@@ -80,7 +80,7 @@ export default function Leaderboard() {
               <span aria-hidden>{t.icon}</span> {t.label}
             </button>
           ))}
-          <a className="lb-tab-link" href={pokerHref(me ? getToken() : null)} title={POKER_URL.replace(/^https?:\/\//, '')}>
+          <a className="lb-tab-link" href={POKER_URL} onClick={e => openPoker(e, !!me)} title={POKER_URL.replace(/^https?:\/\//, '')}>
             <span aria-hidden>♠️</span> {GAMES.poker.name} <span className="muted">→ its own site</span>
           </a>
         </div>

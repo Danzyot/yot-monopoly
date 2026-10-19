@@ -346,3 +346,25 @@ test('holders: seat gating asks the cache for the very token, never the client',
   assert.equal(holders.holdsChog('demo_a', 1), false, 'an account with no linked wallet');
   assert.equal(holders.isChogHolder('demo_a'), false);
 });
+
+test('routes: sign-in only ever returns to a path on this site', async () => {
+  const { localPath } = await import('../src/routes/auth.ts');
+  assert.equal(localPath('/r/ABCDE?x=1'), '/r/ABCDE?x=1');
+  assert.equal(localPath('/'), '/');
+  for (const bad of ['//evil.com', '/\\evil.com', '/\\/evil.com', '/%5Cevil.com'.replace('%5C', '\\'), 'https://evil.com', 'evil.com', '/\tevil', '', undefined, 42]) {
+    assert.equal(localPath(bad), '/', `refused: ${JSON.stringify(bad)}`);
+  }
+});
+
+test('holders: a reading older than ten minutes is no proof (the Chog may have been sold)', async () => {
+  assert.equal(holders.holdsChog('demo_b', 1), true, 'fresh reading');
+  const was = now;
+  now += holders.HOLDINGS_TTL_MS + 1;
+  try {
+    assert.equal(holders.holdsChog('demo_b', 1), false, 'stale reading refused, and a fresh read started');
+    await new Promise(r => setTimeout(r, 50));
+    assert.equal(holders.holdsChog('demo_b', 1), true, 'the background read brought it back');
+  } finally {
+    now = was;
+  }
+});

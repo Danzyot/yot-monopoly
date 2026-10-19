@@ -240,3 +240,17 @@ test('chog season: a lobby saved before the season comes back as Chogs; a game i
     playing.dispose();
   }
 });
+
+test('chogs: a rematch drops a person\'s Chog their wallet no longer holds', () => {
+  const wallet: Record<string, number[]> = { alice: [420] };
+  const reg = new Registry(hooks((user, token) => wallet[user]?.includes(token) ?? false), 1e9);
+  const r = reg.create('alice');
+  r.join(m('alice')); r.join(m('bob'));
+  r.pickCharacter('alice', 'chog', 420);
+  r.start('alice', false);
+  r.end('test');
+  wallet.alice = []; // sold (or the wallet was unlinked) during the game
+  r.rematch('alice', false, () => true);
+  assert.equal(r.seat('alice')!.chogToken, undefined, 'back to the base Chog');
+  r.dispose();
+});

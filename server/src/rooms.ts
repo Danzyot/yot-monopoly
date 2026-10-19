@@ -275,6 +275,9 @@ export class Room {
 
   /** A seat whose character the season does not offer becomes the season's own (lobby only: games keep theirs). */
   private toSeason(s: Seat) {
+    // A person's own Chog is re-checked whenever a table comes back to the lobby (rematch, restore):
+    // it goes if their wallet no longer holds it.
+    if (!s.isBot && s.chogToken !== undefined && !this.hooks.holdsChog?.(s.id, s.chogToken)) delete s.chogToken;
     if (characterAvailable(s.character)) return;
     s.character = SEASON_CHARACTERS[0];
     s.outfit = outfitForCharacter(s.outfit ?? {}, s.character);
