@@ -2,11 +2,10 @@
 // code-drawn stand-in that shows while the file downloads and stays if it
 // fails, so a slow or broken asset never leaves a hole in the scene.
 
-import { Component, Suspense, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { Component, Suspense, useMemo, type ReactNode } from 'react';
 import { useGLTF, useTexture } from '@react-three/drei';
 import {
-  Color, MeshBasicMaterial, MeshStandardMaterial, RingGeometry, SRGBColorSpace,
+  Color, MeshBasicMaterial, MeshStandardMaterial, SRGBColorSpace,
   type Material, type Mesh, type Object3D,
 } from 'three';
 import { ASSETS } from './assets.gen.ts';
@@ -118,105 +117,6 @@ export function ModelTable({ color, roughness, metalness }: { color: string; rou
     return root;
   }, [gltf.scene, color, roughness, metalness]);
   return <primitive object={scene} />;
-}
-
-export interface BuildingSpot { key: string; x: number; z: number; rotY: number; hotel: boolean }
-
-/** Houses and hotels from buildings.glb, body and roof in the edition's colours. */
-export function ModelBuildings({ spots, house, hotel }: { spots: BuildingSpot[]; house: string; hotel: string }) {
-  const gltf = useGLTF(ASSETS.buildings.url);
-  const protos = useMemo(() => {
-    const make = (name: string, color: string) => {
-      const src = gltf.scene.getObjectByName(name);
-      if (!src) throw new Error(`buildings.glb has no ${name}`);
-      const root = src.clone(true);
-      root.position.set(0, 0, 0);
-      for (const m of meshes(root)) {
-        m.castShadow = true;
-        m.receiveShadow = true;
-        // Glossy moulded plastic, like the real pieces, tinted to the edition
-        // (standard, not a physical clear coat: the same at this size, and a
-        // much quicker shader to compile).
-        const tint = (mat: Material) => {
-          const src = mat as MeshStandardMaterial;
-          if (src.name === 'BuildingGlass') return src.clone();
-          const c = new MeshStandardMaterial({
-            name: src.name, color: src.color, roughness: Math.min(src.roughness, 0.26), metalness: 0,
-          });
-          if (c.name === 'BuildingBody') c.color.set(color);
-          if (c.name === 'BuildingRoof') c.color.set(color).multiplyScalar(0.72);
-          return c;
-        };
-        m.material = Array.isArray(m.material) ? m.material.map(tint) : tint(m.material);
-      }
-      return root;
-    };
-    return { house: make('House', house), hotel: make('Hotel', hotel) };
-  }, [gltf.scene, house, hotel]);
-  // Buildings already standing when the board appears are just there; new ones drop in.
-  const standing = useRef<Set<string> | null>(null);
-  if (standing.current === null) standing.current = new Set(spots.map(s => s.key));
-  useEffect(() => { standing.current = new Set(); }, []);
-  // A hotel sold back down to houses: the houses are simply there in its place.
-  const hotelLots = useRef(new Set<string>());
-  useEffect(() => { hotelLots.current = new Set(spots.filter(s => s.hotel).map(s => s.key.split('-')[0])); });
-  const drops = (s: BuildingSpot) => !standing.current!.has(s.key) && (s.hotel || !hotelLots.current.has(s.key.split('-')[0]));
-  return (
-    <group>
-      {spots.map(s => (
-        <Building key={s.key} proto={s.hotel ? protos.hotel : protos.house} spot={s} drop={drops(s)} />
-      ))}
-    </group>
-  );
-}
-
-const DROP_MS = 620;
-// The dust ring kicked up on landing (starts at the half-way impact, gone before the drop ends).
-const PUFF_MS = 300;
-const PUFF_GEO = new RingGeometry(0.55, 1, 28);
-
-function Building({ proto, spot, drop }: { proto: Object3D; spot: BuildingSpot; drop: boolean }) {
-  // One clone per building, kept across re-renders (geometry and materials are shared).
-  const obj = useMemo(() => proto.clone(), [proto]);
-  const start = useRef(drop ? performance.now() : 0);
-  const puff = useRef<Mesh>(null);
-  const puffMat = useMemo(() => new MeshBasicMaterial({ color: '#e9e2d2', transparent: true, opacity: 0, depthWrite: false }), []);
-  useEffect(() => () => puffMat.dispose(), [puffMat]);
-  const puffSize = spot.hotel ? 0.3 : 0.17;
-  // Falls onto the lot, then squashes and settles while a puff of dust spreads and fades.
-  useFrame(() => {
-    if (!start.current) return;
-    const t = (performance.now() - start.current) / DROP_MS;
-    const ring = puff.current;
-    if (t >= 1) {
-      obj.position.y = 0;
-      obj.scale.set(1, 1, 1);
-      if (ring) ring.visible = false;
-      start.current = 0;
-    } else if (t < 0.5) {
-      const k = t / 0.5;
-      obj.position.y = 0.7 * (1 - k * k);
-      obj.scale.set(0.92, 1.1, 0.92);
-    } else {
-      const k = (t - 0.5) / 0.5;
-      const s = Math.sin(k * Math.PI * 2) * (1 - k) * 0.24;
-      obj.position.y = 0;
-      obj.scale.set(1 + s * 0.5, 1 - s, 1 + s * 0.5);
-      if (ring) {
-        const p = Math.min(1, (t - 0.5) * DROP_MS / PUFF_MS);
-        const grow = 1 - (1 - p) ** 2;
-        ring.visible = p < 1;
-        ring.scale.setScalar(puffSize * (0.5 + grow));
-        puffMat.opacity = 0.55 * (1 - p);
-      }
-    }
-  });
-  return (
-    <group position={[spot.x, 0, spot.z]} rotation={[0, spot.rotY, 0]}>
-      <primitive object={obj} />
-      {drop && <mesh ref={puff} geometry={PUFF_GEO} material={puffMat} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.004, 0]} visible={false} />}
-    </group>
-  );
 }
 
 /**

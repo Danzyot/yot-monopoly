@@ -25,6 +25,7 @@ import MinigamePanel from './MinigamePanel.tsx';
 import { DebtClock, PauseButton, PausedBanner, TimeLeft, TurnClock } from './GameClock.tsx';
 import { ChooseBar, DiceRead } from './SpeedChoice.tsx';
 import EndScreen from './EndScreen.tsx';
+import { recordHistory } from '../gameHistory.ts';
 import { useCutsceneOverlay } from '../three/cinematics/store.ts';
 import Portfolio, { PortfolioModal } from './Portfolio.tsx';
 import { PokeButton, PokeNotice, ReactionPicker, SpectatorReactions, latestReaction } from './Reactions.tsx';
@@ -53,6 +54,8 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   mounted.current = true;
   stageView(game);
   const moveBusy = useMoveBusy(game);
+  // Net worth turn by turn and set-completing trades, for the end screen's story.
+  useEffect(() => { recordHistory(game, theme.spaces); }, [game, theme.spaces]);
   const [selected, setSelected] = useState<number | null>(null);
   const [tradeWith, setTradeWith] = useState<string | null>(null);
   const { config } = useAuth();
@@ -380,6 +383,11 @@ function Players({ game, room, me, onTrade, reactions, onPortfolio }: {
     worth: game.netWorth?.[p.id],
     deeds: Object.entries(game.owned).filter(([, o]) => o.owner === p.id).map(([k, o]) => [Number(k), o] as const).sort((a, b) => a[0] - b[0]),
   }]));
+  // Houses and hotels standing on each player's deeds (counted from the staged deeds below, so they go up with the board's).
+  const builtOf = (deeds: (typeof live)[string]['deeds']) => ({
+    houses: deeds.reduce((a, [, o]) => a + (o.houses < 5 ? o.houses : 0), 0),
+    hotels: deeds.filter(([, o]) => o.houses === 5).length,
+  });
   const staged = useStaged(live, JSON.stringify(live));
   return (
     <div className={`players ${chips ? 'compact' : ''}`} ref={rowRef}>
@@ -388,6 +396,7 @@ function Players({ game, room, me, onTrade, reactions, onPortfolio }: {
         const st = staged[p.id] ?? live[p.id];
         const { cash, owes, worth, deeds } = st;
         const props = deeds.length;
+        const { houses, hotels } = builtOf(deeds);
         const reaction = latestReaction(reactions, p.id);
         const chip = chips && expanded !== p.id;
         // A chip opens into the full card first; the full card opens the portfolio.
@@ -422,13 +431,22 @@ function Players({ game, room, me, onTrade, reactions, onPortfolio }: {
                 </>}
               </div>
               {!p.bankrupt && props > 0 && (
-                <div className="pdeed-strip" aria-label={`${p.name}'s deeds`}>
-                  {deeds.map(([i, o]) => {
-                    const sp = theme.spaces[i];
-                    const c = sp.group ? theme.groupColors[sp.group] : sp.kind === 'railroad' ? '#2f3340' : '#a9b3c6';
-                    return <i key={i} className={o.mortgaged ? 'mort' : undefined} style={{ background: c }}
-                      title={`${sp.name}${o.houses === 5 ? ' · hotel' : o.houses ? ` · ${o.houses} house${o.houses > 1 ? 's' : ''}` : ''}${o.mortgaged ? ' · mortgaged' : ''}`} />;
-                  })}
+                <div className="passets">
+                  <div className="pdeed-strip" aria-label={`${p.name}'s deeds`}>
+                    {deeds.map(([i, o]) => {
+                      const sp = theme.spaces[i];
+                      const c = sp.group ? theme.groupColors[sp.group] : sp.kind === 'railroad' ? '#2f3340' : '#a9b3c6';
+                      // A built-on deed wears its buildings: a white cap per house, a red one for a hotel.
+                      return <i key={i} className={o.mortgaged ? 'mort' : o.houses === 5 ? 'hotel' : o.houses ? `built h${o.houses}` : undefined} style={{ background: c }}
+                        title={`${sp.name}${o.houses === 5 ? ' · hotel' : o.houses ? ` · ${o.houses} house${o.houses > 1 ? 's' : ''}` : ''}${o.mortgaged ? ' · mortgaged' : ''}`} />;
+                    })}
+                  </div>
+                  {(houses > 0 || hotels > 0) && (
+                    <span className="pbuild" aria-label={`${houses} ${houses === 1 ? 'house' : 'houses'}, ${hotels} ${hotels === 1 ? 'hotel' : 'hotels'}`}>
+                      {hotels > 0 && <span className="pb hotel" title={`${hotels} ${hotels === 1 ? 'hotel' : 'hotels'}`}><i aria-hidden>🏨</i>{hotels}</span>}
+                      {houses > 0 && <span className="pb house" title={`${houses} ${houses === 1 ? 'house' : 'houses'}`}><i aria-hidden>🏠</i>{houses}</span>}
+                    </span>
+                  )}
                 </div>
               )}
             </div>

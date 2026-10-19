@@ -20,6 +20,7 @@ import { bootContent } from './content.ts';
 
 installTooltips();
 import './styles/cinematics.css';
+import './styles/ownership.css';
 
 // Operator renames go in before the first render, so no board is drawn with the old names.
 void bootContent().finally(() => {

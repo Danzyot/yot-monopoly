@@ -3,7 +3,6 @@
 // it, holds a beat, and glides back:
 //   - you buy a property            -> a close look at your new deed's tile
 //   - you build a house or a hotel  -> down on the street as it goes up
-//   - anyone builds a hotel         -> the same, for everyone
 //   - anyone is sent to jail        -> the cell
 //   - anyone gets out of jail       -> the door and the leap over the bars
 //   - anyone lands on a big rent bill -> the street that's charging it
@@ -12,6 +11,12 @@
 //   - the game begins               -> one slow turn round the table
 // Shots wait for the dice and the walk to finish, never stack up, and give
 // way the moment the player grabs the camera. They can be switched off.
+//
+// Every shot belongs to the throw and move it came with (its epoch). A newer
+// throw or move makes it stale: a queued one is dropped and a playing one
+// glides home at once, so the camera is never off at some other tile while
+// the next player's dice are in the air. Other players' builds get no shot:
+// the camera reacts to the move being played and to the viewer's own doings.
 
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useRef } from 'react';
@@ -19,10 +24,21 @@ import { Vector3 } from 'three';
 import type { GameView } from '../../../shared/types.ts';
 import { tile } from './layout.ts';
 import { useSceneBusy } from './sequence.ts';
-import { pieceObjects, setDirectorActive, type CameraMode } from './camera.ts';
+import { cameraDebug, pieceObjects, setDirectorActive, type LiveMode } from './camera.ts';
 import { cutsceneOwnsCamera } from './cinematics/store.ts';
 
-interface Shot { pos: Vector3; target: Vector3; hold: number; /** Circle the target at this many radians a second while holding. */ orbit?: number }
+interface Shot {
+  pos: Vector3; target: Vector3; hold: number;
+  /** Circle the target at this many radians a second while holding. */
+  orbit?: number;
+  /** The throw and move it came with (see epochOf); stale once they are not the latest. */
+  epoch?: string;
+  /** What it is of, for ?perf logs. */
+  label?: string;
+}
+
+/** A view's throw and move: shots belong to the one they came with. */
+const epochOf = (g: GameView) => `${g.rollSeq}:${g.lastMove?.seq ?? 0}`;
 
 interface Playing {
   shot: Shot;
@@ -35,6 +51,8 @@ interface Playing {
   /** Where the glide home starts (the camera wherever the shot was cut). */
   outPos: Vector3;
   outTarget: Vector3;
+  /** How long the glide home takes (shorter when the shot went stale). */
+  outMs: number;
 }
 
 const drift = new Vector3();
@@ -42,7 +60,11 @@ const UP = new Vector3(0, 1, 0);
 
 const IN_MS = 900;
 const OUT_MS = 800;
+/** A shot gone stale mid-play heads home this quickly. */
+const STALE_OUT_MS = 420;
 const GAP_MS = 2500;
+/** A shot that has waited this long for the scene to be still is history: dropped. */
+const MAX_WAIT_MS = 15_000;
 
 /** Low over the board edge, looking back in at tile `i`. */
 function tileShot(i: number, n: number, opts: { height?: number; dist?: number; side?: number; hold?: number } = {}): Shot {
@@ -59,7 +81,7 @@ function tileShot(i: number, n: number, opts: { height?: number; dist?: number; 
 
 const ease = (k: number) => (k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2);
 
-export function CameraDirector({ game, me, n, enabled, mode }: { game: GameView; me?: string; n: number; enabled: boolean; mode: CameraMode }) {
+export function CameraDirector({ game, me, n, enabled, mode }: { game: GameView; me?: string; n: number; enabled: boolean; mode: LiveMode }) {
   const { camera, controls, gl } = useThree() as unknown as {
     camera: import('three').PerspectiveCamera;
     gl: import('three').WebGLRenderer;
@@ -67,14 +89,17 @@ export function CameraDirector({ game, me, n, enabled, mode }: { game: GameView;
   };
   const busy = useSceneBusy();
   const prev = useRef<GameView | null>(null);
-  const queue = useRef<Shot[]>([]);
+  const queue = useRef<(Shot & { at: number })[]>([]);
+  // The latest throw and move: shots from older ones are stale.
+  const epoch = useRef(epochOf(game));
+  epoch.current = epochOf(game);
   const playing = useRef<Playing | null>(null);
   const lastEnd = useRef(0);
   const ctl = useRef(controls);
   ctl.current = controls;
   // Views that steer themselves (follow, overhead) take the camera back from
   // wherever the shot ends; the others glide home to where the player left it.
-  const selfSteering = mode === 'follow' || mode === 'close' || mode === 'top';
+  const selfSteering = mode === 'follow' || mode === 'close' || mode === 'top' || mode === 'dice';
   const steer = useRef(selfSteering);
   steer.current = selfSteering;
 
@@ -85,7 +110,7 @@ export function CameraDirector({ game, me, n, enabled, mode }: { game: GameView;
     if (!before) {
       // A game about to start: one slow turn round the table before the first roll.
       if (enabled && game.rollSeq === 0 && game.turnNumber <= 1 && game.phase === 'roll') {
-        queue.current = [{ pos: new Vector3(0, 7, 13), target: new Vector3(0, 0.3, 0), hold: 5200, orbit: 2 * Math.PI / 5.2 }];
+        queue.current = [{ pos: new Vector3(0, 7, 13), target: new Vector3(0, 0.3, 0), hold: 5200, orbit: 2 * Math.PI / 5.2, epoch: epochOf(game), label: 'intro', at: performance.now() }];
       }
       return;
     }
@@ -94,26 +119,27 @@ export function CameraDirector({ game, me, n, enabled, mode }: { game: GameView;
     for (const [k, o] of Object.entries(game.owned)) {
       const i = Number(k);
       const was = before.owned[i];
-      if (!was && o.owner === me) shots.push(tileShot(i, n));
-      if (was && o.houses > was.houses) {
+      if (!was && o.owner === me) shots.push({ ...tileShot(i, n), label: `bought ${i}` });
+      // Only the viewer's own builds: another player's would pull the camera off the move being played.
+      if (was && o.houses > was.houses && o.owner === me) {
         const hotel = o.houses === 5;
-        if (o.owner === me || hotel) shots.push(tileShot(i, n, { height: hotel ? 1.3 : 1.15, dist: 1.9, side: 0.6, hold: hotel ? 2200 : 1500 }));
+        shots.push({ ...tileShot(i, n, { height: hotel ? 1.3 : 1.15, dist: 1.9, side: 0.6, hold: hotel ? 2200 : 1500 }), label: `built ${i}` });
       }
     }
     for (const p of game.players) {
       const was = before.players.find(x => x.id === p.id);
       if (!was) continue;
-      if (p.inJail && !was.inJail) shots.push(tileShot(p.position, n, { height: 1.4, dist: 2.1, side: -0.7, hold: 1800 }));
+      if (p.inJail && !was.inJail) shots.push({ ...tileShot(p.position, n, { height: 1.4, dist: 2.1, side: -0.7, hold: 1800 }), label: 'jail' });
       // Out on a roll: the door swings and the piece leaps the bars.
       if (was.inJail && !p.inJail && !p.bankrupt && p.position !== was.position) {
-        shots.push(tileShot(n / 4, n, { height: 1.3, dist: 2.0, side: -0.9, hold: 1500 }));
+        shots.push({ ...tileShot(n / 4, n, { height: 1.3, dist: 2.0, side: -0.9, hold: 1500 }), label: 'out of jail' });
       }
       // Landed on a street with three houses or more and paid up big: the ouch moment.
       const o = game.owned[p.position];
       if (o && o.owner !== p.id && o.houses >= 3 && was.cash - p.cash >= 400 && p.position !== was.position) {
-        shots.push(tileShot(p.position, n, { height: 1.2, dist: 1.9, side: 0.7, hold: 1700 }));
+        shots.push({ ...tileShot(p.position, n, { height: 1.2, dist: 1.9, side: 0.7, hold: 1700 }), label: `rent ${p.position}` });
       }
-      if (p.bankrupt && !was.bankrupt) shots.push(tileShot(p.position, n, { height: 1.8, dist: 2.6, side: 0.4, hold: 2200 }));
+      if (p.bankrupt && !was.bankrupt) shots.push({ ...tileShot(p.position, n, { height: 1.8, dist: 2.6, side: 0.4, hold: 2200 }), label: 'bankrupt' });
     }
     if (game.winner && !before.winner) {
       const w = game.players.find(p => p.id === game.winner);
@@ -125,11 +151,12 @@ export function CameraDirector({ game, me, n, enabled, mode }: { game: GameView;
           shot.target.set(piece.position.x, 0.3, piece.position.z);
         }
         shot.orbit = 0.32;
-        shots.push(shot);
+        // The game is over: no throw will come to make it stale.
+        shots.push({ ...shot, label: 'winner' });
       }
     }
     // Several at once (an auction win + a build): the last is the one worth seeing.
-    if (shots.length) queue.current = [shots[shots.length - 1]];
+    if (shots.length) queue.current = [{ ...shots[shots.length - 1], epoch: epochOf(game), at: performance.now() }];
   }, [game, me, n, enabled]);
 
   // Grabbing the camera (drag, pinch, wheel) cuts the shot short. The controls
@@ -153,9 +180,10 @@ export function CameraDirector({ game, me, n, enabled, mode }: { game: GameView;
     };
   }, [gl]);
 
-  const goOut = (p: Playing, now: number) => {
+  const goOut = (p: Playing, now: number, outMs = OUT_MS) => {
     p.stage = 'out';
     p.stageAt = now;
+    p.outMs = outMs;
     p.outPos.copy(camera.position);
     if (ctl.current) p.outTarget.copy(ctl.current.target);
   };
@@ -167,6 +195,8 @@ export function CameraDirector({ game, me, n, enabled, mode }: { game: GameView;
   useFrame(() => {
     if (!controls) return;
     const now = performance.now();
+    cameraDebug.shot = playing.current ? `${playing.current.shot.label ?? 'shot'}:${playing.current.stage}` : null;
+    cameraDebug.queued = queue.current.length;
     // A cutscene (three/cinematics) has the camera: drop any shot, and put a running one back home first.
     if (cutsceneOwnsCamera()) {
       queue.current = [];
@@ -179,14 +209,26 @@ export function CameraDirector({ game, me, n, enabled, mode }: { game: GameView;
       }
       return;
     }
+    // Lined up for a throw or move that is no longer the latest (or waited too long): let it go.
+    if (queue.current.length) queue.current = queue.current.filter(s => s.epoch === epoch.current && now - s.at < MAX_WAIT_MS);
     let p = playing.current;
+    if (p && p.stage !== 'out' && p.shot.epoch !== epoch.current) {
+      // A new throw came in mid-shot: the camera belongs to the dice and the mover now.
+      if (steer.current) {
+        playing.current = null;
+        setDirectorActive(false);
+        lastEnd.current = now;
+        return;
+      }
+      goOut(p, now, STALE_OUT_MS);
+    }
     if (!p) {
       const next = queue.current[0];
       if (!next || busy || now - lastEnd.current < GAP_MS) return;
       queue.current.shift();
       p = playing.current = {
         shot: next, t0: now, homePos: camera.position.clone(), homeTarget: controls.target.clone(),
-        stage: 'in', stageAt: now, outPos: new Vector3(), outTarget: new Vector3(),
+        stage: 'in', stageAt: now, outPos: new Vector3(), outTarget: new Vector3(), outMs: OUT_MS,
       };
       controls.enabled = false;
       setDirectorActive(true);
@@ -219,10 +261,10 @@ export function CameraDirector({ game, me, n, enabled, mode }: { game: GameView;
         goOut(p, now);
       }
     } else {
-      const k = ease(Math.min(1, t / OUT_MS));
+      const k = ease(Math.min(1, t / p.outMs));
       camera.position.lerpVectors(p.outPos, p.homePos, k);
       controls.target.lerpVectors(p.outTarget, p.homeTarget, k);
-      if (t >= OUT_MS) {
+      if (t >= p.outMs) {
         camera.position.copy(p.homePos);
         controls.target.copy(p.homeTarget);
         playing.current = null;

@@ -7,6 +7,11 @@ import { useCallback, useState } from 'react';
 import { Vector3, type Object3D } from 'three';
 
 export type CameraMode = 'auto' | 'table' | 'follow' | 'close' | 'top' | 'free';
+/**
+ * What the camera is doing this moment: a chosen view, or (Auto only) 'dice',
+ * a closer look at the dice while they tumble and the result is read.
+ */
+export type LiveMode = Exclude<CameraMode, 'auto'> | 'dice';
 
 export const CAMERA_MODES: { id: CameraMode; icon: string; label: string; hint: string }[] = [
   { id: 'auto', icon: '✨', label: 'Auto', hint: 'Follows the action: trails whoever is moving, then pulls back to the table' },
@@ -46,6 +51,13 @@ export function useCameraMode(): [CameraMode, (m: CameraMode) => void, () => voi
 
 /** Each piece's root object, by player id (Pieces registers them). */
 export const pieceObjects = new Map<string, Object3D>();
+
+/**
+ * ?perf: what the camera is up to (window.__yotCam): the live view, who it
+ * follows and the cinematic shot playing, if any. Written by the camera rig
+ * and the director; read only by the debug hook.
+ */
+export const cameraDebug: { mode?: LiveMode; follow?: string | null; shot?: string | null; queued?: number } = {};
 
 /** True while a cinematic shot is flying the camera; the camera rig keeps its hands off. */
 let directorActive = false;
