@@ -13,14 +13,18 @@ import './styles/manage.css';
 import './styles/phone.css';
 import './styles/gd.css';
 import { installTooltips } from './tooltip.ts';
+import { bootContent } from './content.ts';
 
 installTooltips();
 import './styles/cinematics.css';
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
-  </StrictMode>,
-);
+// Operator renames go in before the first render, so no board is drawn with the old names.
+void bootContent().finally(() => {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </StrictMode>,
+  );
+});

@@ -4,7 +4,8 @@
 
 import { CLASSIC_GROUP_COLORS, type SpaceDef } from './board.ts';
 import { cardText, type CardDef } from './cards.ts';
-import { getMap, type BoardArt } from './maps.ts';
+import { contentVersion, spaceRename, cardRewrite } from './contentOverrides.ts';
+import { getMap, type BoardArt, type MapDef } from './maps.ts';
 
 export interface RuleConfig {
   startingCash: number;
@@ -323,35 +324,54 @@ export function getTheme(id: string): Edition {
 }
 
 const resolved = new Map<string, Theme>();
+let resolvedAt = -1;
 
-/** An edition on a map: renamed spaces and card text filled in for that board. */
+/**
+ * A space's name before any operator rename: the edition's own name for it,
+ * else the map's, with generic Chance / Chest squares taking the edition's
+ * deck names (so renaming a deck renames its squares too).
+ */
+export function baseSpaceName(ed: Edition, map: MapDef, i: number): string {
+  const s = map.spaces[i];
+  const own = ed.mapNames?.[map.id]?.[i];
+  if (own) return own;
+  if (s.kind === 'chance') return ed.deckNames.chance;
+  if (s.kind === 'chest') return ed.deckNames.chest;
+  return s.name;
+}
+
+/**
+ * An edition on a map: renamed spaces and card text filled in for that board.
+ * Operator overrides (shared/contentOverrides.ts) win over the built-in names.
+ */
 export function resolveTheme(themeId: string, mapId: string): Theme {
+  // New overrides make every cached theme stale.
+  if (resolvedAt !== contentVersion()) { resolved.clear(); resolvedAt = contentVersion(); }
   const key = `${themeId}:${mapId}`;
   const hit = resolved.get(key);
   if (hit) return hit;
   const ed = getTheme(themeId);
   const map = getMap(mapId);
-  const names = ed.mapNames?.[map.id] ?? {};
-  // Generic corner and deck names follow the edition's own vocabulary.
   const spaces = map.spaces.map((s, i) => {
-    let name = names[i] ?? s.name;
-    if (!names[i] && s.kind === 'chance') name = ed.deckNames.chance;
-    if (!names[i] && s.kind === 'chest') name = ed.deckNames.chest;
+    const name = spaceRename(ed.id, map.id, i) ?? baseSpaceName(ed, map, i);
     return name === s.name ? s : { ...s, name };
   });
-  const fill = (cards: CardDef[]) => cards.map(c => ({ ...c, text: cardText(c.text, spaces, ed.currency) }));
+  const fill = (cards: CardDef[], deck: 'chance' | 'chest') => cards.map((c, i) => ({
+    ...c, text: cardText(cardRewrite(ed.id, map.id, deck, i) ?? c.text, spaces, ed.currency),
+  }));
   // Original takes the map's own look; branded themes keep theirs everywhere.
   const look = ed.id === CLASSIC.id ? map.look : null;
   const theme: Theme = {
     ...ed,
+    deckNames: { ...ed.deckNames },
     groupColors: { ...CLASSIC_GROUP_COLORS, ...ed.groupColors, ...look?.groupColors },
     palette: { ...ed.palette, ...look?.palette },
     art: look?.art ?? ed.art ?? 'heritage',
     lookName: look?.name ?? ed.name,
     mapId: map.id,
     spaces,
-    chance: fill(map.chance),
-    chest: fill(map.chest),
+    chance: fill(map.chance, 'chance'),
+    chest: fill(map.chest, 'chest'),
   };
   resolved.set(key, theme);
   return theme;

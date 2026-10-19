@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { resolveTheme } from '../../../shared/themes.ts';
+import { contentVersion } from '../../../shared/contentOverrides.ts';
 import { drawBoard } from './boardTexture.ts';
 
 const cache = new Map<string, string>();
@@ -21,7 +22,7 @@ function loadImage(url: string | undefined): Promise<HTMLImageElement | null> {
 }
 
 function paint(themeId: string, mapId: string): Promise<string> {
-  const key = `${themeId}:${mapId}`;
+  const key = `${themeId}:${mapId}:${contentVersion()}`;
   const hit = cache.get(key);
   if (hit) return Promise.resolve(hit);
   const job = queue.then(async () => {
@@ -47,7 +48,7 @@ function paint(themeId: string, mapId: string): Promise<string> {
 
 /** The face of `themeId` on `mapId`, tilted like a board on a table, GO towards the viewer. */
 export default function BoardPreview({ themeId, mapId, className = '' }: { themeId: string; mapId: string; className?: string }) {
-  const key = `${themeId}:${mapId}`;
+  const key = `${themeId}:${mapId}:${contentVersion()}`;
   const [url, setUrl] = useState(() => cache.get(key) ?? null);
   useEffect(() => {
     let live = true;
