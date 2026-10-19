@@ -98,6 +98,11 @@ export function markRoll(seq: number, initial: boolean) {
   at(WALK_DELAY_MS, 'done');
 }
 
+/** The beat the latest throw has reached, outside React (the camera reads it every frame). */
+export function rollStageNow(): RollStage {
+  return stage;
+}
+
 function setStage(next: RollStage) {
   stage = next;
   // markRoll runs during a render: tell subscribers afterwards, never mid-render.
@@ -373,6 +378,25 @@ export function goPassTimes(seq: number, n: number): number[] {
     out.push(l.steps <= MAX_HOPS ? l.t0 + (n - origin) * HOP_MS + (l.leap ? HOP_MS : 0) : l.t0 + l.walkMs);
   }
   return out;
+}
+
+/**
+ * Whose move the board is playing at `now` (performance.now() time): the
+ * oldest staged move not yet over, so a move queued behind another waits its
+ * turn; failing that, the latest one that ended less than `linger` ago. Null
+ * when nothing has moved lately. The follow camera trails this player, not
+ * whoever the server says is up (the turn may already have passed on while
+ * the last piece is still walking).
+ */
+export function moverAt(now: number, linger = 0): string | null {
+  let playing: MovePlan | null = null;
+  let recent: MovePlan | null = null;
+  for (const p of plans.values()) {
+    if (p.initial || !p.legs.length) continue;
+    if (now < p.end) { if (!playing || p.seq < playing.seq) playing = p; }
+    else if (now < p.end + linger && (!recent || p.seq > recent.seq)) recent = p;
+  }
+  return (playing ?? recent)?.player ?? null;
 }
 
 /** Player `id`'s staged moves after `afterSeq`, oldest first. */

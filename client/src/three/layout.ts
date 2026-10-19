@@ -96,16 +96,21 @@ export function tokenSpot(i: number, slot: number, count: number, inJail: boolea
   return [cx + g.along[0] * u + g.out[0] * v, cz + g.along[1] * u + g.out[1] * v];
 }
 
-/** House/hotel positions on a property's colour band. */
+/**
+ * House/hotel positions on a property's colour band: the inner strip, toward
+ * the middle of the board. Pieces stand and walk on the outer part of the tile
+ * (tokenSpot), so a building never stands where a piece does, and from the
+ * table camera it is in front of a piece on the far row, not on top of it.
+ */
 export function buildingSpots(i: number, houses: number, n: number): [number, number][] {
   const g = tile(i, n);
   const T = tileWidth(n);
-  const inset = C / 2 - BAND / 2;
+  const inset = C / 2 - BAND / 2 - 0.02;
   const cx = g.x - g.out[0] * inset, cz = g.z - g.out[1] * inset;
   if (houses >= 5) return [[cx, cz]];
   const out: [number, number][] = [];
   for (let h = 0; h < houses; h++) {
-    const u = (h - 1.5) * (T / 4.4);
+    const u = (h - 1.5) * (T / 4.2);
     out.push([cx + g.along[0] * u, cz + g.along[1] * u]);
   }
   return out;

@@ -286,8 +286,13 @@ export function restPose(o: PoseInput, time: number, dt: number) {
   o.lids = 0; o.cheer = 0; o.crouch = 0; o.shrug = 0; o.stretch = 0; o.fidget = 0; o.taunt = 0; o.kick = 0;
 }
 
-export function PieceDouble({ d, character, color, children }: { d: DoubleRig; character: CharacterId; color: string; children?: ReactNode }) {
-  const mats = useCharacterMaterials(character, color);
+export function PieceDouble({ d, character, color, chogToken, children }: {
+  d: DoubleRig; character: CharacterId; color: string;
+  /** A holder's own Chog Genesis token: the double wears its traits, as the board piece does. */
+  chogToken?: number;
+  children?: ReactNode;
+}) {
+  const mats = useCharacterMaterials(character, color, chogToken);
   const tinter = useMemo(() => new Tinter(mats), [mats]);
   d.tinter = tinter;
   return (
@@ -295,7 +300,7 @@ export function PieceDouble({ d, character, color, children }: { d: DoubleRig; c
       <group ref={g => { d.yaw = g; }}>
         <group ref={g => { d.lean = g; }}>
           <group ref={g => { d.scale = g; }}>
-            <CharacterFigure id={character} mats={mats} rig={d.rig} />
+            <CharacterFigure id={character} mats={mats} rig={d.rig} chogToken={chogToken} />
             {children}
           </group>
         </group>

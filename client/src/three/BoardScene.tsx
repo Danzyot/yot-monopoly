@@ -27,11 +27,12 @@ import { SceneEnv } from './SceneEnv.tsx';
 // then (the home page's turning board never needs them).
 const Cutscenes = lazy(() => import('./cinematics/Cutscenes.tsx').then(m => ({ default: m.Cutscenes })));
 import { CutsceneOverlay } from './cinematics/Overlay.tsx';
-import { sequenceDebug, useSceneBusy } from './sequence.ts';
-import { fitBoardDistance, isDirectorActive, pieceObjects, type CameraMode } from './camera.ts';
+import { moverAt, sequenceDebug, useRollStage, useSceneBusy } from './sequence.ts';
+import { cameraDebug, fitBoardDistance, isDirectorActive, pieceObjects, type CameraMode, type LiveMode } from './camera.ts';
 import { liteAssets, noteGpu, readQuality, strongDevice, weakDevice, type Quality } from './quality.ts';
 import { ShaderGate, setupRenderer } from './shaderGate.tsx';
-import { ModelBuildings, ModelTable, WithModel, preloadModels, type BuildingSpot } from './models.tsx';
+import { ModelTable, WithModel, preloadModels } from './models.tsx';
+import { DrawnBuildings, ModelBuildings, type BuildingSpot } from './Buildings.tsx';
 
 // The table is in every scene; the pieces and houses only once there is a game.
 preloadModels(false);
@@ -190,10 +191,10 @@ function TileHighlight({ index, color, pulse, n }: { index: number | null; color
   );
 }
 
-function Ownership({ game, theme }: { game: GameView; theme: Theme }) {
+function Ownership({ game, theme, me }: { game: GameView; theme: Theme; me?: string }) {
   return (
     <group>
-      <DeedMarkers game={game} n={theme.spaces.length} />
+      <DeedMarkers game={game} n={theme.spaces.length} me={me} spaces={theme.spaces} />
       <Buildings game={game} theme={theme} />
     </group>
   );
@@ -202,40 +203,22 @@ function Ownership({ game, theme }: { game: GameView; theme: Theme }) {
 function Buildings({ game, theme }: { game: GameView; theme: Theme }) {
   const house = theme.palette.house ?? '#1f9d49';
   const hotel = theme.palette.hotel ?? '#d2202f';
-  const spots: BuildingSpot[] = Object.entries(game.owned).flatMap(([k, o]) => {
+  const n = theme.spaces.length;
+  const spots: BuildingSpot[] = useMemo(() => Object.entries(game.owned).flatMap(([k, o]) => {
     const i = Number(k);
     if (!o.houses) return [];
-    const g = tile(i, theme.spaces.length);
+    const g = tile(i, n);
     const rotY = g.out[0] === 0 ? 0 : Math.PI / 2;
-    return buildingSpots(i, o.houses, theme.spaces.length).map(([x, z], n) => ({
-      key: o.houses === 5 ? `${i}-h` : `${i}-${n}`, x, z, rotY, hotel: o.houses === 5,
+    return buildingSpots(i, o.houses, n).map(([x, z], h) => ({
+      key: o.houses === 5 ? `${i}-h` : `${i}-${h}`, x, z, rotY, hotel: o.houses === 5,
     }));
-  });
+  }), [game.owned, n]);
   // Kept mounted with none built, so the first house is seen as new and drops in.
+  const props = { spots, house, hotel, tileW: tileWidth(n) };
   return (
-    <WithModel fallback={<DrawnBuildings spots={spots} house={house} hotel={hotel} />}>
-      <ModelBuildings spots={spots} house={house} hotel={hotel} />
+    <WithModel fallback={<DrawnBuildings {...props} />}>
+      <ModelBuildings {...props} />
     </WithModel>
-  );
-}
-
-function DrawnBuildings({ spots, house, hotel }: { spots: BuildingSpot[]; house: string; hotel: string }) {
-  return (
-    <group>
-      {spots.map(({ key, x, z, rotY, hotel: big }) =>
-        big ? (
-          <group key={key} position={[x, 0, z]} rotation={[0, rotY, 0]}>
-            <mesh castShadow position={[0, 0.1, 0]}><boxGeometry args={[0.36, 0.2, 0.2]} /><meshStandardMaterial color={hotel} roughness={0.4} /></mesh>
-            <mesh castShadow position={[0, 0.24, 0]} rotation={[0, 0, Math.PI / 4]} scale={[1, 1, 1]}><boxGeometry args={[0.12, 0.12, 0.2]} /><meshStandardMaterial color={hotel} roughness={0.6} /></mesh>
-          </group>
-        ) : (
-          <group key={key} position={[x, 0, z]} rotation={[0, rotY, 0]}>
-            <mesh castShadow position={[0, 0.06, 0]}><boxGeometry args={[0.13, 0.12, 0.15]} /><meshStandardMaterial color={house} roughness={0.4} /></mesh>
-            <mesh castShadow position={[0, 0.15, 0]} rotation={[0, 0, Math.PI / 4]}><boxGeometry args={[0.1, 0.1, 0.15]} /><meshStandardMaterial color={house} roughness={0.6} /></mesh>
-          </group>
-        ),
-      )}
-    </group>
   );
 }
 
@@ -248,9 +231,14 @@ function DrawnBuildings({ spots, house, hotel }: { spots: BuildingSpot[]; house:
  */
 const PORTRAIT_TABLE = new Vector3(0, 15.5, 5);
 const TOP_DIR = new Vector3(0, 17.5, 1.6);
+/** Where the dice come to rest (Dice.tsx HOME_A/HOME_B), and Auto's view of them from the player's side. */
+const DICE_TARGET = new Vector3(-0.03, 0.15, 1.56);
+const DICE_VIEW = new Vector3(0, 6.2, 6.4);
 
 function CameraRig({ hud, fogNear, fogFar, mode, followId }: {
-  hud: boolean; fogNear: number; fogFar: number; mode: CameraMode; followId?: string;
+  hud: boolean; fogNear: number; fogFar: number; mode: LiveMode;
+  /** Whose turn it is: followed when no move is playing (otherwise the mover is, sequence.ts moverAt). */
+  followId?: string;
 }) {
   const { camera, size, scene, controls } = useThree() as unknown as {
     camera: import('three').PerspectiveCamera; size: { width: number; height: number }; scene: import('three').Scene;
@@ -269,6 +257,7 @@ function CameraRig({ hud, fogNear, fogFar, mode, followId }: {
     : TOP_DIR.clone()), [aspect, camera]);
   const glide = useRef<{ from: Vector3; fromT: Vector3; to: Vector3; toT: Vector3; t0: number } | null>(null);
   const first = useRef(true);
+  const wasDirecting = useRef(false);
 
   useEffect(() => {
     // Keep the fog behind the board however far back the camera sits.
@@ -297,13 +286,24 @@ function CameraRig({ hud, fogNear, fogFar, mode, followId }: {
     controls.enablePan = mode === 'free';
     controls.maxPolarAngle = mode === 'free' || mode === 'close' ? Math.PI / 2.05 : Math.PI / 2.4;
     controls.minDistance = mode === 'free' ? 2.5 : mode === 'close' ? 1 : 6;
-    if (directing) return;
+    if (directing) { wasDirecting.current = true; return; }
+    // A shot or cutscene just handed the camera back: the table view glides
+    // home from wherever it was left, rather than finishing a glide that was
+    // under way when it took over (a jump).
+    if (wasDirecting.current) {
+      wasDirecting.current = false;
+      if (mode === 'table') glide.current = { from: camera.position.clone(), fromT: controls.target.clone(), to: tablePos.clone(), toT: new Vector3(), t0: performance.now() };
+    }
     controls.enabled = mode === 'table' || mode === 'free';
     const dt = Math.min(delta, 0.1);
-    if (mode === 'follow' || mode === 'close' || mode === 'top') {
+    // The piece on the move (until a beat after it lands), else whoever is up.
+    const who = moverAt(performance.now(), AUTO_LINGER_MS) ?? followId;
+    cameraDebug.mode = mode;
+    cameraDebug.follow = who ?? null;
+    if (mode === 'follow' || mode === 'close' || mode === 'top' || mode === 'dice') {
       glide.current = null;
       let pos: Vector3, target: Vector3;
-      const piece = followId ? pieceObjects.get(followId) : undefined;
+      const piece = who ? pieceObjects.get(who) : undefined;
       if (mode === 'close' && piece) {
         // Low over the board edge behind the piece, looking past it across the board.
         const p = piece.position;
@@ -325,6 +325,10 @@ function CameraRig({ hud, fogNear, fogFar, mode, followId }: {
         const back = aspect < 1 ? 1.3 : 1;
         pos = tmpPos.set(p.x + out.x * 3.0 * back, 2.6 * back + p.y * 0.3, p.z + out.z * 3.0 * back);
         target = tmpTarget.set(p.x - out.x * 0.15, 0.3, p.z - out.z * 0.15);
+      } else if (mode === 'dice') {
+        // Over the dice from the player's side, close enough to read them; a little further back on a phone held upright.
+        target = tmpTarget.copy(DICE_TARGET);
+        pos = tmpPos.copy(DICE_TARGET).addScaledVector(DICE_VIEW, aspect < 1 ? 1.45 : 1);
       } else {
         // Nearly straight down; the slight tilt keeps the board square to the screen (straight down has no 'up').
         pos = tmpPos.copy(topPos);
@@ -355,12 +359,15 @@ function CameraRig({ hud, fogNear, fogFar, mode, followId }: {
 const AUTO_LINGER_MS = 2600;
 
 /**
- * The Auto view: while the dice roll or a piece walks it trails the mover
- * (Follow), lingers a beat on the landing, then pulls back to the table.
- * Before the game, and whenever nobody is moving for a while, it's the table.
+ * The Auto view, in step with the move clock (sequence.ts): while the dice
+ * tumble and the result is read it looks at the dice; then it trails the
+ * piece that is moving (Follow) to the tile it lands on and any card drawn
+ * there, lingers a beat, and pulls back to the table. Before the game, and
+ * whenever nobody is moving for a while, it's the table.
  */
-function useAutoMode(mode: CameraMode, playing: boolean): CameraMode {
+function useAutoMode(mode: CameraMode, playing: boolean, rollSeq: number): LiveMode {
   const busy = useSceneBusy();
+  const beat = useRollStage(rollSeq);
   const [trailing, setTrailing] = useState(false);
   useEffect(() => {
     if (mode !== 'auto' || !playing) { setTrailing(false); return; }
@@ -369,6 +376,7 @@ function useAutoMode(mode: CameraMode, playing: boolean): CameraMode {
     return () => clearTimeout(t);
   }, [mode, playing, busy]);
   if (mode !== 'auto') return mode;
+  if (playing && beat !== 'done') return 'dice';
   return trailing ? 'follow' : 'table';
 }
 
@@ -454,7 +462,7 @@ function BoardScene({ themeId, mapId, game, selected, onSelect, spin, ambient = 
   const env = getMap(mapId).environment;
   const look = envLook(env, theme);
   const [hover, setHover] = useState<number | null>(null);
-  const liveMode = useAutoMode(cameraMode, !!game && game.phase !== 'over');
+  const liveMode = useAutoMode(cameraMode, !!game && game.phase !== 'over', game?.rollSeq ?? 0);
   // Adaptive resolution: start sharp, drop to 1× device pixels as soon as the
   // frame rate sags (phones, integrated GPUs), climb back when there is headroom.
   // A device that is plainly weak (few cores, little memory) starts light.
@@ -498,7 +506,7 @@ function BoardScene({ themeId, mapId, game, selected, onSelect, spin, ambient = 
         noteGpu(gl.getContext());
         setStrong(strongDevice());
         // ?perf: expose the renderer and pieces so draw calls, triangles and positions can be read from the console.
-        if (location.search.includes('perf')) Object.assign(window, { __yotGl: gl, __yotScene: scene, __yotPieces: pieceObjects, __yotGo: celebrateGo, __yotSeq: sequenceDebug });
+        if (location.search.includes('perf')) Object.assign(window, { __yotGl: gl, __yotScene: scene, __yotPieces: pieceObjects, __yotGo: celebrateGo, __yotSeq: sequenceDebug, __yotCam: () => ({ ...cameraDebug }) });
       }}
       // A custom backdrop replaces the map's 3D surroundings: it is painted
       // behind a transparent canvas, keeps its aspect ratio on any screen and
@@ -527,7 +535,7 @@ function BoardScene({ themeId, mapId, game, selected, onSelect, spin, ambient = 
         <TileHighlight index={selected ?? null} color={theme.palette.accent} pulse n={theme.spaces.length} />
         {game && (
           <>
-            <Ownership game={game} theme={theme} />
+            <Ownership game={game} theme={theme} me={me} />
             {game.rules.freeParkingPot && theme.spaces[theme.spaces.length / 2]?.kind === 'parking' &&
               <ParkingPot pot={game.pot} n={theme.spaces.length} />}
             <Pieces game={game} n={theme.spaces.length} reactions={reactions} me={me} />

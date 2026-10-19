@@ -1,14 +1,18 @@
-// End of the game: final standings, how long it took, a few fun numbers the
-// engine tallied during play, and the way back in — the host resets the room
-// for a rematch with the same seats and settings; everyone else waits or leaves.
+// End of the game: final standings, how long it took, one line on how the
+// winner did it, the few moments that stood out (if any did), and the way
+// back in — the host resets the room for a rematch with the same seats and
+// settings; everyone else waits or leaves.
 import { useState } from 'react';
 import { resolveTheme } from '../../../shared/themes.ts';
-import type { GameView, PlayerState, PlayerStats, RoomView } from '../../../shared/types.ts';
+import type { GameView, PlayerState, RoomView } from '../../../shared/types.ts';
 import { call } from '../net.ts';
 import { characterEmoji } from '../format.ts';
 import { toastError } from '../toast.tsx';
-import { ordinal } from '../gameHelpers.ts';
+import { groupLabel, ordinal } from '../gameHelpers.ts';
+import { groupIndices, type SpaceDef } from '../../../shared/board.ts';
+import { gameHistory, type GameHistory, type WorthPoint } from '../gameHistory.ts';
 import { Modal } from './Modal.tsx';
+import { PlayerBadge } from './PlayerBadge.tsx';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
@@ -34,28 +38,98 @@ function standings(game: GameView): PlayerState[] {
   return [...alive, ...out];
 }
 
-interface Award { icon: string; title: string; who: PlayerState; value: string }
+/**
+ * A moment worth remembering. Each has a bar to clear, so most games show
+ * one or two and a quiet game shows none: no prize for doing what everyone
+ * did (buying deeds, paying a rent, going to jail), and nothing the podium
+ * and the net worth bars already say.
+ */
+interface Moment { icon: string; title: string; who: PlayerState; text: string }
 
-function awards(game: GameView, cur: (n: number) => string): Award[] {
-  const best = (key: keyof PlayerStats): [PlayerState, number] | null => {
-    let top: [PlayerState, number] | null = null;
-    for (const p of game.players) {
-      const v = game.stats?.[p.id]?.[key] ?? 0;
-      if (v > 0 && (!top || v > top[1])) top = [p, v];
+/** Join names the way a sentence does: "A", "A and B", "A, B and C". */
+function andList(xs: string[]): string {
+  return xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}`;
+}
+
+/** One line on how the winner did it: the sets they held, what stood on them, the rent they took. */
+function howWon(game: GameView, winner: PlayerState, spaces: SpaceDef[], cur: (n: number) => string): string {
+  const mine = Object.entries(game.owned).filter(([, o]) => o.owner === winner.id);
+  const groups = [...new Set(mine.map(([k]) => spaces[Number(k)]).filter(s => s?.kind === 'property' && s.group).map(s => s.group!))];
+  const sets = groups.filter(g => groupIndices(spaces, g).every(i => game.owned[i]?.owner === winner.id));
+  const hotels = mine.filter(([, o]) => o.houses === 5).length;
+  const houses = mine.reduce((a, [, o]) => a + (o.houses < 5 ? o.houses : 0), 0);
+  const rent = game.stats?.[winner.id]?.rentCollected ?? 0;
+  const bits = [
+    hotels ? `${hotels} ${hotels === 1 ? 'hotel' : 'hotels'}` : '',
+    houses ? `${houses} ${houses === 1 ? 'house' : 'houses'}` : '',
+    rent ? `${cur(rent)} in rent` : '',
+  ].filter(Boolean);
+  const how = sets.length
+    ? `with the ${andList(sets.map(groupLabel))} ${sets.length === 1 ? 'set' : 'sets'}`
+    : 'without a full colour set';
+  const end = game.timeUp ? ' when time ran out' : '';
+  return `${winner.name} won ${how}${end}${bits.length ? `: ${andList(bits)}` : ''}.`;
+}
+
+function moments(game: GameView, spaces: SpaceDef[], cur: (n: number) => string, hist: GameHistory | null, order: PlayerState[]): Moment[] {
+  const who = (id: string) => game.players.find(p => p.id === id);
+  const start = game.rules.startingCash || 1500;
+  const out: Moment[] = [];
+
+  // The deal that decided it: a trade that completed one of the winner's sets.
+  const deal = game.winner ? hist?.deals.find(d => d.to === game.winner) : undefined;
+  const dealer = deal && who(deal.to), partner = deal && who(deal.from);
+  if (deal && dealer && partner) {
+    out.push({ icon: '🤝', title: 'The deal', who: dealer, text: `completed the ${groupLabel(deal.group)} set in a trade with ${partner.name} (turn ${deal.turn})` });
+  }
+
+  // A comeback: last at half time, top two at the end. Needs most of the game on record and three or more players.
+  const pts = hist?.points ?? [];
+  if (order.length >= 3 && pts.length >= 8 && pts[0].turn <= 3) {
+    const mid = pts[Math.floor(pts.length / 2)];
+    const ranked = game.players.filter(p => mid.worth[p.id] !== undefined).sort((a, b) => mid.worth[a.id] - mid.worth[b.id]);
+    const low = ranked[0];
+    const place = order.findIndex(p => p.id === low?.id);
+    if (low && place >= 0 && place <= 1 && mid.worth[low.id] < mid.worth[ranked[1].id]) {
+      out.push({ icon: '📈', title: 'Comeback', who: low, text: `last at turn ${mid.turn}, finished ${ordinal(place + 1)}` });
     }
-    return top;
-  };
-  const out: Award[] = [];
-  const add = (key: keyof PlayerStats, icon: string, title: string, fmt: (v: number) => string) => {
-    const b = best(key);
-    if (b) out.push({ icon, title, who: b[0], value: fmt(b[1]) });
-  };
-  add('rentCollected', '💰', 'Landlord of the game', v => `${cur(v)} rent collected`);
-  add('biggestRentPaid', '😱', 'Ouch', v => `paid ${cur(v)} rent in one go`);
-  add('propertiesBought', '🏘️', 'Shopaholic', v => `${v} ${v === 1 ? 'property' : 'properties'} bought`);
-  add('jailed', '🔒', 'Jailbird', v => `sent to jail ${v}×`);
-  add('minigamesWon', '🎮', 'Arcade champ', v => `${v} mini-game${v === 1 ? '' : 's'} won`);
-  return out;
+  }
+
+  // The biggest single rent, when it was a real blow: at least a third of a starting stake.
+  let hit: [PlayerState, number] | null = null;
+  for (const p of game.players) {
+    const v = game.stats?.[p.id]?.biggestRentPaid ?? 0;
+    if (v > (hit?.[1] ?? 0)) hit = [p, v];
+  }
+  if (hit && hit[1] >= start / 3) {
+    out.push({ icon: '💥', title: 'Biggest hit', who: hit[0], text: `paid ${cur(hit[1])} rent in one go${hit[0].bankrupt ? ' on the way out' : ''}` });
+  }
+
+  // Top rent collector, only when it was not the winner (whose rent is in the line above) and it was serious money.
+  let rent: [PlayerState, number] | null = null;
+  for (const p of game.players) {
+    const v = game.stats?.[p.id]?.rentCollected ?? 0;
+    if (v > (rent?.[1] ?? 0)) rent = [p, v];
+  }
+  if (rent && rent[0].id !== game.winner && rent[1] >= start) {
+    out.push({ icon: '👑', title: 'Rent king', who: rent[0], text: `took ${cur(rent[1])} in rent and still didn't win` });
+  }
+  // One each: a player's second moment would read as a pile-up.
+  return out.filter((m, k) => out.findIndex(x => x.who.id === m.who.id) === k).slice(0, 3);
+}
+
+/** Net worth over the game as a little line, on a scale shared by every row. */
+function Spark({ points, id, color, top }: { points: WorthPoint[]; id: string; color: string; top: number }) {
+  const vals = points.map(p => p.worth[id]).filter((v): v is number => v !== undefined);
+  if (vals.length < 4) return null;
+  const W = 72, H = 22;
+  const xy = vals.map((v, k) => `${((k / (vals.length - 1)) * W).toFixed(1)},${(H - 1 - (Math.max(0, v) / top) * (H - 2)).toFixed(1)}`);
+  return (
+    <svg className="end-spark" viewBox={`0 0 ${W} ${H}`} width={W} height={H} aria-hidden>
+      <polyline points={xy.join(' ')} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={xy.at(-1)!.split(',')[0]} cy={xy.at(-1)!.split(',')[1]} r="2.6" fill={color} />
+    </svg>
+  );
 }
 
 export default function EndScreen({ room, game, me, onLeave }: {
@@ -67,7 +141,10 @@ export default function EndScreen({ room, game, me, onLeave }: {
   const [busy, setBusy] = useState(false);
   const winner = game.players.find(p => p.id === game.winner);
   const order = standings(game);
-  const fun = awards(game, cur);
+  const hist = gameHistory(game.startedAt);
+  const story = winner ? howWon(game, winner, theme.spaces, cur) : null;
+  const fun = moments(game, theme.spaces, cur, hist, order);
+  const sparkTop = Math.max(1, ...(hist?.points ?? []).flatMap(p => Object.values(p.worth)));
   const isHost = room.hostId === me;
   const host = room.seats.find(s => s.id === room.hostId);
   const ended = game.endedAt ?? room.now;
@@ -103,11 +180,18 @@ export default function EndScreen({ room, game, me, onLeave }: {
           {game.turnNumber} {game.turnNumber === 1 ? 'turn' : 'turns'} · {duration(ended - game.startedAt)} · {theme.name}
         </p>
 
+        {story && winner && (
+          <p className="end-story" style={{ ['--pc' as string]: winner.color }}>
+            <PlayerBadge p={winner} />
+            <span>{story}</span>
+          </p>
+        )}
+
         {order.length >= 2 && (
           <ol className="podium" aria-label="Podium">
             {podium.map(({ p, place }) => p ? (
               <li key={p.id} className={`podium-spot p${place} ${p.id === me ? 'me' : ''}`} style={{ ['--pc' as string]: p.color }}>
-                <span className="podium-char" aria-hidden>{characterEmoji(p.character)}</span>
+                <span className="podium-char" aria-hidden>{p.chogToken ? <PlayerBadge p={p} className="podium-face" /> : characterEmoji(p.character)}</span>
                 <span className="podium-name">{p.name}</span>
                 <span className="podium-block">
                   <span className="podium-medal" aria-hidden>{MEDALS[place - 1]}</span>
@@ -123,7 +207,7 @@ export default function EndScreen({ room, game, me, onLeave }: {
           {order.map((p, i) => (
             <li key={p.id} className={p.id === me ? 'me' : ''}>
               <span className="end-place" aria-label={ordinal(i + 1)}>{MEDALS[i] ?? `${i + 1}.`}</span>
-              <span className="token-badge" style={{ background: p.color }} aria-hidden>{characterEmoji(p.character)}</span>
+              <PlayerBadge p={p} />
               <span className="grow end-main">
                 <span className="end-line">
                   <span className="end-name">{p.name}{p.id === me ? ' (you)' : ''}</span>
@@ -133,21 +217,24 @@ export default function EndScreen({ room, game, me, onLeave }: {
                   <i style={{ ['--w' as string]: `${Math.max(2, Math.round((worth(p) / top) * 100))}%`, background: p.color, animationDelay: `${0.25 + i * 0.12}s` }} />
                 </span>
               </span>
+              {hist && <Spark points={hist.points} id={p.id} color={p.color} top={sparkTop} />}
             </li>
           ))}
         </ol>
 
         {fun.length > 0 && (
           <>
-            <h3 className="end-h">Awards</h3>
-            <ul className="end-badges" aria-label="Awards">
-              {fun.map(a => (
-                <li key={a.title} className="end-badge" style={{ ['--pc' as string]: a.who.color }} title={`${a.who.name}: ${a.value}`}>
-                  <span className="end-badge-icon" aria-hidden>{a.icon}</span>
-                  <span className="end-badge-text">
-                    <b>{a.title}</b>
-                    <span className="small"><span className="end-badge-who">{a.who.name}</span> · {a.value}</span>
+            <h3 className="end-h">Moments</h3>
+            <ul className={`end-moments n${fun.length}`} aria-label="Moments of the game">
+              {fun.map(m => (
+                <li key={m.title} className="end-moment" style={{ ['--pc' as string]: m.who.color }}>
+                  <span className="end-moment-icon" aria-hidden>{m.icon}</span>
+                  <b className="end-moment-title">{m.title}</b>
+                  <span className="end-moment-who">
+                    <PlayerBadge p={m.who} />
+                    <span className="end-moment-name">{m.who.name}{m.who.id === me ? ' (you)' : ''}</span>
                   </span>
+                  <span className="end-moment-text small">{m.text}</span>
                 </li>
               ))}
             </ul>
