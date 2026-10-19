@@ -890,8 +890,9 @@ kbd { font: 600 11px ui-monospace, Menlo, monospace; background: rgba(255,255,25
 @media (hover: none) and (pointer: coarse) { .hide-touch { display: none; } }
 
 @media (max-width: 760px) {
-  /* Phones: the bottom belongs to the action bar and side panel, so the dock
-     stands in a column at the right edge of the board. */
+  /* Phones: an early column at the right edge of the board. Portrait phones
+     now fold it into one row in the bottom stack and landscape phones into a
+     row under the players (styles/ui-polish.css). */
   .social-dock { left: auto; right: 8px; bottom: auto; top: 128px; flex-direction: column; align-items: flex-end; }
   .dock-btn { height: 36px; min-width: 36px; font-size: 16px; }
   .poke-label { display: none; }
@@ -3110,6 +3111,21 @@ a:focus-visible, .navlink:focus-visible, .brand:focus-visible, .edition:focus-vi
   .bc-badge b { font-size: 18px; }
   .bc-keys { display: none; }
 }
+/* Narrow screens: the top bar is [brand … | code · turn]; the board name
+   goes (the brand and code say enough) and the name shrinks to an ellipsis
+   instead of running under the code. */
+@media (max-width: 600px) {
+  .bc-top { grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; }
+  .bc-brand { gap: 6px; }
+  .bc-name { min-width: 0; }
+  .bc-hat { font-size: 20px; }
+  .bc-live, .bc-onair { font-size: 10px; letter-spacing: 0.1em; padding: 2px 7px 1px; gap: 4px; }
+  .bc-top-mid { gap: 6px; }
+  .bc-map { display: none; }
+  .bc-code { font-size: 16px; letter-spacing: 0.1em; }
+  .bc-turn { font-size: 12px; padding: 1px 8px 2px; }
+  .bc-top-right:not(:has(.bc-tag.warn)) { display: none; }
+}
 @media (max-width: 600px) and (orientation: portrait) {
   .bc-standings { left: var(--bc-safe); right: var(--bc-safe); width: auto; flex-direction: row; flex-wrap: wrap; }
   .bc-row { flex: 1 1 45%; }
@@ -3117,13 +3133,3 @@ a:focus-visible, .navlink:focus-visible, .brand:focus-visible, .edition:focus-vi
   .bc-lt-stats { display: none; }
 }
 
-/* Short portrait phones (667px and under): the dock column would run behind
-   the tips card and the tab row, so it wraps into a second column instead,
-   growing in from the right edge. */
-@media (max-width: 760px) and (orientation: portrait) {
-  .social-dock {
-    flex-wrap: wrap-reverse;
-    align-content: flex-start;
-    max-height: max(180px, calc(100dvh - 440px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)));
-  }
-}
