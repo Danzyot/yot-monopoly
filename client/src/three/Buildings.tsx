@@ -34,7 +34,7 @@ const DUST_MS = 650;
 const DUST_BITS = 8;
 const MAX_DUST = DUST_BITS * 12;
 /** The rim: the shell blown up this much, drawn inside out. */
-const RIM = 1.09;
+const RIM = 1.07;
 
 const dummy = new Object3D();
 const mtx = new Matrix4();
@@ -69,7 +69,7 @@ function paint(parts: { geo: BufferGeometry; color: Color }[]): BufferGeometry {
 /** The roof a touch lighter than the walls (a darker one went muddy under the table light). */
 const roofOf = (c: string) => new Color(c).lerp(new Color('#ffffff'), 0.1);
 /** The white trim takes on some of the building's colour, so from across the table it reads as that colour, not as white. */
-const trimOf = (trim: Color, c: string) => trim.clone().lerp(new Color(c), 0.45);
+const trimOf = (trim: Color, c: string) => trim.clone().lerp(new Color(c), 0.6);
 
 function modelKit(scene: Object3D, name: string, color: string): Kit {
   const src = scene.getObjectByName(name);
@@ -107,12 +107,12 @@ function drawnKit(hotel: boolean, color: string): Kit {
   return { solid: paint([{ geo: walls, color: new Color(color) }, { geo: roof, color: roofOf(color) }]), glass: null, glassMat: null };
 }
 
-/** A rim colour that stands out from the building and the purple board: lighter, or gold for a pale building. */
+/** A rim colour that stands out from the purple board: the building's own colour turned up (it glows, out of tone mapping), or gold for a pale building. */
 function rimOf(color: string): Color {
   const c = new Color(color);
   const hsl = { h: 0, s: 0, l: 0 };
   c.getHSL(hsl);
-  return hsl.l > 0.7 ? new Color('#ffd23f') : c.lerp(new Color('#ffffff'), 0.55);
+  return hsl.l > 0.7 ? new Color('#ffd23f') : c.setHSL(hsl.h, Math.min(1, hsl.s * 1.1), Math.min(0.68, hsl.l * 1.35));
 }
 
 export function ModelBuildings(props: { spots: BuildingSpot[]; house: string; hotel: string; tileW: number }) {

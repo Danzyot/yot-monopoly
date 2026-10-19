@@ -5,7 +5,6 @@ import { getMap } from '../../../shared/maps.ts';
 import type { GameView, RoomView } from '../../../shared/types.ts';
 import { act, call, useConnected, type ChatMsg } from '../net.ts';
 import { useAuth } from '../auth.tsx';
-import { characterEmoji } from '../format.ts';
 import { toast, toastError } from '../toast.tsx';
 import { themeStyle } from '../themeStyle.ts';
 import BoardScene from '../three/BoardScene.tsx';
@@ -25,6 +24,7 @@ import MinigamePanel from './MinigamePanel.tsx';
 import { DebtClock, PauseButton, PausedBanner, TimeLeft, TurnClock } from './GameClock.tsx';
 import { ChooseBar, DiceRead } from './SpeedChoice.tsx';
 import EndScreen from './EndScreen.tsx';
+import { PlayerBadge } from './PlayerBadge.tsx';
 import { recordHistory } from '../gameHistory.ts';
 import { useCutsceneOverlay } from '../three/cinematics/store.ts';
 import Portfolio, { PortfolioModal } from './Portfolio.tsx';
@@ -406,11 +406,9 @@ function Players({ game, room, me, onTrade, reactions, onPortfolio }: {
             style={{ borderColor: p.color }}
             title={!p.bankrupt && worth !== undefined ? `Net worth ${theme.currency}${worth.toLocaleString()}` : undefined}>
             {p.id === game.current && !p.bankrupt && game.phase !== 'over' && <span className="turn-ribbon">{p.id === me ? 'Your turn' : 'Playing'}</span>}
-            <span className="token-badge" style={{ background: p.color }}
-              onClick={chips && !chip ? () => setExpanded(null) : chip ? open : undefined}>
-              {characterEmoji(p.character)}
+            <PlayerBadge p={p} onClick={chips && !chip ? () => setExpanded(null) : chip ? open : undefined}>
               {reaction && <span key={reaction.seq} className="row-react" aria-label={`${p.name} reacted ${reaction.emoji}`}>{reaction.emoji}</span>}
-            </span>
+            </PlayerBadge>
             <div className="grow pf-open" role="button" tabIndex={0}
               title={chip ? `${p.name}${p.id === game.current ? ' — playing' : ''}. Tap for more` : `${p.name}'s portfolio`}
               aria-label={chip ? `${p.name}, ${p.bankrupt ? 'bankrupt' : `${theme.currency}${cash.toLocaleString()}`}${p.id === game.current ? ', playing now' : ''}` : undefined}

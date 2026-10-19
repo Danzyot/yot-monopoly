@@ -73,3 +73,8 @@
   .end-moment-title { font-size: 14px; }
   .end-spark { width: 54px; }
 }
+
+/* A holder's own Chog as a player's face: the token's art inside a ring of the player's colour. */
+.token-badge.pc-chog { padding: 2px; overflow: visible; }
+.token-badge.pc-chog .chog-art { border: none; }
+.podium-char .podium-face { width: 46px; height: 46px; vertical-align: middle; }

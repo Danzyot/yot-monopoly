@@ -148,7 +148,7 @@ export function Cutscenes({ game, n, enabled, low, currency, houseColor, hotelCo
   const [stage, setStage] = useState<Stage | null>(null);
   // One double for the whole game, re-dressed for each cutscene (and hidden between them).
   const dbl = useMemo(newDouble, []);
-  const [look, setLook] = useState<{ character: CharacterId; color: string } | null>(null);
+  const [look, setLook] = useState<{ character: CharacterId; color: string; chogToken?: number } | null>(null);
   const live = useRef<Live | null>(null);
   /** Cutscenes to play once this one is over (a game-ending bankruptcy: the winner's, after it). */
   const queued = useRef<{ cue: CutsceneCue; game: GameView }[]>([]);
@@ -185,7 +185,9 @@ export function Cutscenes({ game, n, enabled, low, currency, houseColor, hotelCo
       items: cue.kind === 'bankrupt' ? lostProps(before, p.id) : [],
       jailCell, houseColor, hotelColor, currency, dbl,
     };
-    if (look?.character !== p.character || look.color !== p.color) setLook({ character: p.character, color: p.color });
+    if (look?.character !== p.character || look.color !== p.color || look.chogToken !== p.chogToken) {
+      setLook({ character: p.character, color: p.color, chogToken: p.chogToken });
+    }
     dbl.tinter?.set(0, 1);
     live.current = {
       run, stage: 'pending', early, notBefore: byCard ? Math.max(settle, byCard.at) : settle + walk, startAt: 0, skipAt: 0, leaving: false, heldTo: now + HOLD_AHEAD_MS,
@@ -367,7 +369,7 @@ export function Cutscenes({ game, n, enabled, low, currency, houseColor, hotelCo
     <>
       <CastWarmup currency={currency} />
       {run && spec?.cast && <Suspense fallback={null}><CastLoader /></Suspense>}
-      {look && <PieceDouble d={dbl} character={look.character} color={look.color} />}
+      {look && <PieceDouble key={look.chogToken ?? 0} d={dbl} character={look.character} color={look.color} chogToken={look.chogToken} />}
       {ctx && ctx.run.cue.kind === 'jail' && <JailScene key={ctx.run.seq} ctx={ctx} />}
       {ctx && ctx.run.cue.kind === 'bankrupt' && <BankruptScene key={ctx.run.seq} ctx={ctx} />}
       {ctx && ctx.run.cue.kind === 'winner' && <WinnerScene key={ctx.run.seq} ctx={ctx} />}

@@ -12,6 +12,7 @@ import { groupLabel, ordinal } from '../gameHelpers.ts';
 import { groupIndices, type SpaceDef } from '../../../shared/board.ts';
 import { gameHistory, type GameHistory, type WorthPoint } from '../gameHistory.ts';
 import { Modal } from './Modal.tsx';
+import { PlayerBadge } from './PlayerBadge.tsx';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
@@ -181,7 +182,7 @@ export default function EndScreen({ room, game, me, onLeave }: {
 
         {story && winner && (
           <p className="end-story" style={{ ['--pc' as string]: winner.color }}>
-            <span className="token-badge" style={{ background: winner.color }} aria-hidden>{characterEmoji(winner.character)}</span>
+            <PlayerBadge p={winner} />
             <span>{story}</span>
           </p>
         )}
@@ -190,7 +191,7 @@ export default function EndScreen({ room, game, me, onLeave }: {
           <ol className="podium" aria-label="Podium">
             {podium.map(({ p, place }) => p ? (
               <li key={p.id} className={`podium-spot p${place} ${p.id === me ? 'me' : ''}`} style={{ ['--pc' as string]: p.color }}>
-                <span className="podium-char" aria-hidden>{characterEmoji(p.character)}</span>
+                <span className="podium-char" aria-hidden>{p.chogToken ? <PlayerBadge p={p} className="podium-face" /> : characterEmoji(p.character)}</span>
                 <span className="podium-name">{p.name}</span>
                 <span className="podium-block">
                   <span className="podium-medal" aria-hidden>{MEDALS[place - 1]}</span>
@@ -206,7 +207,7 @@ export default function EndScreen({ room, game, me, onLeave }: {
           {order.map((p, i) => (
             <li key={p.id} className={p.id === me ? 'me' : ''}>
               <span className="end-place" aria-label={ordinal(i + 1)}>{MEDALS[i] ?? `${i + 1}.`}</span>
-              <span className="token-badge" style={{ background: p.color }} aria-hidden>{characterEmoji(p.character)}</span>
+              <PlayerBadge p={p} />
               <span className="grow end-main">
                 <span className="end-line">
                   <span className="end-name">{p.name}{p.id === me ? ' (you)' : ''}</span>
@@ -230,7 +231,7 @@ export default function EndScreen({ room, game, me, onLeave }: {
                   <span className="end-moment-icon" aria-hidden>{m.icon}</span>
                   <b className="end-moment-title">{m.title}</b>
                   <span className="end-moment-who">
-                    <span className="token-badge" style={{ background: m.who.color }} aria-hidden>{characterEmoji(m.who.character)}</span>
+                    <PlayerBadge p={m.who} />
                     <span className="end-moment-name">{m.who.name}{m.who.id === me ? ' (you)' : ''}</span>
                   </span>
                   <span className="end-moment-text small">{m.text}</span>
