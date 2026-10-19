@@ -25,6 +25,7 @@ import MinigamePanel from './MinigamePanel.tsx';
 import { DebtClock, PauseButton, PausedBanner, TimeLeft, TurnClock } from './GameClock.tsx';
 import { ChooseBar, DiceRead } from './SpeedChoice.tsx';
 import EndScreen from './EndScreen.tsx';
+import { useCutsceneOverlay } from '../three/cinematics/store.ts';
 import Portfolio, { PortfolioModal } from './Portfolio.tsx';
 import { PokeButton, PokeNotice, ReactionPicker, SpectatorReactions, latestReaction } from './Reactions.tsx';
 import { useShortcuts } from './Shortcuts.tsx';
@@ -113,6 +114,8 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   };
   useTurnAlerts(game, me, notify, `${room.code} · Yot Monopoly`);
   const over = !!game.winner || room.status === 'finished';
+  // The results wait for the last move and the bankruptcy/winner cutscenes to play.
+  const endReady = useEndReady(over);
   const closeDialogs = () => {
     setTradeWith(null); setCounter(null); setPortfolio(undefined); setHelpOpen(false); setSelected(null); setManage(null);
   };
@@ -289,7 +292,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
         <ManagePanel game={game} me={me} mode={manage} onClose={() => setManage(null)} onPick={i => { setManage(null); setSelected(i); }} />
       )}
       {helpOpen && <HowToPlay rules={game.rules} currency={theme.currency} shortcuts={!!myPlayer} onClose={() => setHelpOpen(false)} />}
-      {over && <EndScreen room={room} game={game} me={me} onLeave={leave} />}
+      {endReady && <EndScreen room={room} game={game} me={me} onLeave={leave} />}
     </div>
   );
 }
@@ -703,3 +706,26 @@ function MyDeeds({ game, me, onPick, onManage }: { game: GameView; me: string; o
     </div>
   );
 }
+
+/**
+ * True once a finished game's results may cover the board: after the final
+ * move and its cutscenes (bankruptcy, then the winner's podium) have played,
+ * plus a breath. A game that was already over when the screen opened (a
+ * reload) shows them at once; a stuck scene can't hold them back for long.
+ */
+function useEndReady(over: boolean): boolean {
+  const busy = useSceneBusy();
+  const cut = useCutsceneOverlay();
+  const [ready, setReady] = useState(over);
+  const since = useRef(0);
+  useEffect(() => {
+    if (!over) { setReady(false); since.current = 0; return; }
+    if (ready) return;
+    if (!since.current) since.current = performance.now();
+    const left = Math.max(0, 16_000 - (performance.now() - since.current));
+    const t = setTimeout(() => setReady(true), !busy && !cut ? Math.min(900, left) : left);
+    return () => clearTimeout(t);
+  }, [over, busy, cut, ready]);
+  return over && ready;
+}
+
