@@ -5,6 +5,7 @@ import { BANTER_QUIET_MS, BotBanter, PokeTracker, REACTION_BURST, REACTION_EVERY
 import { Game } from '../src/engine/game.ts';
 import { POKE_AFTER_MS } from '../../shared/types.ts';
 import { resolveTheme } from '../../shared/themes.ts';
+import { SEASON_THEME_ID, themeAvailable } from '../../shared/season.ts';
 import { scripted } from './helpers.ts';
 
 const hooks = (): RoomHooks & { finished: number } => {
@@ -198,7 +199,7 @@ test('rematch: host only, after the game; keeps settings, bots and present human
   assert.equal(r.seat('b')!.character, before.character, 'seats keep their character and colour');
   assert.equal(r.seat('b')!.color, before.color);
   assert.equal(r.mapId, 'speed');
-  assert.equal(r.themeId, 'tptv');
+  assert.equal(r.themeId, themeAvailable('tptv') ? 'tptv' : SEASON_THEME_ID);
   assert.equal(r.rules.startingCash, 777);
   assert.deepEqual(r.style, style);
   assert.throws(() => r.rematch('a', false, () => true), /not over/);

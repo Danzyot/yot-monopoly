@@ -225,6 +225,48 @@
 @keyframes ct-burst { from { transform: translate(-50%, -50%) scale(0.3); opacity: 1; } to { transform: translate(-50%, -50%) scale(1.4); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .ct-fly, .ct-flip, .ct-burst { animation-duration: 1ms !important; } }
 
+/* ---- the 3D table (cards/three): the scene fills the stage, the HUD is pinned over it ---- */
+.ct.three .ct-stage { overflow: hidden; border-radius: 0 0 18px 18px; }
+.ct.three .ct-stage > div:first-child:not(.ct-felt) { position: absolute !important; inset: 0; }
+.ct.three .ct-canvas { display: block; }
+/* A pinned chip stands on its anchor (just over the figure's head), so the figure shows under it. */
+.ct-seat.pinned { left: 0; top: 0; visibility: hidden; transform: translate(-50%, calc(-100% - 4px)); transform-origin: 50% 100%; transition: box-shadow 0.2s; }
+.ct-seat.pinned[style*="left"] { visibility: visible; }
+.ct-seat.pinned.turn { transform: translate(-50%, calc(-100% - 4px)) scale(1.06); }
+.ct.three.wide .ct-seat { width: auto; min-width: 108px; max-width: 176px; padding: 6px 10px 5px; background: rgba(16, 8, 46, 0.6); backdrop-filter: blur(2px); }
+.ct.three.wide .ct-seat-name { white-space: nowrap; }
+.ct.three.wide .ct-mini-fan { display: none; }
+.ct.three.wide .ct-seat .ct-ava-badge { width: 34px !important; height: 34px !important; font-size: 17px !important; }
+.ct.three.wide .ct-seat .ct-ring { inset: -5px; width: calc(100% + 10px); height: calc(100% + 10px); }
+.ct.three.wide .ct-seat .ct-ring circle { stroke-width: 9; }
+.ct-color-chip.pinned { left: 0; top: 0; bottom: auto; transform: translate(-50%, -50%); visibility: hidden; display: flex; flex-direction: column; align-items: center; line-height: 1.1; padding: 4px 14px 5px; z-index: 3; }
+.ct-color-chip.pinned[style*="left"] { visibility: visible; }
+.ct-color-chip.pinned.hide { display: none; }
+.ct-color-chip small { font: 700 10.5px var(--font); opacity: 0.85; letter-spacing: 0; }
+.ct-color-chip.yellow small { color: #4a2c00; }
+.ct.three .ct-flash[data-at] { left: 0; top: 0; }
+.ct-flash.wild { font-size: 26px; border-width: 3px; }
+.ct-flash.wild.red { background: #c0262d; border-color: #ff9a9a; }
+.ct-flash.wild.yellow { background: #f7b500; color: #4a2c00; text-shadow: none; border-color: #fff4c2; }
+.ct-flash.wild.green { background: #159657; border-color: #9af0c4; }
+.ct-flash.wild.blue { background: #1f63d1; border-color: #a9c9ff; }
+.ct-flash.skip .ct-ico { font-size: 1.3em; color: #fff; }
+.ct-flash.call.big { font-size: 30px; padding: 10px 22px; border-radius: 22px; box-shadow: 0 0 0 4px rgba(255, 210, 63, 0.35), 0 10px 30px rgba(0, 0, 0, 0.5); }
+.ct.three .ct-fx { z-index: 6; }
+/* The cutscene frame (styles/cinematics.css) sits over the scene, under the HUD. */
+.ct-stage > .cine { z-index: 2; border-radius: 0 0 18px 18px; }
+/* The cut is the moment: the pinned chips step out of the picture while it plays. */
+.ct.three .ct-stage :is(.ct-seat, .ct-color-chip.pinned) { transition: opacity 0.25s ease; }
+.ct.three .ct-stage:has(> .cine:not(.leaving)) :is(.ct-seat, .ct-color-chip.pinned) { opacity: 0; pointer-events: none; }
+.ct.compact .ct-stage > .cine { --cine-bar: clamp(22px, 6vh, 48px); }
+.ct-stage > .cine .cine-title-main { font-size: clamp(30px, 6vw, 72px); }
+.ct.three .ct-top .audio-ctl { margin-right: 4px; }
+.ct.three.compact .ct-top .audio-label { display: none; }
+/* Phones: the controls take the whole bar (the code and round are in the lobby and the feed). */
+.ct.three.compact .ct-top-l { display: none; }
+.ct.three.compact .ct-top { justify-content: flex-end; }
+.ct.three.compact .ct-top-r { gap: 4px; }
+
 /* prompts */
 .ct-prompt-wrap { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 20; width: min(440px, 94%); }
 .ct-prompt {

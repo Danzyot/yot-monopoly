@@ -236,13 +236,17 @@ export function useCardsSequence(view: CardsView | null, animateFirst: boolean):
   const seq = ref.current;
   // During render, so this very render already shows the play starting.
   if (view) seq.push(view, animateFirst);
-  const [, tick] = useState(0);
+  const [ticks, tick] = useState(0);
   const frame = seq.frame();
   const next = frame?.next ?? Infinity;
+  // Re-armed after every tick too: a timer that fires before the clock has
+  // reached `next` (throttled or clamped timers, a clock that stood still)
+  // would otherwise leave the same `next` and no timer, and the table would
+  // wait on a view that may never come (the match's last play).
   useEffect(() => {
     if (!Number.isFinite(next)) return;
     const id = setTimeout(() => tick(n => n + 1), Math.max(0, next - performance.now()) + 5);
     return () => clearTimeout(id);
-  }, [next, view?.seq]);
+  }, [next, view?.seq, ticks]);
   return { frame, seq };
 }

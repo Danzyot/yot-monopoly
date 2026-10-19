@@ -55,6 +55,7 @@ export interface NewPlayer {
   character: CharacterId;
   color: string;
   outfit?: Outfit;
+  chogToken?: number;
   isBot: boolean;
 }
 

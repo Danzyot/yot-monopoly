@@ -336,3 +336,13 @@ test('store: links survive a reload from disk', () => {
   assert.equal(store.walletOwner(alice.address), 'demo_b');
   assert.deepEqual(store.getHoldings(alice.address)?.tokenIds, [1, 42]);
 });
+
+test('holders: seat gating asks the cache for the very token, never the client', () => {
+  // Bob's wallet (alice's key, relinked above) was last seen with #1 and #42.
+  assert.equal(holders.isChogHolder('demo_b'), true);
+  assert.equal(holders.holdsChog('demo_b', 1), true);
+  assert.equal(holders.holdsChog('demo_b', 42), true);
+  assert.equal(holders.holdsChog('demo_b', 2), false, 'a token the wallet does not hold');
+  assert.equal(holders.holdsChog('demo_a', 1), false, 'an account with no linked wallet');
+  assert.equal(holders.isChogHolder('demo_a'), false);
+});

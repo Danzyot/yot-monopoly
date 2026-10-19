@@ -27,10 +27,10 @@ function hasWebGL(): boolean {
 
 const HOP_S = 0.8;
 
-function Spinning({ id, color, outfit }: { id: CharacterId; color: string; outfit?: Outfit }) {
+function Spinning({ id, color, outfit, chogToken }: { id: CharacterId; color: string; outfit?: Outfit; chogToken?: number }) {
   const ref = useRef<Group>(null);
   const rig = useMemo(newRig, []);
-  const mats = useCharacterMaterials(id, color);
+  const mats = useCharacterMaterials(id, color, chogToken);
   const start = useRef<number | null>(null);
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
@@ -45,12 +45,16 @@ function Spinning({ id, color, outfit }: { id: CharacterId; color: string; outfi
   });
   return (
     <group ref={ref}>
-      <CharacterFigure id={id} mats={mats} rig={rig} outfit={outfit} />
+      <CharacterFigure id={id} mats={mats} rig={rig} outfit={outfit} chogToken={chogToken} />
     </group>
   );
 }
 
-export default function CharacterPreview({ character, color, outfit }: { character: CharacterId; color: string; outfit?: Outfit }) {
+export default function CharacterPreview({ character, color, outfit, chogToken }: {
+  character: CharacterId; color: string; outfit?: Outfit;
+  /** Chog only: a holder's own Chog Genesis token. */
+  chogToken?: number;
+}) {
   if (!hasWebGL()) {
     return <span className="char-preview-emoji" style={{ background: color }}>{getCharacter(character).emoji}</span>;
   }
@@ -64,7 +68,7 @@ export default function CharacterPreview({ character, color, outfit }: { charact
       <directionalLight position={[1.5, 2.5, 2]} intensity={2.2} />
       <directionalLight position={[-2, 1, -1.5]} intensity={0.9} color={color} />
       {/* Remount per pick/colour so the "picked!" hop replays (an outfit change only re-dresses). */}
-      <Spinning key={`${character}${color}`} id={character} color={color} outfit={outfit} />
+      <Spinning key={`${character}${color}${chogToken ?? ''}`} id={character} color={color} outfit={outfit} chogToken={chogToken} />
     </Canvas>
   );
 }

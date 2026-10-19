@@ -170,7 +170,7 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
   const markerRef = useRef<Group>(null);
   const ringRef = useRef<Mesh>(null);
   const rig = useMemo(newRig, []);
-  const mats = useCharacterMaterials(p.character, p.color);
+  const mats = useCharacterMaterials(p.character, p.color, p.chogToken);
   const tinter = useMemo(() => new Tinter(mats), [mats]);
   // Props, thrown bits and foley for the moves.
   const fx = useMemo(() => new MoveFX(), []);
@@ -416,7 +416,7 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
     <group ref={ref} position={initial}>
       <group ref={scaleRef}>
         <group ref={yawRef}>
-          <CharacterFigure id={p.character} mats={mats} rig={rig} outfit={p.outfit} />
+          <CharacterFigure id={p.character} mats={mats} rig={rig} outfit={p.outfit} chogToken={p.chogToken} />
           <primitive object={fx.fx} />
           {winner && <Crown />}
         </group>

@@ -101,3 +101,8 @@ export async function holderStatus(userId: string, refresh = false): Promise<Hol
 export function isChogHolder(userId: string): boolean {
   return walletsOf(userId).some(l => (getHoldings(l.address)?.balance ?? 0) > 0);
 }
+
+/** Whether a linked wallet of this account was last seen holding this very token (cache only; never trusts the client). */
+export function holdsChog(userId: string, tokenId: number): boolean {
+  return walletsOf(userId).some(l => getHoldings(l.address)?.tokenIds.includes(tokenId) ?? false);
+}

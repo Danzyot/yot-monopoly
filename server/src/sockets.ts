@@ -18,6 +18,7 @@ import { Registry, Room, RoomError, type Member } from './rooms.ts';
 import { recordResult } from './stats.ts';
 import { resolveRequirements } from './requirements.ts';
 import { takeSeat } from './seating.ts';
+import { holdsChog } from './wallet/holders.ts';
 import { getMap } from '../../shared/maps.ts';
 import { getTheme } from '../../shared/themes.ts';
 import { DEFAULT_TABLE_STYLE, libraryFileOf, sanitizeTableStyle } from '../../shared/tableStyles.ts';
@@ -113,6 +114,7 @@ export function attachSockets(io: Server): SocketLayer {
     onChange: room => { broadcast(room); },
     onEvent: (room, text) => logGameEvent(room.code, `${getMap(room.mapId).name} · ${room.hostName()}`, text),
     onFinished: room => finished(room),
+    holdsChog,
   });
 
   function finished(room: Room) {
@@ -374,9 +376,9 @@ export function attachSockets(io: Server): SocketLayer {
       broadcast(r);
     });
 
-    on<{ character?: CharacterId; color?: string; outfit?: unknown }>('room:seat', (p, room) => {
+    on<{ character?: CharacterId; chogToken?: unknown; color?: string; outfit?: unknown }>('room:seat', (p, room) => {
       const r = inRoom(room);
-      if (p.character) r.pickCharacter(me(), p.character);
+      if (p.character) r.pickCharacter(me(), p.character, typeof p.chogToken === 'number' ? p.chogToken : undefined);
       if (p.color) r.pickColor(me(), String(p.color));
       if (p.outfit !== undefined) r.pickOutfit(me(), p.outfit);
       broadcast(r);

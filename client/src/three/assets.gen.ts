@@ -44,6 +44,10 @@ export const ASSETS = {
     "lightmapLow": "/models/chog/room-light-1k.webp?v=2ab08c3e9c",
     "url": "/models/chog/room.glb?v=32ae4809a8"
   },
+  "chogTraits": {
+    "low": "/models/characters/chog-traits-low.glb?v=10c30b8706",
+    "url": "/models/characters/chog-traits.glb?v=99910b0318"
+  },
   "classicEnv": {
     "url": "/models/classic/room-env.webp?v=7283a87788"
   },
