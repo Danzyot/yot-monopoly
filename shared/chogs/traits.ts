@@ -5,14 +5,21 @@
 //
 // `chogLook(tokenId)` resolves the traits into render parameters. Where a
 // trait value has no 3D part yet it maps to the nearest one that does and
-// sets `fallback`, so the gaps for pass 2 are easy to list. Head, Body and
-// Accessory are pass 2: the slots are here, resolved to null for now.
+// sets `fallback`, so the gaps are easy to list. Head, Body and Accessory
+// (what it wears and holds) are in wear.ts; `chogParts` lists the nodes a look
+// is built from.
 //
 // tokens.json is one row per token: [Skin, Eyes, Mouth, Head, Body, Accessory,
 // Aura, Background, Tier, Side, Form, Base, Naked, art], `art` being the stem
 // of the token's picture on OpenSea's CDN (see chogArtUrl).
 
 import TOKENS from './tokens.json' with { type: 'json' };
+import {
+  ACCESSORY_MAP, BODY_MAP, HAT_MANE, HEAD_MAP,
+  type ChogHatShape, type ChogMane, type ChogPaint, type ChogPropId, type ChogWearShape,
+} from './wear.ts';
+
+export * from './wear.ts';
 
 export const CHOG_SUPPLY = 1969;
 export const CHOG_CONTRACT = '0xc96d31f8626c6d03fae5dcd3d61e3fb9f4a73763';
@@ -207,6 +214,8 @@ export interface ChogColors {
   c3: string;
   /** Green: the rainbow's middle stripe. */
   denim: string;
+  /** The onesie (arms and legs) under a long-sleeved outfit; otherwise the player's colour. */
+  cloth?: string;
 }
 
 export interface ChogLook {
@@ -227,10 +236,14 @@ export interface ChogLook {
   aura: { kind: ChogAuraKind; color: string } | null;
   /** The token's background colour: name tag, plinth ring, card frame, gallery stand. */
   background: string;
-  /** Pass 2 slots: resolved to null until those parts exist. */
-  head: null;
-  body: null;
-  accessory: null;
+  /** What it wears on its head (its Head, or its costume's hood), painted per value. */
+  head: { value: string; shape: ChogHatShape; paint: ChogPaint } | null;
+  /** Its outfit. */
+  body: { value: string; shape: ChogWearShape; paint: ChogPaint } | null;
+  /** What it holds in its right hand. */
+  accessory: ChogPropId | null;
+  /** How much of the mane shows under the hat (none on a skull: they are bald). */
+  mane: ChogMane;
   colors: ChogColors;
   /** Some trait fell back to the nearest existing part; `fallbacks` says which. */
   fallback: boolean;
@@ -276,6 +289,16 @@ export function chogLook(tokenId: number): ChogLook | null {
   } else if (form === 'chog' && !legendary) {
     mouth = 'normalSmile';
   }
+  // What it wears: a Head of its own, or its costume's hood (no costume comes with a Head).
+  const bodySpec = t.Body ? BODY_MAP[t.Body] : undefined;
+  if (t.Body && !bodySpec) fallbacks.push(`Body: ${t.Body}`);
+  const headSpec = t.Head ? HEAD_MAP[t.Head] : bodySpec?.hood;
+  if (t.Head && !HEAD_MAP[t.Head]) fallbacks.push(`Head: ${t.Head}`);
+  const accessory = t.Accessory ? ACCESSORY_MAP[t.Accessory] ?? null : null;
+  if (t.Accessory && !accessory) fallbacks.push(`Accessory: ${t.Accessory}`);
+  const headValue = t.Head ?? t.Body;
+  const mane: ChogMane = form === 'skull' ? 'none' : headSpec ? headSpec.mane ?? HAT_MANE[headSpec.shape] : 'full';
+  if (headSpec?.hidesMouth) mouth = null;
   const aura = t.Aura ? AURA_MAP[t.Aura] ?? null : null;
   if (t.Aura && !aura) fallbacks.push(`Aura: ${t.Aura}`);
   const background = (t.Background && BACKGROUND_COLORS[t.Background]) || (legendary ? '#f6c636' : '#eaa2f6');
@@ -295,11 +318,13 @@ export function chogLook(tokenId: number): ChogLook | null {
     mouth,
     aura,
     background,
-    head: null,
-    body: null,
-    accessory: null,
+    head: headSpec && headValue ? { value: headValue, shape: headSpec.shape, paint: headSpec.paint } : null,
+    body: bodySpec && t.Body ? { value: t.Body, shape: bodySpec.shape, paint: bodySpec.paint } : null,
+    accessory,
+    mane,
     colors: {
       ...DEFAULT_COLORS,
+      ...(bodySpec?.sleeves ? { cloth: bodySpec.sleeves } : {}),
       skin: face,
       hair: sc.mane,
       glow: eyes.laser ?? DEFAULT_COLORS.glow,
@@ -307,6 +332,24 @@ export function chogLook(tokenId: number): ChogLook | null {
     },
     fallback: fallbacks.length > 0,
     fallbacks,
+  };
+}
+
+/**
+ * The trait parts a look is built from, as node names in the traits file
+ * (models/characters/chog-traits.glb), by the rig bone they hang on.
+ * `beams`: the laser beams (off on Low, where they are the one part reaching out past the figure).
+ */
+export function chogParts(look: ChogLook, beams: boolean): { Head: string[]; Body: string[]; HandR: string[] } {
+  const head = [look.form === 'skull' ? 'chog_HeadSkull' : 'chog_HeadBare', `chog_Eyes_${look.eyes}`];
+  if (look.mane !== 'none') head.push(`chog_Hair_${look.mane}`);
+  if (look.eyes === 'laser' && beams) head.push('chog_LaserBeams');
+  if (look.mouth) head.push(`chog_Mouth_${look.mouth}`);
+  if (look.head) head.push(`chog_Hat_${look.head.shape}`);
+  return {
+    Head: head,
+    Body: look.body ? [`chog_Wear_${look.body.shape}`] : [],
+    HandR: look.accessory ? [`chog_Prop_${look.accessory}`] : [],
   };
 }
 

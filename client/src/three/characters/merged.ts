@@ -11,6 +11,8 @@
 //   atlas - every other material (hair, ink, white, denim, metal, gold, glow, c1–c3…)
 //           as one material whose colour, roughness, metalness and glow come from a
 //           tiny per-figure texture, one texel per material key
+//   paint - a token Chog's hat and outfit (material `paint`), coloured by its own
+//           painted texture through the parts' UVs (chogPaint.ts)
 //
 // The merged geometry is built once per loaded file and shared by every figure
 // of that character; each figure gets its own bones, skeleton and atlas
@@ -30,7 +32,7 @@ type V3 = [number, number, number];
 export const RIG_BONES = ['Body', 'Head', 'HandL', 'HandR', 'FootL', 'FootR', 'LidL', 'LidR'] as const;
 export type RigBone = (typeof RIG_BONES)[number];
 
-type Group = 'main' | 'skin' | 'cloth' | 'atlas';
+type Group = 'main' | 'skin' | 'cloth' | 'atlas' | 'paint';
 const OWN: Partial<Record<MatKey, Group>> = { main: 'main', skin: 'skin', cloth: 'cloth' };
 /** Materials drawn from the atlas, one texel each. */
 const ATLAS_KEYS: MatKey[] = ['accent', 'white', 'ink', 'metal', 'gold', 'glow', 'glass', 'wood', 'hair', 'denim', 'c1', 'c2', 'c3'];
@@ -47,8 +49,9 @@ export interface CharacterModel {
   hinges: Partial<Record<'LidL' | 'LidR', V3>>;
 }
 
-const keyOf = (m: Material): MatKey => (m.name.split(':')[1] ?? 'main') as MatKey;
-const groupOf = (k: MatKey): Group => OWN[k] ?? (ATLAS_KEYS.includes(k) ? 'atlas' : 'main');
+/** The material key a part was exported with (`<id>:<key>`); 'paint' is a token Chog's textured hat and outfit. */
+const keyOf = (m: Material): MatKey | 'paint' => (m.name.split(':')[1] ?? 'main') as MatKey | 'paint';
+const groupOf = (k: MatKey | 'paint'): Group => (k === 'paint' ? 'paint' : OWN[k] ?? (ATLAS_KEYS.includes(k) ? 'atlas' : 'main'));
 
 const models = new WeakMap<Object3D, CharacterModel>();
 const ORIGIN = new Vector3();
@@ -63,7 +66,7 @@ export function characterModel(scene: Object3D, cid: string, garments: string[])
 
 interface Chunk { geo: BufferGeometry; rel: Matrix4; bone: number; texel: number }
 export type Chunks = Record<Group, Chunk[]>;
-export const newChunks = (): Chunks => ({ main: [], skin: [], cloth: [], atlas: [] });
+export const newChunks = (): Chunks => ({ main: [], skin: [], cloth: [], atlas: [], paint: [] });
 
 /**
  * Add the meshes under `node` to `chunks`, bound to `bone`, in the node's own
@@ -78,7 +81,7 @@ export function collect(node: Object3D, place: Matrix4, bone: number, chunks: Ch
     if (!m.isMesh) return;
     const k = keyOf(Array.isArray(m.material) ? m.material[0] : m.material);
     const rel = new Matrix4().multiplyMatrices(inv, m.matrixWorld);
-    chunks[groupOf(k)].push({ geo: m.geometry, rel, bone, texel: Math.max(0, ATLAS_KEYS.indexOf(k)) });
+    chunks[groupOf(k)].push({ geo: m.geometry, rel, bone, texel: Math.max(0, ATLAS_KEYS.indexOf(k as MatKey)) });
   });
 }
 
@@ -86,7 +89,7 @@ export function collect(node: Object3D, place: Matrix4, bone: number, chunks: Ch
 export function mergeChunks(chunks: Chunks): MergedGeos {
   return (Object.keys(chunks) as Group[])
     .filter(g => chunks[g].length)
-    .map(group => ({ group, geo: merge(chunks[group], group === 'atlas') }));
+    .map(group => ({ group, geo: merge(chunks[group], group === 'atlas' ? 'texel' : group === 'paint' ? 'own' : null) }));
 }
 
 function build(scene: Object3D, cid: string, garments: string[]): CharacterModel {
@@ -111,8 +114,8 @@ function build(scene: Object3D, cid: string, garments: string[]): CharacterModel
 const vP = new Vector3();
 const nm = new Matrix3();
 
-/** Concatenate chunks into one geometry: position, normal, skinIndex/skinWeight (rigid), uv (atlas texel). */
-function merge(chunks: Chunk[], uvs: boolean): BufferGeometry {
+/** Concatenate chunks into one geometry: position, normal, skinIndex/skinWeight (rigid), uv (the atlas texel, or the parts' own). */
+function merge(chunks: Chunk[], uvs: 'texel' | 'own' | null): BufferGeometry {
   let nv = 0, ni = 0;
   for (const c of chunks) {
     nv += c.geo.attributes.position.count;
@@ -126,7 +129,7 @@ function merge(chunks: Chunk[], uvs: boolean): BufferGeometry {
   const idx = nv > 65535 ? new Uint32Array(ni) : new Uint16Array(ni);
   let v0 = 0, i0 = 0;
   for (const c of chunks) {
-    const p = c.geo.attributes.position, n = c.geo.attributes.normal;
+    const p = c.geo.attributes.position, n = c.geo.attributes.normal, t = c.geo.attributes.uv;
     nm.getNormalMatrix(c.rel);
     const u = (c.texel + 0.5) / ATLAS_W;
     for (let i = 0; i < p.count; i++) {
@@ -139,7 +142,8 @@ function merge(chunks: Chunk[], uvs: boolean): BufferGeometry {
       }
       si[(v0 + i) * 4] = c.bone;
       sw[(v0 + i) * 4] = 255;
-      if (uv) { uv[(v0 + i) * 2] = u; uv[(v0 + i) * 2 + 1] = 0.5; }
+      if (uv && uvs === 'own') { uv[(v0 + i) * 2] = t ? t.getX(i) : 0; uv[(v0 + i) * 2 + 1] = t ? t.getY(i) : 0; }
+      else if (uv) { uv[(v0 + i) * 2] = u; uv[(v0 + i) * 2 + 1] = 0.5; }
     }
     const index = c.geo.index;
     const count = index ? index.count : p.count;
@@ -245,21 +249,36 @@ export interface SkinnedSet {
   dispose(): void;
 }
 
-/** A figure of `model` in this figure's materials: its meshes, and bones to hang on the rig. */
-export const figureMeshes = (model: CharacterModel, mats: Mats): SkinnedSet => skinnedSet(model.geos, model.bones, mats);
+/**
+ * A figure of `model` in this figure's materials: its meshes, and bones to hang on the rig.
+ * `paint` is the material of a token Chog's painted hat and outfit (chogPaint.ts).
+ */
+export const figureMeshes = (model: CharacterModel, mats: Mats, paint?: MeshStandardMaterial | null): SkinnedSet =>
+  skinnedSet(model.geos, model.bones, mats, paint);
+
+/** A textured material follows the figure's white: jail grey (its colour) and the bankrupt fade (its opacity). */
+function followWhite(m: MeshStandardMaterial, mats: Mats) {
+  const ref = mats.white;
+  if (!m.color.equals(ref.color)) m.color.copy(ref.color);
+  if (m.transparent !== ref.transparent) { m.transparent = ref.transparent; m.needsUpdate = true; }
+  m.opacity = ref.opacity;
+  m.depthWrite = ref.depthWrite;
+}
 
 /** Skinned meshes for merged geometry in a figure's materials, with a bone per name (skinIndex order). */
-export function skinnedSet(geos: MergedGeos, names: string[], mats: Mats): SkinnedSet {
+export function skinnedSet(geos: MergedGeos, names: string[], mats: Mats, paint?: MeshStandardMaterial | null): SkinnedSet {
   const bones = names.map(name => Object.assign(new Bone(), { name }));
   const skeleton = new RigSkeleton(bones, bones.map(() => new Matrix4()));
   const atlas = geos.some(g => g.group === 'atlas') ? new Atlas(mats) : null;
   const meshes = geos.map(({ group, geo }) => {
-    const mesh = new SkinnedMesh(geo, group === 'atlas' && atlas ? atlas.material : mats[group as MatKey]);
+    const material = group === 'atlas' && atlas ? atlas.material : group === 'paint' ? paint ?? mats.white : mats[group as MatKey];
+    const mesh = new SkinnedMesh(geo, material);
     mesh.bind(skeleton, IDENTITY);
     // Bones move the parts anywhere around the figure; the mesh's own bounds would cull them wrongly.
     mesh.frustumCulled = false;
     mesh.castShadow = true;
     if (group === 'atlas' && atlas) mesh.onBeforeRender = () => atlas.sync();
+    if (group === 'paint' && paint) mesh.onBeforeRender = () => followWhite(paint, mats);
     return mesh;
   });
   return {
