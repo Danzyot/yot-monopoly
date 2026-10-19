@@ -249,8 +249,8 @@ export default function Gallery() {
     toast(`${def.emoji} You'll play as ${title}`);
     nav('/');
   };
-  /** The token's traits in a line (pass 1 renders Skin, Eyes, Mouth, Aura and Background; Head, Body and Accessory are pass 2). */
-  const traitLine = chogToken ? (t => t && [t.Skin, t.Eyes, t.Mouth, t.Aura, t.Background].filter(Boolean).join(' · '))(traitsOf(chogToken)) : '';
+  /** The token's traits in a line, as minted. */
+  const traitLine = chogToken ? (t => t && [t.Skin, t.Eyes, t.Mouth, t.Head, t.Body, t.Accessory, t.Aura, t.Background].filter(Boolean).join(' · '))(traitsOf(chogToken)) : '';
   const dress = (o: Outfit) => { setOutfit(o); saveOutfitPref(o, def.id); };
   const thumb = (c: (typeof CHARS)[number]) => {
     const k = CHARS.indexOf(c);
@@ -319,8 +319,11 @@ export default function Gallery() {
             {FEATURED.map(id => CHARS.find(c => c.id === id)!).map(thumb)}
           </div>
         </>}
-        <h2 className="gallery-sub">Outfit</h2>
-        <OutfitPicker outfit={outfit} color={color} character={def.id} onChange={dress} />
+        {/* A holder's Chog wears its own traits, not the game's outfit items. */}
+        {!chogToken && <>
+          <h2 className="gallery-sub">Outfit</h2>
+          <OutfitPicker outfit={outfit} color={color} character={def.id} onChange={dress} />
+        </>}
         <div className="outfit-colors">
           <span>Colour</span>
           <div className="gallery-colors small" role="radiogroup" aria-label="Player colour">
