@@ -1,0 +1,24 @@
+/* The home page. Its backdrop is a still of the board in its room
+   (client/public/home/, rendered from BoardScene), not a live scene: no
+   WebGL, no models to download, and the mouse wheel scrolls the page. A slow
+   drift keeps it from looking frozen; it is a compositor-only transform, so it
+   costs nothing per frame. index.html preloads the right picture for the
+   screen, so these two URLs and media queries must stay in step with it. */
+.home-still { overflow: hidden; }
+.home-still::before {
+  content: ''; position: absolute; inset: -4%;
+  background: #0b1a3e url('/home/board-1920.webp') center / cover no-repeat;
+  transform-origin: 55% 45%;
+  animation: home-drift 40s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@media (max-aspect-ratio: 4/5) {
+  .home-still::before { background-image: url('/home/board-960.webp'); }
+}
+@keyframes home-drift {
+  from { transform: scale(1) translate3d(0, 0, 0); }
+  to { transform: scale(1.06) translate3d(-1.5%, 1%, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-still::before { animation: none; }
+}

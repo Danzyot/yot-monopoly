@@ -1,16 +1,42 @@
+import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../auth.tsx';
+import { getToken } from '../api.ts';
 import { BRAND } from '../../../shared/brand.ts';
 import { Avatar } from './Avatar.tsx';
 import { profilePath } from '../community.tsx';
 import { EditTextToggle } from '../textEdit.tsx';
 
+const HEIGHT_KEY = 'yot:header-height';
+
+/** The header's height the last time it settled, if that was at about this window width. */
+function lastHeight(): number {
+  try {
+    const v = JSON.parse(localStorage.getItem(HEIGHT_KEY) ?? 'null') as { w: number; h: number } | null;
+    return v && Math.abs(v.w - window.innerWidth) < 40 ? v.h : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export default function Header() {
-  const { profile, config, openSignIn, signOut } = useAuth();
+  const { profile, config, ready, openSignIn, signOut } = useAuth();
+  // A stored sign-in is checked just after the first paint, and what it brings
+  // (the avatar, more links) can take the header onto two rows on a phone.
+  // Until it is checked the links wait and the header keeps the height it
+  // settled at last time, so the page under it does not jump a moment later.
+  const pending = !ready && !!getToken();
+  const [minHeight] = useState(lastHeight);
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!ready || !el) return;
+    try { localStorage.setItem(HEIGHT_KEY, JSON.stringify({ w: window.innerWidth, h: el.offsetHeight })); } catch { /* private mode */ }
+  }, [ready, profile, config]);
   return (
-    <header className="site-header">
+    <header className="site-header" ref={ref} style={pending && minHeight ? { minHeight } : undefined}>
       <Link to="/" className="brand"><span className="brand-hat">🎩</span> {BRAND.name}</Link>
-      <nav className="row" aria-label="Site">
+      <nav className="row" aria-label="Site" style={pending ? { visibility: 'hidden' } : undefined}>
         {/* NavLink adds aria-current="page" on the active route; .navlink.active styles it. */}
         {/* Always shown: on phones the label shrinks (see manage.css) so it never wraps or overflows. */}
         <NavLink className="navlink nav-chars" to="/characters" aria-label="Characters" title="Characters"><span className="nav-ico" aria-hidden="true">🎭</span><span className="nav-label">Characters</span></NavLink>

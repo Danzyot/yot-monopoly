@@ -14,6 +14,7 @@ import './styles/phone.css';
 import './styles/gd.css';
 import './styles/lobby.css';
 import './styles/trades.css';
+import './styles/home.css';
 import { installTooltips } from './tooltip.ts';
 
 installTooltips();
