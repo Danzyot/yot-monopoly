@@ -10,6 +10,7 @@ import './styles/ui-polish.css';
 import './styles/boards.css';
 import './styles/tooltip.css';
 import './styles/manage.css';
+import './styles/phone.css';
 import { installTooltips } from './tooltip.ts';
 
 installTooltips();

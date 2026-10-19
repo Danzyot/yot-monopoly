@@ -187,6 +187,9 @@ function DeedRow({ game, me, i, full, raising, busy, cur, run, onPick }: {
   const half = Math.floor((s.houseCost ?? 0) / 2);
   // Hint for a blocked + on a full set: the rule says why (build evenly, bank empty, cash).
   const buildNote = isProp && full && !o.mortgaged && why.build && o.houses < 5 && !raising ? why.build : null;
+  // Why − is off on a deed that has buildings (sell evenly), shown under the
+  // name: touch screens never show the button's tooltip. An empty lot needs no note.
+  const sellNote = isProp && full && o.houses > 0 && why.sell && !base ? why.sell : null;
   // The mortgage button's own reason, shown right under it when it is disabled.
   const mortWhy = raising && o.mortgaged ? null : o.mortgaged ? why.unmortgage : why.mortgage;
 
@@ -200,11 +203,12 @@ function DeedRow({ game, me, i, full, raising, busy, cur, run, onPick }: {
               : <span className="muted">{s.kind === 'railroad' ? 'Railroad' : 'Utility'}</span>}
         </div>
         {buildNote && <div className="bp-why small">{buildNote}</div>}
+        {sellNote && sellNote !== buildNote && <div id={`bp-sell-why-${i}`} className="bp-why small">{sellNote}</div>}
       </div>
       {isProp && full && (
         <div className="bp-build" role="group" aria-label={`Buildings on ${s.name}`}>
           <button className="btn tiny ghost bp-step" disabled={busy || !!why.sell} title={why.sell ?? `Sell one for ${cur(half)}`}
-            aria-label={`Sell a building on ${s.name} for ${cur(half)}`} onClick={() => run([{ type: 'sell', space: i }])}>−</button>
+            aria-describedby={sellNote ? `bp-sell-why-${i}` : undefined} aria-label={`Sell a building on ${s.name} for ${cur(half)}`} onClick={() => run([{ type: 'sell', space: i }])}>−</button>
           <Pips houses={o.houses} />
           {!raising && (
             <button className="btn tiny primary bp-step" disabled={busy || !!why.build} title={why.build ?? `Build for ${cur(s.houseCost!)}`}

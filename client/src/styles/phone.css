@@ -1,0 +1,31 @@
+/* Phones and touch screens: the deed card and the trade / manage dialogs.
+   Touch never shows a title tooltip, so disabled buttons say why in a
+   visible line, and every button is big enough for a thumb. */
+
+/* Deed card (Deed.tsx): each action with its reason underneath. */
+.deed-act { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.deed-act.wide, .deed-actions .deed-why.wide { flex-basis: 100%; }
+.deed-act .btn, .branded .deed-act .btn { width: 100%; flex: none; }
+.deed-why { font-size: 11px; line-height: 1.15; font-weight: 700; color: #5b5f6b; text-align: center; overflow-wrap: anywhere; }
+.deed-actions p.deed-why { margin: 0; }
+
+/* The ✕ was a 17px-tall glyph: a 32×32 target, with the name kept clear of it. */
+.deed-x {
+  top: 4px; right: 4px; width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px; line-height: 1; color: #111;
+}
+.deed-head:has(.deed-x) { padding-left: 40px; padding-right: 40px; }
+
+@media (max-width: 600px) {
+  /* One scroll: the dialog's. Each side's deed list no longer scrolls inside it. */
+  .tr-deeds { max-height: none; overflow: visible; }
+}
+
+@media (pointer: coarse), (max-width: 600px) {
+  /* Thumb-sized buttons in dialogs (trade +50 / +100 / +500 / Clear, Mortgage,
+     deed names), as the lobby already has. */
+  .modal button:not(.modal-x) { min-height: 36px; }
+  .tr-jail .btn { min-width: 36px; }
+  .modal .bp-name { box-sizing: border-box; min-height: 36px; padding: 8px 0; }
+  .deed-actions .btn { min-height: 36px; }
+}
