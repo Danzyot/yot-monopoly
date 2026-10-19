@@ -521,3 +521,20 @@ test('seeded bot games with every rule toggle finish and keep every invariant', 
   assert.equal(st.finished, st.games, `unfinished seeds: ${st.unfinished}`);
   assert.ok(st.trades > 0 && st.hotels > 0 && st.auctions > 0, JSON.stringify(st));
 });
+
+test('utilities: 10x only for owning every utility on the board (and there being two or more)', () => {
+  const { g } = scripted(2, {}, 'speed');
+  const ut = g.spaces.map((s, i) => (s.kind === 'utility' ? i : -1)).filter(i => i >= 0);
+  assert.equal(ut.length, 1, 'Speedway has one utility');
+  g.owned[ut[0]] = own('p0');
+  assert.equal(g.rentFor(ut[0], {}, 7), 28, 'the only utility is still 4x');
+  assert.equal(g.rentFor(ut[0], { utilityTenX: true }, 7), 70, 'the card still makes it 10x');
+
+  const c = scripted(2).g;
+  c.owned[12] = own('p0');
+  assert.equal(c.rentFor(12, {}, 7), 28);
+  c.owned[28] = own('p0');
+  assert.equal(c.rentFor(12, {}, 7), 70);
+  c.owned[28] = own('p1');
+  assert.equal(c.rentFor(12, {}, 7), 28);
+});

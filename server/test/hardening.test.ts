@@ -438,3 +438,91 @@ test('a kicked player cannot take a lobby seat again (even after a restart), but
   r.dispose();
   r2.dispose();
 });
+
+// ---- removals always go bankrupt to the bank -------------------------------------
+
+/** A started 3-seat room where 'vic' owns Park Place and Boardwalk and owes the host $25 it cannot pay. */
+function owingRoom() {
+  const r = new Room('OWING', 'host', quietHooks());
+  r.join({ id: 'host', name: 'Host', avatar: '' });
+  r.join({ id: 'vic', name: 'Victim', avatar: '' });
+  r.join({ id: 'c', name: 'Carol', avatar: '' });
+  r.configure('host', false, { rules: { turnSeconds: 0 } });
+  r.start('host', false);
+  const g = r.game!;
+  g.owned[37] = { owner: 'vic', houses: 0, mortgaged: false };
+  g.owned[39] = { owner: 'vic', houses: 0, mortgaged: false };
+  g.player('vic').cash = 10;
+  g.debts.push({ from: 'vic', to: 'host', amount: 25, reason: 'rent on Reading Railroad' });
+  return { r, g, hostCash: g.player('host').cash };
+}
+
+test('a host cannot collect an estate by kicking (or removing) a player who owes them', () => {
+  for (const how of ['kick', 'remove', 'leave'] as const) {
+    const { r, g, hostCash } = owingRoom();
+    if (how === 'kick') r.kick('host', 'vic', false);
+    else if (how === 'remove') r.remove('vic');
+    else r.leave('vic');
+    assert.equal(g.player('vic').bankrupt, true, how);
+    assert.notEqual(g.owned[37]?.owner, 'host', `${how}: no deeds for the host`);
+    assert.notEqual(g.owned[39]?.owner, 'host', `${how}: no deeds for the host`);
+    assert.equal(g.player('host').cash, hostCash, `${how}: no cash for the host`);
+    assert.equal(g.debtOf('vic'), 0, `${how}: the debt is dropped`);
+    assert.ok(g.log.some(l => l.text.includes('returns to the bank')), how);
+    r.dispose();
+  }
+});
+
+test('declaring bankruptcy yourself still pays the player you owe (official rule)', () => {
+  const { r, g, hostCash } = owingRoom();
+  r.act('vic', { type: 'bankrupt' });
+  assert.equal(g.owned[37]?.owner, 'host');
+  assert.equal(g.owned[39]?.owner, 'host');
+  assert.equal(g.player('host').cash, hostCash + 10);
+  r.dispose();
+});
+
+// ---- trade offer flooding ---------------------------------------------------------
+
+test('trade offers are rate limited, and a quick withdrawal is not logged', () => {
+  mock.timers.enable({ apis: ['Date'], now: 7_000_000 });
+  const events: string[] = [];
+  const r = new Room('OFFER', 'a', { ...quietHooks(), onEvent(_r, t) { events.push(t); } });
+  try {
+    r.join({ id: 'a', name: 'A', avatar: '' });
+    r.join({ id: 'b', name: 'B', avatar: '' });
+    r.configure('a', false, { rules: { turnSeconds: 0 } });
+    r.start('a', false);
+    const g = r.game!;
+    const offer = (to: string): Action => ({ type: 'proposeTrade', to, give: { cash: 1, spaces: [], jailCards: 0 }, get: { cash: 0, spaces: [], jailCards: 0 } });
+    const mine = () => g.trades.find(t => t.from === 'a')!.id;
+    r.act('a', offer('b'));
+    const lines = g.log.length, logged = events.length;
+    assert.throws(() => r.act('a', offer('b')), /Slow down — wait a moment before another offer/);
+    r.act('a', { type: 'rejectTrade', id: mine() });
+    assert.equal(g.log.length, lines, 'withdrawn within 5 s: no game log line');
+    assert.equal(events.length, logged, 'nor an operator log line');
+    mock.timers.tick(2_000);
+    assert.throws(() => r.act('a', offer('b')), /Slow down/);
+    assert.doesNotThrow(() => r.act('b', offer('a')), 'the limit is per player');
+    assert.throws(() => r.act('a', { type: 'proposeTrade', to: 'b', give: { cash: 1e9, spaces: [], jailCards: 0 }, get: { cash: 0, spaces: [], jailCards: 0 } }), /Slow down/);
+    mock.timers.tick(1_000);
+    r.act('a', offer('b'));
+    mock.timers.tick(5_000);
+    r.act('a', { type: 'rejectTrade', id: mine() });
+    assert.match(g.log.at(-1)!.text, /withdrew a trade offer/, 'a later withdrawal is logged');
+    // At most 10 a minute, however they are spaced.
+    for (let i = 3; i <= 10; i++) {
+      mock.timers.tick(3_000);
+      r.act('a', offer('b'));
+      r.act('a', { type: 'rejectTrade', id: mine() });
+    }
+    mock.timers.tick(3_000);
+    assert.throws(() => r.act('a', offer('b')), /Slow down/);
+    mock.timers.tick(60_000);
+    assert.doesNotThrow(() => r.act('a', offer('b')));
+  } finally {
+    r.dispose();
+    mock.timers.reset();
+  }
+});

@@ -83,6 +83,9 @@ export const HOST_GRACE_MS = 2 * 60_000;
  * nobody is at (bots and autopilot only) is ended on net worth first.
  */
 const IDLE_ROOM_MS = 30 * 60_000;
+/** Trade offers per player: at most one per TRADE_GAP_MS and TRADE_PER_MIN a minute. */
+const TRADE_GAP_MS = 3_000;
+const TRADE_PER_MIN = 10;
 /** Finished rooms linger this long so people can read the result. */
 const FINISHED_ROOM_MS = 10 * 60_000;
 /** …or longer while someone is still at the table deciding on a rematch, up to this. */
@@ -167,7 +170,7 @@ export class Room {
   private auctionTimer: NodeJS.Timeout | null = null;
   private minigameTimer: NodeJS.Timeout | null = null;
   private autopilotTimer: NodeJS.Timeout | null = null;
-  /** Turn timer, debt deadlines and the game-length limit (Game.clockDeadline). */
+  /** Turn timer, debt deadlines, the game-length and pause limits (Game.clockDeadline). */
   private clockTimer: NodeJS.Timeout | null = null;
   /** Separate from the game timers: host handover must not depend on schedule(). */
   private hostTimer: NodeJS.Timeout | null = null;
@@ -185,6 +188,8 @@ export class Room {
   private departed = new Set<string>();
   /** Players removed by the host or an operator: never seated here again (watching is fine). */
   private kicked = new Set<string>();
+  /** Per player: when their trade offers of the last minute were made (see checkOfferRate). */
+  private offerTimes = new Map<string, number[]>();
 
   constructor(readonly code: string, public hostId: string, private hooks: RoomHooks) {}
 
@@ -249,7 +254,7 @@ export class Room {
       if (this.hostId === id) this.passHost(id, 'left');
       if (this.game && !this.game.player(id).bankrupt && this.game.phase !== 'over') {
         this.hooks.onEvent(this, `${s.name} forfeited`);
-        this.act(id, { type: 'bankrupt' });
+        this.forfeit(id, false);
       }
     }
     // Gone from the table for good: a finished room must not wait on them
@@ -480,7 +485,7 @@ export class Room {
       if (this.seat(target)) this.departed.add(target);
       if (this.hostId === target) this.passHost(target, 'was removed');
       if (this.game && this.game.phase !== 'over' && !this.game.player(target).bankrupt) {
-        this.act(target, { type: 'bankrupt' }, true); // not the player acting
+        this.forfeit(target, true); // not the player acting
       }
     }
   }
@@ -564,7 +569,10 @@ export class Room {
     if (this.status === 'finished') fail('The game is over');
     // Bots and autopilot moving is no sign anyone is still here (see the sweep).
     if (!auto) this.lastActivity = Date.now();
+    const offer = a?.type === 'proposeTrade' && !auto;
+    if (offer) this.checkOfferRate(id);
     this.game.apply(id, a, { auto });
+    if (offer) this.offerTimes.set(id, [...(this.offerTimes.get(id) ?? []), Date.now()]);
     const s = this.seat(id);
     if (!auto && s?.autopilot) {
       // Acting yourself takes the seat back from autopilot.
@@ -572,6 +580,29 @@ export class Room {
       this.hooks.onEvent(this, `${s.name} took back control from autopilot`);
     }
     this.afterChange();
+  }
+
+  /**
+   * Take a player out of the running game (left, kicked, removed): always
+   * bankrupt to the bank, so a host can never collect someone's estate by
+   * removing them while they owe the host.
+   */
+  private forfeit(id: string, auto: boolean) {
+    if (!this.game) fail('The game has not started');
+    if (this.status === 'finished') fail('The game is over');
+    if (!auto) this.lastActivity = Date.now();
+    this.game.forfeit(id);
+    this.afterChange();
+  }
+
+  /** Every offer goes in the game log (and the operator log): one per TRADE_GAP_MS, TRADE_PER_MIN a minute. */
+  private checkOfferRate(id: string) {
+    const now = Date.now();
+    const recent = (this.offerTimes.get(id) ?? []).filter(t => now - t < 60_000);
+    this.offerTimes.set(id, recent);
+    if (recent.length && (now - recent[recent.length - 1] < TRADE_GAP_MS || recent.length >= TRADE_PER_MIN)) {
+      fail('Slow down — wait a moment before another offer');
+    }
   }
 
   /** Host or operator freezes every clock in the game (chat keeps working). */
@@ -671,9 +702,8 @@ export class Room {
     this.clearTimers();
     if (!g || g.phase === 'over' || this.status === 'finished') return;
     this.noteScene(g);
-    // Paused: nothing moves, not even bots, until resume() re-arms everything.
-    if (g.paused) return;
 
+    // While paused this is the pause time limit, which resumes the game.
     const clockDue = g.clockDeadline();
     if (clockDue !== null) {
       this.clockTimer = setTimeout(() => this.guarded('clock', () => {
@@ -685,6 +715,8 @@ export class Room {
         }
       }), Math.max(0, clockDue - Date.now()) + 50);
     }
+    // Paused: nothing else moves, not even bots, until the game resumes.
+    if (g.paused) return;
 
     if (g.auction) {
       const wait = Math.max(0, g.auction.endsAt - Date.now()) + 50;
