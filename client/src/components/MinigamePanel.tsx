@@ -3,16 +3,27 @@ import { resolveTheme } from '../../../shared/themes.ts';
 import {
   MINIGAME_INFO, WHEEL_SEGMENTS, cardLabel, cardRank, type MinigameMove, type MinigameView,
 } from '../../../shared/minigames.ts';
+import { SETTLE_MS } from '../../../shared/pacing.ts';
 import type { GameView, PlayerState } from '../../../shared/types.ts';
 import { act } from '../net.ts';
 import { playArcadeLose, playArcadeWin, playCountdownBeep, playRight, playTick } from '../sound.ts';
 import { toastError } from '../toast.tsx';
-import { movesFreeAt, stageView, useSceneBusy } from '../three/sequence.ts';
+import { holdUntil, movesFreeAt, reserveWalk, stageView, useSceneBusy } from '../three/sequence.ts';
 
 /** How long the client-side wheel animation runs; the server's result screen outlasts it. */
 const SPIN_MS = 4_000;
 /** How long dice tumble before they show the server's roll. */
 const TUMBLE_MS = 900;
+/**
+ * A round whose clocks started this long ago comes up even if this device is
+ * still playing the move that led here: a slow scene must not cost anyone the round.
+ */
+const LATE_MS = 300;
+
+/** Elements that Space / Enter activate themselves: the panel's shortcuts leave those keys to them. */
+const ACTIVATES = 'button, a, [role=button], [role=tab]';
+/** Elements that take every key (typing, picking): the shortcuts stay out of their way entirely. */
+const TYPES_IN = 'input, textarea, select, [contenteditable]:not([contenteditable=false])';
 
 type Kind<K extends MinigameView['kind']> = Extract<MinigameView, { kind: K }>;
 
@@ -53,8 +64,12 @@ export default function MinigamePanel({ game, me, skew }: { game: GameView; me: 
   const theme = resolveTheme(game.themeId, game.mapId);
   const [now, setNow] = useState(Date.now());
   const [busy, setBusy] = useState(false);
-  // The wheel's result waits for the wheel to stop.
-  const [revealAt, setRevealAt] = useState(0);
+  // The result waits for the show: the wheel to stop, the last dice to settle.
+  // Worked out during the render the result arrives in (keyed by stage), so not
+  // even that first render gives it away.
+  const reveal = useRef({ key: '', at: 0 });
+  /** The round whose play stage this panel has shown (its dice tumble when the result lands). */
+  const liveSeq = useRef<number | null>(null);
   const keys = useRef<((e: KeyboardEvent) => boolean) | null>(null);
   const panelKeys = useRef<((e: KeyboardEvent) => boolean) | null>(null);
   // When each timed stage was first seen, so the ring knows how full it started.
@@ -72,15 +87,14 @@ export default function MinigamePanel({ game, me, skew }: { game: GameView; me: 
     const t = setInterval(() => setNow(Date.now()), 100);
     return () => clearInterval(t);
   }, [!!mg]);
-  useEffect(() => {
-    if (mg?.stage === 'result') setRevealAt(mg.kind === 'wheel' && !reducedMotion() ? Date.now() + SPIN_MS : 0);
-  }, [stageKey]);
   // One keyboard listener for the whole panel; the live game decides what the keys do.
   useEffect(() => {
     if (!mg) return;
     const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      const t = e.target instanceof Element ? e.target : null;
+      // Typing goes to the field; Space / Enter on a focused button press that button, not a shortcut.
+      if (t && (t.closest(TYPES_IN) || (t as HTMLElement).isContentEditable)) return;
+      if (t?.closest(ACTIVATES) && (e.key === ' ' || e.key === 'Enter')) return;
       if (e.repeat) return;
       if (keys.current?.(e) || panelKeys.current?.(e)) e.preventDefault();
     };
@@ -92,12 +106,31 @@ export default function MinigamePanel({ game, me, skew }: { game: GameView; me: 
   const info = MINIGAME_INFO[mg.kind];
   const clock = game.paused ? game.paused.at : now + skew;
   if (shownSeq.current !== mg.seq) {
-    const waiting = mg.stage === 'play' && !game.paused
+    // Past the server's start (plus a breath) the clocks are running: come up even if this scene is still busy.
+    const late = mg.startsAt !== undefined && clock > mg.startsAt + LATE_MS;
+    const waiting = mg.stage === 'play' && !game.paused && !late
       && (sceneBusy || movesFreeAt() > performance.now() || (mg.startsAt !== undefined && clock < mg.startsAt));
     // (Re-rendered every 100 ms while a round is on, so it comes up on time.)
     if (waiting) return null;
     shownSeq.current = mg.seq;
   }
+  if (mg.stage === 'play') liveSeq.current = mg.seq;
+  const motion = !reducedMotion();
+  /** How long the show runs once the deciding move arrives: the wheel's spin, the last dice tumbling. */
+  const showMs = !motion ? 0 : mg.kind === 'wheel' ? SPIN_MS : mg.kind === 'diceDuel' ? TUMBLE_MS : 0;
+  if (reveal.current.key !== stageKey) {
+    // The wheel always spins up to its segment; dice tumble only for a roll that arrives while the panel is up.
+    const shows = mg.stage === 'result' && showMs > 0 && (mg.kind === 'wheel' || liveSeq.current === mg.seq);
+    reveal.current = { key: stageKey, at: shows ? Date.now() + showMs : 0 };
+    // What the round paid waits for the show too: the coins, the money pop-ups and the log line
+    // (movesFreeAt) come up as it ends (and the player cards' cash, sceneFreeAt). Nothing walks meanwhile.
+    if (shows) reserveWalk(performance.now(), Math.max(0, showMs - SETTLE_MS));
+  }
+  // The player cards render before this panel, so they take the result's cash change before the
+  // lines above run: until the deciding move arrives, keep the scene held a show ahead (and a
+  // re-render's breath, so the cash never beats the result on screen).
+  if (mg.stage === 'play' && showMs > 0) holdUntil(performance.now() + showMs + 150);
+  const revealAt = reveal.current.at;
   // Frozen at the pause while the game is paused.
   const left = mg.endsAt === null ? null : Math.max(0, Math.ceil((mg.endsAt - clock) / 1000));
   let frac: number | null = null;
@@ -157,6 +190,7 @@ export default function MinigamePanel({ game, me, skew }: { game: GameView; me: 
           <small>ARCADE{host ? <> · <b style={{ color: host.color }}>{host.name}</b> landed here</> : null}</small>
           <b className="mg-title">{info.title}</b>
         </div>
+        {mg.stage === 'play' && mg.kind === 'highLow' && left !== null && <span className="mga-hint">time's up → banked for you</span>}
         {mg.stage === 'play' && left !== null && frac !== null && <Ring left={left} frac={frac} />}
         {mg.stage === 'play' && left === null && <span className="mga-secret" title="The clock is hidden for this one">⏱ ?</span>}
       </div>
@@ -430,9 +464,11 @@ function Reaction({ mg, me, who, cur, send, keys }: Ctx & { mg: Kind<'reaction'>
   const over = mg.stage === 'result';
   const state = over ? 'done' : out ? 'out' : mg.go ? 'go' : 'wait';
   const label = { wait: 'WAIT…', go: 'TAP!', out: 'TOO EARLY', done: mg.winner ? 'DONE' : 'NO TAPS' }[state];
-  const tap = () => { if (inIt && !out && !over) send({ kind: 'tap' }); };
+  const canTap = inIt && !out && !over;
+  const tap = () => { if (canTap) send({ kind: 'tap' }); };
+  // Only a player still in the race claims the key: anyone else's Space / Enter is theirs.
   keys.current = e => {
-    if (e.key === ' ' || e.key === 'Enter') { tap(); return true; }
+    if (canTap && (e.key === ' ' || e.key === 'Enter')) { tap(); return true; }
     return false;
   };
   return (
@@ -445,7 +481,8 @@ function Reaction({ mg, me, who, cur, send, keys }: Ctx & { mg: Kind<'reaction'>
         disabled={!inIt || out || over}
         // pointerdown, not click: every millisecond counts on a phone.
         onPointerDown={e => { e.preventDefault(); tap(); }}
-        onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') e.preventDefault(); }}
+        // Focused, it is the pad's own key (the panel's shortcut stands aside for a focused button).
+        onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (!e.repeat) tap(); } }}
       >
         <span className="mga-pad-word">{label}</span>
         {inIt && state === 'wait' && <small>tapping now disqualifies you</small>}
