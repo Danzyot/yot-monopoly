@@ -1,0 +1,155 @@
+/* ==========================================================================
+   Trades: the full side-by-side offer card and the Trades dialog, the dock
+   button and Players-tab strip that open it, the new-offer notice, and the
+   autopilot banner. Loaded after index.css and ui-polish.css (see main.tsx).
+   ========================================================================== */
+
+/* ---- dock: Trades, with a badge for offers waiting on me ---- */
+.dock-btn.trades-btn { position: relative; }
+.dock-btn.trades-btn.hot { border-color: var(--good); box-shadow: 0 0 0 2px color-mix(in srgb, var(--good) 45%, transparent), 0 6px 18px rgba(0,0,0,0.35); }
+.dock-badge {
+  position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 99px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #e8433a; color: #fff; font: 400 12px/1 var(--display); box-shadow: 0 0 0 2px #fff;
+}
+.dock-badge.quiet { background: var(--panel-solid); color: var(--text); box-shadow: 0 0 0 2px var(--line); }
+/* Portrait phones: the dock is one row; Trades is the icon and its count. */
+@media (max-width: 760px) and (orientation: portrait) {
+  .social-dock .trades-btn .dock-text { display: none; }
+  .social-dock .trades-btn { padding: 0 9px; }
+}
+
+/* ---- Players tab: "N open trades · View" ---- */
+.trades-strip {
+  display: flex; align-items: center; gap: 8px; width: 100%; margin: 0 0 8px; padding: 8px 10px; cursor: pointer; text-align: left;
+  background: rgba(0, 0, 0, 0.28); color: var(--text); font: inherit; font-size: 13px;
+  border: 2px solid var(--line); border-radius: 12px;
+}
+.trades-strip.hot { border-color: var(--good); background: color-mix(in srgb, var(--good) 14%, rgba(0, 0, 0, 0.3)); }
+.trades-strip-go { font: 400 13px var(--display); color: var(--warn); }
+.trades-strip:hover .trades-strip-go { text-decoration: underline; }
+
+/* ---- side panel: the short offer card gains View and the balance ---- */
+.of-head .of-view { flex: none; }
+.of-verdict { margin: 6px 0 0; font-size: 12px; font-weight: 800; color: var(--muted); }
+.of-verdict.up { color: var(--good); }
+.of-verdict.down { color: #ffb4aa; }
+.of-chip.star { box-shadow: inset 0 0 0 1.5px #ffd23f; }
+
+/* ---- new offer notice ---- */
+.trade-ping {
+  position: absolute; left: 50%; top: 96px; transform: translateX(-50%); z-index: 11;
+  display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 24px); padding: 8px 8px 8px 14px;
+  background: var(--panel-solid); border: 2px solid var(--who, var(--good)); border-radius: 16px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55); font-weight: 800; animation: tradePingIn 0.4s cubic-bezier(.2,1.4,.4,1);
+}
+.tp-icon { font-size: 22px; }
+.tp-text { min-width: 0; }
+.tp-x { background: none; border: 0; color: var(--muted); font-size: 15px; padding: 4px 6px; cursor: pointer; }
+.tp-x:hover { color: var(--text); }
+@keyframes tradePingIn { from { opacity: 0; transform: translate(-50%, -14px) scale(0.92); } }
+@media (max-width: 760px) and (orientation: portrait) {
+  .trade-ping { top: 118px; width: max-content; font-size: 13px; gap: 8px; }
+}
+
+/* ---- the Trades dialog ---- */
+.modal.trades-center { max-width: 880px; display: flex; flex-direction: column; padding-bottom: 12px; }
+.modal.trades-center .tr-head { gap: 10px; margin-bottom: 10px; }
+.modal.trades-center .tr-head h2 { margin: 0; white-space: nowrap; }
+.tcs-list { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
+.tcs-empty { margin: 8px 0 4px; }
+.tcs-group { display: flex; flex-direction: column; gap: 10px; }
+.tcs-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.tcs-count {
+  min-width: 22px; height: 22px; padding: 0 6px; border-radius: 99px; display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(255, 255, 255, 0.12); color: var(--text); font-size: 12px;
+}
+.tcs-group.in .tcs-count { background: #e8433a; color: #fff; }
+.tcs-none { margin: 0; }
+
+/* ---- one trade, in full ---- */
+.tcard {
+  border: 2px solid var(--line); border-radius: 16px; padding: 12px; background: rgba(0, 0, 0, 0.22);
+  display: flex; flex-direction: column; gap: 10px; scroll-margin: 12px;
+}
+.tcard.in { border-color: color-mix(in srgb, var(--from) 70%, var(--line)); background: color-mix(in srgb, var(--from) 9%, rgba(0, 0, 0, 0.25)); }
+.tcard.out { border-style: dashed; }
+.tcard.focus { box-shadow: 0 0 0 3px #ffd23f, 0 10px 30px rgba(0, 0, 0, 0.4); animation: tcardFocus 1.2s ease-out 2; }
+@keyframes tcardFocus { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, #ffd23f 50%, transparent), 0 10px 30px rgba(0, 0, 0, 0.4); } }
+.tc-head { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 15px; }
+.tc-icon { font-size: 22px; }
+.tc-headline { min-width: 0; overflow-wrap: anywhere; }
+
+.tc-sides { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: stretch; }
+.tc-swap { align-self: center; font: 400 22px var(--display); color: var(--muted); }
+.tc-side {
+  display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 10px; border-radius: 12px;
+  background: rgba(0, 0, 0, 0.28); border-top: 4px solid var(--who, var(--line));
+}
+.tc-side-title { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 15px; }
+.tc-nothing { margin: 0; color: var(--muted); font-style: italic; flex: 1; }
+.tc-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.tc-deed {
+  display: flex; align-items: stretch; gap: 0; border-radius: 10px; overflow: hidden;
+  background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.tc-band { flex: 0 0 10px; background: var(--set); }
+.tc-deed.mort .tc-band { background: repeating-linear-gradient(135deg, var(--set) 0 4px, rgba(0, 0, 0, 0.55) 4px 8px); }
+.tc-deed-body { display: flex; flex-direction: column; gap: 2px; padding: 6px 9px; min-width: 0; }
+.tc-deed-name { font-size: 14px; line-height: 1.2; overflow-wrap: anywhere; }
+.tc-deed-meta { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 12px; color: var(--muted); font-weight: 700; }
+.tc-group { color: color-mix(in srgb, var(--set) 55%, var(--text)); }
+.tc-flag { align-self: flex-start; margin-top: 2px; padding: 2px 8px; border-radius: 99px; font-size: 12px; font-weight: 800; background: rgba(255, 255, 255, 0.1); }
+.tc-flag.good { background: color-mix(in srgb, #ffd23f 22%, transparent); color: #ffe27a; box-shadow: inset 0 0 0 1px #ffd23f; }
+.tc-flag.warn { background: rgba(255, 120, 100, 0.16); color: #ffb4aa; }
+.tc-flag.info { color: var(--text); }
+.tc-flag.mort { background: rgba(255, 176, 32, 0.14); color: var(--warn); }
+.tc-cash, .tc-jail { display: flex; align-items: center; gap: 6px; padding: 6px 9px; border-radius: 10px; background: rgba(255, 255, 255, 0.06); font-size: 14px; }
+.tc-cash b { color: #9dff8a; font-size: 16px; }
+.tc-worth { border-top: 1px dashed var(--line); padding-top: 6px; font-size: 13px; color: var(--muted); font-weight: 700; }
+.tc-worth b { color: var(--text); }
+
+.tc-verdict { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 2px 10px; font-weight: 800; font-size: 15px; }
+.tc-verdict.up { color: var(--good); }
+.tc-verdict.down { color: #ffb4aa; }
+.tc-verdict-note { font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.tc-problem { margin: 0; color: #ffb4aa; font-weight: 800; text-align: center; }
+.tc-note { margin: 0; color: var(--muted); font-size: 13px; text-align: center; }
+.tc-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.tcard.in .tc-actions .btn { flex: 1 1 0; min-width: 0; min-height: 48px; font-size: 17px; }
+.tcard.in .tc-actions .btn.primary { flex-grow: 1.4; }
+
+/* Phones: the two sides stack (each still says whose it is), buttons stay big. */
+@media (max-width: 640px) {
+  .modal.trades-center { padding: 14px 12px 10px; }
+  .tc-sides { grid-template-columns: 1fr; gap: 6px; }
+  .tc-swap { justify-self: center; transform: rotate(90deg); font-size: 18px; line-height: 1; }
+  .tcard { padding: 10px; }
+  .tcard.in .tc-actions .btn { font-size: 15px; padding-left: 6px; padding-right: 6px; }
+}
+
+/* ---- autopilot: "I'm back" ---- */
+.autopilot-banner {
+  /* Low, just above the action bar: it must not cover an auction, a trade or a card in the middle. */
+  position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 12;
+  display: flex; align-items: center; gap: 14px; width: min(600px, calc(100vw - 24px)); padding: 16px 18px;
+  background: var(--panel-solid); border: 3px solid var(--warn); border-radius: 18px;
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--warn) 20%, transparent), 0 24px 60px rgba(0, 0, 0, 0.6);
+  animation: apIn 0.45s cubic-bezier(.2,1.4,.4,1);
+}
+.ap-bot { font-size: 42px; line-height: 1; }
+.ap-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.ap-text b { font: 400 22px/1.1 var(--display); color: var(--warn); letter-spacing: 0.02em; }
+.ap-text span { font-size: 13.5px; color: var(--muted); font-weight: 600; }
+.ap-back { flex: none; min-height: 56px; padding: 0 22px; font-size: 20px; animation: apPulse 1.6s ease-in-out infinite; }
+@keyframes apIn { from { opacity: 0; transform: translateX(-50%) translateY(16px) scale(0.95); } }
+@keyframes apPulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 35%, transparent); } }
+@media (max-width: 640px) {
+  .autopilot-banner { bottom: 168px; flex-wrap: wrap; justify-content: center; text-align: center; gap: 8px 12px; padding: 14px; }
+  .ap-bot { font-size: 34px; }
+  .ap-text { flex-basis: 100%; }
+  .ap-back { flex: 1 1 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .autopilot-banner, .ap-back, .trade-ping, .tcard.focus { animation: none; }
+}

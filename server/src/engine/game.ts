@@ -32,7 +32,7 @@ import { AUCTION_MS, AUCTION_EXTEND_MS } from '../../../shared/pacing.ts';
 /** A debtor gets this many turn-lengths to pay before the engine settles for them. */
 export const DEBT_TURNS = 2;
 /** Consecutive turn timeouts before a player is marked away (autopilot takes over). */
-export const AFK_AFTER = 2;
+export const AFK_AFTER = 3;
 /** Turn phases that belong to the current player (the turn timer runs in these). */
 const STEP_PHASES: TurnPhase[] = ['roll', 'buy', 'done', 'choose'];
 const MAX_LOG = 250;
@@ -636,20 +636,23 @@ export class Game {
 
   /**
    * Run a player's action. `auto` marks moves the computer makes for a human
-   * (autopilot): those must not count as the player being back.
+   * (autopilot): those must not count as the player being back. Any other
+   * action does ('back' does nothing else). `away`: the room has them on
+   * autopilot (handed over by the host), so coming back is news too.
    */
-  apply(playerId: string, a: Action, opts: { auto?: boolean } = {}): void {
+  apply(playerId: string, a: Action, opts: { auto?: boolean; away?: boolean } = {}): void {
     if (!a || typeof a !== 'object' || typeof a.type !== 'string') fail('Bad action');
     if (this.phase === 'over') fail('The game is over');
     const p = this.player(playerId);
     if (p.bankrupt) fail('You are out of the game');
-    // Resigning stays possible so a player can still leave a paused table.
-    if (this.paused && a.type !== 'bankrupt') fail(`The game is paused by ${this.paused.by}`);
+    // Resigning stays possible so a player can still leave a paused table, and
+    // so does saying you are back.
+    if (this.paused && a.type !== 'bankrupt' && a.type !== 'back') fail(`The game is paused by ${this.paused.by}`);
     this.moveOpen = false; // (an action that failed half way never reached settle())
     this.dispatch(p, a);
     if (!opts.auto) {
       this.timeoutStreak[p.id] = 0;
-      if (p.afk) {
+      if (p.afk || opts.away) {
         p.afk = false;
         this.say(`${p.name} is back.`, p.id);
       }
@@ -684,6 +687,7 @@ export class Game {
       case 'rejectTrade': return this.rejectTrade(p, idArg(a.id));
       case 'minigame': return this.minigameMove(p, a.move);
       case 'choose': return this.choose(p, a.value);
+      case 'back': return; // "I'm back": apply() takes the seat back from autopilot
       default: fail('Unknown action');
     }
   }
