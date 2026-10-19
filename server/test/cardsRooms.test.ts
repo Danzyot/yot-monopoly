@@ -16,6 +16,7 @@ process.env.DEMO_MODE = '1';
 const { CardsRegistry, CardsRoom, CARDS_AUTOPILOT_GRACE_MS } = await import('../src/cards/rooms.ts');
 const { saveCardsIfDirty, restoreCardsLive, CARDS_LIVE_FILE } = await import('../src/cards/persist.ts');
 const { seeded, setHand, setTop, specs } = await import('./cardsHelpers.ts');
+const { SEASON_CHARACTERS, SEASON_BOT_NAMES } = await import('../../shared/season.ts');
 type Room = InstanceType<typeof CardsRoom>;
 
 const m = (id: string, name = id.toUpperCase()) => ({ id, name, avatar: '🙂' });
@@ -101,7 +102,15 @@ test('lobby: seats, host, rules, bots, kicks and the start', () => {
     assert.throws(() => r.join(m('c')), /removed/);
     assert.ok(r.wasKicked('c'));
 
-    assert.throws(() => r.pickCharacter('b', r.seat('a')!.character), /taken/);
+    if (SEASON_CHARACTERS.length > 1) {
+      assert.throws(() => r.pickCharacter('b', r.seat('a')!.character), /taken/);
+    } else {
+      // The Chog season: everyone is the one character, told apart by seat colour; nothing else may be picked.
+      assert.ok(r.seats.every(s => s.character === SEASON_CHARACTERS[0]), 'players and bots are the season character');
+      r.pickCharacter('b', SEASON_CHARACTERS[0]);
+      assert.throws(() => r.pickCharacter('b', 'robot'), /not available/);
+      assert.ok(r.seats.filter(s => s.isBot).every(s => SEASON_BOT_NAMES.includes(s.name)), 'bots take the season names');
+    }
     r.pickColor('b', '#c9e265');
     assert.equal(r.seat('b')!.color, '#c9e265');
 
