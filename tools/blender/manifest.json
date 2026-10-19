@@ -13,7 +13,7 @@
     "robot": "/models/characters/robot.glb?v=ee25c7f5bc",
     "snacky": "/models/characters/snacky.glb?v=33b345b63e",
     "spiky": "/models/characters/spiky.glb?v=cc7fb55013",
-    "starer": "/models/characters/starer.glb?v=69c2505708",
+    "starer": "/models/characters/starer.glb?v=afe08e4806",
     "wizard": "/models/characters/wizard.glb?v=a38863fee9"
   },
   "charactersLow": {
@@ -27,7 +27,7 @@
     "robot": "/models/characters/robot-low.glb?v=2f28a2c77f",
     "snacky": "/models/characters/snacky-low.glb?v=68de99003d",
     "spiky": "/models/characters/spiky-low.glb?v=7ca7a4389e",
-    "starer": "/models/characters/starer-low.glb?v=e3bb918ec9",
+    "starer": "/models/characters/starer-low.glb?v=70ff934b96",
     "wizard": "/models/characters/wizard-low.glb?v=7f423e2d83"
   },
   "chogEnv": {
@@ -81,9 +81,7 @@
     "url": "/models/outfits.glb?v=f4fdf32fc4",
     "varsity": "/outfits/varsity.webp?v=c3604716d4",
     "varsity-tint": "/outfits/varsity-tint.webp?v=fbe77bd03a",
-    "wawa_tee": "/outfits/wawa_tee.webp?v=c6d65642f3",
-    "yot_tee": "/outfits/yot_tee.webp?v=9124d5a408",
-    "yot_tee-tint": "/outfits/yot_tee-tint.webp?v=0eefaa071b"
+    "wawa_tee": "/outfits/wawa_tee.webp?v=c6d65642f3"
   },
   "skylineEnv": {
     "url": "/models/skyline/set-env.webp?v=5f53f04cb3"

@@ -4,8 +4,8 @@
 // tools/blender/outfits.py, and how each item sits on each character is in
 // client/src/three/characters/outfitFit.json.
 //
-// Signature items are a character's own clothes (CJ WAWA's tee and chain,
-// Yot's tee): only that character can wear them, they are what it wears by
+// Signature items are a character's own clothes (CJ WAWA's tee and chain):
+// only that character can wear them, they are what it wears by
 // default, and the game draws them from the character's own model (garment
 // nodes in models/characters/<id>.glb) instead of outfits.glb. Picking another item for the
 // slot, or nothing, takes the garment off.
@@ -49,7 +49,6 @@ export const OUTFIT_ITEMS: OutfitItemDef[] = [
   // Signature items.
   { id: 'wawa_tee', slot: 'body', name: 'WAWA tee', only: 'snacky', node: 'Top' },
   { id: 'cuban_chain', slot: 'neck', name: 'Cuban chain', only: 'snacky', node: 'Chain' },
-  { id: 'yot_tee', slot: 'body', name: 'Tee', only: 'starer', node: 'Top' },
 ];
 
 /** One item id per slot; a missing slot means nothing worn there. */

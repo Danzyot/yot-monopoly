@@ -78,18 +78,20 @@ test('outfits: bots dress themselves from the catalogue', () => {
 
 test('outfits: signature items belong to one character and are what it wears by default', () => {
   const sig = OUTFIT_ITEMS.filter(i => i.only);
-  assert.deepEqual(sig.map(i => i.id).sort(), ['cuban_chain', 'wawa_tee', 'yot_tee']);
+  assert.deepEqual(sig.map(i => i.id).sort(), ['cuban_chain', 'wawa_tee']);
   for (const i of sig) assert.ok(CHARACTERS.includes(i.only!) && i.node, `${i.id} names its character and garment`);
   assert.deepEqual(defaultOutfit('snacky'), { neck: 'cuban_chain', body: 'wawa_tee' });
-  assert.deepEqual(defaultOutfit('starer'), { body: 'yot_tee' });
+  // Yot's collar and belt are part of him, not a garment: he wears nothing by default.
+  assert.deepEqual(defaultOutfit('starer'), {});
   assert.deepEqual(defaultOutfit('robot'), {});
 
   // Parsing with a character refuses another character's own clothes.
   assert.deepEqual(parseOutfit({ body: 'wawa_tee' }, 'snacky'), { ok: true, outfit: { body: 'wawa_tee' } });
   assert.deepEqual(parseOutfit({ body: 'wawa_tee' }, 'starer'), { ok: false, error: 'That item belongs to another character' });
-  assert.deepEqual(sanitizeOutfit({ body: 'yot_tee', head: 'cap' }, 'snacky'), { head: 'cap' });
+  assert.deepEqual(sanitizeOutfit({ body: 'wawa_tee', head: 'cap' }, 'starer'), { head: 'cap' });
+  assert.deepEqual(sanitizeOutfit({ body: 'yot_tee', head: 'cap' }), { head: 'cap' }, 'a retired item is dropped');
   // Carried over to another character: foreign signatures off, empty slots take the new one's.
-  assert.deepEqual(outfitForCharacter({ head: 'cap', neck: 'cuban_chain', body: 'wawa_tee' }, 'starer'), { head: 'cap', body: 'yot_tee' });
+  assert.deepEqual(outfitForCharacter({ head: 'cap', neck: 'cuban_chain', body: 'wawa_tee' }, 'starer'), { head: 'cap' });
   assert.deepEqual(outfitForCharacter({ body: 'hoodie' }, 'snacky'), { neck: 'cuban_chain', body: 'hoodie' });
   // Bots keep their signature items on.
   for (let k = 0; k < 20; k++) {
@@ -112,7 +114,7 @@ test('outfits: seats wear their character\'s own clothes, and only that characte
   r.pickOutfit('a', { body: 'hoodie' });
   assert.deepEqual(a.outfit, { body: 'hoodie' }, 'another item (or none) replaces the signature one');
   r.pickOutfit('a', { body: 'wawa_tee', neck: 'cuban_chain' });
-  assert.throws(() => r.pickOutfit('a', { body: 'yot_tee' }), /another character/);
+  assert.throws(() => r.pickOutfit('a', { body: 'yot_tee' }), /Unknown outfit item/);
   assert.deepEqual(a.outfit, { body: 'wawa_tee', neck: 'cuban_chain' }, 'a refused pick changes nothing');
 
   // Switching character swaps the signature clothes.
@@ -123,7 +125,7 @@ test('outfits: seats wear their character\'s own clothes, and only that characte
   assert.deepEqual(a.outfit, { head: 'cap', neck: 'cuban_chain', body: 'wawa_tee' });
   r.pickCharacter('b', 'robot');
   r.pickCharacter('a', 'starer');
-  assert.deepEqual(a.outfit, { head: 'cap', body: 'yot_tee' });
+  assert.deepEqual(a.outfit, { head: 'cap' });
   assert.throws(() => r.pickOutfit('a', { neck: 'cuban_chain' }), /another character/);
 
   // Bots wear theirs.

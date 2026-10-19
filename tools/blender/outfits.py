@@ -59,7 +59,6 @@ SLOTS = {
 SIGNATURE = {
     'wawa_tee': ('snacky', 'Top', 'body'),
     'cuban_chain': ('snacky', 'Chain', 'neck'),
-    'yot_tee': ('starer', 'Top', 'body'),
 }
 SLOTS.update({k: v[2] for k, v in SIGNATURE.items()})
 GARMENT_SLOT = {'Top': 'body', 'Chain': 'neck'}

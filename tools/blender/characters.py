@@ -46,7 +46,7 @@ PART_PIVOTS = {'Body': (0, 0, 0), 'Head': (0, 0.29, 0), 'HandL': (0.11, 0.115, 0
 # draws legs live, hip to ankle, so the static ones are dropped).
 FOOT_TOKENS = ('Shoe', 'Sole', 'Toe', 'Lace', 'Boot', 'Paw', 'Tabi', 'Foot', 'Slipper', 'Tread', 'Strap', 'Cuff')
 LEG_TOKENS = ('_Leg',)
-LEG_MATS = {'snacky': 'denim', 'starer': 'denim', 'robot': 'metal', 'knight': 'metal', 'astronaut': 'white', 'pirate': 'ink', 'chef': 'c1'}
+LEG_MATS = {'snacky': 'denim', 'starer': 'skin', 'robot': 'metal', 'knight': 'metal', 'astronaut': 'white', 'pirate': 'ink', 'chef': 'c1'}
 # Garment nodes (`<id>_Top`, `<id>_Chain`): a character's own clothes, shown or
 # hidden by the game as its signature outfit items (shared/outfits.ts).
 GARMENTS = ('Top', 'Chain')

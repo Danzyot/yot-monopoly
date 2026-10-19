@@ -385,29 +385,32 @@ const snacky: Look = {
 };
 
 const starer: Look = {
-  colors: { skin: '#8b5a3c', cloth: '#8f9198', denim: '#1f2b42', c1: '#c4977a', c2: '#5a3624', c3: '#2e1a10' },
+  colors: { skin: '#8b5a3c', c1: '#c4977a', c2: '#5a3624' },
   hand: 'skin',
   foot: 'main',
   arms: { shoulder: [0.072, 0.16, 0], radius: 0.018, mat: 'skin' },
-  legs: { hip: [0.036, 0.062, 0.002], radius: 0.024, mat: 'denim' },
+  legs: { hip: [0.036, 0.062, 0.002], radius: 0.024, mat: 'skin' },
+  // Shirtless: a pale belly, a white collar and a thin black belt.
   body: m => (
     <>
-      <Part g={GEO.sphere} m={m.main} p={[0, 0.12, 0]} s={[0.08, 0.095, 0.07]} cast />
-      <Part g={GEO.sphere} m={m.denim} p={[0, 0.066, 0]} s={[0.072, 0.03, 0.058]} />
+      <Part g={GEO.sphere} m={m.skin} p={[0, 0.12, 0]} s={[0.08, 0.095, 0.07]} cast />
+      <Part g={GEO.sphere} m={m.c1} p={[0, 0.105, 0.04]} s={[0.055, 0.06, 0.035]} />
+      <Part g={GEO.cone} m={m.white} p={[-0.022, 0.19, 0.062]} r={[0, 0, PI / 2]} s={[0.018, 0.034, 0.01]} />
+      <Part g={GEO.cone} m={m.white} p={[0.022, 0.19, 0.062]} r={[0, 0, -PI / 2]} s={[0.018, 0.034, 0.01]} />
+      <Part g={GEO.torus(0.1)} m={m.ink} p={[0, 0.07, 0]} r={[PI / 2, 0, 0]} s={[0.062, 0.053, 0.062]} />
     </>
   ),
   head: m => (
     <>
-      <Part g={GEO.sphere} m={m.skin} p={[0, 0.002, 0]} s={[0.112, 0.108, 0.095]} cast />
+      <Part g={GEO.sphere} m={m.skin} p={[0, 0.012, 0]} s={[0.106, 0.138, 0.1]} cast />
       {[-1, 1].map(side => (
-        <group key={side} position={[side * 0.052, 0.034, 0.072]}>
-          <Part g={GEO.sphere} m={m.white} s={0.03} />
-          <Part g={GEO.sphere} m={m.ink} p={[0, 0, 0.027]} s={[0.009, 0.009, 0.005]} />
+        <group key={side} position={[side * 0.047, 0.034, 0.08]}>
+          <Part g={GEO.sphere} m={m.white} s={0.033} />
+          <Part g={GEO.sphere} m={m.ink} p={[0, 0, 0.026]} s={[0.016, 0.016, 0.01]} />
         </group>
       ))}
-      <Part g={GEO.cyl} m={m.skin} p={[0, 0.02, 0.09]} r={[0.25, 0, 0]} s={[0.009, 0.07, 0.009]} />
-      <Part g={GEO.sphere} m={m.c1} p={[0, -0.024, 0.1]} s={0.02} />
-      <Part g={GEO.box} m={m.c2} p={[0, -0.055, 0.088]} s={[0.1, 0.005, 0.005]} />
+      <Part g={GEO.sphere} m={m.c1} p={[0, -0.036, 0.116]} s={0.022} />
+      <Part g={GEO.torus(0.15, PI)} m={m.ink} p={[0, -0.075, 0.1]} s={0.04} />
     </>
   ),
 };
