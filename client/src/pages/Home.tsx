@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { call, useConnected, useRoomList } from '../net.ts';
 import { THEMES, resolveTheme } from '../../../shared/themes.ts';
@@ -12,6 +12,8 @@ import { requirementBadge, requirementSentence } from '../community.tsx';
 // The turning board behind the hero is three.js: it streams in after the page
 // itself, so the buttons are there before the 3D is.
 const BoardScene = lazy(() => import('../three/BoardScene.tsx'));
+/** How long after the page has loaded the backdrop starts (then at the browser's next idle moment). */
+const BACKDROP_DELAY_MS = 1000;
 const preloadEnvironment = (env: string, themeId: string) => {
   void import('../three/environments/index.tsx').then(m => m.preloadEnvironment(env as Parameters<typeof m.preloadEnvironment>[0], themeId));
 };
@@ -37,6 +39,46 @@ const DIP_MS = 900;
 function slowConnection(): boolean {
   const c = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
   return !!c && (c.saveData === true || /(^|-)(2g|3g)$/.test(c.effectiveType ?? ''));
+}
+
+/**
+ * True once the page is up and settled: a second after load, at the next idle
+ * moment. The backdrop (three.js, its models and shaders) waits for this, so
+ * a slow machine spends its first seconds on the buttons, not the 3D.
+ */
+function useAfterLoad(): boolean {
+  const [ok, setOk] = useState(false);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let idle: number | null = null;
+    const go = () => {
+      timer = setTimeout(() => {
+        if (typeof requestIdleCallback === 'function') idle = requestIdleCallback(() => setOk(true), { timeout: 2000 });
+        else setOk(true);
+      }, BACKDROP_DELAY_MS);
+    };
+    if (document.readyState === 'complete') go();
+    else window.addEventListener('load', go, { once: true });
+    return () => {
+      window.removeEventListener('load', go);
+      if (timer) clearTimeout(timer);
+      if (idle !== null) cancelIdleCallback(idle);
+    };
+  }, []);
+  return ok;
+}
+
+/** Whether `el` is on screen (true until known). */
+function useOnScreen(ref: React.RefObject<Element | null>): boolean {
+  const [on, setOn] = useState(true);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver !== 'function') return;
+    const io = new IntersectionObserver(([e]) => setOn(e.isIntersecting));
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref]);
+  return on;
 }
 
 function useDiorama(): [{ themeId: string; mapId: string }, boolean] {
@@ -91,6 +133,10 @@ export default function Home() {
 
   const live = rooms.filter(r => r.status !== 'lobby').length;
   const [scene, dim] = useDiorama();
+  const backdrop = useAfterLoad();
+  // The backdrop rests once the hero is scrolled away: the panels below cover it.
+  const hero = useRef<HTMLElement>(null);
+  const heroOnScreen = useOnScreen(hero);
   // Names come from the catalogue, so a rename there shows up here.
   const featured = FEATURED.map(id => CHARACTER_DEFS.find(c => c.id === id)).filter((c): c is CharacterDef => !!c);
   const others = CHARACTER_DEFS.filter(c => !FEATURED.includes(c.id));
@@ -98,9 +144,15 @@ export default function Home() {
   return (
     <div className="home">
       {/* A live board slowly turning behind the hero, touring every room: shows what the game is before a word is read. */}
-      <div className={`home-bg ${dim ? 'dim' : ''}`} aria-hidden><Suspense fallback={null}><BoardScene themeId={scene.themeId} mapId={scene.mapId} game={null} spin /></Suspense></div>
+      <div className={`home-bg ${dim ? 'dim' : ''}`} aria-hidden>
+        {backdrop && (
+          <Suspense fallback={null}>
+            <BoardScene themeId={scene.themeId} mapId={scene.mapId} game={null} spin ambient paused={!heroOnScreen} />
+          </Suspense>
+        )}
+      </div>
 
-      <section className="home-hero gd">
+      <section className="home-hero gd" ref={hero}>
         <h1>{BRAND.name}</h1>
         <p className="home-tag">Roll the dice. Buy it all. Bankrupt your friends!</p>
         <div className="hero-actions">

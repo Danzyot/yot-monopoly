@@ -272,6 +272,9 @@ export class MoveFX {
     this.bits.count = 0;
     for (let i = 0; i < MAX_BITS; i++) this.bits.setColorAt(i, _c.set('#ffffff'));
     this.fx.add(this.bits);
+    // In the scene (hidden) from the start, so their shaders are compiled with
+    // the rest (shaderGate.tsx); the first move that shows one moves it to the hand.
+    this.fx.add(this.holder, this.hatHolder);
   }
 
   /**

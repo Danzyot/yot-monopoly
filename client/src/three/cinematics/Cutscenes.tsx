@@ -20,7 +20,7 @@ import { poseRig } from '../characters/Figure.tsx';
 import {
   askSkip, holdPiece, jailDoor, overlayLeaving, releasePiece, setCutsceneOwnsCamera, setOverlay, takeSkip, type OverlayBeat,
 } from './store.ts';
-import { CastLoader, PieceDouble, castReady, newDouble, preloadCast, restPose } from './actors.tsx';
+import { CastLoader, CastWarmup, PieceDouble, castReady, newDouble, preloadCast, restPose } from './actors.tsx';
 import { BankruptScene, JackpotScene, JailScene, WinnerScene, type LostProp, type Run, type SceneCtx, type SceneUpdate, type Shot } from './scenes.tsx';
 import { easeInOut, seg, yawOf } from './util.ts';
 
@@ -365,6 +365,7 @@ export function Cutscenes({ game, n, enabled, low, currency, houseColor, hotelCo
   const spec = run ? SPECS[run.cue.kind] : null;
   return (
     <>
+      <CastWarmup currency={currency} />
       {run && spec?.cast && <Suspense fallback={null}><CastLoader /></Suspense>}
       {look && <PieceDouble d={dbl} character={look.character} color={look.color} />}
       {ctx && ctx.run.cue.kind === 'jail' && <JailScene key={ctx.run.seq} ctx={ctx} />}

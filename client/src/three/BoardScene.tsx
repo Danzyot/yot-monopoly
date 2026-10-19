@@ -1,7 +1,7 @@
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { OrbitControls, PerformanceMonitor } from '@react-three/drei';
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
-import { MeshPhysicalMaterial, MeshStandardMaterial, Vector3, type Group, type Mesh } from 'three';
+import { Suspense, lazy, memo, useEffect, useMemo, useRef, useState } from 'react';
+import { MeshStandardMaterial, Vector3, type DirectionalLight, type Group, type Mesh } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { boxesSidesTop } from './boxParts.ts';
@@ -12,7 +12,7 @@ import { cleanAssetUrl, getTablePreset, type TableStyle } from '../../../shared/
 import { boardTexture } from './boardTexture.ts';
 import { C, W, buildingSpots, tile, tileAt, tileWidth } from './layout.ts';
 import { Pieces, type PieceReaction } from './characters/Pieces.tsx';
-import { Environment, FLOOR, TABLE_R, envLook } from './environments/index.tsx';
+import { Environment, FLOOR, STUDIO, TABLE_R, envLook, reflectionsFor } from './environments/index.tsx';
 import { Dice } from './Dice.tsx';
 import { CameraDirector } from './CameraDirector.tsx';
 import { MoneyFX } from './MoneyFX.tsx';
@@ -29,8 +29,8 @@ const Cutscenes = lazy(() => import('./cinematics/Cutscenes.tsx').then(m => ({ d
 import { CutsceneOverlay } from './cinematics/Overlay.tsx';
 import { sequenceDebug, useSceneBusy } from './sequence.ts';
 import { fitBoardDistance, isDirectorActive, pieceObjects, type CameraMode } from './camera.ts';
-import { liteAssets, readQuality, weakDevice, type Quality } from './quality.ts';
-import { ASSETS } from './assets.gen.ts';
+import { liteAssets, noteGpu, readQuality, strongDevice, weakDevice, type Quality } from './quality.ts';
+import { ShaderGate, setupRenderer } from './shaderGate.tsx';
 import { ModelBuildings, ModelTable, WithModel, preloadModels, type BuildingSpot } from './models.tsx';
 
 // The table is in every scene; the pieces and houses only once there is a game.
@@ -106,10 +106,14 @@ function Board({ theme, customLogo, onPick, onHover }: {
 const RIM = 0.13;
 const RIM_UP = 0.035;
 
-/** A lacquered rim round the board's edge, standing a hair proud of the printed face. */
+/**
+ * A lacquered rim round the board's edge, standing a hair proud of the printed
+ * face. Glossy standard material rather than a physical clear coat: the same
+ * at this size, and one fewer of the slowest shaders to compile.
+ */
 function BoardRim({ theme }: { theme: Theme }) {
-  const mat = useMemo(() => new MeshPhysicalMaterial({
-    color: theme.palette.rim ?? theme.palette.boardLine, roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.15,
+  const mat = useMemo(() => new MeshStandardMaterial({
+    color: theme.palette.rim ?? theme.palette.boardLine, roughness: 0.22,
   }), [theme.palette.rim, theme.palette.boardLine]);
   // The four sides as one geometry: one draw call instead of four.
   const geo = useMemo(() => {
@@ -347,21 +351,6 @@ function CameraRig({ hud, fogNear, fogFar, mode, followId }: {
   return null;
 }
 
-/** The procedural studio room: reflections for scenes without a panorama of their own. */
-const STUDIO = { url: undefined, intensity: 0.45, rotation: 0 };
-
-/** Which baked panorama a scene reflects: the set's own when it has one (tools/blender/*_env.py). */
-function reflectionsFor(env: string, themeId: string): { url?: string; intensity: number; rotation: number } {
-  // Each panorama is centred on the back of its set; three's equirect is centred on +x, hence the quarter turn.
-  const baked = (url: string, intensity: number) => ({ url, intensity, rotation: -Math.PI / 2 });
-  if (env === 'lounge' && themeId === 'classic') return baked(ASSETS.classicEnv.url, 0.6);
-  if (env === 'lounge' && themeId === 'tptv') return baked(ASSETS.tptvEnv.url, 0.6);
-  if (env === 'lounge' && themeId === 'chog') return baked(ASSETS.chogEnv.url, 0.6);
-  if (env === 'skyline') return baked(ASSETS.skylineEnv.url, 0.7);
-  if (env === 'speedway') return baked(ASSETS.speedwayEnv.url, 0.55);
-  return STUDIO;
-}
-
 /** How long Auto keeps trailing a piece after it lands, so the landing and any card are seen up close. */
 const AUTO_LINGER_MS = 2600;
 
@@ -393,13 +382,54 @@ function Spinner({ children, spin }: { children: React.ReactNode; spin?: boolean
   return <group ref={ref}>{children}</group>;
 }
 
-export default function BoardScene({ themeId, mapId, game, selected, onSelect, spin, tableStyle, reactions, me, cinematic = false, cameraMode = 'table', quality: qualityProp }: {
+/** A backdrop's frame rate. */
+const AMBIENT_FPS = 30;
+
+/**
+ * Frames for a backdrop (frameloop "demand"): about 30 a second, none while a
+ * dialog is open (it covers the board, and the dialog should get the CPU).
+ */
+function AmbientTicker() {
+  const invalidate = useThree(s => s.invalidate);
+  useEffect(() => {
+    const t = setInterval(() => { if (!document.querySelector('[aria-modal="true"]')) invalidate(); }, 1000 / AMBIENT_FPS);
+    return () => clearInterval(t);
+  }, [invalidate]);
+  return null;
+}
+
+/**
+ * Live shadows paused without taking them off the light: switching castShadow
+ * changes every lit material's shader, and relinking the lot mid-game is a
+ * multi-second stall on some machines. The shadow camera sees nothing, so the
+ * map is cleared once and then left alone, and the depth pass draws nothing.
+ */
+function useShadowPause(light: React.RefObject<DirectionalLight | null>, paused: boolean) {
+  useEffect(() => {
+    const l = light.current;
+    if (!l) return;
+    if (paused) l.shadow.camera.layers.disableAll();
+    else l.shadow.camera.layers.set(0);
+    l.shadow.autoUpdate = !paused;
+    l.shadow.needsUpdate = true;
+  }, [light, paused]);
+}
+
+function BoardScene({ themeId, mapId, game, selected, onSelect, spin, ambient = false, paused = false, tableStyle, reactions, me, cinematic = false, cameraMode = 'table', quality: qualityProp }: {
   themeId: string;
   mapId: string;
   game: GameView | null;
   selected?: number | null;
   onSelect?: (i: number | null) => void;
   spin?: boolean;
+  /**
+   * A page's backdrop (the home page): kept cheap whatever the graphics
+   * setting, so the page over it stays quick. 1× pixels, ~30 fps, the small
+   * lightmaps, no live shadows, paused while a dialog is open.
+   */
+  ambient?: boolean;
+  /** Stop drawing (the backdrop scrolled out of sight). */
+  paused?: boolean;
   /** The room's table look (preset, centre logo, backdrop); absent = the edition's. */
   tableStyle?: TableStyle | null;
   /** Emoji reactions to pop over the characters, by player id. */
@@ -433,10 +463,19 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
   const [autoLow, setLowPower] = useState(weakDevice);
   // Half-size lightmaps on Low (or Auto on a weak device). Chosen once per scene:
   // switching mid-game would blank the room while the other one loads.
-  const [lite] = useState(() => liteAssets(quality));
+  const [lite] = useState(() => ambient || liteAssets(quality));
+  // High goes to 2× only on a clearly strong machine (quality.ts strongDevice).
+  const [strong, setStrong] = useState(strongDevice);
   // Low and High override what the frame-rate monitor decided.
-  const dpr = quality === 'low' ? 1 : quality === 'high' ? Math.min(2, window.devicePixelRatio || 1) : autoDpr;
+  const dpr = ambient || quality === 'low' ? 1
+    : quality === 'high' ? Math.min(strong ? 2 : 1.5, window.devicePixelRatio || 1) : autoDpr;
   const lowPower = quality === 'low' ? true : quality === 'high' ? false : autoLow;
+  // Whether the key light casts at all follows the setting (Auto: whether the
+  // device starts light); Auto backing off later only pauses the shadows
+  // (useShadowPause), which costs no shader rebuild.
+  const castShadow = !ambient && (quality === 'low' ? false : quality === 'high' ? true : !weakDevice());
+  const keyLight = useRef<DirectionalLight>(null);
+  useShadowPause(keyLight, lowPower);
   // Stop rendering entirely while the tab is in the background.
   const [hidden, setHidden] = useState(() => document.hidden);
   useEffect(() => {
@@ -452,10 +491,15 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
 
   return (
     <>
-    <Canvas shadows dpr={dpr} frameloop={hidden ? 'never' : 'always'} camera={{ position: [0, 11.5, 10.5], fov: 45 }} data-no-edit
+    <Canvas shadows dpr={dpr} frameloop={hidden || paused ? 'never' : ambient ? 'demand' : 'always'} camera={{ position: [0, 11.5, 10.5], fov: 45 }} data-no-edit
       onPointerMissed={() => onSelect?.(null)}
-      // ?perf: expose the renderer and pieces so draw calls, triangles and positions can be read from the console.
-      onCreated={({ gl, scene }) => { if (location.search.includes('perf')) Object.assign(window, { __yotGl: gl, __yotScene: scene, __yotPieces: pieceObjects, __yotGo: celebrateGo, __yotSeq: sequenceDebug }); }}
+      onCreated={({ gl, scene }) => {
+        setupRenderer(gl);
+        noteGpu(gl.getContext());
+        setStrong(strongDevice());
+        // ?perf: expose the renderer and pieces so draw calls, triangles and positions can be read from the console.
+        if (location.search.includes('perf')) Object.assign(window, { __yotGl: gl, __yotScene: scene, __yotPieces: pieceObjects, __yotGo: celebrateGo, __yotSeq: sequenceDebug });
+      }}
       // A custom backdrop replaces the map's 3D surroundings: it is painted
       // behind a transparent canvas, keeps its aspect ratio on any screen and
       // needs no CORS, so any https image works.
@@ -468,9 +512,9 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
         : <Environment kind={env} theme={theme} lite={lite} />}
       {/* Reflections for everything lit live: the baked sets reflect themselves (reflectionsFor). */}
       <SceneEnv {...(backdrop ? STUDIO : reflectionsFor(env, theme.id))} />
-      {/* Devices that struggle drop live shadows (the baked sets keep theirs): it halves the draw calls. */}
-      <directionalLight castShadow={!lowPower} position={[6, 12, 5]} intensity={look.keyIntensity} color={look.keyColor}
-        shadow-mapSize={[2048, 2048]} shadow-camera-left={-8} shadow-camera-right={8}
+      {/* Devices that struggle drop live shadows (the baked sets keep theirs): it halves the draw calls. 2048² on High only. */}
+      <directionalLight ref={keyLight} castShadow={castShadow} position={[6, 12, 5]} intensity={look.keyIntensity} color={look.keyColor}
+        shadow-mapSize={quality === 'high' ? [2048, 2048] : [1024, 1024]} shadow-camera-left={-8} shadow-camera-right={8}
         shadow-camera-top={8} shadow-camera-bottom={-8} shadow-bias={-0.0004} />
 
       <Spinner spin={spin}>
@@ -504,10 +548,15 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
       </Spinner>
 
       {/* Auto backs off once frames run past ~24 ms (under 42 fps) for most of 1.5 s. */}
-      <PerformanceMonitor ms={250} iterations={6} bounds={hz => (hz > 100 ? [60, 100] : [42, 60])}
-        onDecline={() => { setDpr(1); setLowPower(true); }}
-        onIncline={() => setDpr(Math.min(1.5, window.devicePixelRatio || 1))}
-        flipflops={3} onFallback={() => { setDpr(1); setLowPower(true); }} />
+      {!ambient && (
+        <PerformanceMonitor ms={250} iterations={6} bounds={hz => (hz > 100 ? [60, 100] : [42, 60])}
+          onDecline={() => { setDpr(1); setLowPower(true); }}
+          onIncline={() => setDpr(Math.min(1.5, window.devicePixelRatio || 1))}
+          flipflops={3} onFallback={() => { setDpr(1); setLowPower(true); }} />
+      )}
+      {ambient && <AmbientTicker />}
+      {/* Compiles what is new before it is drawn, so no frame waits on a shader (shaderGate.tsx). */}
+      <ShaderGate />
       <CameraRig hud={!!game} fogNear={look.fogNear} fogFar={look.fogFar} mode={spin ? 'table' : liveMode} followId={game?.current} />
       {game && !spin && <CameraDirector game={game} me={me} n={theme.spaces.length} enabled={cinematic} mode={liveMode} />}
       <OrbitControls makeDefault enablePan={false} enabled={!spin}
@@ -520,3 +569,7 @@ export default function BoardScene({ themeId, mapId, game, selected, onSelect, s
     </>
   );
 }
+
+// Memoised: the game screen re-renders for chat, tabs, clocks and the like;
+// the board only needs to when its own props change.
+export default memo(BoardScene);

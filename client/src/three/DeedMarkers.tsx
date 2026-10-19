@@ -8,9 +8,9 @@
 // A deed that changes hands pops in.
 
 import { useFrame } from '@react-three/fiber';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import {
-  BoxGeometry, Color, CylinderGeometry, DoubleSide, InstancedMesh, MeshBasicMaterial, MeshPhysicalMaterial,
+  BoxGeometry, Color, CylinderGeometry, DoubleSide, InstancedMesh, MeshBasicMaterial,
   MeshStandardMaterial, Object3D, PlaneGeometry, Shape, ShapeGeometry,
 } from 'three';
 import type { GameView } from '../../../shared/types.ts';
@@ -27,7 +27,8 @@ const pennantGeo = (() => {
   s.moveTo(0, 0); s.lineTo(0.2, 0.055); s.lineTo(0, 0.11); s.closePath();
   return new ShapeGeometry(s);
 })();
-const plaqueMat = new MeshPhysicalMaterial({ color: '#ffffff', roughness: 0.3, clearcoat: 0.8, clearcoatRoughness: 0.15 });
+// Glossy standard rather than a physical clear coat: no difference at this size, and a far quicker shader to compile.
+const plaqueMat = new MeshStandardMaterial({ color: '#ffffff', roughness: 0.2 });
 const poleMat = new MeshStandardMaterial({ color: '#d9c48a', metalness: 0.8, roughness: 0.35 });
 const pennantMat = new MeshBasicMaterial({ color: '#ffffff', side: DoubleSide, toneMapped: false });
 const dimGeo = new PlaneGeometry(1, 1);
@@ -84,6 +85,12 @@ export function DeedMarkers({ game, n }: { game: GameView; n: number }) {
     dirty.current = true;
     popEnd.current = now + POP_MS;
   }, [deeds, colorOf]);
+
+  // Per-instance colours from the start, not from the first deed: a mesh that
+  // gains them changes shader, and that would be built mid-game.
+  useLayoutEffect(() => {
+    for (const m of [plaques.current, pennants.current, washes.current, frames.current]) if (m && !m.instanceColor) m.setColorAt(0, col.set('#ffffff'));
+  }, []);
 
   useFrame(({ clock }) => {
     const P = plaques.current, L = poles.current, F = pennants.current, W = washes.current, R = frames.current;

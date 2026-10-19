@@ -19,6 +19,7 @@ import {
 import { WIN_MS, clearMove, hopPose } from '../three/characters/moves.ts';
 import { MoveFX, propHandMirrored, stepSound } from '../three/characters/moveFx.ts';
 import { SceneEnv } from '../three/SceneEnv.tsx';
+import { ShaderGate, setupRenderer } from '../three/shaderGate.tsx';
 
 type Move = 'idle' | 'walk' | 'jail' | 'win' | 'bankrupt' | EmoteKind;
 
@@ -241,7 +242,8 @@ export default function Gallery() {
     <div className="gallery">
       <div className="gallery-stage">
         <Canvas dpr={[1, 2]} shadows camera={{ position: [0, 0.44, 1.45], fov: 32 }}
-          onCreated={({ camera }) => camera.lookAt(0, 0.22, 0)}>
+          onCreated={({ gl, camera }) => { setupRenderer(gl); camera.lookAt(0, 0.22, 0); }}>
+          <ShaderGate />
           <color attach="background" args={['#14347e']} />
           <SceneEnv intensity={0.8} />
           <hemisphereLight args={['#ffffff', '#1b2b55', 0.6]} />

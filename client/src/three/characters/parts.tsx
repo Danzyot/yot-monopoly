@@ -3,7 +3,7 @@
 // material set, and a <Part> shorthand so each model reads like a parts list.
 
 import {
-  BoxGeometry, ConeGeometry, CylinderGeometry, MeshPhysicalMaterial, MeshStandardMaterial, OctahedronGeometry,
+  BoxGeometry, ConeGeometry, CylinderGeometry, MeshStandardMaterial, OctahedronGeometry,
   SphereGeometry, TorusGeometry, type BufferGeometry,
 } from 'three';
 
@@ -64,10 +64,12 @@ export function makeMaterials(color: string, c: LookColors = {}): Mats {
     new MeshStandardMaterial({ color, roughness, metalness });
   const glowColor = c.glow ?? '#7ff6ff';
   return {
-    // The player's colour is glossy vinyl: a clear coat over a satin base.
-    main: new MeshPhysicalMaterial({ color, roughness: 0.42, clearcoat: 0.55, clearcoatRoughness: 0.28 }),
-    // Skin with a soft sheen so faces don't go flat under the room light.
-    skin: new MeshPhysicalMaterial({ color: c.skin ?? '#f2c9a0', roughness: 0.62, sheen: 0.4, sheenRoughness: 0.6, sheenColor: '#ffd9c2' }),
+    // The player's colour is glossy vinyl. Standard, not physical, materials
+    // throughout: a clear coat and sheen read the same at piece size, and the
+    // physical shader is the slowest of all to compile (Windows translates
+    // every shader to D3D), once per figure kind on every page load.
+    main: std(color, 0.32),
+    skin: std(c.skin ?? '#f2c9a0', 0.62),
     accent: std(c.accent ?? '#e23b3b', 0.55),
     white: std('#f7f5ef', 0.6),
     ink: std('#15151c', 0.45),
@@ -77,7 +79,7 @@ export function makeMaterials(color: string, c: LookColors = {}): Mats {
     glass: std(c.glass ?? '#1c2438', 0.12, 0.7),
     wood: std('#7a4a24', 0.8),
     hair: std(c.hair ?? '#2a1d16', 0.75),
-    cloth: new MeshPhysicalMaterial({ color: c.cloth ?? '#1d1d22', roughness: 0.9, sheen: 0.6, sheenRoughness: 0.8, sheenColor: '#8a8a9a' }),
+    cloth: std(c.cloth ?? '#1d1d22', 0.85),
     denim: std(c.denim ?? '#2f4466', 0.8),
     c1: std(c.c1 ?? '#3fa34d', 0.5),
     c2: std(c.c2 ?? '#5a1a1a', 0.6),

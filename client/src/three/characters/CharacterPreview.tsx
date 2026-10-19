@@ -10,6 +10,7 @@ import { getCharacter, type CharacterId } from '../../../../shared/characters.ts
 import type { Outfit } from '../../../../shared/outfits.ts';
 import { CharacterFigure, newRig, poseRig, useCharacterMaterials } from './Figure.tsx';
 import { SceneEnv } from '../SceneEnv.tsx';
+import { ShaderGate, setupRenderer } from '../shaderGate.tsx';
 
 let webglOk: boolean | null = null;
 function hasWebGL(): boolean {
@@ -56,7 +57,8 @@ export default function CharacterPreview({ character, color, outfit }: { charact
   return (
     <Canvas className="char-preview-canvas" dpr={[1, 2]} gl={{ alpha: true, antialias: true }}
       camera={{ position: [0, 0.34, 1.2], fov: 30 }}
-      onCreated={({ camera }) => camera.lookAt(0, 0.24, 0)}>
+      onCreated={({ gl, camera }) => { setupRenderer(gl); camera.lookAt(0, 0.24, 0); }}>
+      <ShaderGate />
       <SceneEnv intensity={0.7} />
       <hemisphereLight args={['#ffffff', '#443355', 0.8]} />
       <directionalLight position={[1.5, 2.5, 2]} intensity={2.2} />

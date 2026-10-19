@@ -12,7 +12,8 @@ const BACK = -17;   // back wall z
 const SIDE = 20;    // side walls at ±x
 const WALL_H = 16;
 
-export function Lounge({ theme }: { theme: Theme }) {
+/** `ownLights` false: no lights of its own (a baked set's stand-in, lit by the set's lights while that loads). */
+export function Lounge({ theme, ownLights = true }: { theme: Theme; ownLights?: boolean }) {
   const { accent, table, sky } = theme.palette;
   const woodFloor = mix('#6a4529', table, 0.3);
   const wall = mix('#5d4838', sky, 0.3);
@@ -127,10 +128,14 @@ export function Lounge({ theme }: { theme: Theme }) {
 
   return (
     <group>
-      <hemisphereLight args={['#ffe2bd', mix(table, '#000000', 0.4), 0.55]} />
-      {/* Floor lamp: the warm pool of light the room is built around. */}
-      <pointLight position={[13.5, FLOOR + 9.2, -9]} color="#ffb46b" intensity={320} decay={2} />
-      <pointLight position={[-8, FLOOR + 10, -13]} color={accent} intensity={60} decay={2} />
+      {ownLights && (
+        <>
+          <hemisphereLight args={['#ffe2bd', mix(table, '#000000', 0.4), 0.55]} />
+          {/* Floor lamp: the warm pool of light the room is built around. */}
+          <pointLight position={[13.5, FLOOR + 9.2, -9]} color="#ffb46b" intensity={320} decay={2} />
+          <pointLight position={[-8, FLOOR + 10, -13]} color={accent} intensity={60} decay={2} />
+        </>
+      )}
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR, 0]} receiveShadow>
         <planeGeometry args={[SIDE * 2, 60]} />

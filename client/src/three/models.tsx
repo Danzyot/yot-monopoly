@@ -6,7 +6,7 @@ import { Component, Suspense, useEffect, useMemo, useRef, type ReactNode } from 
 import { useFrame } from '@react-three/fiber';
 import { useGLTF, useTexture } from '@react-three/drei';
 import {
-  Color, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, RingGeometry, SRGBColorSpace,
+  Color, MeshBasicMaterial, MeshStandardMaterial, RingGeometry, SRGBColorSpace,
   type Material, type Mesh, type Object3D,
 } from 'three';
 import { ASSETS } from './assets.gen.ts';
@@ -18,10 +18,18 @@ class ModelErrorBoundary extends Component<{ fallback: ReactNode; children: Reac
   render() { return this.state.failed ? this.props.fallback : this.props.children; }
 }
 
-/** Show `children` (a model) once loaded; `fallback` until then and for good if it fails. */
-export function WithModel({ fallback, children }: { fallback: ReactNode; children: ReactNode }) {
+/**
+ * Show `children` (a model) once loaded; `fallback` until then, and `failed`
+ * (by default the same) for good if it fails. `lights` stay up from the start,
+ * over the stand-in and the model alike, and go only if the model fails: a
+ * light coming or going mid-scene changes the shader of every lit material.
+ */
+export function WithModel({ fallback, failed = fallback, lights, children }: {
+  fallback: ReactNode; failed?: ReactNode; lights?: ReactNode; children: ReactNode;
+}) {
   return (
-    <ModelErrorBoundary fallback={fallback}>
+    <ModelErrorBoundary fallback={failed}>
+      {lights}
       <Suspense fallback={fallback}>{children}</Suspense>
     </ModelErrorBoundary>
   );
@@ -126,13 +134,14 @@ export function ModelBuildings({ spots, house, hotel }: { spots: BuildingSpot[];
       for (const m of meshes(root)) {
         m.castShadow = true;
         m.receiveShadow = true;
-        // Glossy moulded plastic, like the real pieces, tinted to the edition.
+        // Glossy moulded plastic, like the real pieces, tinted to the edition
+        // (standard, not a physical clear coat: the same at this size, and a
+        // much quicker shader to compile).
         const tint = (mat: Material) => {
           const src = mat as MeshStandardMaterial;
           if (src.name === 'BuildingGlass') return src.clone();
-          const c = new MeshPhysicalMaterial({
-            name: src.name, color: src.color, roughness: Math.min(src.roughness, 0.4), metalness: 0,
-            clearcoat: 0.7, clearcoatRoughness: 0.2,
+          const c = new MeshStandardMaterial({
+            name: src.name, color: src.color, roughness: Math.min(src.roughness, 0.26), metalness: 0,
           });
           if (c.name === 'BuildingBody') c.color.set(color);
           if (c.name === 'BuildingRoof') c.color.set(color).multiplyScalar(0.72);
