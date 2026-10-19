@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../auth.tsx';
 import { getToken } from '../api.ts';
-import { BRAND } from '../../../shared/brand.ts';
+import { BRAND, GAMES } from '../../../shared/brand.ts';
 import { Avatar } from './Avatar.tsx';
 import { profilePath } from '../community.tsx';
 import { EditTextToggle } from '../textEdit.tsx';
 import WalletNavLink from '../wallet/WalletNavLink.tsx';
+import { pokerHref } from '../pokerLink.ts';
 
 const HEIGHT_KEY = 'yot:header-height';
 
@@ -36,13 +37,20 @@ export default function Header() {
   }, [ready, profile, config]);
   return (
     <header className="site-header" ref={ref} style={pending && minHeight ? { minHeight } : undefined}>
-      <Link to="/" className="brand"><span className="brand-hat">🎩</span> {BRAND.name}</Link>
+      <Link to="/" className="brand">
+        {/* The Chog mark (client/public/brand/, from editions/chog/logo.png); 2x for sharp screens. */}
+        <img className="brand-logo" src="/brand/chog-mark-64.webp" srcSet="/brand/chog-mark-64.webp 1x, /brand/chog-mark-128.webp 2x" alt="" width={32} height={32} decoding="async" />
+        {BRAND.name}
+      </Link>
       <nav className="row" aria-label="Site" style={pending ? { visibility: 'hidden' } : undefined}>
         {/* NavLink adds aria-current="page" on the active route; .navlink.active styles it. */}
-        {/* Always shown: on phones the label shrinks (see manage.css) so it never wraps or overflows. */}
+        {/* The games first. Always shown: on phones the label shrinks to its icon (see manage.css) so nothing wraps or overflows. */}
+        <NavLink className="navlink nav-chars nav-game nav-home" to="/" end aria-label={GAMES.monopoly.name} title={GAMES.monopoly.name}><span className="nav-ico" aria-hidden="true">🎩</span><span className="nav-label">{GAMES.monopoly.name}</span></NavLink>
+        <NavLink className="navlink nav-chars nav-game nav-cards" to={GAMES.cards.path} aria-label={GAMES.cards.name} title={GAMES.cards.name}><span className="nav-ico" aria-hidden="true">🃏</span><span className="nav-label">Cards</span></NavLink>
+        {/* Poker is its own site; a signed-in player carries their sign-in across (pokerLink.ts). Same tab, like the other games. */}
+        <a className="navlink nav-chars nav-game" href={pokerHref(profile ? getToken() : null)} aria-label={GAMES.poker.name} title={GAMES.poker.name}><span className="nav-ico" aria-hidden="true">♠️</span><span className="nav-label">Poker</span></a>
         <NavLink className="navlink nav-chars" to="/characters" aria-label="Characters" title="Characters"><span className="nav-ico" aria-hidden="true">🎭</span><span className="nav-label">Characters</span></NavLink>
-        <NavLink className="navlink nav-chars nav-cards" to="/cards" aria-label="Chog Cards" title="Chog Cards"><span className="nav-ico" aria-hidden="true">🃏</span><span className="nav-label">Cards</span></NavLink>
-        {config.features.leaderboard && <NavLink className="navlink" to="/leaderboard">Leaderboard</NavLink>}
+        {config.features.leaderboard && <NavLink className="navlink nav-chars" to="/leaderboard" aria-label="Leaderboard" title="Leaderboard"><span className="nav-ico" aria-hidden="true">🏆</span><span className="nav-label">Leaderboard</span></NavLink>}
         {config.inviteUrl && <a className="navlink" href={config.inviteUrl} target="_blank" rel="noreferrer">Discord</a>}
         {profile?.isAdmin && <Link className="navlink accent" to="/admin">Dashboard</Link>}
         {profile && config.features.leaderboard && <NavLink className="navlink hide-sm" to={profilePath(profile.id)}>My profile</NavLink>}

@@ -41,6 +41,7 @@ import { canBuildAnywhere, debtOf, hasFullSet, ownedBy, raisable } from '../game
 import { useSocial, useSystemLines } from '../social.ts';
 import { useNotifyPref, useTurnAlerts } from '../turnAlerts.ts';
 import type { ReactionMsg } from '../../../shared/types.ts';
+import { GAMES } from '../../../shared/brand.ts';
 
 export default function GameScreen({ room, game, me, chat, skew }: {
   room: RoomView; game: GameView; me: string; chat: ChatMsg[]; skew: number;
@@ -127,7 +128,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
     const i = (CAMERA_MODES.findIndex(m => m.id === cameraMode) + 1) % CAMERA_MODES.length;
     toast(`${CAMERA_MODES[i].icon} ${CAMERA_MODES[i].label} view — ${CAMERA_MODES[i].hint}`);
   };
-  useTurnAlerts(game, me, notify, `${room.code} · Yot Monopoly`);
+  useTurnAlerts(game, me, notify, `${room.code} · ${GAMES.monopoly.name}`);
   const over = !!game.winner || room.status === 'finished';
   // The results wait for the last move and the bankruptcy/winner cutscenes to play.
   const endReady = useEndReady(over);

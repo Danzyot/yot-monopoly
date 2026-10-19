@@ -1,0 +1,85 @@
+/* Chog season: the whole site in the Chog room's colours (the CHOG edition in
+   shared/themes.ts: purple grounds, Chog-pink actions, the cream accent).
+   Everything here hangs off .season-chog on <html>, which the build puts there
+   while CHOG_SEASON (shared/season.ts) is on (vite.config.ts seasonClass) and
+   main.tsx keeps in step. Flip the flag and the GO skin's blues come back.
+   Loaded after the other stylesheets, so equal-specificity rules here win;
+   button colours use :where() so .btn.primary and friends still set their own. */
+
+.season-chog {
+  --bg: #1a0d3d;
+  --panel: rgba(43, 23, 100, 0.92);
+  --panel-solid: #2b1764;
+  --line: #7a52e0;
+  --text: #ffffff;
+  --muted: #cbbcf0;
+  --hi: #fdf6cd;
+  --accent: #d53f7c;
+  --go: #d53f7c;
+  --go-text: #ffffff;
+  --well: 20 8 48;
+  /* The Chog pink, its light and deep tones, and the cream, for the pieces below. */
+  --chog-pink: #d53f7c;
+  --chog-pink-hi: #ff8ec2;
+  --chog-pink-lo: #9e1d55;
+  --chog-cream: #fdf6cd;
+  --chog-purple: #6b3fd1;
+}
+.season-chog body {
+  background: radial-gradient(120% 70% at 50% 0%, #7a4fe0 0%, #43209a 40%, var(--bg) 100%) fixed var(--bg);
+}
+
+/* ---- buttons: purple by default, pink for the main action, cream for "gold" ---- */
+:where(.season-chog) .btn { --b: #7a4fe0; }
+:where(.season-chog) .btn.gold { --b: #fdf6cd; --t: #5a1a3c; }
+:where(.season-chog) .btn.ghost { --b: #2b1764; }
+.season-chog input:focus, .season-chog select:focus { outline-color: var(--chog-pink-hi); }
+
+/* ---- the gold chips of the GO skin turn cream with pink ink ---- */
+.season-chog .tabs button.on {
+  background: linear-gradient(180deg, #fffbe8, #f7e6b0); color: #7a1747; border-color: #c9a64a; box-shadow: 0 3px 0 #8a6a1a;
+}
+.season-chog .tag.you, .season-chog .how-n { color: #7a1747; }
+.season-chog .how-icon, .season-chog .cast-emoji {
+  background: linear-gradient(180deg, #fffbe8, #f3d9a6); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.6), 0 3px 0 #7a4a8a;
+}
+.season-chog .navlink.active { box-shadow: inset 0 -3px 0 var(--chog-pink-hi); }
+
+/* ---- header: the purple bar with a pink rule ---- */
+.season-chog .site-header {
+  background: linear-gradient(180deg, #3d2190, #2b1764);
+  border-bottom-color: var(--chog-pink);
+}
+
+/* ---- home: the backdrop's wash, the GD hero recoloured ---- */
+.season-chog .home-bg::after {
+  background: linear-gradient(180deg, rgba(43, 23, 100, 0.25) 0%, rgba(30, 14, 72, 0.62) 55%, var(--bg) 100%);
+}
+/* Cream into Chog pink, still in the thick black outline. */
+.season-chog .home-hero.gd h1 {
+  background: linear-gradient(180deg, #fffdf2 0%, #fdf6cd 34%, #ff9ac4 66%, #d53f7c 100%);
+  -webkit-background-clip: text; background-clip: text;
+}
+.season-chog .home-hero.gd .hero-cta,
+.season-chog .hub-play, .season-chog .hub-play:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ff8ec2 0%, #e9508f 48%, #c42a6a 52%, #9e1d55 100%);
+}
+/* Poker's button stands apart in the season: the Chog purple. */
+.season-chog .hub-poker .hub-play, .season-chog .hub-poker .hub-play:hover:not(:disabled) {
+  background: linear-gradient(180deg, #b38cff 0%, #7a4fe0 48%, #5a32c0 52%, #3f1f96 100%);
+}
+.season-chog .home-hero.gd .hero-join .btn,
+.season-chog .hub-join .btn, .season-chog .hub-join .btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #fffdf2 0%, #fdf6cd 48%, #f3d9a6 52%, #e2bd77 100%); color: #5a1a3c;
+}
+.season-chog .home-hero.gd .hero-join, .season-chog .hub-join {
+  background: linear-gradient(180deg, #5a32c0, #2b1764);
+}
+.season-chog .hub-live { color: var(--chog-cream); }
+
+/* The home backdrop: the Classic board in the Chog look, in its purple lounge
+   (client/public/home/chog-board-*; index.html preloads the same files). */
+.season-chog .home-still::before { background-image: url('/home/chog-board-1920.webp'); background-color: #1a0d3d; }
+@media (max-aspect-ratio: 4/5) {
+  .season-chog .home-still::before { background-image: url('/home/chog-board-960.webp'); }
+}

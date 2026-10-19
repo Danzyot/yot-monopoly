@@ -16,8 +16,15 @@ import './styles/gd.css';
 import './styles/lobby.css';
 import './styles/trades.css';
 import './styles/home.css';
+import './styles/hub.css';
+import './styles/season.css';
 import { installTooltips } from './tooltip.ts';
 import { bootContent } from './content.ts';
+import { CHOG_SEASON } from '../../shared/season.ts';
+
+// The season's colours (styles/season.css). The build already put the class on
+// <html> (vite.config.ts seasonClass); this keeps it right if the flag and the page disagree.
+document.documentElement.classList.toggle('season-chog', CHOG_SEASON);
 
 installTooltips();
 import './styles/cinematics.css';

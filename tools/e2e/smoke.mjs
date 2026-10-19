@@ -47,11 +47,11 @@ for (const map of MAPS) {
     page.on('console', m => { if (m.type() === 'error' && !/ERR_CERT|fonts\.g/.test(m.text())) errors.push(`console: ${m.text().slice(0, 200)}`); });
     try {
       await page.goto(`${BASE}/`);
-      await page.click('text=Sign In to Play');
+      await page.click('.hub-monopoly >> text=Sign in to play');
       await page.fill('input[placeholder="Your name"]', 'Smoke');
       await page.click('.modal button:has-text("Play")');
       await page.waitForSelector('text=Sign out');
-      await page.click('text=Create Game');
+      await page.click('.hub-monopoly >> text=Play Monopoly');
       await page.waitForURL(/\/r\//, { waitUntil: 'commit' });
       await page.waitForTimeout(4000);
       await page.click(`button.map-card:has-text("${map}")`);

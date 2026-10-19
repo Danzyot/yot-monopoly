@@ -1,0 +1,110 @@
+/* The Chog Games hub: the header's mark, and the three game cards under the
+   home hero (pages/Home.tsx). The cards borrow the hero's Geometry Dash look
+   (gd.css): black outlines, a drop edge, Titan One on the Play buttons. */
+
+/* ---- header: the Chog mark beside the wordmark ---- */
+.brand-logo { width: 32px; height: 32px; object-fit: contain; flex: none; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)); }
+/* With the games in it the nav can outgrow a phone (an operator's Dashboard and
+   Edit text on top); it wraps into a second right-aligned row rather than
+   running off the left edge. Header.tsx keeps the height from jumping. */
+@media (max-width: 760px) {
+  .site-header { flex-wrap: wrap; row-gap: 4px; }
+  .site-header nav { flex-wrap: wrap; justify-content: flex-end; row-gap: 4px; }
+}
+@media (max-width: 480px) {
+  .brand-logo { width: 26px; height: 26px; }
+  .site-header .brand { font-size: 15px; }
+  /* The wordmark already leads home, so the Monopoly link gives way: the signed-out
+     nav then fits one row with room to spare, whichever font it is drawn in. */
+  .nav-home { display: none; }
+}
+
+/* ---- home: hero, now just the title ---- */
+.home-hero.hub-hero { padding-bottom: 3.5vh; }
+.home-hero.hub-hero .home-tag { margin-bottom: 14px; }
+.home-hero.hub-hero .hero-howto { margin-top: 0; }
+
+/* ---- home: the game cards ---- */
+.hub { position: relative; z-index: 1; max-width: 1000px; margin: 0 auto 26px; padding: 0 16px; }
+.hub-games { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.hub-game {
+  display: flex; flex-direction: column; min-width: 0; overflow: hidden; border-radius: 20px;
+  border: 4px solid #000; box-shadow: 0 6px 0 #000, 0 16px 30px rgba(0, 0, 0, 0.35);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--panel-solid) 80%, #fff 14%), var(--panel-solid));
+}
+.hub-thumb { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; border-bottom: 3px solid #000; background: #0b1a3e; }
+.hub-text { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px 0; flex: 1; min-width: 0; }
+.hub-text h3 { margin: 0; font: 400 26px/1.1 var(--display); text-shadow: var(--outline); }
+.hub-text p { margin: 0 0 2px; font-weight: 700; font-size: 13.5px; line-height: 1.4; color: color-mix(in srgb, var(--text) 88%, transparent); }
+.hub-meta { font: 800 12px var(--font), sans-serif; color: color-mix(in srgb, var(--text) 70%, transparent); letter-spacing: 0.02em; }
+.hub-live { font: 800 13px var(--font), sans-serif; color: var(--hi); text-shadow: var(--outline); }
+.hub-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 14px 14px; }
+
+/* The Play buttons: the hero's old green button, a size down. */
+.hub-play, .hub-play:hover:not(:disabled) {
+  flex: 1 1 auto; display: inline-flex; justify-content: center; align-items: center; text-decoration: none; text-align: center;
+  font: 400 20px/1.1 'Titan One', var(--display); color: #fff; -webkit-text-stroke: 3px #000; paint-order: stroke fill; text-shadow: 0 2px 0 #000;
+  border: 3px solid #000; border-radius: 14px; padding: 10px 16px 11px; box-sizing: border-box; max-width: 100%;
+  background: linear-gradient(180deg, #b6ff5c 0%, #63e021 48%, #2fae12 52%, #1f8f08 100%);
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.45), inset 0 -4px 0 rgba(0, 0, 0, 0.25), 0 4px 0 #000;
+  transition: transform 0.12s cubic-bezier(.3, 1.8, .5, 1);
+}
+.hub-play:hover:not(:disabled) { transform: scale(1.04); }
+.hub-play:active:not(:disabled) { transform: scale(0.95) translateY(2px); box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.45), 0 1px 0 #000; }
+.hub-play:disabled { font-size: 15px; -webkit-text-stroke: 2px #000; opacity: 0.8; }
+.hub-poker .hub-play { background: linear-gradient(180deg, #ff8ec2 0%, #e9508f 48%, #c42a6a 52%, #9e1d55 100%); }
+
+/* Join by code, beside Monopoly's Play. */
+.hub-join {
+  display: flex; flex: 1 1 150px; gap: 4px; align-items: center; padding: 3px; box-sizing: border-box;
+  border: 3px solid #000; border-radius: 14px; background: linear-gradient(180deg, #2a5bd7, #1a3a9c); box-shadow: 0 4px 0 #000;
+}
+.hub-join .code-input {
+  flex: 1; width: 78px; min-width: 0; border: none; background: transparent; box-shadow: none; text-align: center; letter-spacing: 0.15em; padding: 4px 2px;
+  font: 400 16px 'Titan One', var(--display); color: #fff; -webkit-text-stroke: 1.5px #000; paint-order: stroke fill;
+}
+.hub-join .code-input::placeholder { color: rgba(255, 255, 255, 0.55); -webkit-text-stroke: 0; letter-spacing: 0.1em; }
+.hub-join .btn { padding: 5px 11px 6px; border-radius: 10px; }
+
+@media (max-width: 760px) {
+  .hub { margin-bottom: 18px; }
+  .hub-games { grid-template-columns: 1fr; gap: 10px; }
+  /* A row: the picture down the left, the words beside it, the buttons under both. */
+  .hub-game { display: grid; grid-template-columns: 116px minmax(0, 1fr); grid-template-rows: auto auto; border-radius: 18px; }
+  .hub-thumb { grid-row: 1; grid-column: 1; aspect-ratio: auto; height: 100%; min-height: 110px; border-bottom: 0; border-right: 3px solid #000; }
+  .hub-text { grid-row: 1; grid-column: 2; padding: 9px 12px 6px; gap: 3px; }
+  .hub-text h3 { font-size: 21px; }
+  .hub-text p { font-size: 12.5px; }
+  .hub-actions { grid-row: 2; grid-column: 1 / -1; padding: 8px 10px 10px; border-top: 2px solid rgba(0, 0, 0, 0.35); }
+  .hub-play { font-size: 18px; padding: 8px 14px 9px; }
+  .hub-join .code-input { width: 70px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hub-play { transition: none; }
+}
+
+/* ---- leaderboard: one tab per game ---- */
+.lb-tabs { justify-content: center; flex-wrap: wrap; gap: 8px; margin: 10px auto 12px; max-width: 640px; }
+.lb-tabs button { flex: 0 1 auto; font: 400 16px var(--display); padding: 7px 16px 8px; border-radius: 12px; }
+.lb-tab-link {
+  display: inline-flex; align-items: center; gap: 5px; padding: 7px 14px 8px; border-radius: 12px; text-decoration: none;
+  font: 400 16px var(--display); color: var(--text); text-shadow: var(--outline); opacity: 0.85;
+  background: rgb(var(--well) / 0.35); border: 2px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+.lb-tab-link:hover { opacity: 1; background: rgba(255, 255, 255, 0.1); }
+.lb-tab-link .muted { font: 700 12px var(--font), sans-serif; text-shadow: none; }
+@media (max-width: 480px) {
+  .lb-tabs button, .lb-tab-link { font-size: 14px; padding: 6px 10px 7px; }
+}
+
+/* ---- home: one star (the Chog season) gets a single centred card ---- */
+.cast-stars.solo { grid-template-columns: minmax(0, 560px); justify-content: center; }
+
+/* The season's line under the cast: holders play as their own Chog. */
+.cast-wallet { justify-content: center; }
+.cast-wallet a { color: var(--hi); font-weight: 800; }
+
+/* ---- /sso: a short message while the hand-off happens ---- */
+.sso-page { min-height: 50vh; text-align: center; max-width: 520px; }
+.sso-page h2 { margin: 0; }
+.sso-page p { margin: 0; }

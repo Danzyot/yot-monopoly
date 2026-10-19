@@ -2,7 +2,7 @@
   "name": "yot-monopoly",
   "version": "0.1.0",
   "private": true,
-  "description": "Yot Monopoly — multiplayer 3D property-trading board game with custom editions",
+  "description": "Chog Games — Monopoly, Chog Cards and Chog Poker: multiplayer browser games with the Chog crew",
   "workspaces": [
     "server",
     "client"

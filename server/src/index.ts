@@ -32,6 +32,7 @@ import { buildProfile } from './profiles.ts';
 import { devFakeDiscord, gateInfo } from './requirements.ts';
 import { buttonFlowAvailable, codeVerifyAvailable, primeVerifyChannel, verifyChannelName } from './verifycode.ts';
 import type { SiteConfig } from '../../shared/types.ts';
+import { BRAND } from '../../shared/brand.ts';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 8080);
@@ -200,7 +201,7 @@ http.on('error', e => {
   process.exit(1);
 });
 http.listen(PORT, () => {
-  console.log(`Yot Monopoly server on :${PORT}`);
+  console.log(`${BRAND.name} server on :${PORT}`);
   if (demoMode()) console.warn('⚠️  DEMO_MODE=1 — anyone can sign in with just a name. Turn it off for real events.');
   if (devFakeDiscord()) console.warn('⚠️  DEV_FAKE_DISCORD=1 — Discord requirements use a fake server (demo names decide membership).');
   if (!discordEnabled() && !demoMode()) console.warn('⚠️  No Discord app configured and DEMO_MODE is off — nobody can sign in.');

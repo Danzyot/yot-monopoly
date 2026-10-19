@@ -3,13 +3,17 @@ import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { call, useConnected, useRoomList } from '../net.ts';
 import { getToken } from '../api.ts';
-import { THEMES, resolveTheme } from '../../../shared/themes.ts';
+import { THEMES, getTheme, resolveTheme } from '../../../shared/themes.ts';
 import { MAPS, getMap } from '../../../shared/maps.ts';
-import { BRAND } from '../../../shared/brand.ts';
-import { CHARACTER_DEFS, type CharacterDef, type CharacterId } from '../../../shared/characters.ts';
+import { BRAND, GAMES } from '../../../shared/brand.ts';
+import { CARDS_MAX_PLAYERS, CARDS_MIN_PLAYERS } from '../../../shared/cards/meta.ts';
+import type { CharacterDef, CharacterId } from '../../../shared/characters.ts';
+import { CHOG_SEASON, SEASON_THEME_ID, availableCharacters, themeAvailable } from '../../../shared/season.ts';
 import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { requirementBadge, requirementSentence } from '../community.tsx';
+import { useCardsRoomList } from '../cards/net.ts';
+import { pokerHref } from '../pokerLink.ts';
 
 // The home page has no WebGL at all: the board behind the hero is a still
 // (client/public/home/, drifted by styles/home.css), so the page is up at once
@@ -20,13 +24,36 @@ const loadHowToPlay = () => import('../components/HowToPlay.tsx');
 const HowToPlay = lazy(loadHowToPlay);
 
 const STEPS: { icon: string; title: string; body: string }[] = [
-  { icon: '🎲', title: 'Create a table', body: 'Pick a board, a theme and your house rules. Sign in with just a name.' },
-  { icon: '🔗', title: 'Share the code', body: 'Friends join with the five-letter code or the invite link — phones welcome. Short on people? Bots fill in.' },
-  { icon: '🚀', title: 'Roll', body: 'Buy, build, trade and auction your way to the last player standing.' },
+  { icon: '🎮', title: 'Pick a game', body: `${GAMES.monopoly.name}, ${GAMES.cards.name} or ${GAMES.poker.name}. One sign-in works across all three.` },
+  { icon: '🔗', title: 'Share the code', body: 'Every table has a five-letter code and an invite link — phones welcome. Short on people? Bots fill in.' },
+  { icon: '🏆', title: 'Play', body: CHOG_SEASON
+    ? 'Roll, shed your hand or shove all-in, Chog against Chog. Wins against real people count on the leaderboard.'
+    : 'Roll, shed your hand or shove all-in. Wins against real people count on the leaderboard.' },
 ];
 
-/** The characters the home page puts first. */
-const FEATURED: CharacterId[] = ['chog', 'snacky', 'starer'];
+/** A board's picture: in the Chog season, the board in the Chog look (client/public/home/chog-*.webp). */
+const mapThumb = (mapId: string) => (CHOG_SEASON ? `/home/chog-${mapId}.webp` : `/maps/${mapId}.webp`);
+
+/** The game cards' one-liners: Chog-flavoured for the season (shared/season.ts). */
+const BLURBS = CHOG_SEASON ? {
+  monopoly: 'Buy, build and trade on three 3D boards, in Chog’s purple poker lounge.',
+  cards: 'Match colour, number or symbol and empty your hand before the other Chogs.',
+  poker: 'No-Limit Hold’em in the Chog room: cash tables by link, tournaments for the whole club.',
+} : {
+  monopoly: 'Buy, build and trade on three 3D boards, with the Chog crew as your pieces.',
+  cards: 'Match colour, number or symbol and shed your hand first. Fast rounds, big tables.',
+  poker: 'No-Limit Hold’em: cash tables you share by link, and tournaments for the whole club.',
+};
+
+/** The hub's "tables open now" line under a game card. */
+function liveLine(connected: boolean, open: number, playing: number): string {
+  if (!connected) return 'Connecting…';
+  if (open === 0) return 'No tables open — start one!';
+  return `${open} table${open === 1 ? '' : 's'} open now${playing ? ` · ${playing} playing` : ''}`;
+}
+
+/** The characters the home page puts first: just Chog during the Chog season. */
+const FEATURED: CharacterId[] = CHOG_SEASON ? ['chog'] : ['chog', 'snacky', 'starer'];
 
 /** The hero's "How to play" button; the same as components/HowToPlay's HowToPlayButton, without its code in the page. */
 function HowToButton({ label }: { label: string }) {
@@ -47,6 +74,7 @@ export default function Home() {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const rooms = useRoomList();
+  const cardTables = useCardsRoomList();
   const connected = useConnected();
   const canCreate = !!profile && (config.features.publicRooms || profile.isAdmin);
   // While a stored sign-in is still being checked, show the button it will most
@@ -73,51 +101,96 @@ export default function Home() {
   };
 
   const live = rooms.filter(r => r.status !== 'lobby').length;
-  // Names come from the catalogue, so a rename there shows up here.
-  const featured = FEATURED.map(id => CHARACTER_DEFS.find(c => c.id === id)).filter((c): c is CharacterDef => !!c);
-  const others = CHARACTER_DEFS.filter(c => !FEATURED.includes(c.id));
+  const cardsLive = cardTables.filter(r => r.status !== 'lobby').length;
+  // Names come from the catalogue, so a rename there shows up here. Only the
+  // characters the season lets people play are shown (just Chog while CHOG_SEASON is on).
+  const playable = availableCharacters();
+  const featured = FEATURED.map(id => playable.find(c => c.id === id)).filter((c): c is CharacterDef => !!c);
+  const others = playable.filter(c => !FEATURED.includes(c.id));
+  const looks = THEMES.filter(t => themeAvailable(t.id));
+  const castTitle = featured.length === 1 && others.length === 0 ? `Meet ${featured[0].name}` : 'Meet the characters';
 
   return (
     <div className="home">
       {/* The board in its room behind the hero, drifting slowly: shows what the game is before a word is read. */}
       <div className="home-bg home-still" aria-hidden />
 
-      <section className="home-hero gd">
+      <section className="home-hero gd hub-hero">
         <h1>{BRAND.name}</h1>
-        <p className="home-tag">Roll the dice. Buy it all. Bankrupt your friends!</p>
-        <div className="hero-actions">
-          {profile || checking ? (
-            <button className="btn primary hero-cta" disabled={busy || !connected || !canCreate} onClick={create}>
-              {canCreate || checking ? 'Create Game' : 'Room creation is operators-only right now'}
-            </button>
-          ) : (
-            <button className="btn primary hero-cta" onClick={openSignIn}>Sign In to Play</button>
-          )}
-          <form className="hero-join" onSubmit={e => { e.preventDefault(); join(code); }}>
-            <input className="code-input" value={code} maxLength={5} placeholder="CODE" aria-label="Room code"
-              autoCapitalize="characters" autoComplete="off" spellCheck={false}
-              onChange={e => setCode(e.target.value.toUpperCase())} />
-            <button className="btn gold" type="submit">Join!</button>
-          </form>
-        </div>
+        <p className="home-tag">Monopoly, cards and poker with the Chog crew.</p>
         <div className="hero-howto">
           <HowToButton label="❓ New here? How to play" />
-          <Link className="btn small ghost" to="/characters">🎭 Meet the characters</Link>
+          <Link className="btn small ghost" to="/characters">{CHOG_SEASON ? '💜' : '🎭'} {castTitle}</Link>
         </div>
-        <p className="hero-status muted small" role="status">
-          {!connected ? 'Connecting to server…'
-            : rooms.length === 0 ? 'No tables open yet — start one and invite your friends!'
-              : `${rooms.length} open table${rooms.length === 1 ? '' : 's'}${live ? ` · ${live} playing` : ''}`}
-        </p>
       </section>
 
-      {/* The cast: the two stars up front, everyone else a tap away on /characters. */}
+      {/* The hub: one card per game, with what is on right now. Monopoly's "Play"
+          is the old hero button (create a table, or sign in first); Cards has its
+          own home at /cards; Poker is its own site, reached with the sign-in in hand. */}
+      <section className="hub" aria-labelledby="hub-title">
+        <h2 id="hub-title" className="sr-only">Pick a game</h2>
+        <ul className="hub-games">
+          <li className="hub-game hub-monopoly">
+            <img className="hub-thumb" src="/home/monopoly-640.webp" alt="" width={640} height={400} decoding="async" />
+            <div className="hub-text">
+              <h3>{GAMES.monopoly.name}</h3>
+              <p>{BLURBS.monopoly}</p>
+              <span className="hub-meta">2–8 players · 45 min</span>
+              <span className="hub-live" role="status">{liveLine(connected, rooms.length, live)}</span>
+            </div>
+            <div className="hub-actions">
+              {profile || checking ? (
+                <button className="btn primary hub-play" disabled={busy || !connected || !canCreate} onClick={create}>
+                  {canCreate || checking ? `Play ${GAMES.monopoly.name}` : 'Tables are operators-only right now'}
+                </button>
+              ) : (
+                <button className="btn primary hub-play" onClick={openSignIn}>Sign in to play</button>
+              )}
+              <form className="hub-join" onSubmit={e => { e.preventDefault(); join(code); }}>
+                <input className="code-input" value={code} maxLength={5} placeholder="CODE" aria-label="Room code"
+                  autoCapitalize="characters" autoComplete="off" spellCheck={false}
+                  onChange={e => setCode(e.target.value.toUpperCase())} />
+                <button className="btn gold small" type="submit">Join</button>
+              </form>
+            </div>
+          </li>
+
+          <li className="hub-game hub-cards">
+            <img className="hub-thumb" src="/home/cards-640.webp" alt="" width={640} height={400} loading="lazy" decoding="async" />
+            <div className="hub-text">
+              <h3>{GAMES.cards.name}</h3>
+              <p>{BLURBS.cards}</p>
+              <span className="hub-meta">{CARDS_MIN_PLAYERS}–{CARDS_MAX_PLAYERS} players · 15 min</span>
+              <span className="hub-live" role="status">{liveLine(connected, cardTables.length, cardsLive)}</span>
+            </div>
+            <div className="hub-actions">
+              <Link className="btn primary hub-play" to={GAMES.cards.path}>Play Cards</Link>
+            </div>
+          </li>
+
+          <li className="hub-game hub-poker">
+            <img className="hub-thumb" src="/home/poker-640.webp" alt="" width={640} height={400} loading="lazy" decoding="async" />
+            <div className="hub-text">
+              <h3>{GAMES.poker.name}</h3>
+              <p>{BLURBS.poker}</p>
+              <span className="hub-meta">2–9 per table · cash & tournaments</span>
+              {/* One short line either way, so the card keeps its height when a stored sign-in is confirmed. */}
+              <span className="hub-live">{profile || checking ? 'You stay signed in there' : 'On its own site'}</span>
+            </div>
+            <div className="hub-actions">
+              <a className="btn primary hub-play" href={pokerHref(profile ? getToken() : null)}>Play Poker</a>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      {/* The cast: the stars up front, everyone else a tap away on /characters. */}
       <section className="cast" aria-labelledby="cast-title">
         <div className="cast-head">
-          <h2 id="cast-title">Meet the characters</h2>
-          <Link className="cast-all" to="/characters">See all characters →</Link>
+          <h2 id="cast-title">{castTitle}</h2>
+          <Link className="cast-all" to="/characters">{others.length ? 'See all characters →' : 'See them move →'}</Link>
         </div>
-        <div className="cast-stars">
+        <div className={`cast-stars${featured.length === 1 ? ' solo' : ''}`}>
           {featured.map(c => (
             <Link key={c.id} to="/characters" className="cast-star" aria-label={`${c.name}: ${c.blurb}`}>
               <span className="cast-emoji" aria-hidden>{c.emoji}</span>
@@ -125,10 +198,18 @@ export default function Home() {
             </Link>
           ))}
         </div>
-        <p className="cast-more">
-          <span className="cast-dots" aria-hidden>{others.map(c => <i key={c.id} title={c.name}>{c.emoji}</i>)}</span>
-          <Link to="/characters">+ {others.length} more to play as</Link>
-        </p>
+        {others.length > 0 && (
+          <p className="cast-more">
+            <span className="cast-dots" aria-hidden>{others.map(c => <i key={c.id} title={c.name}>{c.emoji}</i>)}</span>
+            <Link to="/characters">+ {others.length} more to play as</Link>
+          </p>
+        )}
+        {/* Holders play as their own NFT Chog, built from its traits, once their wallet is linked. */}
+        {CHOG_SEASON && (
+          <p className="cast-more cast-wallet">
+            <Link to="/wallet">Hold a Chog Genesis? Link your wallet to play as yours →</Link>
+          </p>
+        )}
       </section>
 
       <div className="home-body">
@@ -155,7 +236,7 @@ export default function Home() {
                 const open = r.status === 'lobby';
                 return (
                   <li key={r.code} className={`room-card ${r.status}`}>
-                    <img className="room-thumb" src={`/maps/${map.id}.webp`} alt="" width={84} height={58} loading="lazy" decoding="async" />
+                    <img className="room-thumb" src={mapThumb(map.id)} alt="" width={84} height={58} loading="lazy" decoding="async" />
                     <div className="room-main">
                       <div className="room-top">
                         <b className="mono room-code">{r.code}</b>
@@ -186,17 +267,17 @@ export default function Home() {
           <div className="card-grid">
             {MAPS.map(m => (
               <div key={m.id} className="info-card">
-                <img className="map-thumb" src={`/maps/${m.id}.webp`} alt="" width={320} height={200} loading="lazy" decoding="async" />
+                <img className="map-thumb" src={mapThumb(m.id)} alt="" width={320} height={200} loading="lazy" decoding="async" />
                 <b>{m.name}</b>
                 <span className="small muted">{m.description}</span>
-                <span className="info-meta">{m.spaces.length} spaces · {m.players[0]}–{m.players[1]} players · {m.look.name} look</span>
+                <span className="info-meta">{m.spaces.length} spaces · {m.players[0]}–{m.players[1]} players · {CHOG_SEASON ? `${getTheme(SEASON_THEME_ID).name} look` : `${m.look.name} look`}</span>
               </div>
             ))}
           </div>
-          <h2 className="mt" id="editions-title">Themes</h2>
-          <p className="muted small">Any theme on any board. Original keeps each board’s own look.</p>
+          <h2 className="mt" id="editions-title">{looks.length === 1 ? 'The look' : 'Themes'}</h2>
+          <p className="muted small">{looks.length === 1 ? `Every board is in the ${looks[0].name} look right now.` : 'Any theme on any board. Original keeps each board’s own look.'}</p>
           <div className="card-grid">
-            {THEMES.map(t => (
+            {looks.map(t => (
               <div key={t.id} className="info-card edition-card" style={{ background: t.palette.board, color: t.palette.boardText, borderColor: t.palette.boardLine }}>
                 <div className="row">
                   {t.logoUrl && <img className="edition-logo" src={t.logoUrl} alt="" width={34} height={34} loading="lazy" decoding="async" />}

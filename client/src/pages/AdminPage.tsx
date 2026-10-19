@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { NavLink, Navigate, useParams } from 'react-router-dom';
 import { useAuth } from '../auth.tsx';
 import { ADMIN_TABS } from '../components/admin/tabs.tsx';
+import { BRAND } from '../../../shared/brand.ts';
 
 // Operator dashboard at /admin/<tab>. The server checks operator rights on
 // every call; this check only decides what to render.
@@ -11,7 +12,7 @@ export default function AdminPage() {
   const tab = ADMIN_TABS.find(t => t.id === tabId);
 
   useEffect(() => {
-    document.title = `${tab ? `${tab.label} · ` : ''}Dashboard · Yot Monopoly`;
+    document.title = `${tab ? `${tab.label} · ` : ''}Dashboard · ${BRAND.name}`;
   }, [tab]);
 
   if (!ready) return <div className="page"><p className="muted">Loading…</p></div>;
