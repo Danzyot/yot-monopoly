@@ -70,7 +70,8 @@ export function CardsCamera({ state, compact }: { state: RefObject<SceneState | 
   const cut = useRef<Cut | null>(null);
   const look = useRef<Vector3 | null>(null);
   const seen = useRef<{ seq: number; done: Set<number> }>({ seq: -1, done: new Set() });
-  const podium = useRef<{ start: number; done: boolean; confetti: number } | null>(null);
+  /** `cutIn`: the podium's first frame, which cuts straight to its orbit (a new shot, not a drift). */
+  const podium = useRef<{ start: number; done: boolean; confetti: number; cutIn: boolean } | null>(null);
   const fov = useRef(40);
 
   // Esc skips a cut or the podium, like the Monopoly cutscenes.
@@ -137,7 +138,7 @@ export function CardsCamera({ state, compact }: { state: RefObject<SceneState | 
     if (st.podium) {
       let p = podium.current;
       if (!p) {
-        p = podium.current = { start: now, done: false, confetti: 0 };
+        p = podium.current = { start: now, done: false, confetti: 0, cutIn: true };
         cut.current = null;
         const w = st.podium;
         const r = view.history.at(-1);
@@ -182,6 +183,14 @@ export function CardsCamera({ state, compact }: { state: RefObject<SceneState | 
       pos.set(Math.sin(th) * r, FELT_Y + (narrow ? 5.2 : 3.6), Math.cos(th) * r + 0.3);
       tgt.set(CENTRE.x, FELT_Y + (narrow ? 1.3 : 1.0), CENTRE.z + 0.3);
       want = narrow ? 46 : 42;
+      const p = podium.current;
+      if (p?.cutIn) {
+        p.cutIn = false;
+        camera.position.copy(pos);
+        (look.current ??= new Vector3()).copy(tgt);
+        camera.fov = want;
+        camera.updateProjectionMatrix();
+      }
     } else {
       want = base(size.width / Math.max(1, size.height), compact, st.myTurn && !frame.busy, pos, tgt);
     }

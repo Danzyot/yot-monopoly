@@ -104,7 +104,8 @@ function Seat({ p, seat, state, lite }: { p: CardsPlayerView; seat?: CardsSeatVi
     // Where to stand: the seat, or the middle of the table for the victory dance.
     if (winner) target.set(CENTRE.x, FELT_Y, CENTRE.z + 0.3);
     else seatPos(angle, undefined, target);
-    if (!mo.placed) { g.position.copy(target); mo.placed = true; }
+    // The podium cuts in with the winner already in the middle (the camera cuts there at the same moment).
+    if (!mo.placed || (winner && !mo.winAt)) { g.position.copy(target); mo.placed = true; }
     else g.position.lerp(target, 1 - Math.exp(-5 * dt));
 
     // Reactions, from the steps of the play staging now (each once, as it starts).
