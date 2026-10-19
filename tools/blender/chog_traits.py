@@ -5,11 +5,18 @@ and feet of every token. This script exports the swappable head parts, all in
 head space (relative to the head pivot) so the game hangs them on the head
 bone exactly like the base head (client/src/three/characters/chogToken.ts):
 
-  chog_HeadBare       the face, cheeks, nose and mane, with no eyes or mouth
-  chog_HeadSkull      the Skull form: bone, eye sockets, nasal cavity, teeth, the same mane
+  chog_HeadBare       the face, cheeks and nose, with no eyes, mouth or mane
+  chog_HeadSkull      the Skull form: a bald skull with eye sockets, nasal cavity and teeth
+  chog_Hair_<trim>    the mane, whole or cut back to sit under a hat (chog_wear.py)
   chog_Eyes_<id>      one node per eyes variant (shared/chogs/traits.ts, ChogEyesVariant)
   chog_LaserBeams     the laser variant's beams, on their own so they can be toggled
   chog_Mouth_<id>     one node per mouth variant (ChogMouthVariant)
+  chog_Hat_<shape>    hats, hair and face props (shared/chogs/wear.ts, ChogHatShape)
+  chog_Wear_<shape>   outfits, in body space (ChogWearShape)
+  chog_Prop_<id>      held props, in right-hand space (ChogPropId)
+
+Hats and outfits are painted per value from the figure's own texture
+(material `chog:paint`; see chog_wear.py).
 
 Skin, mane, lens, laser and tear colours are runtime material tints (the
 material names are `chog:<key>` like every character's); aura and the
@@ -35,6 +42,7 @@ import bmesh  # noqa: E402
 from mathutils import Vector  # noqa: E402
 import blib  # noqa: E402
 import characters  # noqa: E402
+import chog_wear  # noqa: E402
 import detailed  # noqa: E402
 from detailed import CHOG_EYE_AT, ChogFace, M, cyl, ell, loop, rbox, sheet, strand, torus  # noqa: E402
 
@@ -47,7 +55,9 @@ KEYS = {
     'main': ('#3cb4ff', 0.32, 0), 'skin': ('#f3e6d2', 0.62, 0), 'hair': ('#5b3aa8', 0.75, 0), 'cloth': ('#56349f', 0.85, 0),
     'white': ('#f7f5ef', 0.6, 0), 'ink': ('#15151c', 0.45, 0), 'accent': ('#ec6f98', 0.55, 0), 'gold': ('#f4c542', 0.3, 0.8),
     'glow': ('#7ff6ff', 0.4, 0), 'glass': ('#1c2438', 0.12, 0.7), 'c1': ('#e8323c', 0.5, 0), 'c2': ('#8fd3ff', 0.35, 0),
-    'c3': ('#7b4fd8', 0.4, 0), 'denim': ('#3cc35a', 0.6, 0), 'metal': ('#b9c2cf', 0.3, 0.75),
+    'c3': ('#7b4fd8', 0.4, 0), 'denim': ('#3cc35a', 0.6, 0), 'metal': ('#b9c2cf', 0.3, 0.75), 'wood': ('#7a4a24', 0.8, 0),
+    # Hats and outfits: the figure's paint texture (white here; the preview tints it).
+    'paint': ('#d8d8d8', 0.7, 0),
 }
 
 
@@ -475,17 +485,18 @@ MOUTHS = {
 # ---- heads --------------------------------------------------------------------------
 
 def head_bare(m):
-    """The base head minus its eyes and mouth (the nose in the blush colour: c1 is red on a token)."""
+    """The base head minus its eyes, mouth and mane (the nose in the blush colour: c1 is red on a token)."""
     head = [F.build(f'{CID}_BareFace', m['skin'])]
     detailed.chog_cheeks(CID, head, m, F)
     detailed.chog_nose(CID, head, m, F, mat='accent')
-    detailed.chog_hair(CID, head, m, F)
     return head
 
 
 def head_skull(m):
-    """The Skull form: the same face as bone, with hollow sockets, a nasal cavity and a row of teeth under the same mane."""
+    """The Skull form: the same face as bone, with hollow sockets, a nasal cavity and a row of teeth, and a bald
+    cranium behind (the skulls in the art have no mane)."""
     head = [F.build(f'{CID}_SkullBone', m['skin'])]
+    head.append(ell(f'{CID}_SkullCranium', (0, 0.02, -0.045), (0.114, 0.12, 0.11), m['skin'], seg=(36, 24), fuse=True))
     for s in (-1, 1):
         head.append(ell(f'{CID}_Socket{s}', (0, 0, 0), (0.035, 0.036, 0.014), m['ink'], parent=at(s, lift=-0.009), seg=(24, 16)))
     head.append(ell(f'{CID}_Nasal', (0, 0, 0), (0.011, 0.014, 0.006), m['ink'], parent=on(0, -0.0605, -0.003), seg=(14, 10)))
@@ -496,7 +507,6 @@ def head_skull(m):
     head.append(line(f'{CID}_UpperLip', [(-0.029, -0.0785), (0, -0.0775), (0.029, -0.0785)], 0.0017, m['ink'], lift=0.003))
     head.append(line(f'{CID}_Jaw', [(-0.028, -0.0925), (0, -0.0935), (0.028, -0.0925)], 0.0017, m['ink'], lift=0.003))
     detailed.chog_cheeks(CID, head, m, F)
-    detailed.chog_hair(CID, head, m, F)
     return head
 
 
@@ -527,6 +537,14 @@ def build(m):
     nodes['LaserBeams'] = assemble(f'{CID}_LaserBeams', laser_beams(m))
     for vid, fn in MOUTHS.items():
         nodes[f'Mouth_{vid}'] = assemble(f'{CID}_Mouth_{vid}', fn(m))
+    for trim in chog_wear.TRIMS:
+        nodes[f'Hair_{trim}'] = assemble(f'{CID}_Hair_{trim}', chog_wear.hair(m, trim))
+    for shape, fn in {**chog_wear.HATS, **chog_wear.HOODS}.items():
+        nodes[f'Hat_{shape}'] = chog_wear.assemble(f'{CID}_Hat_{shape}', fn(m))
+    for shape, fn in chog_wear.WEARS.items():
+        nodes[f'Wear_{shape}'] = chog_wear.assemble(f'{CID}_Wear_{shape}', fn(m))
+    for pid, fn in chog_wear.PROPS.items():
+        nodes[f'Prop_{pid}'] = chog_wear.assemble(f'{CID}_Prop_{pid}', fn(m))
     return nodes
 
 
@@ -588,18 +606,30 @@ def preview(nodes, m, ids, path):
     sc.cycles.samples = 32
     sc.cycles.use_denoising = True
     outs = []
+    by_name = {n.name: n for n in nodes.values()}
+    # The paint texture is the client's: here hats and outfits just take their ground colour, each its own material.
+    body_paint = m['paint'].copy()
+    swapped = []
+    for n in nodes.values():
+        if n.name.startswith(f'{CID}_Wear_'):
+            for k, slot in enumerate(n.material_slots):
+                if slot.material == m['paint']:
+                    n.data.materials[k] = body_paint
+                    swapped.append((n, k))
+    place = {'Head': HEAD, 'Body': Vector((0, 0, 0)), 'HandR': Vector(blib.V(*characters.PART_PIVOTS['HandR']))}
     for tid in ids:
         look = looks[str(tid)]
         tint(m, look)
+        for mat, part in ((m['paint'], look['head']), (body_paint, look['body'])):
+            if part:
+                mat.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (*blib.hex_rgb(part['paint']['base']), 1)
         world.node_tree.nodes['Background'].inputs['Color'].default_value = (*blib.hex_rgb(look['background']), 1)
         world.node_tree.nodes['Background'].inputs['Strength'].default_value = 0.9
-        shown = {'HeadSkull' if look['form'] == 'skull' else 'HeadBare', f"Eyes_{look['eyes']}"}
-        if look['eyes'] == 'laser':
-            shown.add('LaserBeams')
-        if look['mouth']:
-            shown.add(f"Mouth_{look['mouth']}")
-        for name, n in nodes.items():
-            n.location = HEAD if name in shown else far
+        for n in nodes.values():
+            n.location = far
+        for bone, names in look['parts'].items():
+            for name in names:
+                by_name[name].location = place[bone]
         out = f'{os.path.splitext(path)[0]}_{tid}.png'
         sc.render.filepath = out
         bpy.ops.render.render(write_still=True)
@@ -607,6 +637,10 @@ def preview(nodes, m, ids, path):
         blib.log('preview', tid, look['form'], look['eyes'], look['mouth'], '→', out)
     for n in nodes.values():
         n.location = (0, 0, 0)
+    # The export wants every hat and outfit in the one paint material again.
+    for n, k in swapped:
+        n.data.materials[k] = m['paint']
+    bpy.data.materials.remove(body_paint)
     for o in list(sc.objects):
         if o.type != 'MESH' or o.name.split('_', 1)[0] != CID or o not in nodes.values():
             if o not in nodes.values():

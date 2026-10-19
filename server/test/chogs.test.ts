@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
-  AURA_MAP, BACKGROUND_COLORS, CHOG_EYES_VARIANTS, CHOG_MOUTH_VARIANTS, CHOG_SUPPLY, CHOG_TOKEN_IDS, EYES_MAP, MOUTH_MAP, SKIN_COLORS,
-  chogArtUrl, chogLook, isChogTokenId, traitsOf,
+  ACCESSORY_MAP, AURA_MAP, BACKGROUND_COLORS, BODY_MAP, CHOG_EYES_VARIANTS, CHOG_MOUTH_VARIANTS, CHOG_SUPPLY, CHOG_TOKEN_IDS, EYES_MAP, HEAD_MAP,
+  MOUTH_MAP, SKIN_COLORS, chogArtUrl, chogLook, chogParts, isChogTokenId, traitsOf,
 } from '../../shared/chogs/traits.ts';
 import { Registry, Room, type RoomHooks } from '../src/rooms.ts';
 import { CHOG_SEASON, SEASON_BOT_NAMES, SEASON_THEME_ID, characterShared } from '../../shared/season.ts';
@@ -52,7 +53,18 @@ test('chogs: real tokens resolve to the right parts', () => {
   assert.equal(one.colors.glass, '#f4a21a', 'the BTC lenses are orange');
   assert.equal(one.lids, false);
   assert.equal(one.fallback, false);
-  assert.equal(one.accessory, null, 'accessories are pass 2');
+  // ...in a purple MCGA cap over its cut-back mane, the yellow 143 jersey, a Fwog in its hand.
+  assert.equal(one.head?.shape, 'cap');
+  assert.equal(one.head?.paint.base, HEAD_MAP.MCGA.paint.base);
+  assert.equal(one.mane, 'cap', 'the side and back spikes poke out under the cap');
+  assert.equal(one.body?.shape, 'tank');
+  assert.match(one.body!.paint.decals![0].text, /143/);
+  assert.equal(one.accessory, 'fwog');
+  assert.deepEqual(chogParts(one, true), {
+    Head: ['chog_HeadBare', 'chog_Eyes_btcGlass', 'chog_Hair_cap', 'chog_Mouth_flat', 'chog_Hat_cap'],
+    Body: ['chog_Wear_tank'],
+    HandR: ['chog_Prop_fwog'],
+  });
 
   // #186: a White Skull with purple lasers and a Burning Aura; skulls have no mouth.
   const skull = chogLook(186)!;
@@ -62,6 +74,22 @@ test('chogs: real tokens resolve to the right parts', () => {
   assert.equal(skull.mouth, null);
   assert.deepEqual(skull.aura, { kind: 'fire', color: '#ff7a24' });
   assert.equal(skull.colors.skin, SKIN_COLORS.White.face);
+  assert.equal(skull.mane, 'none', 'skulls are bald');
+  // A skull keeps its hat (#61: a BOOB Cap).
+  const capped = chogLook(61)!;
+  assert.equal(capped.form, 'skull');
+  assert.equal(capped.head?.shape, 'cap');
+  assert.equal(capped.mane, 'none');
+  assert.ok(!chogParts(capped, true).Head.some(p => p.startsWith('chog_Hair_')));
+
+  // A costume brings its own hood and its sleeves' colour (#124: the Shark Suit, no Head).
+  const shark = chogLook(124)!;
+  assert.equal(shark.head?.shape, 'sharkHood');
+  assert.equal(shark.head?.value, 'Shark Suit');
+  assert.equal(shark.mane, 'hood');
+  assert.equal(shark.colors.cloth, BODY_MAP['Shark Suit'].sleeves);
+  // A ski mask hides the mouth (#425: Robber).
+  assert.equal(chogLook(425)!.mouth, null);
 
   // #1517: Radioactive, Green, Green Happy eyes.
   const radio = chogLook(1517)!;
@@ -90,6 +118,48 @@ test('chogs: real tokens resolve to the right parts', () => {
   const normal = CHOG_TOKEN_IDS.find(id => traitsOf(id)!.Eyes === 'Normal Eye' && traitsOf(id)!.Form === 'Chog')!;
   assert.equal(chogLook(normal)!.lids, true);
 });
+
+test('chogs: heads, outfits and props are modelled, and every part a token needs is in the traits file', () => {
+  // The few one-of-a-kind heads still without a part of their own (they fall back to none, and say so).
+  const unmodelled = new Set(['Holy Seal', 'Poison Shroom', 'Blue Laser']);
+  let heads = 0, headsDone = 0, bodies = 0, bodiesDone = 0;
+  for (const id of CHOG_TOKEN_IDS) {
+    const t = traitsOf(id)!;
+    const look = chogLook(id)!;
+    if (t.Head) {
+      heads++;
+      if (HEAD_MAP[t.Head]) headsDone++;
+      else assert.ok(unmodelled.has(t.Head) && look.fallbacks.includes(`Head: ${t.Head}`), `#${id} head ${t.Head}`);
+    }
+    if (t.Body) {
+      bodies++;
+      if (BODY_MAP[t.Body]) bodiesDone++;
+    }
+    if (t.Accessory) assert.ok(ACCESSORY_MAP[t.Accessory], `#${id} accessory ${t.Accessory}`);
+    if (t.Form === 'Skull') assert.equal(look.mane, 'none', `#${id} is a bald skull`);
+  }
+  assert.ok(headsDone / heads >= 0.9, `heads modelled: ${headsDone}/${heads}`);
+  assert.ok(bodiesDone / bodies >= 0.85, `outfits modelled: ${bodiesDone}/${bodies}`);
+
+  // Every node any token asks for exists in both the full and the Low traits file, in the figure's own materials.
+  const keys = new Set(['skin', 'hair', 'white', 'ink', 'accent', 'gold', 'glow', 'glass', 'c1', 'c2', 'c3', 'denim', 'metal', 'wood', 'paint']);
+  for (const file of ['chog-traits.glb', 'chog-traits-low.glb']) {
+    const gltf = glbJson(new URL(`../../client/public/models/characters/${file}`, import.meta.url));
+    const names = new Set((gltf.nodes ?? []).map(n => n.name ?? ''));
+    for (const m of gltf.materials ?? []) assert.ok(keys.has(m.name?.replace(/^chog:/, '') ?? ''), `${file}: material ${m.name}`);
+    for (const id of CHOG_TOKEN_IDS) {
+      const p = chogParts(chogLook(id)!, true);
+      for (const part of [...p.Head, ...p.Body, ...p.HandR]) assert.ok(names.has(part), `${file} has ${part} (#${id})`);
+    }
+  }
+});
+
+/** A GLB's JSON chunk. */
+function glbJson(url: URL): { nodes?: { name?: string }[]; materials?: { name?: string }[] } {
+  const buf = readFileSync(url);
+  const len = buf.readUInt32LE(12);
+  return JSON.parse(buf.subarray(20, 20 + len).toString('utf8'));
+}
 
 test('chogs: only a verified holder of the token may play as it', () => {
   const wallet: Record<string, number[]> = { alice: [1, 420, 1969] };

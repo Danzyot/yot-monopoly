@@ -1,0 +1,11 @@
+{
+  "//": "The per-figure paint texture of a token Chog (hat, outfit): canvas pixels at full size, origin top-left. tools/blender/chog_wear.py writes UVs into it; client/src/three/characters/chogPaint.ts paints it. A slot's D area holds the front (decal) faces, its P area every other face, wrapped every `wrap` px with `guard` px of pattern either side; one swatch row of 32 px squares per slot. Pixels per unit (k) are the same both ways, and a row is (ytop - y) * k below the area's top.",
+  "w": 1024,
+  "h": 768,
+  "k": 1600,
+  "guard": 32,
+  "wrap": 448,
+  "swatch": 32,
+  "hat": { "d": [0, 0, 512, 352], "p": [0, 352, 512, 352], "sw": 704, "ytop": 0.21, "r": 0.13, "axisZ": -0.035 },
+  "body": { "d": [512, 0, 512, 352], "p": [512, 352, 512, 352], "sw": 736, "ytop": 0.215, "r": 0.075, "axisZ": 0.0 }
+}

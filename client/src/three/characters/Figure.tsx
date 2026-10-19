@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
-import { BufferAttribute, BufferGeometry, Color, DynamicDrawUsage, Vector3, type Group } from 'three';
+import { BufferAttribute, BufferGeometry, Color, DynamicDrawUsage, Vector3, type Group, type MeshStandardMaterial } from 'three';
 import { ASSETS } from '../assets.gen.ts';
 import { WithModel } from '../models.tsx';
 import type { CharacterId } from '../../../../shared/characters.ts';
@@ -18,6 +18,7 @@ import { liteAssets } from '../quality.ts';
 import { characterModel, figureMeshes, type CharacterModel } from './merged.ts';
 import { chogLook, isChogTokenId, type ChogLook } from '../../../../shared/chogs/traits.ts';
 import { chogTokenModel } from './chogToken.ts';
+import { chogPaintMaterial } from './chogPaint.ts';
 import { characterShared } from '../../../../shared/season.ts';
 import { ChogAura } from './ChogAura.tsx';
 
@@ -54,7 +55,8 @@ export function tokenLook(id: CharacterId, chogToken?: number): ChogLook | null 
 export function useCharacterMaterials(id: CharacterId, color: string, chogToken?: number): Mats {
   const look = useMemo(() => tokenLook(id, chogToken), [id, chogToken]);
   const mats = useMemo(() => {
-    const colors = { ...LOOKS[id]?.colors, ...look?.colors, ...(characterShared(id) ? { cloth: color } : {}) };
+    // A token's long-sleeved outfit colours its arms and legs (the onesie); otherwise they are the player's.
+    const colors = { ...LOOKS[id]?.colors, ...(characterShared(id) ? { cloth: color } : {}), ...look?.colors };
     const m = makeMaterials(color, colors);
     if (look?.base === 'radioactive') {
       for (const k of ['skin', 'hair'] as const) {
@@ -101,7 +103,8 @@ export function CharacterFigure({ outfit, lite, chogToken, ...props }: {
       </WithModel>
       {look?.aura && !(lite ?? liteModels()) && <ChogAura kind={look.aura.kind} color={look.aura.color} />}
       {look && <ChogPlinth color={look.background} />}
-      <OutfitLayer {...props} outfit={outfit} />
+      {/* A token Chog wears its own traits (its hat, its outfit), not outfit items over them. */}
+      {!look && <OutfitLayer {...props} outfit={outfit} />}
     </>
   );
 }
@@ -272,22 +275,29 @@ function ModelFigure({ id, mats, rig, outfit, lite }: { id: CharacterId; mats: M
   return <RiggedModel model={model} items={items} outfit={outfit} mats={mats} rig={rig} look={LOOKS[id] ?? LOOKS.spiky} />;
 }
 
-/** A holder's own Chog: the base model's body with the head assembled from its token's trait parts (chogToken.ts). */
+/**
+ * A holder's own Chog: the base model's body with its head, outfit and held prop assembled from
+ * its token's trait parts (chogToken.ts), the hat and outfit painted on a texture of its own (chogPaint.ts).
+ */
 function ChogTokenFigure({ mats, rig, look, lite }: { id: CharacterId; mats: Mats; rig: Rig; look: ChogLook; lite?: boolean }) {
   const liteNow = lite ?? liteModels();
   const [base, traits] = useGLTF([characterUrl('chog', liteNow), chogTraitsUrl(liteNow)]);
   // The laser beams stay off on Low (they are the one part that reaches out past the figure).
   const model = useMemo(() => chogTokenModel(base.scene, traits.scene, look, !liteNow), [base.scene, traits.scene, look, liteNow]);
-  return <RiggedModel model={model} items={[]} outfit={{}} mats={mats} rig={rig} look={LOOKS.chog} />;
+  const paint = useMemo(() => chogPaintMaterial(look, liteNow), [look, liteNow]);
+  useEffect(() => () => paint?.dispose(), [paint]);
+  return <RiggedModel model={model} items={[]} outfit={{}} mats={mats} rig={rig} look={LOOKS.chog} paint={paint} />;
 }
 
 const NO_ITEMS: ReturnType<typeof garmentItems> = [];
 
 /** A merged model on the rig: its skinned meshes in this figure's materials, each part's bone hung on its rig group. */
-function RiggedModel({ model, items = NO_ITEMS, outfit, mats, rig, look }: {
+function RiggedModel({ model, items = NO_ITEMS, outfit, mats, rig, look, paint }: {
   model: CharacterModel; items?: ReturnType<typeof garmentItems>; outfit: Outfit; mats: Mats; rig: Rig; look: Look;
+  /** A token Chog's painted hat and outfit. */
+  paint?: MeshStandardMaterial | null;
 }) {
-  const fig = useMemo(() => figureMeshes(model, mats), [model, mats]);
+  const fig = useMemo(() => figureMeshes(model, mats, paint), [model, mats, paint]);
   useEffect(() => () => fig.dispose(), [fig]);
   const b = fig.bones;
   return (
