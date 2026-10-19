@@ -1,0 +1,5 @@
+# Monopoly/UNO image: poker is its own Railway service (Root Directory poker/).
+poker
+.git
+.claude
+**/node_modules
