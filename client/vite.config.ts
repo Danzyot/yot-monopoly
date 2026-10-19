@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib';
+import { CHOG_SEASON } from '../shared/season.ts';
 
 /**
  * Brotli and gzip copies of everything worth compressing in the build (the
@@ -34,8 +35,25 @@ function precompress(): Plugin {
   };
 }
 
+/**
+ * Chog season (shared/season.ts): the page arrives with .season-chog on <html>
+ * and the purple browser bar, so the first paint is already in the season's
+ * colours (styles/season.css); main.tsx keeps the class in step with the flag.
+ */
+function seasonClass(): Plugin {
+  return {
+    name: 'yot-season-class',
+    transformIndexHtml(html) {
+      if (!CHOG_SEASON) return html;
+      return html
+        .replace('<html lang="en">', '<html lang="en" class="season-chog">')
+        .replace('<meta name="theme-color" content="#0b2a72" />', '<meta name="theme-color" content="#2b1764" />');
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), precompress()],
+  plugins: [react(), precompress(), seasonClass()],
   server: {
     port: 5173,
     fs: { allow: ['..'] },

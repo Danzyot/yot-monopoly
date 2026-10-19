@@ -25,6 +25,12 @@ The home page is the hub: the three game cards with live "tables open now" count
 Monopoly and Cards, then the characters and how it works. It ships no WebGL — the 3D
 game loads when a table is opened.
 
+**Chog season.** While `CHOG_SEASON` is on (`shared/season.ts`) the whole site is Chog:
+only the Chog character, every table in the Chog look, and the site's UI in the Chog
+room's purple, pink and cream (`client/src/styles/season.css`, keyed on a `season-chog`
+class the build puts on `<html>`). Set the flag to `false` and rebuild to bring the
+usual cast, looks and blue skin back.
+
 ## Features (Monopoly)
 
 **Play**

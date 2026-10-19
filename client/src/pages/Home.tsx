@@ -3,11 +3,12 @@ import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { call, useConnected, useRoomList } from '../net.ts';
 import { getToken } from '../api.ts';
-import { THEMES, resolveTheme } from '../../../shared/themes.ts';
+import { THEMES, getTheme, resolveTheme } from '../../../shared/themes.ts';
 import { MAPS, getMap } from '../../../shared/maps.ts';
 import { BRAND, GAMES } from '../../../shared/brand.ts';
 import { CARDS_MAX_PLAYERS, CARDS_MIN_PLAYERS } from '../../../shared/cards/meta.ts';
-import { CHARACTER_DEFS, type CharacterDef, type CharacterId } from '../../../shared/characters.ts';
+import type { CharacterDef, CharacterId } from '../../../shared/characters.ts';
+import { CHOG_SEASON, SEASON_THEME_ID, availableCharacters, themeAvailable } from '../../../shared/season.ts';
 import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { requirementBadge, requirementSentence } from '../community.tsx';
@@ -25,8 +26,24 @@ const HowToPlay = lazy(loadHowToPlay);
 const STEPS: { icon: string; title: string; body: string }[] = [
   { icon: '🎮', title: 'Pick a game', body: `${GAMES.monopoly.name}, ${GAMES.cards.name} or ${GAMES.poker.name}. One sign-in works across all three.` },
   { icon: '🔗', title: 'Share the code', body: 'Every table has a five-letter code and an invite link — phones welcome. Short on people? Bots fill in.' },
-  { icon: '🏆', title: 'Play', body: 'Roll, shed your hand or shove all-in. Wins against real people count on the leaderboard.' },
+  { icon: '🏆', title: 'Play', body: CHOG_SEASON
+    ? 'Roll, shed your hand or shove all-in, Chog against Chog. Wins against real people count on the leaderboard.'
+    : 'Roll, shed your hand or shove all-in. Wins against real people count on the leaderboard.' },
 ];
+
+/** A board's picture: in the Chog season, the board in the Chog look (client/public/home/chog-*.webp). */
+const mapThumb = (mapId: string) => (CHOG_SEASON ? `/home/chog-${mapId}.webp` : `/maps/${mapId}.webp`);
+
+/** The game cards' one-liners: Chog-flavoured for the season (shared/season.ts). */
+const BLURBS = CHOG_SEASON ? {
+  monopoly: 'Buy, build and trade on three 3D boards, in Chog’s purple poker lounge.',
+  cards: 'Match colour, number or symbol and empty your hand before the other Chogs.',
+  poker: 'No-Limit Hold’em in the Chog room: cash tables by link, tournaments for the whole club.',
+} : {
+  monopoly: 'Buy, build and trade on three 3D boards, with the Chog crew as your pieces.',
+  cards: 'Match colour, number or symbol and shed your hand first. Fast rounds, big tables.',
+  poker: 'No-Limit Hold’em: cash tables you share by link, and tournaments for the whole club.',
+};
 
 /** The hub's "tables open now" line under a game card. */
 function liveLine(connected: boolean, open: number, playing: number): string {
@@ -85,9 +102,13 @@ export default function Home() {
 
   const live = rooms.filter(r => r.status !== 'lobby').length;
   const cardsLive = cardTables.filter(r => r.status !== 'lobby').length;
-  // Names come from the catalogue, so a rename there shows up here.
-  const featured = FEATURED.map(id => CHARACTER_DEFS.find(c => c.id === id)).filter((c): c is CharacterDef => !!c);
-  const others = CHARACTER_DEFS.filter(c => !FEATURED.includes(c.id));
+  // Names come from the catalogue, so a rename there shows up here. Only the
+  // characters the season lets people play are shown (just Chog while CHOG_SEASON is on).
+  const playable = availableCharacters();
+  const featured = FEATURED.map(id => playable.find(c => c.id === id)).filter((c): c is CharacterDef => !!c);
+  const others = playable.filter(c => !FEATURED.includes(c.id));
+  const looks = THEMES.filter(t => themeAvailable(t.id));
+  const castTitle = featured.length === 1 && others.length === 0 ? `Meet ${featured[0].name}` : 'Meet the characters';
 
   return (
     <div className="home">
@@ -99,7 +120,7 @@ export default function Home() {
         <p className="home-tag">Monopoly, cards and poker with the Chog crew.</p>
         <div className="hero-howto">
           <HowToButton label="❓ New here? How to play" />
-          <Link className="btn small ghost" to="/characters">🎭 Meet the characters</Link>
+          <Link className="btn small ghost" to="/characters">{CHOG_SEASON ? '💜' : '🎭'} {castTitle}</Link>
         </div>
       </section>
 
@@ -113,7 +134,7 @@ export default function Home() {
             <img className="hub-thumb" src="/home/monopoly-640.webp" alt="" width={640} height={400} decoding="async" />
             <div className="hub-text">
               <h3>{GAMES.monopoly.name}</h3>
-              <p>Buy, build and trade on three 3D boards, with the Chog crew as your pieces.</p>
+              <p>{BLURBS.monopoly}</p>
               <span className="hub-meta">2–8 players · 45 min</span>
               <span className="hub-live" role="status">{liveLine(connected, rooms.length, live)}</span>
             </div>
@@ -138,7 +159,7 @@ export default function Home() {
             <img className="hub-thumb" src="/home/cards-640.webp" alt="" width={640} height={400} loading="lazy" decoding="async" />
             <div className="hub-text">
               <h3>{GAMES.cards.name}</h3>
-              <p>Match colour, number or symbol and shed your hand first. Fast rounds, big tables.</p>
+              <p>{BLURBS.cards}</p>
               <span className="hub-meta">{CARDS_MIN_PLAYERS}–{CARDS_MAX_PLAYERS} players · 15 min</span>
               <span className="hub-live" role="status">{liveLine(connected, cardTables.length, cardsLive)}</span>
             </div>
@@ -151,7 +172,7 @@ export default function Home() {
             <img className="hub-thumb" src="/home/poker-640.webp" alt="" width={640} height={400} loading="lazy" decoding="async" />
             <div className="hub-text">
               <h3>{GAMES.poker.name}</h3>
-              <p>No-Limit Hold'em: cash tables you share by link, and tournaments for the whole club.</p>
+              <p>{BLURBS.poker}</p>
               <span className="hub-meta">2–9 per table · cash & tournaments</span>
               <span className="hub-live">{profile ? 'Its own site — you stay signed in' : 'On its own site'}</span>
             </div>
@@ -162,13 +183,13 @@ export default function Home() {
         </ul>
       </section>
 
-      {/* The cast: the two stars up front, everyone else a tap away on /characters. */}
+      {/* The cast: the stars up front, everyone else a tap away on /characters. */}
       <section className="cast" aria-labelledby="cast-title">
         <div className="cast-head">
-          <h2 id="cast-title">Meet the characters</h2>
-          <Link className="cast-all" to="/characters">See all characters →</Link>
+          <h2 id="cast-title">{castTitle}</h2>
+          <Link className="cast-all" to="/characters">{others.length ? 'See all characters →' : 'See them move →'}</Link>
         </div>
-        <div className="cast-stars">
+        <div className={`cast-stars${featured.length === 1 ? ' solo' : ''}`}>
           {featured.map(c => (
             <Link key={c.id} to="/characters" className="cast-star" aria-label={`${c.name}: ${c.blurb}`}>
               <span className="cast-emoji" aria-hidden>{c.emoji}</span>
@@ -176,10 +197,12 @@ export default function Home() {
             </Link>
           ))}
         </div>
-        <p className="cast-more">
-          <span className="cast-dots" aria-hidden>{others.map(c => <i key={c.id} title={c.name}>{c.emoji}</i>)}</span>
-          <Link to="/characters">+ {others.length} more to play as</Link>
-        </p>
+        {others.length > 0 && (
+          <p className="cast-more">
+            <span className="cast-dots" aria-hidden>{others.map(c => <i key={c.id} title={c.name}>{c.emoji}</i>)}</span>
+            <Link to="/characters">+ {others.length} more to play as</Link>
+          </p>
+        )}
       </section>
 
       <div className="home-body">
@@ -206,7 +229,7 @@ export default function Home() {
                 const open = r.status === 'lobby';
                 return (
                   <li key={r.code} className={`room-card ${r.status}`}>
-                    <img className="room-thumb" src={`/maps/${map.id}.webp`} alt="" width={84} height={58} loading="lazy" decoding="async" />
+                    <img className="room-thumb" src={mapThumb(map.id)} alt="" width={84} height={58} loading="lazy" decoding="async" />
                     <div className="room-main">
                       <div className="room-top">
                         <b className="mono room-code">{r.code}</b>
@@ -237,17 +260,17 @@ export default function Home() {
           <div className="card-grid">
             {MAPS.map(m => (
               <div key={m.id} className="info-card">
-                <img className="map-thumb" src={`/maps/${m.id}.webp`} alt="" width={320} height={200} loading="lazy" decoding="async" />
+                <img className="map-thumb" src={mapThumb(m.id)} alt="" width={320} height={200} loading="lazy" decoding="async" />
                 <b>{m.name}</b>
                 <span className="small muted">{m.description}</span>
-                <span className="info-meta">{m.spaces.length} spaces · {m.players[0]}–{m.players[1]} players · {m.look.name} look</span>
+                <span className="info-meta">{m.spaces.length} spaces · {m.players[0]}–{m.players[1]} players · {CHOG_SEASON ? `${getTheme(SEASON_THEME_ID).name} look` : `${m.look.name} look`}</span>
               </div>
             ))}
           </div>
-          <h2 className="mt" id="editions-title">Themes</h2>
-          <p className="muted small">Any theme on any board. Original keeps each board’s own look.</p>
+          <h2 className="mt" id="editions-title">{looks.length === 1 ? 'The look' : 'Themes'}</h2>
+          <p className="muted small">{looks.length === 1 ? `Every board is in the ${looks[0].name} look right now.` : 'Any theme on any board. Original keeps each board’s own look.'}</p>
           <div className="card-grid">
-            {THEMES.map(t => (
+            {looks.map(t => (
               <div key={t.id} className="info-card edition-card" style={{ background: t.palette.board, color: t.palette.boardText, borderColor: t.palette.boardLine }}>
                 <div className="row">
                   {t.logoUrl && <img className="edition-logo" src={t.logoUrl} alt="" width={34} height={34} loading="lazy" decoding="async" />}
