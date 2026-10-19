@@ -12,6 +12,8 @@ import { getMap } from '../../shared/maps.ts';
 import * as PACE from '../../shared/pacing.ts';
 import { DEFAULT_TABLE_STYLE, sanitizeTableStyle, type TableStyle } from '../../shared/tableStyles.ts';
 import { migrateCharacter } from '../../shared/characters.ts';
+import { isChogTokenId, resolvedChogTokens } from '../../shared/chogs/traits.ts';
+import { CHOG_SEASON, SEASON_BOT_NAMES, SEASON_CHARACTERS, SEASON_THEME_ID, characterAvailable, characterShared, themeAvailable } from '../../shared/season.ts';
 import { defaultOutfit, outfitForCharacter, parseOutfit, randomOutfit, sanitizeOutfit } from '../../shared/outfits.ts';
 import { cutsceneSnap, cutscenesMs, pickCutscenes, type CutsceneSnap } from '../../shared/cutscenes.ts';
 import { sanitizeRequirements } from './requirements.ts';
@@ -100,7 +102,8 @@ export const MAX_ROOMS = 500;
 /** Each account may open this many rooms per CREATE_WINDOW_MS (operators exempt). */
 export const CREATES_PER_WINDOW = 5;
 const CREATE_WINDOW_MS = 10 * 60_000;
-const BOT_NAMES = ['Rich Uncle', 'Tycoon', 'Landlord', 'Baron', 'Mogul', 'Magnate', 'Banker', 'Heiress'];
+/** Chog-flavoured during the Chog season (shared/season.ts), the classic set otherwise. */
+const BOT_NAMES = SEASON_BOT_NAMES;
 
 export interface Member {
   id: string;
@@ -121,6 +124,11 @@ export interface RoomHooks {
   onFinished(room: Room): void;
   /** The last human left the lobby (bots don't count): the registry closes it. */
   onEmpty?(room: Room): void;
+  /**
+   * Whether this account's linked wallets hold Chog Genesis token `tokenId`
+   * (server/src/wallet/holders.ts). Without it nobody may play as a token.
+   */
+  holdsChog?(userId: string, tokenId: number): boolean;
 }
 
 export class RoomError extends Error {}
@@ -197,7 +205,16 @@ export class Room {
   /** Per player: when their trade offers of the last minute were made (see checkOfferRate). */
   private offerTimes = new Map<string, number[]>();
 
-  constructor(readonly code: string, public hostId: string, private hooks: RoomHooks) {}
+  constructor(readonly code: string, public hostId: string, private hooks: RoomHooks) {
+    // A new table takes the season's look, with the house rules it brings (restore overwrites this).
+    if (!themeAvailable(this.themeId)) this.setTheme(SEASON_THEME_ID);
+  }
+
+  /** Switch the look; an edition brings its own default house rules. */
+  private setTheme(themeId: string) {
+    this.themeId = getTheme(themeId).id;
+    this.rules = sanitizeRules({ ...this.rules, ...getTheme(this.themeId).rules });
+  }
 
   // ---- lobby ----------------------------------------------------------------
 
@@ -236,8 +253,33 @@ export class Room {
     return s;
   }
 
+  /** A character nobody at the table plays yet, among those the season allows (shared ones are always free). */
   private freeCharacter(): CharacterId {
-    return CHARACTERS.find(c => !this.seats.some(s => s.character === c)) ?? CHARACTERS[0];
+    return SEASON_CHARACTERS.find(c => characterShared(c) || !this.seats.some(s => s.character === c)) ?? SEASON_CHARACTERS[0];
+  }
+
+  /**
+   * A Chog Genesis token for a bot to play as, one no one at the table has:
+   * a random real token whose traits all have parts, so a table of bots
+   * looks like a crowd of different Chogs.
+   */
+  private freeBotToken(): number {
+    const pool = resolvedChogTokens();
+    const used = new Set(this.seats.map(s => s.chogToken));
+    for (let i = 0; i < 20; i++) {
+      const t = pool[randomInt(pool.length)];
+      if (!used.has(t)) return t;
+    }
+    return pool.find(t => !used.has(t)) ?? pool[0];
+  }
+
+  /** A seat whose character the season does not offer becomes the season's own (lobby only: games keep theirs). */
+  private toSeason(s: Seat) {
+    if (characterAvailable(s.character)) return;
+    s.character = SEASON_CHARACTERS[0];
+    s.outfit = outfitForCharacter(s.outfit ?? {}, s.character);
+    delete s.chogToken;
+    if (s.isBot && CHOG_SEASON && s.character === 'chog') s.chogToken = this.freeBotToken();
   }
 
   private freeColor(): string {
@@ -382,11 +424,8 @@ export class Room {
       const cash = getMap(this.mapId).startingCash;
       if (cash) this.rules = { ...this.rules, startingCash: cash };
     }
-    if (p.themeId) {
-      this.themeId = getTheme(p.themeId).id;
-      // An edition brings its own default house rules.
-      this.rules = sanitizeRules({ ...this.rules, ...getTheme(this.themeId).rules });
-    }
+    // During the Chog season every table wears the season's look, whatever is asked for.
+    if (p.themeId) this.setTheme(themeAvailable(p.themeId) ? p.themeId : SEASON_THEME_ID);
     if (p.rules) this.rules = sanitizeRules({ ...this.rules, ...p.rules });
     // A board seats at most its own maximum (Speedway: 5).
     const most = getMap(this.mapId).players[1];
@@ -411,15 +450,32 @@ export class Room {
     this.style = sanitizeTableStyle(raw);
   }
 
-  pickCharacter(id: string, character: CharacterId) {
+  /**
+   * Pick a character; with `chogToken`, play as that Chog Genesis token, which
+   * only a verified holder of it may (the wallet store is asked, never the
+   * client). Two Chogs may share a table when they are different tokens.
+   */
+  pickCharacter(id: string, character: CharacterId, chogToken?: number) {
     this.dirty = true;
     this.requireLobby();
     if (!CHARACTERS.includes(character)) fail('Unknown character');
+    if (!characterAvailable(character)) fail('That character is resting this week — it is Chog season');
     const s = this.seat(id) ?? fail('You are not seated');
-    if (this.seats.some(o => o !== s && o.character === character)) fail('That character is taken');
+    if (chogToken !== undefined) {
+      if (character !== 'chog') fail('Only Chog can play as a Chog Genesis token');
+      if (!isChogTokenId(chogToken)) fail('Unknown Chog token');
+      if (s.isBot || !this.hooks.holdsChog?.(id, chogToken)) fail('That Chog is not in a wallet linked to your account');
+      // Its holder takes it: a bot that happened to draw the same token plays another.
+      for (const o of this.seats) if (o !== s && o.isBot && o.chogToken === chogToken) o.chogToken = this.freeBotToken();
+    }
+    // A token is one seat's; a shared character (the season's base Chog) is anyone's.
+    const clash = (o: Seat) => o.character === character && (o.chogToken ?? 0) === (chogToken ?? 0);
+    if ((chogToken !== undefined || !characterShared(character)) && this.seats.some(o => o !== s && clash(o))) fail('That character is taken');
     // The outfit comes along, minus the old character's own clothes, plus the new one's.
     if (character !== s.character) s.outfit = outfitForCharacter(s.outfit ?? {}, character);
     s.character = character;
+    if (chogToken !== undefined) s.chogToken = chogToken;
+    else delete s.chogToken;
   }
 
   pickColor(id: string, color: string) {
@@ -452,9 +508,13 @@ export class Room {
     const used = new Set(this.seats.map(s => s.name.toLowerCase()));
     const name = this.uniqueName(BOT_NAMES.find(n => !used.has(n.toLowerCase())) ?? 'Bot', '');
     const character = this.freeCharacter();
+    // In the Chog season a bot plays a real Chog Genesis token; its eyes are the token's own, so no glasses over them.
+    const chogToken = CHOG_SEASON && character === 'chog' ? this.freeBotToken() : undefined;
+    const outfit = randomOutfit(n => randomInt(n), character);
+    if (chogToken) delete outfit.eyes;
     this.seats.push({
       id: `bot-${this.code}-${randomInt(1e9)}`, name, avatar: '🤖', isBot: true, connected: true, disconnectedAt: null,
-      character, color: this.freeColor(), outfit: randomOutfit(n => randomInt(n), character),
+      character, color: this.freeColor(), outfit, ...(chogToken ? { chogToken } : {}),
     });
   }
 
@@ -513,7 +573,10 @@ export class Room {
     this.game = new Game({
       theme: resolveTheme(this.themeId, this.mapId),
       rules: this.rules,
-      players: order.map(s => ({ id: s.id, name: s.name, character: s.character, color: s.color, outfit: s.outfit ?? {}, isBot: s.isBot })),
+      players: order.map(s => ({
+        id: s.id, name: s.name, character: s.character, color: s.color, outfit: s.outfit ?? {}, isBot: s.isBot,
+        ...(s.chogToken !== undefined ? { chogToken: s.chogToken } : {}),
+      })),
       rng: n => randomInt(n),
       onLog: text => this.hooks.onEvent(this, text),
       // The operator's site-wide switch wins over the room's house rule, even mid-game.
@@ -540,6 +603,9 @@ export class Room {
     this.seats = this.seats.filter(s => s.isBot || present(s.id));
     if (!this.seat(this.hostId)) this.hostId = this.seats.find(s => !s.isBot)?.id ?? byId;
     for (const s of this.seats) if (!s.isBot) { s.connected = true; s.disconnectedAt = null; }
+    // Back in the lobby: a game from before the season comes back with season characters and look.
+    for (const s of this.seats) this.toSeason(s);
+    if (!themeAvailable(this.themeId)) this.setTheme(SEASON_THEME_ID);
     this.game = null;
     this.status = 'lobby';
     this.startedAt = null;
@@ -938,11 +1004,19 @@ export class Room {
     // Snapshots from before characters existed carry `token`; migrateCharacter
     // maps those (and anything unknown) onto a character.
     const withCharacter = <T extends object>(x: T) => {
-      const { token: _legacy, ...rest } = x as T & { token?: unknown };
+      const { token: _legacy, chogToken, ...rest } = x as T & { token?: unknown; chogToken?: unknown };
       const character = migrateCharacter(x);
-      return { ...rest, character, outfit: sanitizeOutfit((x as { outfit?: unknown }).outfit, character) };
+      return {
+        ...rest, character, outfit: sanitizeOutfit((x as { outfit?: unknown }).outfit, character),
+        ...(character === 'chog' && isChogTokenId(chogToken) ? { chogToken } : {}),
+      };
     };
     r.seats = s.seats.map(x => ({ ...withCharacter(x), connected: x.isBot, disconnectedAt: x.isBot ? null : now }));
+    // A lobby saved before the season sits down as Chogs at a Chog table; a game in progress keeps its characters and look.
+    if (r.status === 'lobby') {
+      for (const seat of r.seats) r.toSeason(seat);
+      if (!themeAvailable(r.themeId)) r.setTheme(SEASON_THEME_ID);
+    }
     if (s.game) {
       const game = { ...s.game, players: s.game.players.map(withCharacter) };
       r.game = Game.restore({

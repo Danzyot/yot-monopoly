@@ -1,26 +1,71 @@
-// The card table, 2D: players round an oval (a row on phones), the draw and
-// discard piles in the middle with the colour in play and the direction of
-// play, our hand fanned along the bottom. Everything that moves is staged by
-// sequence.ts: this file draws a frame of it (the pose, and the steps
-// animating now) and holds the buttons and prompts until a play has shown.
+// The card table: the 3D room (three/CardsScene.tsx: the Chog lounge, the
+// players' characters at a round felt, every card in flight) with the HUD in
+// the DOM over it — each opponent's chip pinned over their figure (a row on
+// phones), the prompts, our hand fanned along the bottom — or, without
+// WebGL, the 2D table: players round an oval, the piles in the middle.
+// Everything that moves is staged by sequence.ts: this file draws a frame of
+// it (the pose, and the steps animating now) and holds the buttons and
+// prompts until a play has shown.
 
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { COLOR_LABEL, cardName, isWild, type Card, type CardColor, CARD_COLORS } from '../../../shared/cards/deck.ts';
 import { CARDS_HOUSE_RULES } from '../../../shared/cards/rules.ts';
 import { LAST_CARD_CALL, CARDS_GAME_NAME } from '../../../shared/cards/meta.ts';
 import type { CardsAction, CardsLogEntry, CardsPlayerView, CardsStep, CardsView } from '../../../shared/cards/types.ts';
 import { CARDS_AUTOPLAY_GRACE_MS, matchLabel, type CardsRoomView, type CardsSeatView } from '../../../shared/cards/room.ts';
+import { CARDS_PODIUM_MS } from '../../../shared/cards/pacing.ts';
 import { getCharacter } from '../../../shared/characters.ts';
+import { SEASON_CHARACTERS } from '../../../shared/season.ts';
 import type { ChatMsg } from '../net.ts';
 import { cardsAct, cardsCall, cardsChat } from './net.ts';
 import { CardArt, CardBack, CardFace, CARD_HEX } from './CardFace.tsx';
 import { useCardsSequence, type CardsFrame, type StagedStep } from './sequence.ts';
-import { toastError } from '../toast.tsx';
+import { toast, toastError } from '../toast.tsx';
 import { useAuth } from '../auth.tsx';
 import { askConfirm, CloseX, Modal } from '../components/Modal.tsx';
 import Chat from '../components/Chat.tsx';
 import { Avatar } from '../components/Avatar.tsx';
+import MusicPlayer from '../components/MusicPlayer.tsx';
+import { useMusicScene } from '../music.ts';
+import { useAmbience } from '../ambience.ts';
+import { QUALITY_LEVELS, useQuality } from '../three/quality.ts';
+import { useCinematicPref } from '../three/cinematic.ts';
+import { useCardsSounds } from './useCardsSounds.ts';
+
+// The 3D table brings three.js: fetched when a table is first seen (the 2D felt stands in while it loads).
+const CardsScene = lazy(() => import('./three/CardsScene.tsx'));
+
+let webglOk: boolean | null = null;
+/** Can this browser draw the 3D table? (?2d in the URL asks for the flat one.) */
+function hasWebGL(): boolean {
+  if (webglOk === null) {
+    try {
+      const c = document.createElement('canvas');
+      webglOk = !!(c.getContext('webgl2') ?? c.getContext('webgl'));
+    } catch {
+      webglOk = false;
+    }
+  }
+  return webglOk && !location.search.includes('2d');
+}
+
+/** The system's "less motion" wish: no camera cuts, no cards in flight. */
+function useReducedMotion(): boolean {
+  const q = '(prefers-reduced-motion: reduce)';
+  const [r, setR] = useState(() => typeof matchMedia === 'function' && matchMedia(q).matches);
+  useEffect(() => {
+    if (typeof matchMedia !== 'function') return;
+    const m = matchMedia(q);
+    const on = () => setR(m.matches);
+    m.addEventListener('change', on);
+    return () => m.removeEventListener('change', on);
+  }, []);
+  return r;
+}
+
+/** The room the music and the ambience follow: the Chog lounge. */
+const CHOG_ROOM = { mapId: 'classic', themeId: 'chog' };
 
 type Pt = { x: number; y: number };
 
@@ -97,7 +142,7 @@ function TurnRing({ endsAt, total, skew }: { endsAt: number | null; total: numbe
 }
 
 function SeatAvatar({ seat, size = 46 }: { seat?: CardsSeatView; size?: number }) {
-  const ch = getCharacter(seat?.character ?? 'snacky');
+  const ch = getCharacter(seat?.character ?? SEASON_CHARACTERS[0]);
   return (
     <span className="ct-ava-badge" style={{ background: seat?.color ?? '#888', width: size, height: size, fontSize: size * 0.5 }} aria-hidden>
       {ch.emoji}
@@ -107,9 +152,11 @@ function SeatAvatar({ seat, size = 46 }: { seat?: CardsSeatView; size?: number }
 }
 
 /** One opponent round the table. */
-function SeatChip({ p, seat, at, view, frame, skew, now, canCatch, compact }: {
+function SeatChip({ p, seat, at, view, frame, skew, now, canCatch, compact, pin }: {
   p: CardsPlayerView; seat?: CardsSeatView; at: Pt; view: CardsView; frame: CardsFrame; skew: number; now: number;
   canCatch: boolean; compact: boolean;
+  /** Pinned over the player's 3D figure (the scene places it); otherwise at `at`. */
+  pin?: (el: HTMLElement | null) => void;
 }) {
   const turn = frame.current === p.id && (view.phase !== 'roundOver' && view.phase !== 'over');
   const count = frame.counts[p.id] ?? p.cards;
@@ -118,8 +165,8 @@ function SeatChip({ p, seat, at, view, frame, skew, now, canCatch, compact }: {
   const away = seat?.awayAt && !seat.isBot ? Math.max(0, Math.ceil((seat.awayAt + CARDS_AUTOPLAY_GRACE_MS - now) / 1000)) : null;
   const fan = Math.min(count, compact ? 4 : 7);
   return (
-    <div className={`ct-seat ${turn ? 'turn' : ''} ${p.left ? 'left' : ''} ${compact ? 'compact' : ''}`}
-      style={{ ...pos(at), '--seat': seat?.color ?? '#888' } as CSSProperties} data-player={p.id}>
+    <div className={`ct-seat ${turn ? 'turn' : ''} ${p.left ? 'left' : ''} ${compact ? 'compact' : ''} ${pin ? 'pinned' : ''}`}
+      style={{ ...(pin ? {} : pos(at)), '--seat': seat?.color ?? '#888' } as CSSProperties} data-player={p.id} ref={pin}>
       <div className="ct-ava">
         {turn && <TurnRing endsAt={frame.busy ? null : view.turnEndsAt} total={view.rules.turnSeconds * 1000} skew={skew} />}
         <SeatAvatar seat={seat} size={compact ? 38 : 50} />
@@ -151,13 +198,18 @@ function SeatChip({ p, seat, at, view, frame, skew, now, canCatch, compact }: {
   );
 }
 
-/** What is animating right now: cards in flight, flashes, banners. */
-function Effects({ frame, layout, piles, names, me }: {
+/**
+ * What is animating right now: cards in flight, flashes, banners. On the 3D
+ * table the cards fly in the scene and the flashes are pinned over whoever
+ * they are about (data-at), so here they only get their text.
+ */
+function Effects({ frame, layout, piles, names, me, three, fxRef }: {
   frame: CardsFrame; layout: Record<string, Pt>; piles: { pile: Pt; discard: Pt }; names: Record<string, string>; me: string | null;
+  three: boolean; fxRef?: React.RefObject<HTMLDivElement | null>;
 }) {
   return (
-    <div className="ct-fx" aria-hidden>
-      {frame.active.map(s => <Effect key={`${frame.play?.seq}-${s.index}`} s={s} layout={layout} piles={piles} names={names} me={me} />)}
+    <div className="ct-fx" aria-hidden ref={fxRef}>
+      {frame.active.map(s => <Effect key={`${frame.play?.seq}-${s.index}`} s={s} layout={layout} piles={piles} names={names} me={me} three={three} />)}
     </div>
   );
 }
@@ -169,22 +221,28 @@ function fly(from: Pt, to: Pt, dur: number, delay = 0, extra: CSSProperties = {}
   } as CSSProperties;
 }
 
-function Effect({ s, layout, piles, names, me }: {
-  s: StagedStep; layout: Record<string, Pt>; piles: { pile: Pt; discard: Pt }; names: Record<string, string>; me: string | null;
+function Effect({ s, layout, piles, names, me, three }: {
+  s: StagedStep; layout: Record<string, Pt>; piles: { pile: Pt; discard: Pt }; names: Record<string, string>; me: string | null; three: boolean;
 }) {
   const st: CardsStep = s.step;
   const dur = s.end - s.at;
   // Negative for a step already under way, so a late mount joins it in step.
   const left = s.at - performance.now();
   const seatAt = (id: string) => layout[id] ?? { x: 50, y: 50 };
-  const flash = (at: Pt, text: ReactNode, cls = '') => (
-    <div className={`ct-flash ${cls}`} style={{ ...pos(at), animationDuration: `${dur}ms`, animationDelay: `${left}ms` }}>{text}</div>
-  );
+  /** A flash over a player (their id), the pile or the discard: placed here in 2D, by the scene in 3D. */
+  const flash = (where: string, text: ReactNode, cls = '') => {
+    const at = where === 'pile' ? piles.pile : where === 'discard' ? piles.discard : seatAt(where);
+    return (
+      <div className={`ct-flash ${cls}`} data-at={three ? where : undefined}
+        style={{ ...(three ? {} : pos(at)), animationDuration: `${dur}ms`, animationDelay: `${left}ms` }}>{text}</div>
+    );
+  };
   const banner = (text: ReactNode, cls = '') => (
     <div className={`ct-banner ${cls}`} style={{ animationDuration: `${dur}ms`, animationDelay: `${left}ms` }}>{text}</div>
   );
   switch (st.type) {
     case 'play':
+      if (three) return st.jumpIn ? flash(st.player, 'Jump in!', 'call') : null;
       return (
         <div className={`ct-fly ${st.jumpIn ? 'jump' : ''}`} style={fly(seatAt(st.player), piles.discard, dur, left)}>
           <CardFace card={st.card} />
@@ -197,12 +255,12 @@ function Effect({ s, layout, piles, names, me }: {
       const mine = st.player === me && st.cards;
       return (
         <>
-          {Array.from({ length: n }, (_, k) => (
+          {!three && Array.from({ length: n }, (_, k) => (
             <div key={k} className="ct-fly draw" style={fly(piles.pile, seatAt(st.player), 380, left + k * gap)}>
               <CardArt card={mine ? st.cards![k] ?? null : null} />
             </div>
           ))}
-          {st.count > 1 && flash(seatAt(st.player), `+${st.count}`, 'draw')}
+          {st.count > 1 && flash(st.player, `+${st.count}`, 'draw')}
         </>
       );
     }
@@ -212,7 +270,7 @@ function Effect({ s, layout, piles, names, me }: {
       const gap = n > 1 ? Math.max(20, (dur - 360) / n) : 0;
       return (
         <>
-          {Array.from({ length: n }, (_, k) => (
+          {!three && Array.from({ length: n }, (_, k) => (
             <div key={k} className="ct-fly draw" style={fly(piles.pile, seatAt(st.order[k % st.order.length]), 360, left + k * gap)}>
               <CardBack />
             </div>
@@ -222,32 +280,43 @@ function Effect({ s, layout, piles, names, me }: {
       );
     }
     case 'flip':
+      if (three) return null;
       return (
         <div className="ct-flip" style={{ ...pos(piles.discard), animationDuration: `${dur}ms`, animationDelay: `${left}ms` }}>
           <CardFace card={st.card} />
         </div>
       );
-    case 'skip': return flash(seatAt(st.player), <><span className="ct-ico">⤼</span>Skipped!</>, 'skip');
+    case 'skip': return flash(st.player, <><span className="ct-ico">⊘</span>Skipped!</>, 'skip');
     case 'reverse': return banner(<><span className="ct-ico spin">⟲</span>Reverse!</>, 'reverse');
-    case 'color': return (
-      <div className="ct-burst" style={{ ...pos(piles.discard), '--cc': CARD_HEX[st.color].base, animationDuration: `${dur}ms`, animationDelay: `${left}ms` } as CSSProperties} />
-    );
+    case 'color':
+      if (three) return flash('discard', `${COLOR_LABEL[st.color]}!`, `wild ${st.color}`);
+      return (
+        <div className="ct-burst" style={{ ...pos(piles.discard), '--cc': CARD_HEX[st.color].base, animationDuration: `${dur}ms`, animationDelay: `${left}ms` } as CSSProperties} />
+      );
     case 'swap': return banner(<>{names[st.player]} ⇄ {names[st.target]}<small>hands swapped</small></>, 'swap');
     case 'rotate': return banner(<>Pass it on!<small>every hand moves {st.direction === 1 ? 'clockwise' : 'anticlockwise'}</small></>, 'swap');
-    case 'challenge': return banner(<>Challenge!<small>{st.bluff ? `It was a bluff — ${names[st.target]} draws 4` : `It was legal — ${names[st.player]} draws 6`}</small></>, st.bluff ? 'good' : 'bad');
-    case 'call': return flash(seatAt(st.player), LAST_CARD_CALL, 'call');
-    case 'catch': return flash(seatAt(st.target), <>Caught!<small>by {names[st.player]}</small></>, 'catch');
-    case 'pass': return flash(seatAt(st.player), 'Pass', 'soft');
-    case 'timeout': return flash(seatAt(st.player), '⏱ Time!', 'soft');
-    case 'leave': return flash(seatAt(st.player), 'Left', 'soft');
-    case 'reshuffle': return flash(piles.pile, 'Reshuffle', 'soft');
-    case 'roundEnd': return banner(<>{names[st.winner]} {st.blocked ? 'takes' : 'wins'} the round!<small>+{st.points} points</small></>, 'win');
+    case 'challenge':
+      // The 3D table cuts to the challenge with its own title card.
+      if (three) return null;
+      return banner(<>Challenge!<small>{st.bluff ? `It was a bluff — ${names[st.target]} draws 4` : `It was legal — ${names[st.player]} draws 6`}</small></>, st.bluff ? 'good' : 'bad');
+    case 'call': return flash(st.player, LAST_CARD_CALL, three ? 'call big' : 'call');
+    case 'catch': return flash(st.target, <>Caught!<small>by {names[st.player]}</small></>, 'catch');
+    case 'pass': return flash(st.player, 'Pass', 'soft');
+    case 'timeout': return flash(st.player, '⏱ Time!', 'soft');
+    case 'leave': return flash(st.player, 'Left', 'soft');
+    case 'reshuffle': return flash('pile', 'Reshuffle', 'soft');
+    case 'roundEnd':
+      // In 3D the camera cuts to the winner with a title card; the match's last round goes on to the podium.
+      if (three) return null;
+      return banner(<>{names[st.winner]} {st.blocked ? 'takes' : 'wins'} the round!<small>+{st.points} points</small></>, 'win');
   }
 }
 
 /** Our hand: fanned on wide screens, a scrolling row on phones. */
-function Hand({ cards, view, frame, compact, onPlay }: {
+function Hand({ cards, view, frame, compact, onPlay, rects, handRef }: {
   cards: Card[]; view: CardsView; frame: CardsFrame; compact: boolean; onPlay: (c: Card) => void;
+  /** Where each card was last drawn (by id): the 3D table flies a play out from there. */
+  rects?: Map<number, DOMRect>; handRef?: React.RefObject<HTMLDivElement | null>;
 }) {
   const you = view.you!;
   const playable = new Set(frame.busy ? [] : you.playable);
@@ -255,8 +324,19 @@ function Hand({ cards, view, frame, compact, onPlay }: {
   const n = cards.length;
   const spread = compact ? 0 : Math.min(7, 60 / Math.max(1, n));
   const overlap = compact ? 0 : Math.max(-62, Math.min(-8, -86 + 900 / Math.max(n, 1) * 0.5));
+  const own = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const el = own.current;
+    if (!rects || !el) return;
+    // Now, and once the cards have slid into place (they take 0.15 s).
+    const note = () => { for (const b of el.querySelectorAll<HTMLElement>('button[data-card]')) rects.set(Number(b.dataset.card), b.getBoundingClientRect()); };
+    note();
+    const t = setTimeout(note, 220);
+    return () => clearTimeout(t);
+  });
   return (
-    <div className={`ct-hand ${compact ? 'row' : 'fan'}`} role="list" aria-label="Your hand">
+    <div className={`ct-hand ${compact ? 'row' : 'fan'}`} role="list" aria-label="Your hand"
+      ref={el => { own.current = el; if (handRef) handRef.current = el; }}>
       {cards.map((c, i) => {
         const can = playable.has(c.id);
         const off = i - (n - 1) / 2;
@@ -267,7 +347,7 @@ function Hand({ cards, view, frame, compact, onPlay }: {
         };
         const jump = can && view.current !== you.id;
         return (
-          <button key={c.id} role="listitem" style={style}
+          <button key={c.id} role="listitem" style={style} data-card={c.id}
             className={`ct-card ${can ? 'can' : ''} ${!can && myStep && !frame.busy ? 'dim' : ''} ${you.drawn === c.id ? 'drawn' : ''} ${jump ? 'jump' : ''}`}
             aria-label={`${cardName(c)}${can ? (jump ? ', jump in' : ', playable') : ''}`}
             aria-disabled={!can}
@@ -462,6 +542,46 @@ export default function CardsTable({ room, me, chat, skew, fromLobby }: {
   useTicker(live || view.phase === 'roundOver', 400);
   const now = Date.now() + skew;
 
+  // The 3D table and what it needs from the DOM: our hand (cards fly from
+  // and to it), the chips pinned over the figures, the effects layer.
+  const three = useMemo(hasWebGL, []);
+  const reduced = useReducedMotion();
+  const [quality, nextQuality] = useQuality();
+  const [cinematic] = useCinematicPref();
+  const handRects = useMemo(() => new Map<number, DOMRect>(), []);
+  const chipEls = useMemo(() => new Map<string, HTMLElement>(), []);
+  const pins = useRef(new Map<string, (el: HTMLElement | null) => void>());
+  const pinFor = useCallback((id: string) => {
+    let f = pins.current.get(id);
+    if (!f) {
+      f = (el: HTMLElement | null) => { if (el) chipEls.set(id, el); else chipEls.delete(id); };
+      pins.current.set(id, f);
+    }
+    return f;
+  }, [chipEls]);
+  const handRef = useRef<HTMLDivElement | null>(null);
+  const fxRef = useRef<HTMLDivElement | null>(null);
+  const qualityInfo = QUALITY_LEVELS.find(q => q.id === quality)!;
+  const cycleQuality = () => {
+    const i = (QUALITY_LEVELS.findIndex(q => q.id === quality) + 1) % QUALITY_LEVELS.length;
+    toast(`${QUALITY_LEVELS[i].icon} ${QUALITY_LEVELS[i].label} — ${QUALITY_LEVELS[i].hint}`);
+    nextQuality();
+  };
+  // The Chog lounge's tune and room tone, with the same switches as the board (MusicPlayer).
+  useMusicScene(CHOG_ROOM);
+  useAmbience(CHOG_ROOM);
+  // The match won: the winner dances on the table before the results show (the scene says when; a timer backs it up).
+  const [podiumDone, setPodiumDone] = useState(false);
+  const winner = view.phase === 'over' ? view.winner : null;
+  const podium = three && !reduced && room.status === 'finished' && !!winner && !podiumDone && !!frame && !frame.busy ? winner : null;
+  useEffect(() => {
+    if (!podium) return;
+    const t = setTimeout(() => setPodiumDone(true), CARDS_PODIUM_MS + 1500);
+    return () => clearTimeout(t);
+  }, [podium]);
+  const myTurnFree = !!you && view.current === you.id && live && !!frame && !frame.busy;
+  useCardsSounds(frame, myId, myTurnFree);
+
   // A pick in progress goes stale when the table moves on.
   useEffect(() => { setPendingWild(null); setPendingSeven(null); }, [view.turn, view.round]);
 
@@ -553,7 +673,7 @@ export default function CardsTable({ room, me, chat, skew, fromLobby }: {
   );
 
   return (
-    <div className={`ct ${compact ? 'compact' : 'wide'} ${myTurn && !held ? 'my-turn' : ''}`} data-phase={view.phase} data-busy={held ? '1' : '0'}
+    <div className={`ct ${compact ? 'compact' : 'wide'} ${three ? 'three' : 'flat'} ${myTurn && !held ? 'my-turn' : ''}`} data-phase={view.phase} data-busy={held ? '1' : '0'}
       data-current={view.current} data-order={view.players.map(p => p.id).join(',')} data-round={view.round}>
       <header className="ct-top">
         <div className="ct-top-l">
@@ -562,6 +682,13 @@ export default function CardsTable({ room, me, chat, skew, fromLobby }: {
           <span className="ct-meta">Round {view.round} · {matchLabel(view.rules)}{room.spectators ? ` · ${room.spectators} watching` : ''}</span>
         </div>
         <div className="ct-top-r">
+          <MusicPlayer />
+          {three && (
+            <button className="btn tiny ghost" onClick={cycleQuality} aria-label={`${qualityInfo.label}. Change`}
+              title={`${qualityInfo.label} — ${qualityInfo.hint}. Click for the next setting`}>
+              {qualityInfo.icon}{compact ? '' : ' Graphics'}
+            </button>
+          )}
           <button className="btn tiny ghost" onClick={() => setRulesOpen(true)} aria-label="Rules">{compact ? '❓' : '❓ Rules'}</button>
           {isHost && live && (
             <button className="btn tiny ghost" onClick={() => cardsCall('cards:pause', { paused: !view.paused }).catch(toastError)}>
@@ -579,37 +706,53 @@ export default function CardsTable({ room, me, chat, skew, fromLobby }: {
 
       <div className="ct-main">
         <div className="ct-stage">
-          <div className="ct-felt" aria-hidden />
+          {three ? (
+            <Suspense fallback={<div className="ct-felt" aria-hidden />}>
+              <CardsScene view={view} frame={frame} seats={seats} me={myId} myTurn={myTurn && !held} compact={compact} quality={quality}
+                reduced={reduced} cinematic={cinematic} canDraw={myTurn && !held && !!you?.canDraw} onDraw={() => void act({ type: 'draw' })}
+                podium={podium} onPodiumDone={() => setPodiumDone(true)} handEl={handRef} handRects={handRects} chipEls={chipEls} fxEl={fxRef} />
+            </Suspense>
+          ) : <div className="ct-felt" aria-hidden />}
           {view.players.filter(p => p.id !== myId).map(p => (
             <SeatChip key={p.id} p={p} seat={seats[p.id]} at={layout[p.id]} view={view} frame={frame} skew={skew} now={now}
-              canCatch={catchable.has(p.id) && !held} compact={compact} />
+              canCatch={catchable.has(p.id) && !held} compact={compact} pin={three && !compact ? pinFor(p.id) : undefined} />
           ))}
 
-          <div className={`ct-dir ${frame.direction === 1 ? 'cw' : 'ccw'}`} style={{ '--cc': color ? CARD_HEX[color].base : '#9aa7ff' } as CSSProperties} aria-label={`Play goes ${frame.direction === 1 ? 'clockwise' : 'anticlockwise'}`}>
-            <svg viewBox="0 0 200 200" aria-hidden>
-              <circle cx="100" cy="100" r="90" className="ct-dir-track" />
-              {[0, 120, 240].map(a => (
-                <g key={a} transform={`rotate(${a} 100 100)`}>
-                  <path d="M 100 10 A 90 90 0 0 1 170 43" className="ct-dir-arc" />
-                  <path d={frame.direction === 1 ? 'M 160 28 L 174 46 L 152 49' : 'M 110 0 L 96 10 L 110 22'} className="ct-dir-head" />
-                </g>
-              ))}
-            </svg>
-          </div>
+          {!three && (
+            <div className={`ct-dir ${frame.direction === 1 ? 'cw' : 'ccw'}`} style={{ '--cc': color ? CARD_HEX[color].base : '#9aa7ff' } as CSSProperties} aria-label={`Play goes ${frame.direction === 1 ? 'clockwise' : 'anticlockwise'}`}>
+              <svg viewBox="0 0 200 200" aria-hidden>
+                <circle cx="100" cy="100" r="90" className="ct-dir-track" />
+                {[0, 120, 240].map(a => (
+                  <g key={a} transform={`rotate(${a} 100 100)`}>
+                    <path d="M 100 10 A 90 90 0 0 1 170 43" className="ct-dir-arc" />
+                    <path d={frame.direction === 1 ? 'M 160 28 L 174 46 L 152 49' : 'M 110 0 L 96 10 L 110 22'} className="ct-dir-head" />
+                  </g>
+                ))}
+              </svg>
+            </div>
+          )}
 
-          <button className={`ct-pile ${myTurn && !held && you?.canDraw ? 'can' : ''}`} style={pos(piles.pile)}
-            disabled={!(myTurn && !held && you?.canDraw)} onClick={() => void act({ type: 'draw' })}
-            aria-label={`Draw pile, ${view.drawCount} cards${myTurn && you?.canDraw ? ': draw' : ''}`}>
-            <span className="ct-pile-stack" aria-hidden><CardBack /><CardBack /><CardBack /></span>
-            <span className="ct-pile-n">{view.drawCount}</span>
-          </button>
-          <div className="ct-discard" style={{ ...pos(piles.discard), '--cc': color ? CARD_HEX[color].base : 'transparent' } as CSSProperties}>
-            <div className="ct-discard-glow" aria-hidden />
-            {discardTop ? <CardFace card={discardTop} key={discardTop.id} /> : <div className="ct-empty" />}
-            <span className={`ct-color-chip ${color ?? 'none'}`} aria-live="polite">{color ? COLOR_LABEL[color] : 'Colour?'}</span>
-          </div>
+          {!three && (
+            <button className={`ct-pile ${myTurn && !held && you?.canDraw ? 'can' : ''}`} style={pos(piles.pile)}
+              disabled={!(myTurn && !held && you?.canDraw)} onClick={() => void act({ type: 'draw' })}
+              aria-label={`Draw pile, ${view.drawCount} cards${myTurn && you?.canDraw ? ': draw' : ''}`}>
+              <span className="ct-pile-stack" aria-hidden><CardBack /><CardBack /><CardBack /></span>
+              <span className="ct-pile-n">{view.drawCount}</span>
+            </button>
+          )}
+          {three ? (
+            <span className={`ct-color-chip pinned ${color ?? 'none'} ${podium ? 'hide' : ''}`} ref={pinFor('colour')} aria-live="polite">
+              {color ? COLOR_LABEL[color] : 'Colour?'}<small>{view.drawCount} in the pile</small>
+            </span>
+          ) : (
+            <div className="ct-discard" style={{ ...pos(piles.discard), '--cc': color ? CARD_HEX[color].base : 'transparent' } as CSSProperties}>
+              <div className="ct-discard-glow" aria-hidden />
+              {discardTop ? <CardFace card={discardTop} key={discardTop.id} /> : <div className="ct-empty" />}
+              <span className={`ct-color-chip ${color ?? 'none'}`} aria-live="polite">{color ? COLOR_LABEL[color] : 'Colour?'}</span>
+            </div>
+          )}
 
-          <Effects frame={frame} layout={layout} piles={piles} names={names} me={myId} />
+          <Effects frame={frame} layout={layout} piles={piles} names={names} me={myId} three={three} fxRef={fxRef} />
 
           {pd && !held && live && !(myTurn && prompt) && (
             <div className="ct-pending">+{pd.amount} waiting on {names[view.current]}</div>
@@ -665,12 +808,14 @@ export default function CardsTable({ room, me, chat, skew, fromLobby }: {
               <button className="btn small primary" onClick={() => cardsCall('cards:back').catch(toastError)}>I'm back!</button>
             </div>
           )}
-          {frame.hand !== null && hand.length > 0 && <Hand cards={hand} view={view} frame={frame} compact={compact} onPlay={playCard} />}
+          {frame.hand !== null && hand.length > 0 && (
+            <Hand cards={hand} view={view} frame={frame} compact={compact} onPlay={playCard} rects={three ? handRects : undefined} handRef={handRef} />
+          )}
         </footer>
       )}
       {!you && <div className="ct-watching">You're watching this match.</div>}
 
-      {room.status === 'finished' && !held && <MatchOver room={room} view={view} me={me} isHost={isHost} />}
+      {room.status === 'finished' && !held && !podium && <MatchOver room={room} view={view} me={me} isHost={isHost} />}
       {rulesOpen && <RulesModal view={view} onClose={() => setRulesOpen(false)} />}
     </div>
   );

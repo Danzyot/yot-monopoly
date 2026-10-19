@@ -4,7 +4,7 @@ import { call, type ChatMsg } from '../net.ts';
 import { TIME_LIMIT_CHOICES, TURN_SECONDS_CHOICES, getTheme, resolveTheme, type RuleConfig } from '../../../shared/themes.ts';
 import { getMap } from '../../../shared/maps.ts';
 import { PLAYER_COLORS, type RoomSeat, type RoomView } from '../../../shared/types.ts';
-import { CHARACTER_DEFS, getCharacter, isCharacterId, type CharacterId } from '../../../shared/characters.ts';
+import { getCharacter, isCharacterId, type CharacterId } from '../../../shared/characters.ts';
 import { characterEmoji } from '../format.ts';
 import { toast, toastError } from '../toast.tsx';
 import { useAuth } from '../auth.tsx';
@@ -13,15 +13,18 @@ import MusicPlayer from './MusicPlayer.tsx';
 import { Avatar } from './Avatar.tsx';
 import BoardScene from '../three/BoardScene.tsx';
 import TableStylePicker from './TableStylePicker.tsx';
-import BoardPicker from './BoardPicker.tsx';
+import BoardPicker, { LOOK_STEP } from './BoardPicker.tsx';
+import { availableCharacters, characterAvailable, characterShared } from '../../../shared/season.ts';
 import CharacterPreview from '../three/characters/CharacterPreview.tsx';
-import { preloadCharacters } from '../three/characters/Figure.tsx';
+import { preloadCharacters, preloadChogTraits } from '../three/characters/Figure.tsx';
 import { themeStyle } from '../themeStyle.ts';
 import RequirementsPicker from './RequirementsPicker.tsx';
 import { ProfileLink } from '../community.tsx';
 import { askConfirm } from './Modal.tsx';
 import { HowToPlayButton } from './HowToPlay.tsx';
 import OutfitPicker, { loadOutfitPref, sameOutfit, saveOutfitPref } from './OutfitPicker.tsx';
+import ChogPicker, { ChogArt, loadChogTokenPref } from './ChogPicker.tsx';
+import { chogName, isLegendary } from '../../../shared/chogs/traits.ts';
 import type { Outfit } from '../../../shared/outfits.ts';
 
 const TOGGLES: [keyof RuleConfig, string, string][] = [
@@ -91,13 +94,13 @@ function SeatList({ room, me, isHost, onMakeHost }: {
         <li key={s.id} style={{ borderColor: s.color }}>
           {/* Character first (it is what they play as); their own avatar rides on its corner. */}
           <span className="seat-ids">
-            <span className="token-badge" style={{ background: s.color }} role="img" aria-label={`${getCharacter(s.character).name}, ${s.color}`}>{characterEmoji(s.character)}</span>
+            <SeatBadge seat={s} />
             {!s.isBot && <span className="seat-avatar"><Avatar src={s.avatar} size={16} /></span>}
           </span>
           <span className="grow">
             <span className="seat-name"><ProfileLink id={s.id} isBot={s.isBot} newTab>{s.name}</ProfileLink> {s.id === me && <em className="tag you">you</em>}{s.id === room.hostId && <em className="tag">host</em>} {s.isBot && <em className="tag">bot</em>}
             {!s.connected && <em className="tag warn">away</em>}</span>
-            <span className="seat-char small"><i className="seat-swatch" style={{ background: s.color }} aria-hidden /> {getCharacter(s.character).name}</span>
+            <span className="seat-char small"><i className="seat-swatch" style={{ background: s.color }} aria-hidden /> {seatName(s)}</span>
           </span>
           {isHost && onMakeHost && !s.isBot && s.connected && s.id !== room.hostId && (
             <button className="btn tiny ghost" title={`Make ${s.name} the host`} onClick={() => onMakeHost(s.id, s.name)}>Make host</button>
@@ -111,28 +114,51 @@ function SeatList({ room, me, isHost, onMakeHost }: {
   );
 }
 
-/** Our own seat: character (3D preview + grid), outfit and colour. */
+/** What a seat plays as: its character, or its own Chog Genesis token. */
+const seatName = (s: RoomSeat) => (s.chogToken ? chogName(s.chogToken) : getCharacter(s.character).name);
+
+/** A seat's character badge: the emoji on the player's colour, or the token's art framed in its background colour. */
+function SeatBadge({ seat: s }: { seat: RoomSeat }) {
+  if (s.chogToken) {
+    return (
+      <span className="token-badge chog-badge" role="img" aria-label={`${chogName(s.chogToken)}, ${s.color}`}>
+        <ChogArt token={s.chogToken} />
+      </span>
+    );
+  }
+  return <span className="token-badge" style={{ background: s.color }} role="img" aria-label={`${seatName(s)}, ${s.color}`}>{characterEmoji(s.character)}</span>;
+}
+
+/** Our own seat: character (3D preview + grid), the holder's own Chogs, outfit and colour. */
 function CharacterPicker({ room, me, seat, onWear }: {
   room: RoomView; me: string; seat: RoomSeat; onWear: (o: Outfit) => void;
 }) {
+  const token = seat.chogToken;
   return (
     <>
       <div className="char-picker">
         <div className="char-preview">
-          <CharacterPreview character={seat.character} color={seat.color} outfit={seat.outfit} />
+          <CharacterPreview character={seat.character} color={seat.color} outfit={seat.outfit} chogToken={token} />
           <div className="char-about">
-            <b>{getCharacter(seat.character).name}</b>
-            <span className="small muted">{getCharacter(seat.character).blurb}</span>
+            <b>{seatName(seat)}</b>
+            <span className="small muted">
+              {token
+                ? isLegendary(token) ? `Legendary 1:1 #${token} — one of ten hand-painted Chogs.` : 'Your own Chog Genesis, built from its traits.'
+                : getCharacter(seat.character).blurb}
+            </span>
           </div>
         </div>
         <div className="char-grid">
-          {CHARACTER_DEFS.map(c => {
-            const holder = room.seats.find(s => s.character === c.id && s.id !== me);
+          {availableCharacters().map(c => {
+            // A token Chog is its own character: the base Chog stays free for someone else. A shared
+            // character (everyone is a Chog in the Chog season) is never taken; colours tell players apart.
+            const holder = characterShared(c.id) ? undefined : room.seats.find(s => s.character === c.id && !s.chogToken && s.id !== me);
+            const on = seat.character === c.id && !token;
             return (
-              <button key={c.id} disabled={!!holder} aria-pressed={seat.character === c.id}
+              <button key={c.id} disabled={!!holder} aria-pressed={on}
                 title={holder ? `${c.name} — taken by ${holder.name}` : `${c.name} — ${c.blurb}`}
                 aria-label={holder ? `${c.name}, taken by ${holder.name}` : c.name}
-                className={`char-pick ${seat.character === c.id ? 'on' : ''}`}
+                className={`char-pick ${on ? 'on' : ''}`}
                 onClick={() => call('room:seat', { character: c.id }).catch(toastError)}>
                 <span className="char-emoji">{c.emoji}</span>
                 <span className="char-name">{c.name}</span>
@@ -141,6 +167,9 @@ function CharacterPicker({ room, me, seat, onWear }: {
             );
           })}
         </div>
+        <ChogPicker selected={token ?? null}
+          taken={id => room.seats.find(s => s.chogToken === id && s.id !== me)?.name}
+          onPick={id => call('room:seat', { character: 'chog', chogToken: id }).catch(toastError)} />
       </div>
       <h4 className="lobby-outfit-head">Outfit</h4>
       <OutfitPicker outfit={seat.outfit ?? {}} color={seat.color} character={seat.character} onChange={onWear} />
@@ -263,9 +292,9 @@ function MemberLobby({ room, me, spectating, chat, onLeave, onWear }: {
           {mySeat && (
             <details className="lm-me">
               <summary>
-                <span className="token-badge" style={{ background: mySeat.color }} aria-hidden>{characterEmoji(mySeat.character)}</span>
+                <SeatBadge seat={mySeat} />
                 <span className="grow">
-                  <b>{getCharacter(mySeat.character).name}</b>
+                  <b>{seatName(mySeat)}</b>
                   <span className="small muted">Your character · change it or dress up</span>
                 </span>
                 <span className="lm-me-caret" aria-hidden>▾</span>
@@ -302,6 +331,8 @@ export default function Lobby({ room, me, spectating, chat }: {
   // Fetch the table's characters (one small file each) while everyone gathers, so the game starts with them in.
   const seatChars = room.seats.map(s => s.character).join(',');
   useEffect(() => { if (seatChars) preloadCharacters(seatChars.split(',') as CharacterId[]); }, [seatChars]);
+  const tokensAtTable = room.seats.some(s => s.chogToken);
+  useEffect(() => { if (tokensAtTable) preloadChogTraits(); }, [tokensAtTable]);
 
   // The character picked on /characters ("Play as …"): applied once, the first
   // time we hold a seat in this room, and only while nobody else has it.
@@ -311,9 +342,13 @@ export default function Lobby({ room, me, spectating, chat }: {
     applied.current = room.code;
     let pref: string | null = null;
     try { pref = localStorage.getItem(CHARACTER_PREF_KEY); } catch { /* private mode */ }
-    if (!isCharacterId(pref) || pref === mySeat.character) return;
-    if (room.seats.some(s => s.character === pref && s.id !== me)) return;
-    call('room:seat', { character: pref }).catch(() => {});
+    // "Play as Chog #n" from the gallery: the token comes along (the server checks we hold it).
+    const token = pref === 'chog' ? loadChogTokenPref() : null;
+    if (!isCharacterId(pref) || !characterAvailable(pref)) return;
+    if (pref === mySeat.character && (token ?? undefined) === mySeat.chogToken) return;
+    const clash = (s: RoomSeat) => s.character === pref && s.id !== me && (s.chogToken ?? 0) === (token ?? 0);
+    if ((token || !characterShared(pref)) && room.seats.some(clash)) return;
+    call('room:seat', { character: pref, ...(token ? { chogToken: token } : {}) }).catch(() => {});
   }, [mySeat, room.code, room.seats, me]);
 
   // The outfit last worn (or dressed up on /characters): put on once per room,
@@ -324,7 +359,8 @@ export default function Lobby({ room, me, spectating, chat }: {
     dressed.current = room.code;
     let prefChar: string | null = null;
     try { prefChar = localStorage.getItem(CHARACTER_PREF_KEY); } catch { /* private mode */ }
-    const free = isCharacterId(prefChar) && !room.seats.some(s => s.character === prefChar && s.id !== me);
+    const free = isCharacterId(prefChar) && characterAvailable(prefChar)
+      && (characterShared(prefChar) || !room.seats.some(s => s.character === prefChar && s.id !== me));
     const pref = loadOutfitPref(free ? prefChar as CharacterId : mySeat.character);
     if (!sameOutfit(pref, mySeat.outfit)) call('room:seat', { outfit: pref }).catch(() => {});
   }, [mySeat, room.code, room.seats, me]);
@@ -411,7 +447,7 @@ export default function Lobby({ room, me, spectating, chat }: {
         <section className="panel">
           <BoardPicker room={room} isHost={isHost} configure={configure} />
 
-          <h3 className="bp-step"><span className="bp-num" aria-hidden>3</span>Table <small className="muted">optional</small></h3>
+          <h3 className="bp-step"><span className="bp-num" aria-hidden>{LOOK_STEP ? 3 : 2}</span>Table <small className="muted">optional</small></h3>
           <TableStylePicker style={room.style} canEdit={isHost} />
 
           <div className="rules-head">

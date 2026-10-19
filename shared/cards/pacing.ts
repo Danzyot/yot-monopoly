@@ -12,7 +12,11 @@ export const CARDS_FLIP_MS = 650;
 export const CARDS_DRAW_MS = 380;
 export const CARDS_DRAW_GAP_MS = 110;
 export const CARDS_DEAL_GAP_MS = 28;
+/** One card's flight in a deal (the gap between cards comes from the step's length). */
+export const CARDS_DEAL_FLY_MS = 360;
 export const CARDS_SETTLE_MS = 120;
+/** The podium after the final round (the winner's dance on the table) before the results show. Clients only: the server has nothing to wait for. */
+export const CARDS_PODIUM_MS = 5_200;
 /** Never let one play hold the table longer than this. */
 export const CARDS_MAX_PLAY_MS = 4_500;
 /** Queued plays never push the scene further ahead than this. */
@@ -32,12 +36,12 @@ export function cardsStepMs(s: CardsStep): number {
     case 'swap': return 900;
     case 'rotate': return 1_000;
     case 'challenge': return 1_500;
-    case 'call': return 300;
+    case 'call': return 650;
     case 'catch': return 650;
     case 'pass': return 200;
     case 'timeout': return 300;
     case 'leave': return 300;
-    case 'roundEnd': return 1_400;
+    case 'roundEnd': return 2_000;
   }
 }
 

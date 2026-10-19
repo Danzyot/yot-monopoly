@@ -17,6 +17,15 @@ export function characterAvailable(id: CharacterId): boolean {
   return SEASON_CHARACTERS.includes(id);
 }
 
+/**
+ * Whether several players may play the same character: during the season
+ * there are more seats than characters, so they share it and are told apart
+ * by their colour (a base Chog wears it on its onesie) or their own NFT Chog.
+ */
+export function characterShared(id: CharacterId): boolean {
+  return CHOG_SEASON && characterAvailable(id);
+}
+
 /** The picker's list: the catalogue filtered to what the season allows. */
 export function availableCharacters(): CharacterDef[] {
   return CHARACTER_DEFS.filter(c => SEASON_CHARACTERS.includes(c.id));

@@ -15,7 +15,11 @@ import { HEAD_Y, LOOKS, DefaultBody, type Look } from './looks.tsx';
 import { OutfitLayer } from './Outfit.tsx';
 import { OUTFIT_ITEMS, defaultOutfit, type Outfit } from '../../../../shared/outfits.ts';
 import { liteAssets } from '../quality.ts';
-import { characterModel, figureMeshes } from './merged.ts';
+import { characterModel, figureMeshes, type CharacterModel } from './merged.ts';
+import { chogLook, isChogTokenId, type ChogLook } from '../../../../shared/chogs/traits.ts';
+import { chogTokenModel } from './chogToken.ts';
+import { characterShared } from '../../../../shared/season.ts';
+import { ChogAura } from './ChogAura.tsx';
 
 export interface Rig {
   pose: Group | null;
@@ -35,9 +39,31 @@ export const newRig = (): Rig => ({
   pose: null, head: null, handL: null, handR: null, footL: null, footR: null, lidL: null, lidR: null, lag: new Float32Array(13),
 });
 
-/** Per-figure materials in the player's colour, freed when the figure goes. */
-export function useCharacterMaterials(id: CharacterId, color: string): Mats {
-  const mats = useMemo(() => makeMaterials(color, LOOKS[id]?.colors), [id, color]);
+/** The look of a Chog Genesis token a player plays as (character 'chog' with a token), else null. */
+export function tokenLook(id: CharacterId, chogToken?: number): ChogLook | null {
+  return id === 'chog' && isChogTokenId(chogToken) ? chogLook(chogToken) : null;
+}
+
+/**
+ * Per-figure materials in the player's colour, freed when the figure goes. A
+ * Chog Genesis token recolours them to its traits (skin, mane, lenses, lasers)
+ * and a Radioactive one glows from its skin and mane. When players share a
+ * character (the Chog season), its clothes take the player's colour as well as
+ * its shoes, so no two of them look alike.
+ */
+export function useCharacterMaterials(id: CharacterId, color: string, chogToken?: number): Mats {
+  const look = useMemo(() => tokenLook(id, chogToken), [id, chogToken]);
+  const mats = useMemo(() => {
+    const colors = { ...LOOKS[id]?.colors, ...look?.colors, ...(characterShared(id) ? { cloth: color } : {}) };
+    const m = makeMaterials(color, colors);
+    if (look?.base === 'radioactive') {
+      for (const k of ['skin', 'hair'] as const) {
+        m[k].emissive.copy(m[k].color);
+        m[k].emissiveIntensity = 0.9;
+      }
+    }
+    return m;
+  }, [id, color, look]);
   useEffect(() => () => disposeMaterials(mats), [mats]);
   return mats;
 }
@@ -58,18 +84,35 @@ const ANKLE = 0.03;
  * (signature items) are part of its model and show while worn; with no outfit
  * given, it wears them.
  */
-export function CharacterFigure({ outfit, lite, ...props }: {
+export function CharacterFigure({ outfit, lite, chogToken, ...props }: {
   id: CharacterId; mats: Mats; rig: Rig; outfit?: Outfit;
   /** The simplified model (default: by the stored graphics setting); false for close-ups like the gallery. */
   lite?: boolean;
+  /** Chog only: the holder's own Chog Genesis token, assembled from its traits (mats must come from the same token). */
+  chogToken?: number;
 }) {
+  const look = useMemo(() => tokenLook(props.id, chogToken), [props.id, chogToken]);
   return (
     <>
       <WithModel fallback={<DrawnFigure {...props} />}>
-        <ModelFigure {...props} lite={lite} outfit={outfit ?? defaultOutfit(props.id)} />
+        {look
+          ? <ChogTokenFigure {...props} look={look} lite={lite} />
+          : <ModelFigure {...props} lite={lite} outfit={outfit ?? defaultOutfit(props.id)} />}
       </WithModel>
+      {look?.aura && !(lite ?? liteModels()) && <ChogAura kind={look.aura.kind} color={look.aura.color} />}
+      {look && <ChogPlinth color={look.background} />}
       <OutfitLayer {...props} outfit={outfit} />
     </>
+  );
+}
+
+/** The ring under a token Chog, in its background colour (its name tag colour everywhere else). */
+function ChogPlinth({ color }: { color: string }) {
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.003, 0]}>
+      <ringGeometry args={[0.105, 0.13, 40]} />
+      <meshBasicMaterial color={color} transparent opacity={0.8} depthWrite={false} />
+    </mesh>
   );
 }
 
@@ -207,6 +250,17 @@ export function preloadCharacters(ids: Iterable<CharacterId>, lite?: boolean) {
   for (const id of new Set(ids)) useGLTF.preload(characterUrl(id, lite));
 }
 
+/** The Chog Genesis trait parts (tools/blender/chog_traits.py): one file for every token. */
+export function chogTraitsUrl(lite = liteModels()): string {
+  return (lite && ASSETS.chogTraits.low) || ASSETS.chogTraits.url;
+}
+
+/** Start downloading the trait parts (a table with a token Chog at it). */
+export function preloadChogTraits(lite?: boolean) {
+  useGLTF.preload(characterUrl('chog', lite));
+  useGLTF.preload(chogTraitsUrl(lite));
+}
+
 /** Garment nodes a character's model has (its signature outfit items), in bone order after RIG_BONES. */
 const garmentItems = (id: CharacterId) => OUTFIT_ITEMS.filter(item => item.only === id && item.node);
 
@@ -215,10 +269,27 @@ function ModelFigure({ id, mats, rig, outfit, lite }: { id: CharacterId; mats: M
   const gltf = useGLTF(characterUrl(cid, lite));
   const items = useMemo(() => garmentItems(cid), [cid]);
   const model = useMemo(() => characterModel(gltf.scene, cid, items.map(i => i.node!)), [gltf.scene, cid, items]);
+  return <RiggedModel model={model} items={items} outfit={outfit} mats={mats} rig={rig} look={LOOKS[id] ?? LOOKS.spiky} />;
+}
+
+/** A holder's own Chog: the base model's body with the head assembled from its token's trait parts (chogToken.ts). */
+function ChogTokenFigure({ mats, rig, look, lite }: { id: CharacterId; mats: Mats; rig: Rig; look: ChogLook; lite?: boolean }) {
+  const liteNow = lite ?? liteModels();
+  const [base, traits] = useGLTF([characterUrl('chog', liteNow), chogTraitsUrl(liteNow)]);
+  // The laser beams stay off on Low (they are the one part that reaches out past the figure).
+  const model = useMemo(() => chogTokenModel(base.scene, traits.scene, look, !liteNow), [base.scene, traits.scene, look, liteNow]);
+  return <RiggedModel model={model} items={[]} outfit={{}} mats={mats} rig={rig} look={LOOKS.chog} />;
+}
+
+const NO_ITEMS: ReturnType<typeof garmentItems> = [];
+
+/** A merged model on the rig: its skinned meshes in this figure's materials, each part's bone hung on its rig group. */
+function RiggedModel({ model, items = NO_ITEMS, outfit, mats, rig, look }: {
+  model: CharacterModel; items?: ReturnType<typeof garmentItems>; outfit: Outfit; mats: Mats; rig: Rig; look: Look;
+}) {
   const fig = useMemo(() => figureMeshes(model, mats), [model, mats]);
   useEffect(() => () => fig.dispose(), [fig]);
   const b = fig.bones;
-  const look = LOOKS[id] ?? LOOKS.spiky;
   return (
     <group ref={g => { rig.pose = g; }}>
       {fig.meshes.map((m, i) => <primitive key={i} object={m} />)}

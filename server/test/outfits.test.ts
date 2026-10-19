@@ -5,6 +5,7 @@ import {
   OUTFIT_ITEMS, OUTFIT_SLOTS, defaultOutfit, outfitForCharacter, parseOutfit, randomOutfit, sanitizeOutfit,
 } from '../../shared/outfits.ts';
 import { CHARACTERS } from '../../shared/characters.ts';
+import { CHOG_SEASON } from '../../shared/season.ts';
 
 const hooks = (): RoomHooks => ({ onChange() {}, onEvent(_r: Room, _t: string) {}, onFinished() {} });
 const m = (id: string) => ({ id, name: id, avatar: '🙂' });
@@ -18,8 +19,11 @@ test('outfits: picks are validated against the known items of each slot', () => 
   const reg = new Registry(hooks(), 1e9);
   const r = reg.create('a');
   r.join(m('a')); r.join(m('b'));
-  r.pickCharacter('a', 'spiky');
-  r.pickCharacter('b', 'robot');
+  // (In the Chog season both are already the base Chog, which has no clothes of its own.)
+  if (!CHOG_SEASON) {
+    r.pickCharacter('a', 'spiky');
+    r.pickCharacter('b', 'robot');
+  }
   assert.deepEqual(r.seat('a')!.outfit, {}, 'a plain character wears nothing of its own');
 
   r.pickOutfit('a', { head: 'cap', eyes: 'shades', neck: 'chain', body: 'hoodie' });
@@ -102,7 +106,8 @@ test('outfits: signature items belong to one character and are what it wears by 
   }
 });
 
-test('outfits: seats wear their character\'s own clothes, and only that character can pick them', () => {
+// Needs CJ WAWA, Yot and Robo, who rest during the Chog season.
+test('outfits: seats wear their character\'s own clothes, and only that character can pick them', { skip: CHOG_SEASON && 'Chog season: only Chog is on offer' }, () => {
   const reg = new Registry(hooks(), 1e9);
   const r = reg.create('a');
   r.join(m('a')); r.join(m('b'));

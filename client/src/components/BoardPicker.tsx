@@ -12,6 +12,7 @@
 // tableLabel() in shared/themes.ts has the words players see.)
 
 import { THEMES, resolveTheme, tableLabel, type RuleConfig } from '../../../shared/themes.ts';
+import { themeAvailable } from '../../../shared/season.ts';
 import { MAPS, getMap } from '../../../shared/maps.ts';
 import type { RoomView } from '../../../shared/types.ts';
 import BoardPreview from '../three/BoardPreview.tsx';
@@ -30,6 +31,10 @@ function themeRules(rules: Partial<RuleConfig>): string {
     .map(([k]) => RULE_WORDS[k as keyof RuleConfig])
     .join(', ');
 }
+
+/** The looks on offer (one during the Chog season, so there is nothing to pick and the step is hidden). */
+const LOOKS = THEMES.filter(t => themeAvailable(t.id));
+export const LOOK_STEP = LOOKS.length > 1;
 
 export default function BoardPicker({ room, isHost, configure }: {
   room: RoomView;
@@ -61,12 +66,13 @@ export default function BoardPicker({ room, isHost, configure }: {
         })}
       </div>
 
+      {LOOK_STEP && <>
       <h3 className="bp-step"><span className="bp-num" aria-hidden>2</span>Look</h3>
       <p className="pick-hint muted small">
         How the {map.name} board is printed: names, colours, money and cards. Original is the board’s own look; the others reskin it.{hostOnly}
       </p>
       <div className="edition-pick bp-themes" role="group" aria-label="Look">
-        {THEMES.map(t => {
+        {LOOKS.map(t => {
           const on = t.id === room.themeId;
           const rt = resolveTheme(t.id, room.mapId);
           const rules = themeRules(t.rules);
@@ -89,6 +95,7 @@ export default function BoardPicker({ room, isHost, configure }: {
           );
         })}
       </div>
+      </>}
       <p className="bp-summary small" aria-live="polite">
         <b>{tableLabel(map.name, current.name)}</b>
         {' '}— {map.spaces.length} spaces, {current.deckNames.chance} &amp; {current.deckNames.chest} cards.
