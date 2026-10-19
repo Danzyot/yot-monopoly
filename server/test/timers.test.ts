@@ -2,7 +2,7 @@
 // fixes, the Speed Die and operator fixes.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AUCTION_MS, Game, type GameSnapshot } from '../src/engine/game.ts';
+import { AUCTION_MS, Game, PAUSE_MAX_MS, type GameSnapshot } from '../src/engine/game.ts';
 import { botAction } from '../src/engine/bot.ts';
 import { Room, type RoomHooks } from '../src/rooms.ts';
 import { DEFAULT_RULES, resolveTheme } from '../../shared/themes.ts';
@@ -159,7 +159,7 @@ test('pause freezes every clock and blocks actions; resume shifts deadlines', ()
   tick(1_000);
   g.pause('Host');
   assert.throws(() => act('p0', { type: 'bid', amount: 10 }), /paused by Host/);
-  assert.equal(g.clockDeadline(), null);
+  assert.equal(g.clockDeadline(), now() + PAUSE_MAX_MS, 'only the pause time limit is left');
   assert.equal(g.view().paused?.by, 'Host');
   tick(100_000);
   assert.equal(g.auctionTimeout(), false, 'the auction clock is frozen');
@@ -172,6 +172,35 @@ test('pause freezes every clock and blocks actions; resume shifts deadlines', ()
   assert.equal(g.debtEndsAt.p1, debtEnd + 100_000);
   assert.equal(g.endsAt, t0 + 30 * 60_000 + 100_000);
   act('p0', { type: 'bid', amount: 10 });
+});
+
+test('pause: the game resumes by itself after the pause time limit', () => {
+  const { g, tick, now, act } = scripted(2, { turnSeconds: 60 });
+  const turnEnd = g.turnEndsAt!;
+  g.pause('Host');
+  const t0 = now();
+  tick(PAUSE_MAX_MS - 1);
+  assert.equal(g.clockTimeout(), false, 'not yet');
+  assert.ok(g.paused);
+  tick(1);
+  assert.equal(g.clockDeadline(), now());
+  assert.equal(g.clockTimeout(), true);
+  assert.equal(g.paused, null);
+  assert.equal(g.log.at(-1)!.text, '▶️ Game resumed (pause time limit).');
+  assert.equal(g.turnEndsAt, turnEnd + (now() - t0), 'the turn clock picks up where it stopped');
+  act('p0', { type: 'roll' });
+});
+
+test('room: a pause left running resumes by itself at the limit', async () => {
+  const { r, g, events } = room();
+  r.pause('a', false, 'A');
+  g.paused!.at -= PAUSE_MAX_MS; // as if the host walked off 5 minutes ago
+  r.setConnected('b', true); // re-arm timers, as any change does
+  await sleep(150);
+  assert.equal(g.paused, null);
+  assert.ok(events.includes('▶️ Game resumed (pause time limit).'));
+  r.act(g.current.id, { type: 'roll' });
+  r.dispose();
 });
 
 test('pause: resigning still works while paused', () => {

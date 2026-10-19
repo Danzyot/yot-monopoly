@@ -37,6 +37,10 @@ export const AFK_AFTER = 2;
 const STEP_PHASES: TurnPhase[] = ['roll', 'buy', 'done', 'choose'];
 const MAX_LOG = 250;
 const MAX_OPEN_TRADES = 5;
+/** Withdrawing an offer this soon after making it is not logged. */
+const QUIET_WITHDRAW_MS = 5_000;
+/** A pause ends by itself after this long, so no host can freeze a table for good. */
+export const PAUSE_MAX_MS = 5 * 60_000;
 /** Longest player or offer id a client may name (ids are short; anything longer is junk). */
 const MAX_ID_LEN = 64;
 /** Debt/charge reasons that start with this are rent (for the summary stats). */
@@ -241,6 +245,8 @@ export class Game {
   private minigamesEnabled: () => boolean;
   private cardSeq = 0;
   private tradeSeq = 0;
+  /** Per open offer: when it was made (a quick withdrawal is not logged). */
+  private offerMadeAt: Record<string, number> = {};
   private onLog?: (text: string) => void;
   private onBank?: (amount: number, reason: string) => void;
   private rng: Rng;
@@ -348,8 +354,10 @@ export class Game {
       return 25 * 2 ** (n - 1) * (opts.railroadMultiplier ?? 1);
     }
     if (s.kind === 'utility') {
+      // 10× when the owner holds every utility on the board (and there are at least two).
+      const total = this.spaces.filter(x => x.kind === 'utility').length;
       const n = this.ownedBy(o.owner).filter(i => this.spaces[i].kind === 'utility').length;
-      const mult = opts.utilityTenX || n >= 2 ? 10 : 4;
+      const mult = opts.utilityTenX || (total >= 2 && n === total) ? 10 : 4;
       return mult * diceTotal;
     }
     return 0;
@@ -1167,9 +1175,11 @@ export class Game {
    * everything left (cash, deeds as they are, Get Out of Jail Free cards, and
    * what others owe `p`), paying the 10% on mortgaged deeds; the bank auctions
    * the deeds unmortgaged and puts the jail cards back under their decks.
+   * `toBank` (the room took them out: kicked, removed, left): their debts are
+   * dropped and everything goes to the bank, so nobody can be handed an estate.
    */
-  private goBankrupt(p: PlayerState) {
-    const mine = this.debts.filter(d => d.from === p.id);
+  private goBankrupt(p: PlayerState, opts: { toBank?: boolean } = {}) {
+    const mine = opts.toBank ? [] : this.debts.filter(d => d.from === p.id);
     this.debts = this.debts.filter(d => d.from !== p.id);
     this.trades = this.trades.filter(t => t.from !== p.id && t.to !== p.id);
 
@@ -1282,6 +1292,8 @@ export class Game {
     if (original) this.trades = this.trades.filter(t => t !== original);
     const t: Trade = { id: `t${++this.tradeSeq}`, from: p.id, to: to.id, give, get };
     this.trades.push(t);
+    this.offerMadeAt[t.id] = this.now();
+    for (const id of Object.keys(this.offerMadeAt)) if (!this.trades.some(x => x.id === id)) delete this.offerMadeAt[id];
     this.say(original ? `${p.name} countered ${to.name}'s offer.` : `${p.name} offered ${to.name} a trade.`, p.id);
   }
 
@@ -1342,6 +1354,10 @@ export class Game {
     const t = this.trades.find(x => x.id === id) ?? fail('That offer is gone');
     if (t.to !== p.id && t.from !== p.id) fail('Not your offer');
     this.trades = this.trades.filter(x => x.id !== id);
+    const madeAt = this.offerMadeAt[id];
+    delete this.offerMadeAt[id];
+    // Offer-and-withdraw spam stays out of the log.
+    if (t.from === p.id && madeAt !== undefined && this.now() - madeAt < QUIET_WITHDRAW_MS) return;
     this.say(t.from === p.id ? `${p.name} withdrew a trade offer.` : `${p.name} declined a trade.`, p.id);
   }
 
@@ -1607,9 +1623,10 @@ export class Game {
     if (this.turnEndsAt - ms < until) this.turnEndsAt = until + ms;
   }
 
-  /** When the room must call clockTimeout() next (turn step, a debt, or the game-length limit). */
+  /** When the room must call clockTimeout() next (turn step, a debt, the game-length or pause limit). */
   clockDeadline(): number | null {
-    if (this.paused || this.phase === 'over') return null;
+    if (this.phase === 'over') return null;
+    if (this.paused) return this.paused.at + PAUSE_MAX_MS;
     const due = Object.values(this.debtEndsAt);
     if (this.turnEndsAt !== null) due.push(this.turnEndsAt);
     if (this.endsAt !== null && !this.timeUp) due.push(this.endsAt);
@@ -1621,6 +1638,10 @@ export class Game {
     const due = this.clockDeadline();
     const now = this.now();
     if (due === null || now < due) return false;
+    if (this.paused) {
+      this.unpause('▶️ Game resumed (pause time limit).');
+      return true;
+    }
     if (this.endsAt !== null && !this.timeUp && now >= this.endsAt) {
       this.timeUp = true;
       this.say(this.phase === 'roll' ? '⏰ Time is up!' : `⏰ Time is up — the game ends when ${this.current.name}'s turn is over.`);
@@ -1707,10 +1728,28 @@ export class Game {
   }
 
   resume(by: string) {
-    const p = this.paused ?? fail('The game is not paused');
+    if (!this.paused) fail('The game is not paused');
+    this.unpause(`▶️ Game resumed by ${by}.`);
+  }
+
+  private unpause(text: string) {
+    const p = this.paused!;
     this.paused = null;
     this.shiftClocks(this.now() - p.at);
-    this.say(`▶️ Game resumed by ${by}.`);
+    this.say(text);
+    this.settle();
+  }
+
+  /**
+   * The room takes a player out (kicked, removed, left the table): always
+   * bankrupt to the bank, whoever they owe (see goBankrupt).
+   */
+  forfeit(playerId: string) {
+    if (this.phase === 'over') fail('The game is over');
+    const p = this.player(playerId);
+    if (p.bankrupt) fail('You are out of the game');
+    this.moveOpen = false;
+    this.goBankrupt(p, { toBank: true });
     this.settle();
   }
 
