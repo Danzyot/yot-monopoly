@@ -52,8 +52,8 @@ function liveLine(connected: boolean, open: number, playing: number): string {
   return `${open} table${open === 1 ? '' : 's'} open now${playing ? ` · ${playing} playing` : ''}`;
 }
 
-/** The characters the home page puts first. */
-const FEATURED: CharacterId[] = ['chog', 'snacky', 'starer'];
+/** The characters the home page puts first: just Chog during the Chog season. */
+const FEATURED: CharacterId[] = CHOG_SEASON ? ['chog'] : ['chog', 'snacky', 'starer'];
 
 /** The hero's "How to play" button; the same as components/HowToPlay's HowToPlayButton, without its code in the page. */
 function HowToButton({ label }: { label: string }) {
@@ -174,7 +174,8 @@ export default function Home() {
               <h3>{GAMES.poker.name}</h3>
               <p>{BLURBS.poker}</p>
               <span className="hub-meta">2–9 per table · cash & tournaments</span>
-              <span className="hub-live">{profile ? 'Its own site — you stay signed in' : 'On its own site'}</span>
+              {/* One short line either way, so the card keeps its height when a stored sign-in is confirmed. */}
+              <span className="hub-live">{profile || checking ? 'You stay signed in there' : 'On its own site'}</span>
             </div>
             <div className="hub-actions">
               <a className="btn primary hub-play" href={pokerHref(profile ? getToken() : null)}>Play Poker</a>
@@ -201,6 +202,12 @@ export default function Home() {
           <p className="cast-more">
             <span className="cast-dots" aria-hidden>{others.map(c => <i key={c.id} title={c.name}>{c.emoji}</i>)}</span>
             <Link to="/characters">+ {others.length} more to play as</Link>
+          </p>
+        )}
+        {/* Holders play as their own NFT Chog, built from its traits, once their wallet is linked. */}
+        {CHOG_SEASON && (
+          <p className="cast-more cast-wallet">
+            <Link to="/wallet">Hold a Chog Genesis? Link your wallet to play as yours →</Link>
           </p>
         )}
       </section>

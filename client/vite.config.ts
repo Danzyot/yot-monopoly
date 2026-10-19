@@ -77,6 +77,9 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (/[\\/]node_modules[\\/](three|three-stdlib|@react-three)[\\/]/.test(id)) return 'three';
+          // React's string renderer (the card table draws its SVG faces to textures with it,
+          // cards/three/cardAtlas.ts) is 200 KB the home page never needs: keep it out of 'react'.
+          if (/[\\/]node_modules[\\/]react-dom[\\/](server|cjs[\\/]react-dom-server)/.test(id)) return 'react-server';
           // Named, or Rollup would pull React into 'three' (fiber imports it).
           if (/[\\/]node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom)[\\/]/.test(id)) return 'react';
           // Bundler helpers (Vite's lazy-import preloader…) ride with React,

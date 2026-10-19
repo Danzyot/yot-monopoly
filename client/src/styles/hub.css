@@ -100,6 +100,10 @@
 /* ---- home: one star (the Chog season) gets a single centred card ---- */
 .cast-stars.solo { grid-template-columns: minmax(0, 560px); justify-content: center; }
 
+/* The season's line under the cast: holders play as their own Chog. */
+.cast-wallet { justify-content: center; }
+.cast-wallet a { color: var(--hi); font-weight: 800; }
+
 /* ---- /sso: a short message while the hand-off happens ---- */
 .sso-page { min-height: 50vh; text-align: center; max-width: 520px; }
 .sso-page h2 { margin: 0; }
