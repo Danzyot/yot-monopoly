@@ -55,7 +55,9 @@ for (const map of MAPS) {
       await page.waitForURL(/\/r\//, { waitUntil: 'commit' });
       await page.waitForTimeout(4000);
       await page.click(`button.map-card:has-text("${map}")`);
-      await page.click(`button.bp-theme:has-text("${edition}")`);
+      // The look picker is hidden during the Chog season (every table is the Chog look).
+      const look = page.locator(`button.bp-theme:has-text("${edition}")`);
+      if (await look.count()) await look.first().click();
       await page.click('text=+ Add bot');
       await page.click('text=+ Add bot');
       await page.click('text=Start Game');
