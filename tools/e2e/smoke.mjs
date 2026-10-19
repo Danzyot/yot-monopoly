@@ -84,6 +84,8 @@ for (const map of MAPS) {
         const gl = window.__yotGl;
         return gl ? { calls: gl.info.render.calls, triangles: gl.info.render.triangles } : null;
       });
+      // Chat is the default tab: open the log to count the rolls.
+      await page.click('button:has-text("Log")', { timeout: 5000 }).catch(() => {});
       const log = await page.locator('.log').innerText().catch(() => '');
       const turns = (log.match(/rolled/g) || []).length;
       console.log(`${tag}: ${turns} rolls, ${perf ? `${perf.calls} draw calls, ${perf.triangles} triangles` : 'no perf'}${errors.length ? `, ${errors.length} ERRORS` : ''}`);

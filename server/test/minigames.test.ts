@@ -588,3 +588,15 @@ test('room: an arcade round starts once the move that got there has played out',
     room.dispose();
   }
 });
+
+test('holdMinigame: the room asking a few ms after the round opened still holds it', () => {
+  const { g, start, tick, clock } = setup();
+  start('diceDuel');
+  const due = g.minigameDeadline()!;
+  // The room notes the scene right after the action that opened the round; a
+  // millisecond or two may have passed. That is not "play has begun".
+  tick(3);
+  g.holdMinigame(clock + 6000);
+  assert.equal(g.minigameDeadline(), due + 6000 - 0, 'held for the scene');
+  assert.equal(g.view().minigame!.startsAt, clock + 6000);
+});

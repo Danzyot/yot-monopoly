@@ -88,6 +88,8 @@ export interface MinigameState {
    * screen. Absent in older snapshots.
    */
   playFrom?: number;
+  /** When the round opened (absent in older snapshots): play starts then unless a hold moves it. */
+  openedAt?: number;
 }
 
 /** Everything needed to rebuild a game after a restart (see Game.restore). */
@@ -164,6 +166,9 @@ function idArg(v: unknown): string {
 function speedName(f: SpeedFace): string {
   return f === 'mr' ? 'Mr. Monopoly' : f === 'bus' ? 'Bus' : String(f);
 }
+
+/** How late after an arcade round opens the room may still hold its start for the scene. */
+const HOLD_GRACE_MS = 250;
 
 export class Game {
   readonly theme: Theme;
@@ -1363,7 +1368,7 @@ export class Game {
     const k = kind ?? MINIGAME_KINDS[this.rng(MINIGAME_KINDS.length)];
     const others = this.active().filter(o => o !== p).map(o => o.id);
     const data = MINIGAMES[k].start({ ...this.minigameCtx(), host: p.id, others });
-    this.minigame = { seq: ++this.minigameSeq, kind: k, host: p.id, stage: 'play', resultEndsAt: 0, result: null, data, playFrom: this.now() };
+    this.minigame = { seq: ++this.minigameSeq, kind: k, host: p.id, stage: 'play', resultEndsAt: 0, result: null, data, playFrom: this.now(), openedAt: this.now() };
     this.phase = 'minigame';
     const info = MINIGAME_INFO[k];
     const vs = k === 'diceDuel' ? ` — ${p.name} vs ${this.player((data as { opponent: string }).opponent).name}` : '';
@@ -1402,7 +1407,11 @@ export class Game {
     const mg = this.minigame;
     if (!mg || mg.stage !== 'play' || this.phase !== 'minigame' || this.paused || mg.playFrom === undefined) return;
     // Once play has begun the round's clocks are live: never move them under the players.
-    if (this.now() > mg.playFrom || until <= mg.playFrom) return;
+    // (The room asks right after the action that opened the round, a few ms later at
+    // most: that is not "begun".)
+    // A round not held yet, asked about within HOLD_GRACE_MS of opening, has not begun.
+    const fresh = mg.openedAt !== undefined && mg.playFrom === mg.openedAt && this.now() - mg.openedAt <= HOLD_GRACE_MS;
+    if ((this.now() > mg.playFrom && !fresh) || until <= mg.playFrom) return;
     MINIGAMES[mg.kind].shift(mg.data, until - mg.playFrom);
     mg.playFrom = until;
   }
