@@ -3,7 +3,32 @@
     "url": "/models/buildings.glb?v=94108fccdf"
   },
   "characters": {
-    "url": "/models/characters.glb?v=951821c090"
+    "alien": "/models/characters/alien.glb?v=fe61582008",
+    "astronaut": "/models/characters/astronaut.glb?v=55c1e2c388",
+    "cat": "/models/characters/cat.glb?v=fb0d6865dc",
+    "chef": "/models/characters/chef.glb?v=5089ad5c68",
+    "knight": "/models/characters/knight.glb?v=e419fc92e0",
+    "ninja": "/models/characters/ninja.glb?v=5c47e56591",
+    "pirate": "/models/characters/pirate.glb?v=e894c4294c",
+    "robot": "/models/characters/robot.glb?v=ee25c7f5bc",
+    "snacky": "/models/characters/snacky.glb?v=33b345b63e",
+    "spiky": "/models/characters/spiky.glb?v=cc7fb55013",
+    "starer": "/models/characters/starer.glb?v=69c2505708",
+    "wizard": "/models/characters/wizard.glb?v=a38863fee9"
+  },
+  "charactersLow": {
+    "alien": "/models/characters/alien-low.glb?v=737f68eadb",
+    "astronaut": "/models/characters/astronaut-low.glb?v=14af4a549b",
+    "cat": "/models/characters/cat-low.glb?v=3e63049e8e",
+    "chef": "/models/characters/chef-low.glb?v=f2491ecb6d",
+    "knight": "/models/characters/knight-low.glb?v=a1b163075d",
+    "ninja": "/models/characters/ninja-low.glb?v=3ae5166171",
+    "pirate": "/models/characters/pirate-low.glb?v=133465aa60",
+    "robot": "/models/characters/robot-low.glb?v=2f28a2c77f",
+    "snacky": "/models/characters/snacky-low.glb?v=68de99003d",
+    "spiky": "/models/characters/spiky-low.glb?v=7ca7a4389e",
+    "starer": "/models/characters/starer-low.glb?v=e3bb918ec9",
+    "wizard": "/models/characters/wizard-low.glb?v=7f423e2d83"
   },
   "chogEnv": {
     "url": "/models/chog/room-env.webp?v=a984cb9f8d"

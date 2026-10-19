@@ -15,6 +15,7 @@ import BoardScene from '../three/BoardScene.tsx';
 import TableStylePicker from './TableStylePicker.tsx';
 import BoardPicker from './BoardPicker.tsx';
 import CharacterPreview from '../three/characters/CharacterPreview.tsx';
+import { preloadCharacters } from '../three/characters/Figure.tsx';
 import { themeStyle } from '../themeStyle.ts';
 import RequirementsPicker from './RequirementsPicker.tsx';
 import { ProfileLink } from '../community.tsx';
@@ -97,6 +98,10 @@ export default function Lobby({ room, me, spectating, chat }: {
 
   const configure = (p: { themeId?: string; mapId?: string; rules?: Partial<RuleConfig>; private?: boolean }) =>
     call('room:configure', p).catch(toastError);
+
+  // Fetch the table's characters (one small file each) while everyone gathers, so the game starts with them in.
+  const seatChars = room.seats.map(s => s.character).join(',');
+  useEffect(() => { if (seatChars) preloadCharacters(seatChars.split(',') as CharacterId[]); }, [seatChars]);
 
   // The character picked on /characters ("Play as …"): applied once, the first
   // time we hold a seat in this room, and only while nobody else has it.

@@ -161,7 +161,7 @@ function Turntable({ id, color, outfit, move, startedAt, frozen, x = 0 }: {
   return (
     <group ref={spin} position={[x, 0, 0]}>
       <group ref={body}>
-        <CharacterFigure id={id} mats={mats} rig={rig} outfit={outfit} />
+        <CharacterFigure id={id} mats={mats} rig={rig} outfit={outfit} lite={false} />
         <primitive object={fx.fx} />
       </group>
     </group>
