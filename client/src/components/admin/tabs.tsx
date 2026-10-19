@@ -3,6 +3,7 @@
 import type { ComponentType } from 'react';
 import AltsTab from './AltsTab.tsx';
 import BansTab from './BansTab.tsx';
+import ContentTab from './ContentTab.tsx';
 import DiscordTab from './DiscordTab.tsx';
 import FeaturesTab from './FeaturesTab.tsx';
 import GraphicsManager from './GraphicsManager.tsx';
@@ -27,6 +28,7 @@ export const ADMIN_TABS: AdminTab[] = [
   { id: 'bans', label: 'Bans', icon: '⛔', Component: BansTab },
   { id: 'logs', label: 'Logs', icon: '📜', Component: LogsTab },
   { id: 'features', label: 'Features', icon: '🎛', Component: FeaturesTab },
+  { id: 'content', label: 'Content', icon: '✏️', Component: ContentTab },
   { id: 'discord', label: 'Discord', icon: '💬', Component: DiscordTab },
   { id: 'graphics', label: 'Graphics', icon: '🖼', Component: GraphicsManager },
   { id: 'music', label: 'Music', icon: '🎵', Component: MusicManager },

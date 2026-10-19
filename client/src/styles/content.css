@@ -1,0 +1,54 @@
+/* Dashboard → Content: names and texts players read, editable in place. */
+.cn-sections { align-self: flex-start; }
+.cn-count { font-weight: 900; color: var(--hi); }
+.adm-seg button.on .cn-count { color: #5a3500; }
+.cn-reset-kind { justify-content: flex-end; margin-top: -6px; }
+.cn-pickers { gap: 8px; align-items: center; }
+.cn-help code, .cn-group-h code { font-size: 12px; }
+
+.cn-group { padding: 10px 12px; }
+.cn-group-h { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 16px; }
+.cn-swatch { width: 22px; height: 22px; border-radius: 6px; flex: none; border: 2px solid rgba(255, 255, 255, 0.5); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3); }
+
+.cn-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.cn-c-idx { width: 44px; }
+.cn-c-kind { width: 96px; }
+.cn-c-name { width: 38%; }
+.cn-c-price { width: 90px; }
+.cn-c-house { width: 70px; }
+.cn-c-card { width: 36%; }
+.cn-c-effect { width: 22%; }
+.cn-table th, .cn-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid color-mix(in srgb, var(--line) 45%, transparent); font-size: 13px; vertical-align: top; }
+.cn-table tr:last-child td { border-bottom: 0; }
+.cn-table th { color: var(--muted); font-weight: 800; white-space: nowrap; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+.cn-table td { padding-top: 9px; }
+.cn-table td.cn-name { padding-top: 6px; }
+.cn-idx { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 800; }
+.cn-table td { overflow-wrap: anywhere; }
+.cn-rent { font-variant-numeric: tabular-nums; color: var(--muted); }
+.cn-preview { font-style: italic; }
+
+.cn-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cn-field input, .cn-field textarea { width: 100%; min-width: 0; padding: 6px 9px; font-size: 14px; }
+.cn-field.edited input, .cn-field.edited textarea { border-color: var(--hi); }
+.cn-field.dirty input, .cn-field.dirty textarea { border-color: var(--good); }
+.cn-field-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.cn-chip { font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 7px; border-radius: 99px; background: var(--hi); color: #5a3500; flex: none; }
+.cn-default { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 80px; }
+
+.cn-entity { display: flex; flex-direction: column; gap: 10px; }
+.cn-entity h3 { margin: 0; }
+.cn-labelled { display: flex; flex-direction: column; gap: 3px; }
+
+/* Phones: each row becomes a small card. */
+@media (max-width: 700px) {
+  .cn-table, .cn-table tbody, .cn-table tr, .cn-table td { display: block; width: auto; }
+  .cn-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .cn-table tr { padding: 8px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 45%, transparent); }
+  .cn-table tr:last-child { border-bottom: 0; }
+  .cn-table td { border: 0; padding: 2px 0; }
+  .cn-table td[data-label]::before { content: attr(data-label) ' '; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
+  .cn-table td.cn-name::before { display: block; margin-bottom: 2px; }
+  .cn-pickers .adm-seg { display: flex; width: 100%; }
+  .cn-pickers .adm-seg button { flex: 1; }
+}

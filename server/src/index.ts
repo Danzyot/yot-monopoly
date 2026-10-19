@@ -20,6 +20,7 @@ import { authRoutes, mountInteractions } from './routes/auth.ts';
 import { mountMusic } from './routes/music.ts';
 import { mountGraphics } from './routes/graphics.ts';
 import { mountTextOverrides } from './routes/textOverrides.ts';
+import { mountContent } from './routes/content.ts';
 import { attachSockets } from './sockets.ts';
 import { staticClient } from './staticFiles.ts';
 import { allResults, leaderboard, loadResults } from './stats.ts';
@@ -98,6 +99,8 @@ const io = new Server(http, {
 });
 const sockets = attachSockets(io);
 
+// Operator renames first, so restored games resolve their board with them.
+mountContent(app);
 const restored = restoreLive(sockets.registry);
 if (restored) console.log(`Restored ${restored} live room(s) from the last snapshot`);
 armPersistence(sockets.registry);
