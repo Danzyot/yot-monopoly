@@ -56,8 +56,8 @@ export function verifyToken(token: unknown): PlayerProfile | null {
     const iat = typeof data.iat === 'number' ? data.iat : 0;
     if (!iat || Date.now() - iat > MAX_TOKEN_AGE_MS) return null;
     // Re-cleaned on every read, so tokens signed before cleanName still render safely.
-    const name = cleanName(data.name);
-    if (!name) return null;
+    // A name that cleans to nothing keeps the session, as Discord sign-in does.
+    const name = cleanName(data.name) || 'Player';
     const profile: PlayerProfile = {
       id: String(data.id),
       name,
@@ -103,25 +103,29 @@ const BLANK_LETTERS = /[\u115f\u1160\u3164\uffa0\u2800]/g;
  * Removes characters that change nothing on screen: format characters
  * (zero-width spaces and joiners, bidi overrides and isolates, the BOM),
  * controls (as a space, so "a\nb" stays two words), private-use and lone
- * surrogates. A joiner between two emoji is kept so 👨‍👩‍👧 stays one family.
+ * surrogates. Kept where they do draw something: a joiner between two emoji
+ * (👨‍👩‍👧, 👩🏾‍💻 stay one), a joiner or non-joiner between two letters of a
+ * script that needs them (Sinhala, Persian…; not Latin, Greek or Cyrillic,
+ * where it would only make a lookalike), and the tags of a subdivision flag.
  */
 export function stripInvisible(s: string): string {
   return s.replace(
-    /(\p{Extended_Pictographic}\p{M}*)\u200d(?=\p{Extended_Pictographic})|[\p{Cc}]|[\p{Cf}\p{Co}\p{Cs}]/gu,
-    (m, emoji?: string) => emoji ? `${emoji}\u200d` : /\p{Cc}/u.test(m) ? ' ' : '',
+    /(\p{Extended_Pictographic}[\p{M}\p{Emoji_Modifier}]*)\u200d(?=\p{Extended_Pictographic})|((?![\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}])\p{L}\p{M}*[\u200c\u200d])(?=\p{L})|(\u{1F3F4}[\u{E0020}-\u{E007F}]+)|[\p{Cc}]|[\p{Cf}\p{Co}\p{Cs}]/gu,
+    (m, emoji?: string, letter?: string, flag?: string) =>
+      emoji ? `${emoji}\u200d` : letter ?? flag ?? (/\p{Cc}/u.test(m) ? ' ' : ''),
   );
 }
 
 /**
  * A display name that cannot pass for someone else's: NFKC (fullwidth and
- * styled letters become plain ones), invisible characters removed, at most two
- * combining marks in a row, whitespace collapsed, `max` characters. Returns ''
+ * styled letters become plain ones), invisible characters removed, at most three
+ * stacked (non-spacing) marks in a row, whitespace collapsed, `max` characters. Returns ''
  * when fewer than two visible characters are left; callers refuse or fall back.
  */
 export function cleanName(raw: unknown, max = 24): string {
   const s = stripInvisible(String(raw ?? '').normalize('NFKC'))
     .replace(BLANK_LETTERS, '')
-    .replace(/(\p{M}{2})\p{M}+/gu, '$1')
+    .replace(/([\p{Mn}\p{Me}]{3})[\p{Mn}\p{Me}]+/gu, '$1')
     .replace(/\s+/g, ' ')
     .trim();
   // By code point, so an emoji is never cut in half.

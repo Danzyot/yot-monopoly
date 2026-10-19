@@ -445,7 +445,8 @@ function ActionBar({ game, me, skew, selected, onManage, onLeave, onTrade }: {
   // (a debt of mine still comes first, below).
   if (game.phase === 'auction' && !game.paused && !(p && !p.bankrupt && debtOf(game, me) > 0)) return auctionBar();
   // Roll → result → walk: hold my buttons while the dice tumble, the score shows and the piece moves.
-  if (sceneBusy && game.current === me && !game.paused) {
+  // (Not in an arcade round: its panel holds the scene for its own show, and the bar says so below.)
+  if (sceneBusy && game.current === me && !game.paused && game.phase !== 'minigame') {
     return <div className="actionbar mine"><span className="ab-status rolling">{diceShown ? '🚶 Moving…' : '🎲 Rolling…'}</span>{dice}</div>;
   }
   if (game.paused) return <div className="actionbar"><span className="ab-status">⏸️ Game paused</span>{dice}</div>;

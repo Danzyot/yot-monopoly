@@ -42,11 +42,11 @@ test('cleanName: controls become spaces and whitespace collapses', () => {
   assert.equal(cleanName('Bob　 Smith'), 'Bob Smith');
 });
 
-test('cleanName: combining-mark floods are capped at two', () => {
+test('cleanName: combining-mark floods are capped at three', () => {
   const zalgo = 'Z' + '̶̷̸̹̺'.repeat(4) + 'ed';
   const out = cleanName(zalgo);
-  assert.equal(out, 'Z̶̷ed');
-  assert.ok(!/\p{M}{3}/u.test(cleanName('x' + '̀'.repeat(50) + 'y')));
+  assert.equal(out, 'Z̶̷̸ed');
+  assert.ok(!/\p{M}{4}/u.test(cleanName('x' + '̀'.repeat(50) + 'y')));
 });
 
 test('cleanName: blank-looking letters do not count as a name', () => {
@@ -73,6 +73,18 @@ test('cleanName: emoji survive, joined emoji stay joined', () => {
   assert.equal(cleanName('Ann 🎩'), 'Ann 🎩');
   assert.equal(cleanName('Fam 👨‍👩‍👧'), 'Fam 👨‍👩‍👧');
   assert.equal(cleanName('Ann❤️'), 'Ann❤️', 'variation selectors are kept');
+  assert.equal(cleanName('👩🏾‍💻 Dev'), '👩🏾‍💻 Dev', 'a skin tone before the joiner');
+  assert.equal(cleanName('👨🏽‍👩🏽‍👧🏽 fam'), '👨🏽‍👩🏽‍👧🏽 fam');
+  const england = '\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}';
+  assert.equal(cleanName(`${england} Jo`), `${england} Jo`, 'subdivision flags keep their tags');
+});
+
+test('cleanName: scripts that need joiners and stacked marks keep them', () => {
+  assert.equal(cleanName('ශ්\u200dරී ලංකා'), 'ශ්\u200dරී ලංකා', 'Sinhala joiner');
+  assert.equal(cleanName('علی\u200cرضا'), 'علی\u200cرضا', 'Persian non-joiner');
+  assert.equal(cleanName('ကျော်ဇင်'), 'ကျော်ဇင်', 'Burmese syllable marks');
+  assert.equal(cleanName('မြို့သူ'), 'မြို့သူ');
+  assert.equal(cleanName('Al\u200dice'), 'Alice', 'but not inside a Latin name');
 });
 
 test('lookalike names no longer collide', () => {
@@ -94,11 +106,11 @@ test('Discord sign-in cleans the name and falls back when nothing is left', () =
   assert.equal(makeDiscordProfile({ id: '2', username: '​' }).name, 'Player');
 });
 
-test('tokens are re-cleaned on read, and an invisible name is refused', () => {
+test('tokens are re-cleaned on read, and an invisible name falls back to Player', () => {
   const old = signToken({ id: 'demo_old', name: 'Alice​‮', avatar: '🎩', provider: 'demo' });
   assert.equal(verifyToken(old)?.name, 'Alice');
   const blank = signToken({ id: 'demo_blank', name: '​​​', avatar: '🎩', provider: 'demo' });
-  assert.equal(verifyToken(blank), null);
+  assert.equal(verifyToken(blank)?.name, 'Player');
 });
 
 // ---- chat ---------------------------------------------------------------------
