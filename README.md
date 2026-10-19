@@ -1,10 +1,31 @@
-# 🎩 Yot Monopoly
+# Chog Games
 
-A multiplayer 3D property-trading board game for the browser, with several boards,
-custom looks (like the poker sites: one codebase, many branded versions),
-mini-games, music, and a full operator dashboard.
+The Chog Games hub at **choggames.com**: three multiplayer browser games with one
+sign-in (Discord, or just a name in demo mode), one Discord app and one crew of
+characters. The brand is one file (`shared/brand.ts`: the name, the game names and
+where poker lives).
 
-## Features
+## The games
+
+- **Monopoly** (`/`) — the original Yot Monopoly: a 3D property-trading board game with
+  three boards, custom looks, mini-games, music and a full operator dashboard. Everything
+  under *Features* below is about it. Served by this server.
+- **Chog Cards** (`/cards`) — a fast shedding card game for 2–10: match colour, number or
+  symbol, empty your hand first, call "Last card!". Shares the server, the socket, the
+  sign-in and the leaderboard page (its own tab) with Monopoly; code in
+  `client/src/cards/`, `server/src/cards/` and `shared/cards/`.
+- **Chog Poker** (`poker.choggames.com`) — No-Limit Hold'em cash tables and multi-table
+  tournaments. It is a **separate app** in `poker/` with its own Railway service and its
+  own persistent disk; this server does not serve it. Read `poker/HANDOVER.md` first and
+  `poker/DEPLOY.md` for the steps. It runs on the same login secret and Discord app as this
+  site, so the hub hands a signed-in player over as `https://poker.choggames.com/#dtoken=…`
+  (`client/src/pokerLink.ts`; the base URL is `POKER_URL` in `shared/brand.ts`).
+
+The home page is the hub: the three game cards with live "tables open now" counts for
+Monopoly and Cards, then the characters and how it works. It ships no WebGL — the 3D
+game loads when a table is opened.
+
+## Features (Monopoly)
 
 **Play**
 - **Many games at once** — every table is a room with a 5-letter code and an invite

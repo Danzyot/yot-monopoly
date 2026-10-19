@@ -5,11 +5,14 @@ import { call, useConnected, useRoomList } from '../net.ts';
 import { getToken } from '../api.ts';
 import { THEMES, resolveTheme } from '../../../shared/themes.ts';
 import { MAPS, getMap } from '../../../shared/maps.ts';
-import { BRAND } from '../../../shared/brand.ts';
+import { BRAND, GAMES } from '../../../shared/brand.ts';
+import { CARDS_MAX_PLAYERS, CARDS_MIN_PLAYERS } from '../../../shared/cards/meta.ts';
 import { CHARACTER_DEFS, type CharacterDef, type CharacterId } from '../../../shared/characters.ts';
 import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { requirementBadge, requirementSentence } from '../community.tsx';
+import { useCardsRoomList } from '../cards/net.ts';
+import { pokerHref } from '../pokerLink.ts';
 
 // The home page has no WebGL at all: the board behind the hero is a still
 // (client/public/home/, drifted by styles/home.css), so the page is up at once
@@ -20,10 +23,17 @@ const loadHowToPlay = () => import('../components/HowToPlay.tsx');
 const HowToPlay = lazy(loadHowToPlay);
 
 const STEPS: { icon: string; title: string; body: string }[] = [
-  { icon: '🎲', title: 'Create a table', body: 'Pick a board, a theme and your house rules. Sign in with just a name.' },
-  { icon: '🔗', title: 'Share the code', body: 'Friends join with the five-letter code or the invite link — phones welcome. Short on people? Bots fill in.' },
-  { icon: '🚀', title: 'Roll', body: 'Buy, build, trade and auction your way to the last player standing.' },
+  { icon: '🎮', title: 'Pick a game', body: `${GAMES.monopoly.name}, ${GAMES.cards.name} or ${GAMES.poker.name}. One sign-in works across all three.` },
+  { icon: '🔗', title: 'Share the code', body: 'Every table has a five-letter code and an invite link — phones welcome. Short on people? Bots fill in.' },
+  { icon: '🏆', title: 'Play', body: 'Roll, shed your hand or shove all-in. Wins against real people count on the leaderboard.' },
 ];
+
+/** The hub's "tables open now" line under a game card. */
+function liveLine(connected: boolean, open: number, playing: number): string {
+  if (!connected) return 'Connecting…';
+  if (open === 0) return 'No tables open — start one!';
+  return `${open} table${open === 1 ? '' : 's'} open now${playing ? ` · ${playing} playing` : ''}`;
+}
 
 /** The two characters the home page puts first. */
 const FEATURED: CharacterId[] = ['snacky', 'starer'];
@@ -47,6 +57,7 @@ export default function Home() {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const rooms = useRoomList();
+  const cardTables = useCardsRoomList();
   const connected = useConnected();
   const canCreate = !!profile && (config.features.publicRooms || profile.isAdmin);
   // While a stored sign-in is still being checked, show the button it will most
@@ -73,6 +84,7 @@ export default function Home() {
   };
 
   const live = rooms.filter(r => r.status !== 'lobby').length;
+  const cardsLive = cardTables.filter(r => r.status !== 'lobby').length;
   // Names come from the catalogue, so a rename there shows up here.
   const featured = FEATURED.map(id => CHARACTER_DEFS.find(c => c.id === id)).filter((c): c is CharacterDef => !!c);
   const others = CHARACTER_DEFS.filter(c => !FEATURED.includes(c.id));
@@ -82,33 +94,72 @@ export default function Home() {
       {/* The board in its room behind the hero, drifting slowly: shows what the game is before a word is read. */}
       <div className="home-bg home-still" aria-hidden />
 
-      <section className="home-hero gd">
+      <section className="home-hero gd hub-hero">
         <h1>{BRAND.name}</h1>
-        <p className="home-tag">Roll the dice. Buy it all. Bankrupt your friends!</p>
-        <div className="hero-actions">
-          {profile || checking ? (
-            <button className="btn primary hero-cta" disabled={busy || !connected || !canCreate} onClick={create}>
-              {canCreate || checking ? 'Create Game' : 'Room creation is operators-only right now'}
-            </button>
-          ) : (
-            <button className="btn primary hero-cta" onClick={openSignIn}>Sign In to Play</button>
-          )}
-          <form className="hero-join" onSubmit={e => { e.preventDefault(); join(code); }}>
-            <input className="code-input" value={code} maxLength={5} placeholder="CODE" aria-label="Room code"
-              autoCapitalize="characters" autoComplete="off" spellCheck={false}
-              onChange={e => setCode(e.target.value.toUpperCase())} />
-            <button className="btn gold" type="submit">Join!</button>
-          </form>
-        </div>
+        <p className="home-tag">Monopoly, cards and poker with the Chog crew.</p>
         <div className="hero-howto">
           <HowToButton label="❓ New here? How to play" />
           <Link className="btn small ghost" to="/characters">🎭 Meet the characters</Link>
         </div>
-        <p className="hero-status muted small" role="status">
-          {!connected ? 'Connecting to server…'
-            : rooms.length === 0 ? 'No tables open yet — start one and invite your friends!'
-              : `${rooms.length} open table${rooms.length === 1 ? '' : 's'}${live ? ` · ${live} playing` : ''}`}
-        </p>
+      </section>
+
+      {/* The hub: one card per game, with what is on right now. Monopoly's "Play"
+          is the old hero button (create a table, or sign in first); Cards has its
+          own home at /cards; Poker is its own site, reached with the sign-in in hand. */}
+      <section className="hub" aria-labelledby="hub-title">
+        <h2 id="hub-title" className="sr-only">Pick a game</h2>
+        <ul className="hub-games">
+          <li className="hub-game hub-monopoly">
+            <img className="hub-thumb" src="/home/monopoly-640.webp" alt="" width={640} height={400} decoding="async" />
+            <div className="hub-text">
+              <h3>{GAMES.monopoly.name}</h3>
+              <p>Buy, build and trade on three 3D boards, with the Chog crew as your pieces.</p>
+              <span className="hub-meta">2–8 players · 45 min</span>
+              <span className="hub-live" role="status">{liveLine(connected, rooms.length, live)}</span>
+            </div>
+            <div className="hub-actions">
+              {profile || checking ? (
+                <button className="btn primary hub-play" disabled={busy || !connected || !canCreate} onClick={create}>
+                  {canCreate || checking ? `Play ${GAMES.monopoly.name}` : 'Tables are operators-only right now'}
+                </button>
+              ) : (
+                <button className="btn primary hub-play" onClick={openSignIn}>Sign in to play</button>
+              )}
+              <form className="hub-join" onSubmit={e => { e.preventDefault(); join(code); }}>
+                <input className="code-input" value={code} maxLength={5} placeholder="CODE" aria-label="Room code"
+                  autoCapitalize="characters" autoComplete="off" spellCheck={false}
+                  onChange={e => setCode(e.target.value.toUpperCase())} />
+                <button className="btn gold small" type="submit">Join</button>
+              </form>
+            </div>
+          </li>
+
+          <li className="hub-game hub-cards">
+            <img className="hub-thumb" src="/home/cards-640.webp" alt="" width={640} height={400} loading="lazy" decoding="async" />
+            <div className="hub-text">
+              <h3>{GAMES.cards.name}</h3>
+              <p>Match colour, number or symbol and shed your hand first. Fast rounds, big tables.</p>
+              <span className="hub-meta">{CARDS_MIN_PLAYERS}–{CARDS_MAX_PLAYERS} players · 15 min</span>
+              <span className="hub-live" role="status">{liveLine(connected, cardTables.length, cardsLive)}</span>
+            </div>
+            <div className="hub-actions">
+              <Link className="btn primary hub-play" to={GAMES.cards.path}>Play Cards</Link>
+            </div>
+          </li>
+
+          <li className="hub-game hub-poker">
+            <img className="hub-thumb" src="/home/poker-640.webp" alt="" width={640} height={400} loading="lazy" decoding="async" />
+            <div className="hub-text">
+              <h3>{GAMES.poker.name}</h3>
+              <p>No-Limit Hold'em: cash tables you share by link, and tournaments for the whole club.</p>
+              <span className="hub-meta">2–9 per table · cash & tournaments</span>
+              <span className="hub-live">{profile ? 'Its own site — you stay signed in' : 'On its own site'}</span>
+            </div>
+            <div className="hub-actions">
+              <a className="btn primary hub-play" href={pokerHref(profile ? getToken() : null)}>Play Poker</a>
+            </div>
+          </li>
+        </ul>
       </section>
 
       {/* The cast: the two stars up front, everyone else a tap away on /characters. */}

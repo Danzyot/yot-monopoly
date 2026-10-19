@@ -6,6 +6,7 @@ import Lobby from '../components/Lobby.tsx';
 import GameScreen from '../components/GameScreen.tsx';
 import RequirementsModal from '../components/RequirementsModal.tsx';
 import { requirementBadge, useHostNotice } from '../community.tsx';
+import { BRAND, GAMES } from '../../../shared/brand.ts';
 
 /** The ?tv=1 broadcast view: only TVs and stream overlays need its code. */
 const BroadcastScreen = lazy(() => import('../components/BroadcastScreen.tsx'));
@@ -26,7 +27,7 @@ export default function RoomPage() {
   // Keyed on the code, not every state: turn alerts flash the title in between.
   useEffect(() => {
     if (tv) return; // the broadcast screen titles its own tab
-    document.title = room ? `${room.code} · Yot Monopoly` : 'Yot Monopoly';
+    document.title = room ? `${room.code} · ${GAMES.monopoly.name} · ${BRAND.name}` : BRAND.name;
   }, [room?.code, tv]);
 
   if (!ready) return <div className="center-msg"><p className="muted">Loading…</p></div>;

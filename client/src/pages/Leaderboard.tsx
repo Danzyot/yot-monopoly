@@ -1,18 +1,28 @@
-// All-time leaderboard: a podium for the top three, then every ranked player.
-// Points come from finished games with two or more people (server/src/stats.ts).
+// All-time leaderboards, one tab per game: a podium for the top three, then
+// every ranked player. Points come from finished games with two or more
+// people (server/src/stats.ts for Monopoly, server/src/cards/stats.ts for
+// Chog Cards). Poker keeps its own on its own site.
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { api } from '../api.ts';
+import { Link, useSearchParams } from 'react-router-dom';
+import { api, getToken } from '../api.ts';
 import { useAuth } from '../auth.tsx';
 import { Avatar } from '../components/Avatar.tsx';
 import { profilePath } from '../community.tsx';
 import { getCharacter } from '../../../shared/characters.ts';
+import { BRAND, GAMES, POKER_URL } from '../../../shared/brand.ts';
+import { pokerHref } from '../pokerLink.ts';
 
 interface Row {
   id: string; name: string; games: number; wins: number; points: number;
   /** Optional: older results carry neither. */
   avatar?: string; character?: string;
 }
+
+type GameTab = 'monopoly' | 'cards';
+const TABS: { id: GameTab; label: string; icon: string; url: string; blurb: string }[] = [
+  { id: 'monopoly', label: GAMES.monopoly.name, icon: '🎩', url: '/api/leaderboard', blurb: "One point for every opponent you outlast. Games against bots alone don't count." },
+  { id: 'cards', label: GAMES.cards.name, icon: '🃏', url: '/api/cards/leaderboard', blurb: "One point for every player you finish ahead of. Tables of bots alone don't count." },
+];
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 const ordinal = (n: number) => `${n}${n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'}`;
@@ -30,19 +40,31 @@ function Disc({ row, size }: { row: Row; size: number }) {
 
 export default function Leaderboard() {
   const { profile: me } = useAuth();
+  // The tab lives in the URL (?game=cards), so a leaderboard can be linked to.
+  const [params, setParams] = useSearchParams();
+  const tab = TABS.find(t => t.id === params.get('game')) ?? TABS[0];
   const [rows, setRows] = useState<Row[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
-    api<Row[]>('/api/leaderboard').then(r => { if (live) setRows(r); }).catch(e => { if (live) setErr(e.message); });
+    setRows(null);
+    setErr(null);
+    // Monopoly answers with the rows; Cards wraps them ({ leaders, recent }).
+    api<Row[] | { leaders: Row[] }>(tab.url)
+      .then(r => { if (live) setRows(Array.isArray(r) ? r : r.leaders); })
+      .catch(e => { if (live) setErr(e.message); });
     return () => { live = false; };
-  }, []);
+  }, [tab]);
 
   useEffect(() => {
-    document.title = 'Leaderboard · Yot Monopoly';
-    return () => { document.title = 'Yot Monopoly'; };
-  }, []);
+    document.title = `${tab.label} leaderboard · ${BRAND.name}`;
+    return () => { document.title = BRAND.name; };
+  }, [tab]);
+
+  const pick = (id: GameTab) => setParams(id === TABS[0].id ? {} : { game: id }, { replace: true });
+  // Cards results carry no character, so the column would be empty.
+  const showChar = tab.id === 'monopoly';
 
   const top = rows ? rows.slice(0, 3) : [];
   // Podium: 2nd · 1st · 3rd, the classic silhouette; missing places stay empty.
@@ -52,7 +74,17 @@ export default function Leaderboard() {
     <div className="page lb-page">
       <header className="lb-head">
         <h1 className="lb-title"><span aria-hidden>🏆</span> Leaderboard</h1>
-        <p className="lb-blurb">One point for every opponent you outlast. Games against bots alone don't count.</p>
+        <div className="tabs lb-tabs" role="tablist" aria-label="Game">
+          {TABS.map(t => (
+            <button key={t.id} type="button" role="tab" aria-selected={t.id === tab.id} className={t.id === tab.id ? 'on' : ''} onClick={() => pick(t.id)}>
+              <span aria-hidden>{t.icon}</span> {t.label}
+            </button>
+          ))}
+          <a className="lb-tab-link" href={pokerHref(me ? getToken() : null)} title={POKER_URL.replace(/^https?:\/\//, '')}>
+            <span aria-hidden>♠️</span> {GAMES.poker.name} <span className="muted">→ its own site</span>
+          </a>
+        </div>
+        <p className="lb-blurb">{tab.blurb}</p>
       </header>
 
       {err && <p className="warn" role="alert">{err}</p>}
@@ -66,11 +98,15 @@ export default function Leaderboard() {
 
       {rows && rows.length === 0 && (
         <section className="panel lb-empty">
-          <div className="lb-empty-icon" aria-hidden>🎩</div>
+          <div className="lb-empty-icon" aria-hidden>{tab.icon}</div>
           <h2>The board is still empty</h2>
-          <p className="muted">Nobody has finished a game against another person yet. Gather a friend, bankrupt them, and be the first name up here.</p>
+          <p className="muted">
+            {tab.id === 'cards'
+              ? 'Nobody has finished a card match against another person yet. Open a table, empty your hand first, and be the first name up here.'
+              : 'Nobody has finished a game against another person yet. Gather a friend, bankrupt them, and be the first name up here.'}
+          </p>
           <div className="row center wrap">
-            <Link className="btn primary chunky" to="/">Create a game</Link>
+            <Link className="btn primary chunky" to={tab.id === 'cards' ? GAMES.cards.path : '/'}>{tab.id === 'cards' ? 'Open a table' : 'Create a game'}</Link>
             <Link className="btn" to="/characters">Meet the characters</Link>
           </div>
         </section>
@@ -107,7 +143,7 @@ export default function Leaderboard() {
                   <th scope="col" className="lb-c-num">Wins</th>
                   <th scope="col" className="lb-c-rate">Win rate</th>
                   <th scope="col" className="lb-c-num">Points</th>
-                  <th scope="col" className="lb-c-char">Plays as</th>
+                  {showChar && <th scope="col" className="lb-c-char">Plays as</th>}
                 </tr>
               </thead>
               <tbody>
@@ -134,9 +170,11 @@ export default function Leaderboard() {
                         </span>
                       </td>
                       <td className="lb-c-num lb-points" data-label="Points"><b>{r.points}</b></td>
-                      <td className="lb-c-char" data-label="Plays as">
-                        {c ? <span className="lb-char" title={c.name}><span className="lb-char-emoji" aria-hidden>{c.emoji}</span><span className="lb-char-name">{c.name}</span></span> : <span className="muted">—</span>}
-                      </td>
+                      {showChar && (
+                        <td className="lb-c-char" data-label="Plays as">
+                          {c ? <span className="lb-char" title={c.name}><span className="lb-char-emoji" aria-hidden>{c.emoji}</span><span className="lb-char-name">{c.name}</span></span> : <span className="muted">—</span>}
+                        </td>
+                      )}
                     </tr>
                   );
                 })}

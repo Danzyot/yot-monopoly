@@ -11,6 +11,7 @@ import { getMap } from '../../../shared/maps.ts';
 import { getTheme } from '../../../shared/themes.ts';
 import { getCharacter } from '../../../shared/characters.ts';
 import type { PublicProfile } from '../../../shared/types.ts';
+import { BRAND } from '../../../shared/brand.ts';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
@@ -61,8 +62,8 @@ export default function Profile() {
   }, [id]);
 
   useEffect(() => {
-    document.title = p ? `${p.name} · Yot Monopoly` : 'Player · Yot Monopoly';
-    return () => { document.title = 'Yot Monopoly'; };
+    document.title = p ? `${p.name} · ${BRAND.name}` : `Player · ${BRAND.name}`;
+    return () => { document.title = BRAND.name; };
   }, [p]);
 
   const mine = me?.id === id;
