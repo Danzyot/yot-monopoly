@@ -5,9 +5,9 @@
 // material group, rigidly bound to a bone that rides on the rig group the part
 // used to hang from, so the rig animates it exactly as before:
 //
-//   main  - the player's colour (its own material: clear-coated, tinted per player)
-//   skin  - skin (its own material: sheen)
-//   cloth - clothes with sheen
+//   main  - the player's colour (its own material, tinted per player)
+//   skin  - skin (its own material)
+//   cloth - clothes (their own material)
 //   atlas - every other material (hair, ink, white, denim, metal, gold, glow, c1–c3…)
 //           as one material whose colour, roughness, metalness and glow come from a
 //           tiny per-figure texture, one texel per material key

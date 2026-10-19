@@ -11,6 +11,7 @@ import { liteAssets } from '../quality.ts';
 import { useGLTF, useTexture } from '@react-three/drei';
 import { ASSETS } from '../assets.gen.ts';
 import { NightSky, Skyline } from './Skyline.tsx';
+import { preloadPanorama } from '../SceneEnv.tsx';
 import { Speedway } from './Speedway.tsx';
 
 export { FLOOR, TABLE_R } from './common.tsx';
@@ -48,19 +49,17 @@ export function Environment({ kind, theme, lite = false }: { kind: EnvironmentId
       // A modelled, light-baked race track for every edition; the drawn one
       // shows while it loads (and stays if it cannot).
       return (
-        <WithModel fallback={<Speedway theme={theme} />}>
+        <WithModel fallback={<Speedway theme={theme} ownLights={false} />} failed={<Speedway theme={theme} />} lights={<SpeedwayLights />}>
           <BakedScene asset={ASSETS.speedwaySet} lite={lite} />
-          <SpeedwayLights />
         </WithModel>
       );
     case 'skyline':
       // Every edition gets the modelled, light-baked penthouse roof; the drawn
       // roof stands in while it loads (and for good if it cannot).
       return (
-        <WithModel fallback={<Skyline theme={theme} />}>
+        <WithModel fallback={<Skyline theme={theme} ownLights={false} />} failed={<Skyline theme={theme} />} lights={<SkylineLights />}>
           <BakedScene asset={ASSETS.skylineSet} lite={lite} />
           <NightSky horizon={skylineHaze(theme)} />
-          <SkylineLights />
         </WithModel>
       );
     case 'lounge':
@@ -70,27 +69,24 @@ export function Environment({ kind, theme, lite = false }: { kind: EnvironmentId
       // palette until it gets one.
       if (theme.id === 'classic') {
         return (
-          <WithModel fallback={<Lounge theme={theme} />}>
+          <WithModel fallback={<Lounge theme={theme} ownLights={false} />} failed={<Lounge theme={theme} />} lights={<RoomLights />}>
             <ClassicRoom lite={lite} />
-            <RoomLights />
           </WithModel>
         );
       }
       // Takeprofit TV: its broadcast studio (tools/blender/tptv_room.py).
       if (theme.id === 'tptv') {
         return (
-          <WithModel fallback={<Lounge theme={theme} />}>
+          <WithModel fallback={<Lounge theme={theme} ownLights={false} />} failed={<Lounge theme={theme} />} lights={<TptvRoomLights />}>
             <BakedScene asset={ASSETS.tptvRoom} lite={lite} />
-            <TptvRoomLights />
           </WithModel>
         );
       }
       // Chog Poker: its purple lounge (tools/blender/chog_room.py).
       if (theme.id === 'chog') {
         return (
-          <WithModel fallback={<Lounge theme={theme} />}>
+          <WithModel fallback={<Lounge theme={theme} ownLights={false} />} failed={<Lounge theme={theme} />} lights={<ChogRoomLights />}>
             <BakedScene asset={ASSETS.chogRoom} lite={lite} />
-            <ChogRoomLights />
           </WithModel>
         );
       }
@@ -175,6 +171,21 @@ function SpeedwayLights() {
   );
 }
 
+/** The procedural studio room: reflections for scenes without a panorama of their own. */
+export const STUDIO = { url: undefined, intensity: 0.45, rotation: 0 };
+
+/** Which baked panorama a scene reflects: the set's own when it has one (tools/blender/*_env.py). */
+export function reflectionsFor(env: EnvironmentId, themeId: string): { url?: string; intensity: number; rotation: number } {
+  // Each panorama is centred on the back of its set; three's equirect is centred on +x, hence the quarter turn.
+  const baked = (url: string, intensity: number) => ({ url, intensity, rotation: -Math.PI / 2 });
+  if (env === 'lounge' && themeId === 'classic') return baked(ASSETS.classicEnv.url, 0.6);
+  if (env === 'lounge' && themeId === 'tptv') return baked(ASSETS.tptvEnv.url, 0.6);
+  if (env === 'lounge' && themeId === 'chog') return baked(ASSETS.chogEnv.url, 0.6);
+  if (env === 'skyline') return baked(ASSETS.skylineEnv.url, 0.7);
+  if (env === 'speedway') return baked(ASSETS.speedwayEnv.url, 0.55);
+  return STUDIO;
+}
+
 /** The baked set a scene shows, if it has one. */
 function bakedFor(kind: EnvironmentId, themeId: string): BakedAsset | null {
   if (kind === 'speedway') return ASSETS.speedwaySet;
@@ -187,6 +198,8 @@ function bakedFor(kind: EnvironmentId, themeId: string): BakedAsset | null {
 
 /** Start downloading a scene's set before it is shown (the home page tour, the lobby's next pick). */
 export function preloadEnvironment(kind: EnvironmentId, themeId: string): void {
+  const { url } = reflectionsFor(kind, themeId);
+  if (url) void preloadPanorama(url);
   const set = bakedFor(kind, themeId);
   if (!set) return;
   useGLTF.preload(set.url);

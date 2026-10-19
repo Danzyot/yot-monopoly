@@ -37,6 +37,29 @@ export function weakDevice(): boolean {
   return weak;
 }
 
+/**
+ * A device plainly strong enough for 2× pixels on High: plenty of cores and
+ * memory and a discrete GPU (as the renderer names it; noteGpu, from the first
+ * Canvas). Anything else gets 1.5× at most: integrated graphics on a 4K
+ * screen would otherwise shade four times the pixels for little gain.
+ */
+let gpu = '';
+export function noteGpu(gl: WebGLRenderingContext | WebGL2RenderingContext): void {
+  if (gpu) return;
+  try {
+    const info = gl.getExtension('WEBGL_debug_renderer_info');
+    gpu = String(gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER) ?? '') || '?';
+  } catch {
+    gpu = '?';
+  }
+}
+export function strongDevice(): boolean {
+  if (weakDevice()) return false;
+  const nav = navigator as Navigator & { deviceMemory?: number };
+  if ((navigator.hardwareConcurrency || 0) < 8 || (nav.deviceMemory ?? 8) < 8) return false;
+  return /nvidia|geforce|quadro|radeon\W*(\(tm\)\s*)?(rx|pro)|apple m\d (pro|max|ultra)/i.test(gpu) && !/swiftshader|llvmpipe/i.test(gpu);
+}
+
 /** Low, or Auto on a weak device: download and hold the half-size lightmaps. */
 export function liteAssets(q: Quality = read()): boolean {
   return q === 'low' || (q === 'auto' && weakDevice());

@@ -16,7 +16,8 @@ const START_ANGLE = -Math.PI / 2 - 0.55;
 /** Point on a circle of radius r at angle a (0 = +x, −π/2 = back of the table). */
 const polar = (r: number, a: number): [number, number] => [Math.cos(a) * r, Math.sin(a) * r];
 
-export function Speedway({ theme }: { theme: Theme }) {
+/** `ownLights` false: no lights of its own (a baked set's stand-in, lit by the set's lights while that loads). */
+export function Speedway({ theme, ownLights = true }: { theme: Theme; ownLights?: boolean }) {
   const { accent, sky } = theme.palette;
   const asphalt = '#2c2e33';
 
@@ -100,12 +101,16 @@ export function Speedway({ theme }: { theme: Theme }) {
 
   return (
     <group>
-      <hemisphereLight args={['#c9d8ff', '#2a2622', 0.6]} />
-      {/* Floodlights wash the infield; no shadows, they would cost a map each. */}
-      {towers.slice(0, 2).map(([x, z], k) => (
-        <spotLight key={k} position={[x, FLOOR + 22, z]} angle={0.55} penumbra={0.6} intensity={900} decay={2} color="#eef4ff" />
-      ))}
-      <pointLight position={[0, FLOOR + 3, -22]} color={accent} intensity={80} decay={2} />
+      {ownLights && (
+        <>
+          <hemisphereLight args={['#c9d8ff', '#2a2622', 0.6]} />
+          {/* Floodlights wash the infield; no shadows, they would cost a map each. */}
+          {towers.slice(0, 2).map(([x, z], k) => (
+            <spotLight key={k} position={[x, FLOOR + 22, z]} angle={0.55} penumbra={0.6} intensity={900} decay={2} color="#eef4ff" />
+          ))}
+          <pointLight position={[0, FLOOR + 3, -22]} color={accent} intensity={80} decay={2} />
+        </>
+      )}
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR - 0.01, 0]} receiveShadow>
         <planeGeometry args={[200, 200]} />

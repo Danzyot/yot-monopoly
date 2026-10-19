@@ -10,8 +10,8 @@
 import { useGLTF } from '@react-three/drei';
 import { useEffect, useMemo, type ReactNode } from 'react';
 import {
-  CanvasTexture, Color, CylinderGeometry, DoubleSide, IcosahedronGeometry, InstancedMesh, MeshStandardMaterial, Object3D,
-  PlaneGeometry, SRGBColorSpace, SphereGeometry, Vector3, type BufferGeometry, type Group, type Material, type Mesh,
+  CanvasTexture, Color, CylinderGeometry, DoubleSide, IcosahedronGeometry, InstancedMesh, Mesh, MeshStandardMaterial, Object3D,
+  PlaneGeometry, SRGBColorSpace, SphereGeometry, Vector3, type BufferGeometry, type Group, type Material,
 } from 'three';
 import { ASSETS } from '../assets.gen.ts';
 import { CharacterFigure, Tinter, newRig, useCharacterMaterials, type PoseInput, type Rig } from '../characters/Figure.tsx';
@@ -478,3 +478,27 @@ export function makeDust(count: number): Particles {
 
 /** Shared bits for small props: a pocket, a house, a deed card. */
 export const POCKET_GEO = new SphereGeometry(1, 14, 10);
+
+/**
+ * The cast's own kinds of material (the particles, the see-through pocket and
+ * moth), hidden, for as long as there is a game: compiled up front with the
+ * rest of the scene (three/shaderGate.tsx), so the first cutscene of each kind
+ * does not stop to build its shaders. The cops, the doubles and the props
+ * share their shaders with what is already on the board.
+ */
+export function CastWarmup({ currency }: { currency: string }) {
+  const set = useMemo(() => {
+    const particles = [makeConfetti(1), makeBills(1, currency), makeDust(1)];
+    const loose = [
+      new MeshStandardMaterial({ transparent: true }),
+      new MeshStandardMaterial({ side: DoubleSide, transparent: true }),
+    ];
+    const root = new Object3D();
+    root.visible = false;
+    for (const p of particles) root.add(p.mesh);
+    for (const m of loose) root.add(new Mesh(POCKET_GEO, m));
+    return { root, dispose: () => { for (const p of particles) p.dispose(); for (const m of loose) m.dispose(); } };
+  }, [currency]);
+  useEffect(() => () => set.dispose(), [set]);
+  return <primitive object={set.root} />;
+}

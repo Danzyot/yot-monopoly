@@ -29,7 +29,8 @@ function towerGeometry(): BoxGeometry {
   return g;
 }
 
-export function Skyline({ theme }: { theme: Theme }) {
+/** `ownLights` false: no lights of its own (a baked set's stand-in, lit by the set's lights while that loads). */
+export function Skyline({ theme, ownLights = true }: { theme: Theme; ownLights?: boolean }) {
   const { accent, sky } = theme.palette;
   const lit = mix('#ffd49a', accent, 0.12);
   const concrete = mix('#4b4f5a', sky, 0.15);
@@ -130,9 +131,13 @@ export function Skyline({ theme }: { theme: Theme }) {
 
   return (
     <group>
-      <hemisphereLight args={['#7f8fd0', '#120f1a', 0.6]} />
-      <directionalLight position={MOON} intensity={0.5} color="#a9bcff" />
-      <pointLight position={[0, FLOOR + 3, -ROOF + 1]} color={mix('#ffcf80', accent, 0.3)} intensity={90} decay={2} />
+      {ownLights && (
+        <>
+          <hemisphereLight args={['#7f8fd0', '#120f1a', 0.6]} />
+          <directionalLight position={MOON} intensity={0.5} color="#a9bcff" />
+          <pointLight position={[0, FLOOR + 3, -ROOF + 1]} color={mix('#ffcf80', accent, 0.3)} intensity={90} decay={2} />
+        </>
+      )}
 
       {/* Roof slab, painted helipad ring, parapet. */}
       <mesh position={[0, FLOOR - 1, 0]} receiveShadow>
