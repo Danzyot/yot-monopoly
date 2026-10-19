@@ -14,6 +14,7 @@
 export type ChogHatShape =
   | 'cap' | 'bucket' | 'beanie' | 'headband' | 'durag' | 'dome' | 'ushanka' | 'crown' | 'spartan' | 'clownNose' | 'plunger'
   | 'balaclava' | 'rainbowWig' | 'bob' | 'horns' | 'ramHorns' | 'thorns' | 'fedora' | 'gem' | 'thirdEye' | 'wreath' | 'banana'
+  | 'seal' | 'shrooms' | 'laserEye'
   // A costume's own hood (painted in the hat slot: no costume comes with a Head).
   | 'hood' | 'sharkHood' | 'bananaHood' | 'dragonHood' | 'toadHood' | 'gangsterHood' | 'astroHelmet';
 
@@ -85,6 +86,7 @@ export const HAT_MANE: Record<ChogHatShape, ChogMane> = {
   cap: 'cap', bucket: 'cap', beanie: 'cap', headband: 'full', durag: 'cap', dome: 'cap', ushanka: 'cap', crown: 'crown',
   spartan: 'none', clownNose: 'full', plunger: 'cap', balaclava: 'cap', rainbowWig: 'none', bob: 'none', horns: 'full',
   ramHorns: 'full', thorns: 'full', fedora: 'cap', gem: 'full', thirdEye: 'full', wreath: 'full', banana: 'full',
+  seal: 'full', shrooms: 'full', laserEye: 'full',
   hood: 'hood', sharkHood: 'hood', bananaHood: 'hood', dragonHood: 'hood', toadHood: 'hood', gangsterHood: 'hood', astroHelmet: 'hood',
 };
 
@@ -186,6 +188,12 @@ export const HEAD_MAP: Record<string, ChogHatSpec> = {
   'Silver wreath': { shape: 'wreath', paint: { base: '#c8c4b4', sw: ['#c8c4b4'] } },
   'Taped Banana': { shape: 'banana', paint: { base: '#f8d43a', sw: ['#f8d43a', '#a8a8b0'] } },
   'Head Wrap': { shape: 'durag', paint: { base: '#e8e2d2', pattern: { kind: 'bandage', color: '#c8bfa8' } } },
+  // A golden seal floating over the top of the head: a netted ring with four knobbed spokes.
+  'Holy Seal': { shape: 'seal', paint: { base: '#f8cc2a', sw: ['#f8cc2a', '#fff2a0'] } },
+  // Toadstools sprouting from the mane: pale green caps (swatch 0) with orange spots (2) on pale stems (1), one little orange one.
+  'Poison Shroom': { shape: 'shrooms', paint: { base: '#8cc47e', sw: ['#8cc47e', '#c4e0b0', '#ec9a3e'] } },
+  // A third eye in the brow firing a laser (the beam is the figure's glow colour, cyan unless its eyes are lasers).
+  'Blue Laser': { shape: 'laserEye', paint: { base: '#ffffff' } },
 };
 
 // ---- bodies ---------------------------------------------------------------------

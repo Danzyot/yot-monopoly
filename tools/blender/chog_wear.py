@@ -32,7 +32,7 @@ import re
 
 import bmesh
 import bpy
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 import blib
 import characters
@@ -608,11 +608,95 @@ def hat_banana(m):
     return out
 
 
+def frame_y(p, d):
+    """A frame at p (three space) whose local y points along d."""
+    return Matrix.Translation(Vector(p)) @ Vector((0, 1, 0)).rotation_difference(Vector(d).normalized()).to_matrix().to_4x4()
+
+
+def hat_seal(m):
+    """The Holy Seal: a golden ring netted across (swatch 1) floating over the head, tipped toward his left, four
+    spokes out of it ending in knobs (swatch 0)."""
+    p = m['paint']
+    T = frame_y((0.05, 0.24, 0.06), (0, 0.32, 1.0)) @ M((0, 0, 0), (0, -0.42, 0))
+    R = 0.052
+    out = [sw(torus('SealRing', (0, 0, 0), R, 0.0078, p, r=(math.pi / 2, 0, 0), parent=T, seg=40, mseg=8), 'hat', 0),
+           sw(torus('SealHub', (0, 0, 0), 0.012, 0.0045, p, r=(math.pi / 2, 0, 0), parent=T, seg=16, mseg=6), 'hat', 0)]
+    # The net: bars across both ways, ending at the ring.
+    for k, off in enumerate((-0.026, 0.0, 0.026)):
+        half = math.sqrt(R * R - off * off)
+        out.append(sw(rbox(f'SealBarX{k}', (0, 0, off), (2 * half, 0.0045, 0.0045), p, parent=T, bevel=0.0015, segs=1), 'hat', 1))
+        out.append(sw(rbox(f'SealBarZ{k}', (off, 0, 0), (0.0045, 0.0045, 2 * half), p, parent=T, bevel=0.0015, segs=1), 'hat', 1))
+    # In the seal's plane (local x-z): spokes out on the diagonals, a knob and a cross-guard on each.
+    for k in range(4):
+        a = math.pi / 4 + k * math.pi / 2
+        d = Vector((math.cos(a), 0, math.sin(a)))
+        n = Vector((-d.z, 0, d.x))
+        root, tip = T @ (d * (R + 0.004)), T @ (d * (R + 0.034))
+        out.append(sw(strand(f'SealSpoke{k}', [root, tip], 0.0062, 0.005, p, ring=8, n=2, round_tip=False), 'hat', 0))
+        out.append(sw(ell(f'SealKnob{k}', tuple(T @ (d * (R + 0.042))), (0.0105, 0.0105, 0.0105), p, seg=(12, 8)), 'hat', 0))
+        g = d * (R + 0.022)
+        out.append(sw(strand(f'SealGuard{k}', [T @ (g - n * 0.012), T @ (g + n * 0.012)], 0.0045, 0.0045, p, ring=6, n=2), 'hat', 0))
+    return out
+
+
+def shroom(name, p, base, top, cap, spots=4, cap_k=0, stem_k=1, spot_k=2):
+    """A toadstool from `base` up to `top` (a bent stem: swatch stem_k), its cap (radius, height; swatch cap_k) on the
+    end, facing along the stem, spotted (swatch spot_k)."""
+    base, top = Vector(base), Vector(top)
+    d = (top - base).normalized()
+    mid = base.lerp(top, 0.5) + Vector((0, 0.008, 0)) - d * 0.004
+    r_cap, h_cap = cap
+    out = [sw(strand(f'{name}Stem', [base, mid, top], r_cap * 0.26, r_cap * 0.2, p, ring=10, n=4, round_tip=False), 'hat', stem_k)]
+    T = frame_y(top - d * 0.002, d)
+    c = dome(f'{name}Cap', (0, 0, 0), (r_cap, h_cap, r_cap), p, -0.002, 0.0, seg=(24, 12), thick=0.003,
+             deform=lambda v: Vector((v.x, v.y - 0.2 * h_cap * (v.x * v.x + v.z * v.z) / (r_cap * r_cap), v.z)))
+    c.matrix_world = THREE_TO_BLENDER @ T @ B2T
+    out.append(sw(c, 'hat', cap_k))
+    for k in range(spots):
+        ph = 0.7 + k * TAU / spots + (0.4 if k % 2 else 0.0)
+        th = 0.55 + 0.35 * (k % 2)
+        q = Vector((r_cap * math.sin(th) * math.cos(ph), h_cap * math.cos(th), r_cap * math.sin(th) * math.sin(ph)))
+        n = Vector((q.x / r_cap ** 2, q.y / h_cap ** 2, q.z / r_cap ** 2)).normalized()
+        out.append(sw(ell(f'{name}Spot{k}', (0, 0, 0), (r_cap * 0.22, r_cap * 0.19, 0.0025), p,
+                          parent=T @ detailed.frame_z(q + n * 0.0005, n), seg=(10, 6)), 'hat', spot_k))
+    return out
+
+
+def hat_shrooms(m):
+    """Poison Shroom: toadstools sprouting from the mane, a tall one on top, one out of each side and a little
+    orange one low on his right (caps swatch 0 with spots 2, stems 1)."""
+    p = m['paint']
+    return (shroom('ShroomTop', p, (0.0, 0.215, -0.04), (0.014, 0.305, -0.02), (0.082, 0.052), spots=7)
+            + shroom('ShroomL', p, (0.125, 0.16, -0.04), (0.19, 0.228, -0.01), (0.062, 0.04), spots=5)
+            + shroom('ShroomR', p, (-0.135, 0.105, -0.04), (-0.192, 0.15, 0.0), (0.052, 0.034), spots=4)
+            + shroom('ShroomTiny', p, (-0.14, 0.025, -0.04), (-0.176, 0.037, 0.0), (0.024, 0.016), spots=3, cap_k=2, spot_k=0))
+
+
+def hat_laser_eye(m):
+    """Blue Laser: a third eye in the brow, its iris glowing (the beam is a node of its own, brow_beam)."""
+    f = detailed.ChogFace()
+    G = f.on_face(0, 0.046, -0.002)
+    return [ell('LaserEyeRim', (0, 0, 0), (0.026, 0.017, 0.008), m['ink'], parent=G, seg=(20, 10)),
+            ell('LaserEyeWhite', (0, 0, 0.001), (0.023, 0.014, 0.009), m['white'], parent=G, seg=(20, 10)),
+            ell('LaserEyeIris', (0, 0, 0.0055), (0.0105, 0.0105, 0.005), m['glow'], parent=G, seg=(14, 8))]
+
+
+BROW_BEAM = Vector((0.62, 0.42, 0.8)).normalized()
+
+
+def brow_beam(m):
+    """The Blue Laser's beam out of the third eye, up and away to his left."""
+    f = detailed.ChogFace()
+    start = f.on_face(0, 0.046, 0.006) @ Vector((0, 0, 0))
+    return [strand('BrowBeam', [start, start + BROW_BEAM * 0.3], 0.0068, 0.0068, m['glow'], ring=10, round_tip=False, n=3)]
+
+
 HATS = {
     'cap': hat_cap, 'bucket': hat_bucket, 'beanie': hat_beanie, 'headband': hat_headband, 'durag': hat_durag, 'dome': hat_dome,
     'ushanka': hat_ushanka, 'crown': hat_crown, 'spartan': hat_spartan, 'clownNose': hat_clown_nose, 'plunger': hat_plunger,
     'balaclava': hat_balaclava, 'rainbowWig': hat_rainbow_wig, 'bob': hat_bob, 'horns': hat_horns, 'ramHorns': hat_ram_horns,
     'thorns': hat_thorns, 'fedora': hat_fedora, 'gem': hat_gem, 'thirdEye': hat_third_eye, 'wreath': hat_wreath, 'banana': hat_banana,
+    'seal': hat_seal, 'shrooms': hat_shrooms, 'laserEye': hat_laser_eye,
 }
 
 

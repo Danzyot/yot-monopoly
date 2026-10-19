@@ -12,6 +12,7 @@ bone exactly like the base head (client/src/three/characters/chogToken.ts):
   chog_LaserBeams     the laser variant's beams, on their own so they can be toggled
   chog_Mouth_<id>     one node per mouth variant (ChogMouthVariant)
   chog_Hat_<shape>    hats, hair and face props (shared/chogs/wear.ts, ChogHatShape)
+  chog_BrowBeam       the Blue Laser head's beam, on its own like the eyes' beams
   chog_Wear_<shape>   outfits, in body space (ChogWearShape)
   chog_Prop_<id>      held props, in right-hand space (ChogPropId)
 
@@ -22,11 +23,11 @@ Skin, mane, lens, laser and tear colours are runtime material tints (the
 material names are `chog:<key>` like every character's); aura and the
 Radioactive glow are runtime effects, not geometry.
 
-    tools/blender/run.sh chog_traits.py [--preview out.png --tokens 1,186,1517]
+    tools/blender/run.sh chog_traits.py [--preview out.png --tokens 1,186,1517 [--head] [--no-export]]
 
 `--preview` renders whole figures for real tokens (their look resolved by
 shared/chogs/traits.ts through chog_look.ts), one frame each, to compare with
-the NFT art.
+the NFT art (`--head`: a close-up of the head, `--no-export`: renders only).
 """
 
 import json
@@ -361,12 +362,158 @@ def eyes_goggles(m):
     return out
 
 
+def eyes_smirk(m):
+    """Smirk: a big pupil rolled up toward his left under a heavy arched lid, the white a crescent below it."""
+    out = []
+    for s in (-1, 1):
+        G = at(s)
+        x = s * EYE_X
+        out.append(ell(f'{CID}_SmirkRim{s}', (0, 0, -0.0015), (0.0315, 0.027, 0.010), m['ink'], parent=G, seg=(24, 14)))
+        out.append(ell(f'{CID}_SmirkWhite{s}', (0, 0, 0), (0.029, 0.0245, 0.011), m['white'], parent=G, seg=(24, 14)))
+        out.append(ell(f'{CID}_SmirkPupil{s}', (0.0085, 0.006, 0.0085), (0.0195, 0.0185, 0.0045), m['ink'], parent=G, seg=(18, 12)))
+        out.append(ell(f'{CID}_SmirkGlint{s}', (0.0135, 0.0125, 0.0125), (0.0058, 0.0044, 0.0018), m['white'], parent=G, r=(0, 0, 0.5), seg=(10, 6)))
+        # The lid: thick over the top, thinning down to the corners.
+        out.append(line(f'{CID}_SmirkLid{s}', [(x - 0.034, EYE_Y + 0.006), (x - 0.02, EYE_Y + 0.024), (x, EYE_Y + 0.0305),
+                                               (x + 0.02, EYE_Y + 0.025), (x + 0.035, EYE_Y + 0.008)], 0.0046, m['ink'], lift=0.002, r1=0.0022))
+    return out
+
+
+def eyes_frog(m):
+    """Frog: big bulging white eyes ringed in ink, a wide oval pupil in each with a glint."""
+    out = []
+    for s in (-1, 1):
+        G = at(s, lift=0.002)
+        out.append(ell(f'{CID}_FrogRim{s}', (0, 0, -0.002), (0.0345, 0.036, 0.016), m['ink'], parent=G, seg=(26, 16)))
+        out.append(ell(f'{CID}_FrogWhite{s}', (0, 0, 0), (0.032, 0.0335, 0.018), m['white'], parent=G, seg=(26, 16)))
+        out.append(ell(f'{CID}_FrogPupil{s}', (0.001, -0.003, 0.013), (0.0195, 0.0145, 0.0065), m['ink'], parent=G, seg=(18, 12)))
+        out.append(ell(f'{CID}_FrogGlint{s}', (-0.0075, 0.0035, 0.0196), (0.0055, 0.0038, 0.002), m['white'], parent=G, seg=(10, 6)))
+    return out
+
+
+def face_paint(name, m, mat, side, up=0.06, down=0.048, hw=0.031):
+    """A clown's four-pointed star of face paint over an eye, its points long up and down, laid on the face."""
+    # Row by row from the top point to the bottom one, widest across the eye (concave sides: a star, not a rhombus).
+    mid = up / (up + down)
+    star = lambda t: 0.0006 + hw * (1 - (abs(t - mid) / (mid if t < mid else 1 - mid))) ** 2.2
+    panel, _ = sheet(name, face_surf, side * EYE_X, star, EYE_Y + up, EYE_Y - down, 0.0012, 0.001, m[mat], nu=6, nv=18)
+    return panel
+
+
+def eyes_clown(m, mix=False):
+    """Clown Eye: black almond eyes with two glints, a star of face paint over each (blue: the lens colour) and a
+    lash line flicked up at the outer corner. The Mix paints his right eye red and slants the lids down to the nose."""
+    out = []
+    for s in (-1, 1):
+        x = s * EYE_X
+        out.append(face_paint(f'{CID}_ClownPaint{s}', m, 'c1' if mix and s < 0 else 'glass', s))
+        G = at(s, lift=0.001)
+        out.append(ell(f'{CID}_ClownEye{s}', (0, -0.002, 0), (0.019, 0.0235, 0.0085), m['ink'], parent=G, seg=(20, 14)))
+        out.append(ell(f'{CID}_ClownGlint{s}', (-0.006, 0.006, 0.0075), (0.0045, 0.0062, 0.0018), m['white'], parent=G, r=(0, 0, -0.3), seg=(10, 6)))
+        out.append(ell(f'{CID}_ClownGlint2{s}', (0.005, -0.011, 0.0072), (0.0026, 0.0026, 0.0015), m['white'], parent=G, seg=(8, 6)))
+        if mix:
+            lid = [(s * (EYE_X + 0.033), EYE_Y + 0.031), (x + s * 0.012, EYE_Y + 0.026), (x - s * 0.006, EYE_Y + 0.021), (s * (EYE_X - 0.026), EYE_Y + 0.009)]
+        else:
+            lid = [(s * (EYE_X - 0.024), EYE_Y + 0.012), (x - s * 0.008, EYE_Y + 0.0225), (x + s * 0.012, EYE_Y + 0.023), (s * (EYE_X + 0.034), EYE_Y + 0.03)]
+        out.append(line(f'{CID}_ClownLid{s}', lid, 0.0036, m['ink'], lift=0.0028, r1=0.0024))
+    return out
+
+
+def eyes_clown_mix(m):
+    return eyes_clown(m, mix=True)
+
+
+def eyes_worried(m):
+    """Worried: big round eyes with wide pupils and two glints each, the lids slanting up toward the nose."""
+    out = eyes_round(m, pupil=0.021, rx=0.029, ry=0.031)
+    for s in (-1, 1):
+        G = at(s)
+        out.append(ell(f'{CID}_WorriedGlint{s}', (0.008, -0.009, 0.0128), (0.003, 0.003, 0.0015), m['white'], parent=G, seg=(8, 6)))
+        out.append(line(f'{CID}_WorriedLid{s}', [(s * (EYE_X + 0.033), EYE_Y + 0.017), (s * (EYE_X + 0.012), EYE_Y + 0.029),
+                                                 (s * (EYE_X - 0.01), EYE_Y + 0.037), (s * (EYE_X - 0.027), EYE_Y + 0.041)],
+                        0.0042, m['ink'], lift=0.003, r1=0.0026))
+    return out
+
+
+def eyes_up(m):
+    """Up: big glossy black eyes, a white half-moon of light across the top of each."""
+    out = []
+    for s in (-1, 1):
+        G = at(s)
+        out.append(ell(f'{CID}_UpEye{s}', (0, 0, 0), (0.0285, 0.031, 0.011), m['ink'], parent=G, seg=(24, 16)))
+        out.append(ell(f'{CID}_UpShine{s}', (-0.004, 0.0145, 0.0068), (0.0165, 0.0095, 0.004), m['white'], parent=G, r=(0, 0, -0.25), seg=(16, 10)))
+    return out
+
+
+def face_rim(border, lift, kx=1.0, ky=1.0):
+    """A visor's border points pulled in toward its middle (kx, ky) and laid back on the face at `lift`."""
+    c = sum(border, Vector()) / len(border)
+    return [F.on_face(c.x + (p.x - c.x) * kx, c.y + (p.y - c.y) * ky, lift).translation.copy() for p in border]
+
+
+def headset_strap(name, m, hw, y=EYE_Y, w=0.008):
+    """A headset's strap from the visor's ends back round the head."""
+    out = []
+    for s in (-1, 1):
+        x0 = s * hw
+        out.append(strand(f'{name}{s}', [(x0, y + 0.002, F.face_z(x0, y) + 0.006), (s * 0.128, y + 0.012, -0.03),
+                                         (s * 0.1, y + 0.03, -0.13), (0, y + 0.038, -0.165)], w, w, m['ink'],
+                          ring=8, n=5, round_tip=False, up=(0, 1, 0), flat=0.5))
+    return out
+
+
+def eyes_vr_modern(m):
+    """Modern VR: a rounded black visor (the lens colour) in a dark shell with grey sides, a neon line round its face
+    (the glow colour) and a white glint."""
+    top, bot = EYE_Y + 0.036, EYE_Y - 0.042
+    hw = lambda t: 0.09 + 0.016 * math.sqrt(max(0.0, 1 - (2 * t - 1) ** 2))
+    panel, border = sheet(f'{CID}_VrLens', face_surf, 0, hw, top, bot, 0.016, 0.012, m['glass'], nu=14, nv=4)
+    out = [panel, loop(f'{CID}_VrShell', border, 0.0068, m['ink'], axis=(0, 0, 1), ring=8, n=2)]
+    out.append(loop(f'{CID}_VrNeon', face_rim(border, 0.0172, 0.93, 0.82), 0.0024, m['glow'], axis=(0, 0, 1), ring=6, n=2))
+    for s in (-1, 1):
+        x = s * 0.104
+        out.append(ell(f'{CID}_VrSide{s}', (x, EYE_Y - 0.003, F.face_z(x, EYE_Y) + 0.004), (0.012, 0.034, 0.028), m['metal'], seg=(14, 10)))
+    out.append(line(f'{CID}_VrGlint', [(-0.077, EYE_Y + 0.019), (-0.072, EYE_Y + 0.01), (-0.069, EYE_Y + 0.0)], 0.0034, m['white'],
+                    lift=0.0182, r1=0.0026, n=4))
+    out.append(ell(f'{CID}_VrGlintDot', (0, 0, 0), (0.0032, 0.0032, 0.0015), m['white'], parent=on(-0.0675, EYE_Y - 0.01, 0.018), seg=(8, 6)))
+    return out + headset_strap(f'{CID}_VrStrap', m, 0.112)
+
+
+def eyes_vr_classic(m):
+    """Classic VR: a boxy headset, a thick grey frame round a black lens (the lens colour) with white streaks of glare."""
+    top, bot = EYE_Y + 0.036, EYE_Y - 0.04
+    panel, border = sheet(f'{CID}_BoxLens', face_surf, 0, lambda t: 0.104, top, bot, 0.02, 0.018, m['glass'], nu=16, nv=4)
+    out = [panel, loop(f'{CID}_BoxFrame', border, 0.0075, m['metal'], axis=(0, 0, 1), ring=8, n=2)]
+    for k, (x, w) in enumerate(((-0.062, 0.007), (-0.047, 0.0045), (0.036, 0.007), (0.051, 0.0045))):
+        out.append(rbox(f'{CID}_BoxGlare{k}', (0, 0, 0), (w, 0.056, 0.0016), m['white'], r=(0, 0, -0.45), parent=on(x, EYE_Y - 0.002, 0.0205),
+                        bevel=0.0006, segs=1))
+    return out + headset_strap(f'{CID}_BoxStrap', m, 0.112, w=0.0085)
+
+
+def eyes_viper(m):
+    """Chog Viper: ski goggles, a wide mirrored lens (the lens colour) dipping over the nose, in a thick light frame
+    outlined in ink, and the strap round the head."""
+    top, bot = EYE_Y + 0.04, EYE_Y - 0.042
+
+    def surf(x, y):
+        # The bottom edge rises over the nose.
+        t = (top - y) / (top - bot)
+        return face_surf(x, y + 0.02 * t ** 3 * math.exp(-(x / 0.03) ** 2))
+    hw = lambda t: 0.094 + 0.014 * math.sqrt(max(0.0, 1 - (2 * t - 1) ** 2)) - 0.012 * t * t
+    panel, border = sheet(f'{CID}_ViperLens', surf, 0, hw, top, bot, 0.013, 0.008, m['glass'], nu=16, nv=5)
+    out = [panel, loop(f'{CID}_ViperFrame', border, 0.0066, m['white'], axis=(0, 0, 1), ring=8, n=2),
+           loop(f'{CID}_ViperEdge', face_rim(border, 0.0085, 1.035, 1.07), 0.0062, m['ink'], axis=(0, 0, 1), ring=8, n=2)]
+    out.append(ell(f'{CID}_ViperShine', (0, 0, 0), (0.024, 0.0045, 0.0015), m['white'], parent=on(-0.05, EYE_Y + 0.024, 0.0145), r=(0, 0, 0.12), seg=(10, 6)))
+    return out + headset_strap(f'{CID}_ViperStrap', m, 0.11)
+
+
 EYES = {
     'normal': eyes_normal, 'happy': eyes_happy, 'side': eyes_side, 'laser': eyes_laser, 'dead': eyes_dead, 'round': eyes_round,
     'roundSmall': eyes_round_small, 'heart': eyes_heart, 'roundCrying': eyes_round_crying, 'roundTear': eyes_round_tear,
     'closedCrying': eyes_closed_crying, 'teary': eyes_teary, 'tired': eyes_tired, 'angry': eyes_angry, 'flat': eyes_flat,
     'vertical': eyes_vertical, 'base': eyes_base, 'xd': eyes_xd, 'animeGlass': eyes_anime_glass, 'retroGlass': eyes_retro_glass,
     'btcGlass': eyes_btc_glass, 'glasses3d': eyes_glasses_3d, 'shades': eyes_shades, 'visor': eyes_visor, 'goggles': eyes_goggles,
+    'smirk': eyes_smirk, 'frog': eyes_frog, 'clown': eyes_clown, 'clownMix': eyes_clown_mix, 'worried': eyes_worried, 'up': eyes_up,
+    'vrModern': eyes_vr_modern, 'vrClassic': eyes_vr_classic, 'viper': eyes_viper,
 }
 
 
@@ -541,6 +688,7 @@ def build(m):
         nodes[f'Hair_{trim}'] = assemble(f'{CID}_Hair_{trim}', chog_wear.hair(m, trim))
     for shape, fn in {**chog_wear.HATS, **chog_wear.HOODS}.items():
         nodes[f'Hat_{shape}'] = chog_wear.assemble(f'{CID}_Hat_{shape}', fn(m))
+    nodes['BrowBeam'] = chog_wear.assemble(f'{CID}_BrowBeam', chog_wear.brow_beam(m))
     for shape, fn in chog_wear.WEARS.items():
         nodes[f'Wear_{shape}'] = chog_wear.assemble(f'{CID}_Wear_{shape}', fn(m))
     for pid, fn in chog_wear.PROPS.items():
@@ -568,8 +716,8 @@ def tint(m, look):
         b.inputs['Emission Strength'].default_value = 1.4 if key == 'glow' else 0.9 if glow else 0.0
 
 
-def preview(nodes, m, ids, path):
-    """One figure per token, front view, against its background colour; a contact sheet with the art is made by the caller."""
+def preview(nodes, m, ids, path, close=False):
+    """One figure per token, front view (`close`: the head), against its background colour; a contact sheet with the art is made by the caller."""
     sc = bpy.context.scene
     looks = looks_for(ids)
     far = (100, 100, 0)
@@ -588,6 +736,10 @@ def preview(nodes, m, ids, path):
     cam.data.lens = 70
     cam.location = blib.V(0, 0.36, 1.05)
     cam.rotation_euler = (math.radians(84), 0, 0)
+    if close:
+        # The head and what floats over it.
+        cam.location = blib.V(0, 0.385, 1.25)
+        cam.rotation_euler = (math.radians(90), 0, 0)
     sc.camera = cam
     key = bpy.data.objects.new('Key', bpy.data.lights.new('Key', 'AREA'))
     key.data.energy, key.data.size = 60, 0.8
@@ -602,7 +754,7 @@ def preview(nodes, m, ids, path):
     world = bpy.data.worlds.new('W')
     world.use_nodes = True
     sc.world = world
-    sc.render.resolution_x, sc.render.resolution_y = 420, 480
+    sc.render.resolution_x, sc.render.resolution_y = (420, 420) if close else (420, 480)
     sc.cycles.samples = 32
     sc.cycles.use_denoising = True
     outs = []
@@ -656,7 +808,7 @@ def main():
         blib.log(name, f'{len(n.data.polygons)}f')
     if '--preview' in sys.argv:
         ids = [int(x) for x in sys.argv[sys.argv.index('--tokens') + 1].split(',')] if '--tokens' in sys.argv else [1, 186, 1517]
-        preview(nodes, m, ids, sys.argv[sys.argv.index('--preview') + 1])
+        preview(nodes, m, ids, sys.argv[sys.argv.index('--preview') + 1], close='--head' in sys.argv)
         if '--no-export' in sys.argv:
             return
     rel = f'models/characters/{CID}-traits.glb'

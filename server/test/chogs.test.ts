@@ -107,12 +107,21 @@ test('chogs: real tokens resolve to the right parts', () => {
   assert.equal(legend.colors.hair, SKIN_COLORS.Origin.mane);
   assert.equal(legend.fallback, false, 'a 1:1 has nothing to fall back from');
 
-  // A value with no part of its own falls back to the nearest and says so.
-  const smirk = CHOG_TOKEN_IDS.find(id => traitsOf(id)!.Eyes === 'Smirk')!;
-  const fb = chogLook(smirk)!;
-  assert.equal(fb.eyes, 'side');
-  assert.equal(fb.fallback, true);
-  assert.deepEqual(fb.fallbacks, ['Eyes: Smirk']);
+  // Every Eyes value has a part of its own (the coloured ones share their shape's: Blue Smirk is a smirk).
+  for (const [value, spec] of Object.entries(EYES_MAP)) assert.ok(!spec.fallback, `eyes ${value} has its own part`);
+  const smirk = CHOG_TOKEN_IDS.find(id => traitsOf(id)!.Eyes === 'Blue Smirk')!;
+  assert.equal(chogLook(smirk)!.eyes, 'smirk');
+  // VR headsets: the lens is the glass, the neon rim the glow.
+  const vr = chogLook(CHOG_TOKEN_IDS.find(id => traitsOf(id)!.Eyes === 'Modern VR')!)!;
+  assert.equal(vr.eyes, 'vrModern');
+  assert.equal(vr.colors.glow, EYES_MAP['Modern VR'].laser);
+  assert.equal(vr.colors.glass, EYES_MAP['Modern VR'].lens);
+
+  // The Blue Laser head fires its beam out of the brow (#1280), only where beams are on (not on Low).
+  const brow = chogLook(1280)!;
+  assert.equal(brow.head?.shape, 'laserEye');
+  assert.ok(chogParts(brow, true).Head.includes('chog_BrowBeam'));
+  assert.ok(!chogParts(brow, false).Head.includes('chog_BrowBeam'));
 
   // The base eyes blink with the base lids; a skull's or any other eyes do not.
   const normal = CHOG_TOKEN_IDS.find(id => traitsOf(id)!.Eyes === 'Normal Eye' && traitsOf(id)!.Form === 'Chog')!;
@@ -120,16 +129,14 @@ test('chogs: real tokens resolve to the right parts', () => {
 });
 
 test('chogs: heads, outfits and props are modelled, and every part a token needs is in the traits file', () => {
-  // The few one-of-a-kind heads still without a part of their own (they fall back to none, and say so).
-  const unmodelled = new Set(['Holy Seal', 'Poison Shroom', 'Blue Laser']);
   let heads = 0, headsDone = 0, bodies = 0, bodiesDone = 0;
   for (const id of CHOG_TOKEN_IDS) {
     const t = traitsOf(id)!;
     const look = chogLook(id)!;
     if (t.Head) {
       heads++;
+      assert.ok(HEAD_MAP[t.Head], `#${id} head ${t.Head} has a part`);
       if (HEAD_MAP[t.Head]) headsDone++;
-      else assert.ok(unmodelled.has(t.Head) && look.fallbacks.includes(`Head: ${t.Head}`), `#${id} head ${t.Head}`);
     }
     if (t.Body) {
       bodies++;
@@ -138,7 +145,7 @@ test('chogs: heads, outfits and props are modelled, and every part a token needs
     if (t.Accessory) assert.ok(ACCESSORY_MAP[t.Accessory], `#${id} accessory ${t.Accessory}`);
     if (t.Form === 'Skull') assert.equal(look.mane, 'none', `#${id} is a bald skull`);
   }
-  assert.ok(headsDone / heads >= 0.9, `heads modelled: ${headsDone}/${heads}`);
+  assert.equal(headsDone, heads, `heads modelled: ${headsDone}/${heads}`);
   assert.ok(bodiesDone / bodies >= 0.85, `outfits modelled: ${bodiesDone}/${bodies}`);
 
   // Every node any token asks for exists in both the full and the Low traits file, in the figure's own materials.

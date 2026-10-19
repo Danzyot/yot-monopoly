@@ -126,27 +126,28 @@ export const BACKGROUND_COLORS: Record<ChogBackground, string> = {
 export type ChogEyesVariant =
   | 'normal' | 'happy' | 'side' | 'laser' | 'dead' | 'round' | 'roundSmall' | 'heart' | 'roundCrying' | 'roundTear'
   | 'closedCrying' | 'teary' | 'tired' | 'angry' | 'flat' | 'vertical' | 'base' | 'xd'
-  | 'animeGlass' | 'retroGlass' | 'btcGlass' | 'glasses3d' | 'shades' | 'visor' | 'goggles';
+  | 'animeGlass' | 'retroGlass' | 'btcGlass' | 'glasses3d' | 'shades' | 'visor' | 'goggles'
+  | 'smirk' | 'frog' | 'clown' | 'clownMix' | 'worried' | 'up' | 'vrModern' | 'vrClassic' | 'viper';
 
 export const CHOG_EYES_VARIANTS: ChogEyesVariant[] = [
   'normal', 'happy', 'side', 'laser', 'dead', 'round', 'roundSmall', 'heart', 'roundCrying', 'roundTear',
   'closedCrying', 'teary', 'tired', 'angry', 'flat', 'vertical', 'base', 'xd',
   'animeGlass', 'retroGlass', 'btcGlass', 'glasses3d', 'shades', 'visor', 'goggles',
+  'smirk', 'frog', 'clown', 'clownMix', 'worried', 'up', 'vrModern', 'vrClassic', 'viper',
 ];
 
 interface EyesSpec {
   id: ChogEyesVariant;
-  /** Laser beam colour (the `glow` material). */
+  /** Laser beam colour (the `glow` material; also a VR headset's neon rim). */
   laser?: string;
-  /** Lens / visor colour (the `glass` material). */
+  /** Lens / visor colour (the `glass` material; also a clown's face paint). */
   lens?: string;
-  /** Not quite this: the nearest part that exists (pass 2 work). */
+  /** Not quite this: the nearest part that exists (none left, but a new value would say so). */
   fallback?: true;
 }
 
 const laser = (c: string): EyesSpec => ({ id: 'laser', laser: c });
 const visor = (c: string): EyesSpec => ({ id: 'visor', lens: c });
-const near = (id: ChogEyesVariant, lens?: string): EyesSpec => ({ id, lens, fallback: true });
 
 /** Every Eyes value in the collection → its part. */
 export const EYES_MAP: Record<string, EyesSpec> = {
@@ -157,15 +158,16 @@ export const EYES_MAP: Record<string, EyesSpec> = {
   'Closed Eye Crying': { id: 'closedCrying' }, 'Tired': { id: 'tired' }, 'Retro Glass': { id: 'retroGlass', lens: '#a9dcff' },
   'Teary': { id: 'teary' }, 'Sunset visor': visor('#ff5a3a'), 'Plasma visor': visor('#2fd0c4'), 'Angry': { id: 'angry' },
   'Flat': { id: 'flat' }, 'Vertical': { id: 'vertical' }, 'Base': { id: 'base' }, 'MOG': { id: 'goggles', lens: '#ffb03a' },
-  'Smirk': near('side'), 'Frog': near('round'), 'Clown Eye': near('round'), 'Modern VR': near('goggles', '#3a3a4a'),
-  'Chog Viper': near('shades'), 'Classic VR': near('goggles', '#2a2a36'), 'Clown Eye Mix': near('round'), 'XD': { id: 'xd' },
-  'Retard': { id: 'glasses3d', lens: '#3a86ff' }, '3D Glass': { id: 'glasses3d', lens: '#3a86ff' }, 'Worried': near('round'),
+  'Smirk': { id: 'smirk' }, 'Frog': { id: 'frog' }, 'Clown Eye': { id: 'clown', lens: '#2a4cf0' },
+  'Modern VR': { id: 'vrModern', lens: '#121219', laser: '#1a9cff' }, 'Chog Viper': { id: 'viper', lens: '#167ee0' },
+  'Classic VR': { id: 'vrClassic', lens: '#141419' }, 'Clown Eye Mix': { id: 'clownMix', lens: '#2a4cf0' }, 'XD': { id: 'xd' },
+  'Retard': { id: 'glasses3d', lens: '#3a86ff' }, '3D Glass': { id: 'glasses3d', lens: '#3a86ff' }, 'Worried': { id: 'worried' },
   'BTC Glass': { id: 'btcGlass', lens: '#f4a21a' }, 'cyan laser': laser('#3ae8ff'), 'Thug': { id: 'shades' },
   'Red Round Eye': { id: 'roundSmall' }, 'Green Side Eye': { id: 'side' }, 'Blue Retard': { id: 'glasses3d', lens: '#3a86ff' },
-  'Red Flat': { id: 'flat' }, 'Up': near('round'), 'Green Happy': { id: 'happy' }, 'Mixed Retard': { id: 'glasses3d', lens: '#3a86ff' },
+  'Red Flat': { id: 'flat' }, 'Up': { id: 'up' }, 'Green Happy': { id: 'happy' }, 'Mixed Retard': { id: 'glasses3d', lens: '#3a86ff' },
   'Mixed Happy': { id: 'happy' }, 'Blue Round Eye': { id: 'roundSmall' }, 'Normal': { id: 'normal' }, 'Mixed Side Eye': { id: 'side' },
-  'Blue Smirk': near('side'), 'Mixed Round Eye': { id: 'roundSmall' }, 'Blue Happy': { id: 'happy' }, 'Red Retard': { id: 'glasses3d', lens: '#3a86ff' },
-  'Blue Flat': { id: 'flat' }, 'Green Round Eye': { id: 'roundSmall' }, 'Green Retard': { id: 'glasses3d', lens: '#3a86ff' }, 'Green Smirk': near('side'),
+  'Blue Smirk': { id: 'smirk' }, 'Mixed Round Eye': { id: 'roundSmall' }, 'Blue Happy': { id: 'happy' }, 'Red Retard': { id: 'glasses3d', lens: '#3a86ff' },
+  'Blue Flat': { id: 'flat' }, 'Green Round Eye': { id: 'roundSmall' }, 'Green Retard': { id: 'glasses3d', lens: '#3a86ff' }, 'Green Smirk': { id: 'smirk' },
 };
 
 export type ChogMouthVariant =
@@ -338,7 +340,7 @@ export function chogLook(tokenId: number): ChogLook | null {
 /**
  * The trait parts a look is built from, as node names in the traits file
  * (models/characters/chog-traits.glb), by the rig bone they hang on.
- * `beams`: the laser beams (off on Low, where they are the one part reaching out past the figure).
+ * `beams`: the laser beams (off on Low, where they are the parts reaching out past the figure).
  */
 export function chogParts(look: ChogLook, beams: boolean): { Head: string[]; Body: string[]; HandR: string[] } {
   const head = [look.form === 'skull' ? 'chog_HeadSkull' : 'chog_HeadBare', `chog_Eyes_${look.eyes}`];
@@ -346,6 +348,8 @@ export function chogParts(look: ChogLook, beams: boolean): { Head: string[]; Bod
   if (look.eyes === 'laser' && beams) head.push('chog_LaserBeams');
   if (look.mouth) head.push(`chog_Mouth_${look.mouth}`);
   if (look.head) head.push(`chog_Hat_${look.head.shape}`);
+  // The Blue Laser's beam out of its third eye (off on Low, like the eyes' beams).
+  if (look.head?.shape === 'laserEye' && beams) head.push('chog_BrowBeam');
   return {
     Head: head,
     Body: look.body ? [`chog_Wear_${look.body.shape}`] : [],
