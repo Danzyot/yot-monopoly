@@ -6,9 +6,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
-import {
-  BufferAttribute, BufferGeometry, Color, DynamicDrawUsage, Vector3, type Group, type Material, type Mesh, type Object3D,
-} from 'three';
+import { BufferAttribute, BufferGeometry, Color, DynamicDrawUsage, Vector3, type Group } from 'three';
 import { ASSETS } from '../assets.gen.ts';
 import { WithModel } from '../models.tsx';
 import type { CharacterId } from '../../../../shared/characters.ts';
@@ -16,6 +14,8 @@ import { GEO, Part, disposeMaterials, makeMaterials, type Mats } from './parts.t
 import { HEAD_Y, LOOKS, DefaultBody, type Look } from './looks.tsx';
 import { OutfitLayer } from './Outfit.tsx';
 import { OUTFIT_ITEMS, defaultOutfit, type Outfit } from '../../../../shared/outfits.ts';
+import { liteAssets } from '../quality.ts';
+import { characterModel, figureMeshes } from './merged.ts';
 
 export interface Rig {
   pose: Group | null;
@@ -52,24 +52,26 @@ const ANKLE = 0.03;
 
 /**
  * A character on the rig. The modelled version (tools/blender/characters.py)
- * shows once characters.glb is in; until then, or if it fails, the same design
+ * shows once its models/characters/<id>.glb is in; until then, or if it fails, the same design
  * drawn from primitives. Both hang their parts on the same rig groups, and so
  * does the outfit (Outfit.tsx) when one is given. The character's own clothes
  * (signature items) are part of its model and show while worn; with no outfit
  * given, it wears them.
  */
-export function CharacterFigure({ outfit, ...props }: { id: CharacterId; mats: Mats; rig: Rig; outfit?: Outfit }) {
+export function CharacterFigure({ outfit, lite, ...props }: {
+  id: CharacterId; mats: Mats; rig: Rig; outfit?: Outfit;
+  /** The simplified model (default: by the stored graphics setting); false for close-ups like the gallery. */
+  lite?: boolean;
+}) {
   return (
     <>
       <WithModel fallback={<DrawnFigure {...props} />}>
-        <ModelFigure {...props} outfit={outfit ?? defaultOutfit(props.id)} />
+        <ModelFigure {...props} lite={lite} outfit={outfit ?? defaultOutfit(props.id)} />
       </WithModel>
       <OutfitLayer {...props} outfit={outfit} />
     </>
   );
 }
-
-const PART_NAMES = ['Body', 'Head', 'HandL', 'HandR', 'FootL', 'FootR'] as const;
 
 // ---- limbs -----------------------------------------------------------------
 // Characters with `arms` / `legs` get a limb from each shoulder to its hand and
@@ -80,17 +82,22 @@ const PART_NAMES = ['Body', 'Head', 'HandL', 'HandR', 'FootL', 'FootR'] as const
 
 const RADIAL = 10;
 const RINGS = 8;
+/** Vertices in one tube. */
+const TUBE = (RINGS + 1) * (RADIAL + 1);
 
+/** A pair of tubes (left, right) in one geometry: both arms, or both legs, are one draw. */
 function limbGeometry(): BufferGeometry {
   const g = new BufferGeometry();
-  const n = (RINGS + 1) * (RADIAL + 1) * 3;
+  const n = 2 * TUBE * 3;
   g.setAttribute('position', new BufferAttribute(new Float32Array(n), 3).setUsage(DynamicDrawUsage));
   g.setAttribute('normal', new BufferAttribute(new Float32Array(n), 3).setUsage(DynamicDrawUsage));
   const index: number[] = [];
-  for (let r = 0; r < RINGS; r++) {
-    for (let k = 0; k < RADIAL; k++) {
-      const a = r * (RADIAL + 1) + k, b = a + RADIAL + 1;
-      index.push(a, a + 1, b, b, a + 1, b + 1);
+  for (const base of [0, TUBE]) {
+    for (let r = 0; r < RINGS; r++) {
+      for (let k = 0; k < RADIAL; k++) {
+        const a = base + r * (RADIAL + 1) + k, b = a + RADIAL + 1;
+        index.push(a, a + 1, b, b, a + 1, b + 1);
+      }
     }
   }
   g.setIndex(index);
@@ -101,10 +108,10 @@ const vS = new Vector3(), vH = new Vector3(), vU = new Vector3(), vBend = new Ve
 const vC = new Vector3(), vP = new Vector3(), vT = new Vector3(), vB = new Vector3();
 
 /**
- * Re-shape `g` into a tube from s to h (radius r0 → r1) that bows toward `pole`
- * as much as a limb of length `natural` would have to when its ends are closer.
+ * Re-shape tube `tube` (0 left, 1 right) of `g` into a tube from s to h (radius r0 → r1) that bows
+ * toward `pole` as much as a limb of length `natural` would have to when its ends are closer.
  */
-function bend(g: BufferGeometry, s: Vector3, h: Vector3, r0: number, r1: number, natural: number, pole: Vector3) {
+function bend(g: BufferGeometry, tube: number, s: Vector3, h: Vector3, r0: number, r1: number, natural: number, pole: Vector3) {
   vU.subVectors(h, s);
   const len = Math.max(1e-4, vU.length());
   vU.divideScalar(len);
@@ -117,7 +124,7 @@ function bend(g: BufferGeometry, s: Vector3, h: Vector3, r0: number, r1: number,
   vC.addVectors(s, h).multiplyScalar(0.5).addScaledVector(vBend, bow);
   const pos = g.attributes.position.array as Float32Array;
   const nor = g.attributes.normal.array as Float32Array;
-  let o = 0;
+  let o = tube * TUBE * 3;
   for (let i = 0; i <= RINGS; i++) {
     const t = i / RINGS, u = 1 - t;
     vP.set(0, 0, 0).addScaledVector(s, u * u).addScaledVector(vC, 2 * u * t).addScaledVector(h, t * t);
@@ -144,14 +151,12 @@ const poleArm = [new Vector3(0.6, -0.25, -0.75), new Vector3(-0.6, -0.25, -0.75)
 const poleLeg = [new Vector3(0.12, 0, 1), new Vector3(-0.12, 0, 1)];
 
 function Limbs({ look, mats, rig }: { look: Look; mats: Mats; rig: Rig }) {
-  const geos = useMemo(() => [limbGeometry(), limbGeometry(), limbGeometry(), limbGeometry()], []);
+  const geos = useMemo(() => [limbGeometry(), limbGeometry()], []);
   useEffect(() => () => geos.forEach(g => g.dispose()), [geos]);
   return (
     <>
       {look.arms && <mesh geometry={geos[0]} material={mats[look.arms.mat]} castShadow frustumCulled={false} />}
-      {look.arms && <mesh geometry={geos[1]} material={mats[look.arms.mat]} castShadow frustumCulled={false} />}
-      {look.legs && <mesh geometry={geos[2]} material={mats[look.legs.mat]} castShadow frustumCulled={false} />}
-      {look.legs && <mesh geometry={geos[3]} material={mats[look.legs.mat]} castShadow frustumCulled={false} />}
+      {look.legs && <mesh geometry={geos[1]} material={mats[look.legs.mat]} castShadow frustumCulled={false} />}
       <LimbDriver look={look} geos={geos} rig={rig} />
     </>
   );
@@ -162,95 +167,88 @@ function LimbDriver({ look, geos, rig }: { look: Look; geos: BufferGeometry[]; r
   useFrame(() => {
     const { arms, legs } = look;
     if (arms) {
-      for (const [g, hand, side, i] of [[geos[0], rig.handL, 1, 0], [geos[1], rig.handR, -1, 1]] as const) {
+      for (const [hand, side, i] of [[rig.handL, 1, 0], [rig.handR, -1, 1]] as const) {
         if (!hand) continue;
         vS.set(arms.shoulder[0] * side, arms.shoulder[1], arms.shoulder[2]);
-        bend(g, vS, vH.copy(hand.position), arms.radius, arms.radius * 0.85, ARM_LEN, poleArm[i]);
+        bend(geos[0], i, vS, vH.copy(hand.position), arms.radius, arms.radius * 0.85, ARM_LEN, poleArm[i]);
       }
     }
     if (legs) {
-      for (const [g, foot, side, i] of [[geos[2], rig.footL, 1, 0], [geos[3], rig.footR, -1, 1]] as const) {
+      for (const [foot, side, i] of [[rig.footL, 1, 0], [rig.footR, -1, 1]] as const) {
         if (!foot) continue;
         vS.set(legs.hip[0] * side, legs.hip[1], legs.hip[2]);
         vH.set(foot.position.x, foot.position.y + ANKLE, foot.position.z - 0.006);
-        bend(g, vS, vH, legs.radius, legs.radius * 0.9, LEG_LEN, poleLeg[i]);
+        bend(geos[1], i, vS, vH, legs.radius, legs.radius * 0.9, LEG_LEN, poleLeg[i]);
       }
     }
   });
   return null;
 }
 
-/** A clone of a characters.glb node wearing this figure's own materials ("<id>:<key>" -> its material of that key). */
-function cloneNode(src: Object3D, mats: Mats, cast: boolean) {
-  const obj = src.clone(true);
-  obj.position.set(0, 0, 0);
-  obj.traverse((o: Object3D) => {
-    const m = o as Mesh;
-    if (!m.isMesh) return;
-    // Player colour, jail grey and fade all follow the figure's materials.
-    const swap = (mat: Material) => mats[(mat.name.split(':')[1] ?? 'main') as keyof Mats] ?? mats.main;
-    m.material = Array.isArray(m.material) ? m.material.map(swap) : swap(m.material);
-    m.castShadow = cast;
-  });
-  return obj;
+// ---- the modelled figure ------------------------------------------------------
+// One file per character (tools/blender/characters.py), so a game downloads only
+// the characters at its table; a simplified copy for Low graphics (and Auto on a
+// weak device). The figure is merged into a few skinned meshes (merged.ts).
+
+const CHAR_URLS = ASSETS.characters as Record<string, string>;
+const CHAR_URLS_LOW = ASSETS.charactersLow as Record<string, string>;
+/** Decided once per page, like the lightmaps (BoardScene): a quality change takes effect on the next visit. */
+let liteOnce: boolean | null = null;
+const liteModels = () => (liteOnce ??= liteAssets());
+
+/** The model file for a character: the simplified one when `lite` (default: the stored graphics setting). */
+export function characterUrl(id: CharacterId, lite = liteModels()): string {
+  const cid = CHAR_URLS[id] ? id : 'spiky';
+  return (lite && CHAR_URLS_LOW[cid]) || CHAR_URLS[cid];
 }
 
-function ModelFigure({ id, mats, rig, outfit }: { id: CharacterId; mats: Mats; rig: Rig; outfit: Outfit }) {
-  const gltf = useGLTF(ASSETS.characters.url);
-  const parts = useMemo(() => {
-    const cid = LOOKS[id] ? id : 'spiky';
-    return Object.fromEntries(PART_NAMES.map(name => {
-      const src = gltf.scene.getObjectByName(`${cid}_${name}`);
-      if (!src) throw new Error(`characters.glb has no ${cid}_${name}`);
-      return [name, cloneNode(src, mats, name === 'Body' || name === 'Head')];
-    })) as Record<(typeof PART_NAMES)[number], Object3D>;
-  }, [gltf.scene, id, mats]);
-  // The character's own garments (its signature outfit items), each shown while that item is worn.
-  const garments = useMemo(() => OUTFIT_ITEMS.flatMap(item => {
-    const src = item.only === id && item.node ? gltf.scene.getObjectByName(`${id}_${item.node}`) : undefined;
-    return src ? [{ item, obj: cloneNode(src, mats, item.slot === 'body') }] : [];
-  }), [gltf.scene, id, mats]);
-  // Eyelids, for the characters that blink: each hangs from its hinge on the head.
-  const lids = useMemo(() => {
-    const cid = LOOKS[id] ? id : 'spiky';
-    return (['LidL', 'LidR'] as const).map(name => {
-      const src = gltf.scene.getObjectByName(`${cid}_${name}`);
-      const hinge = src?.userData.hinge as [number, number, number] | undefined;
-      if (!src || !hinge) return null;
-      const obj = src.clone(true);
-      obj.position.set(0, 0, 0);
-      obj.traverse((o: Object3D) => {
-        const m = o as Mesh;
-        if (m.isMesh) m.material = mats[((m.material as Material).name.split(':')[1] ?? 'skin') as keyof Mats] ?? mats.skin;
-      });
-      return { obj, hinge };
-    });
-  }, [gltf.scene, id, mats]);
+/** Start downloading these characters' models (the ones at a table) before a scene asks for them. */
+export function preloadCharacters(ids: Iterable<CharacterId>, lite?: boolean) {
+  for (const id of new Set(ids)) useGLTF.preload(characterUrl(id, lite));
+}
+
+/** Garment nodes a character's model has (its signature outfit items), in bone order after RIG_BONES. */
+const garmentItems = (id: CharacterId) => OUTFIT_ITEMS.filter(item => item.only === id && item.node);
+
+function ModelFigure({ id, mats, rig, outfit, lite }: { id: CharacterId; mats: Mats; rig: Rig; outfit: Outfit; lite?: boolean }) {
+  const cid: CharacterId = CHAR_URLS[id] ? id : 'spiky';
+  const gltf = useGLTF(characterUrl(cid, lite));
+  const items = useMemo(() => garmentItems(cid), [cid]);
+  const model = useMemo(() => characterModel(gltf.scene, cid, items.map(i => i.node!)), [gltf.scene, cid, items]);
+  const fig = useMemo(() => figureMeshes(model, mats), [model, mats]);
+  useEffect(() => () => fig.dispose(), [fig]);
+  const b = fig.bones;
   const look = LOOKS[id] ?? LOOKS.spiky;
   return (
     <group ref={g => { rig.pose = g; }}>
-      <primitive object={parts.Body} />
-      {garments.map(({ item, obj }) => <primitive key={item.id} object={obj} visible={outfit[item.slot] === item.id} />)}
+      {fig.meshes.map((m, i) => <primitive key={i} object={m} />)}
+      <primitive object={b.Body} />
+      {/* The character's own garments (its signature outfit items), each shown while that item is worn. */}
+      {items.map(item => <primitive key={item.id} object={b[item.node!]} visible={outfit[item.slot] === item.id} />)}
       <Limbs look={look} mats={mats} rig={rig} />
       <group ref={g => { rig.footL = g; }} position={[FOOT_REST[0], FOOT_REST[1], FOOT_REST[2]]}>
-        <primitive object={parts.FootL} />
+        <primitive object={b.FootL} />
       </group>
       <group ref={g => { rig.footR = g; }} position={[-FOOT_REST[0], FOOT_REST[1], FOOT_REST[2]]}>
-        <primitive object={parts.FootR} />
+        <primitive object={b.FootR} />
       </group>
       <group ref={g => { rig.handL = g; }} position={[HAND_REST[0], HAND_REST[1], HAND_REST[2]]}>
-        <primitive object={parts.HandL} />
+        <primitive object={b.HandL} />
       </group>
       <group ref={g => { rig.handR = g; }} position={[-HAND_REST[0], HAND_REST[1], HAND_REST[2]]}>
-        <primitive object={parts.HandR} />
+        <primitive object={b.HandR} />
       </group>
       <group ref={g => { rig.head = g; }} position={[0, HEAD_Y, 0]}>
-        <primitive object={parts.Head} />
-        {lids.map((l, i) => l && (
-          <group key={i} ref={g => { rig[i ? 'lidR' : 'lidL'] = g; }} position={l.hinge} visible={false}>
-            <primitive object={l.obj} />
-          </group>
-        ))}
+        <primitive object={b.Head} />
+        {/* Eyelids, for the characters that blink: each hangs from its hinge on the head. */}
+        {(['LidL', 'LidR'] as const).map(name => {
+          const hinge = model.hinges[name];
+          return hinge && (
+            <group key={name} ref={g => { rig[name === 'LidL' ? 'lidL' : 'lidR'] = g; }} position={hinge} visible={false}>
+              <primitive object={b[name]} />
+            </group>
+          );
+        })}
       </group>
     </group>
   );

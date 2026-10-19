@@ -8,11 +8,17 @@ out of its skull) and smoothed, so the figures read as moulded vinyl toys
 instead of stacked primitives. Small details (eyes, buttons, visors) stay
 crisp primitives.
 
-Output: models/characters.glb with nodes `<id>_Body|Head|HandL|HandR|FootL|FootR`
-(plus `<id>_Top|Chain` for the garments a detailed character wears), each
-with its origin on the rig pivot Figure.tsx animates. Material names are
-`<id>:<key>`; the game swaps each for that figure's own material of that key
-(player colour on `main`, greying in jail, fading when bankrupt).
+Output: one file per character, models/characters/<id>.glb, so a game only
+downloads the characters at its table. Nodes `<id>_Body|Head|HandL|HandR|FootL|FootR`
+(plus `<id>_LidL|LidR` eyelids and `<id>_Top|Chain` for the garments a detailed
+character wears), each with its origin on the rig pivot Figure.tsx animates.
+Material names are `<id>:<key>`; the game swaps each for that figure's own
+material of that key (player colour on `main`, greying in jail, fading when
+bankrupt), and merges each figure into a few skinned meshes (merged.ts).
+models/characters/<id>-low.glb is the same model simplified by gltfpack
+(LOW_RATIO of the triangles) for Low graphics. The manifest records both
+(`characters` / `charactersLow`, by id); .cache/models/characters.glb keeps all
+of them uncompressed in one file for outfits.py.
 
     tools/blender/run.sh characters.py [--preview out.png]
 """
@@ -48,6 +54,7 @@ FUSE_MATS = {'main', 'skin', 'white', 'metal', 'wood'}
 VOXEL = 0.0024          # remesh resolution (figures are ~0.45 tall)
 MIN_FUSE_THICKNESS = 0.022
 FACE_BUDGET = 1600       # per fused surface
+LOW_RATIO = 0.4          # triangles kept in the Low-graphics copy (gltfpack -si; it stops early where shapes would break)
 
 
 def extract():
@@ -378,8 +385,18 @@ def main():
         for n in nodes:
             n.location = (0, 0, 0)
             n.scale = (1, 1, 1)
-    blib.export_glb(nodes, 'models/characters.glb', images='NONE')
-    blib.record('characters', {'url': '/models/characters.glb'})
+    # All of them uncompressed in one file, for outfits.py (thumbnails and fitting previews).
+    blib.export_glb(nodes, 'models/characters.glb', images='NONE', cache_only=True)
+    full, low = {}, {}
+    for cid, ns in by_char.items():
+        rel = f'models/characters/{cid}.glb'
+        blib.export_glb(ns, rel, images='NONE')
+        low_rel = f'models/characters/{cid}-low.glb'
+        blib.gltfpack(os.path.join(blib.PUBLIC, low_rel), ['-si', str(LOW_RATIO)], src=os.path.join(blib.HERE, '.cache', rel))
+        blib.log('wrote', low_rel, f'{os.path.getsize(os.path.join(blib.PUBLIC, low_rel)) // 1024} KB')
+        full[cid], low[cid] = f'/{rel}', f'/{low_rel}'
+    blib.record('characters', full)
+    blib.record('charactersLow', low)
 
 
 if __name__ == '__main__':

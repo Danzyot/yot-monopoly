@@ -212,12 +212,12 @@ function Building({ proto, spot, drop }: { proto: Object3D; spot: BuildingSpot; 
 
 /**
  * Start downloading the shared models before the first scene asks for them.
- * The pieces (1.6 MB) and houses only with `game`: the home page's turning
- * board has neither, so a first visit does not wait on them.
+ * The houses only with `game`: the home page's turning board has none, so a
+ * first visit does not wait on them. The characters load one file each, only
+ * those at the table (preloadCharacters in characters/Figure.tsx, from the lobby).
  */
 export function preloadModels(game: boolean) {
   useGLTF.preload(ASSETS.table.url);
   if (!game) return;
   useGLTF.preload(ASSETS.buildings.url);
-  useGLTF.preload(ASSETS.characters.url);
 }

@@ -671,8 +671,12 @@ def denoise(px: np.ndarray, passes=2) -> np.ndarray:
 # Export + manifest
 # --------------------------------------------------------------------------
 
-def export_glb(objs, rel_path, images='WEBP', quality=88, normals=True, compress=True):
-    path = os.path.join(PUBLIC, rel_path)
+def export_glb(objs, rel_path, images='WEBP', quality=88, normals=True, compress=True, cache_only=False):
+    """Export `objs` to public/<rel_path> (meshopt-compressed), keeping the raw export in .cache/<rel_path>.
+
+    `cache_only` writes just the raw .cache copy (a file other build scripts read, not shipped).
+    """
+    path = os.path.join(HERE, '.cache', rel_path) if cache_only else os.path.join(PUBLIC, rel_path)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     bpy.ops.object.select_all(action='DESELECT')
     for o in objs:
@@ -686,6 +690,9 @@ def export_glb(objs, rel_path, images='WEBP', quality=88, normals=True, compress
         export_cameras=False, export_lights=False,
     )
     raw = os.path.getsize(path)
+    if cache_only:
+        log('wrote', os.path.relpath(path, REPO), f'{raw // 1024} KB')
+        return path
     # Keep the uncompressed export (gitignored) so compression can be redone without a re-bake.
     cache = os.path.join(HERE, '.cache', rel_path)
     os.makedirs(os.path.dirname(cache), exist_ok=True)
@@ -697,8 +704,11 @@ def export_glb(objs, rel_path, images='WEBP', quality=88, normals=True, compress
     return path
 
 
-def gltfpack(path):
+def gltfpack(path, extra=(), src=None):
     """Meshopt-compress a GLB in place (three.js decodes it with the bundled decoder, no CDN).
+
+    `src` packs another file (e.g. the uncompressed cache) into `path`; `extra`
+    adds gltfpack options (e.g. `-si 0.4` for a simplified copy).
 
     -kn/-km keep the named nodes and materials the game looks up; -kv keeps the
     lightmap UVs, which no material in the file references (the lightmap loads
@@ -711,8 +721,8 @@ def gltfpack(path):
         log('gltfpack not installed (npm install at the repo root) — leaving', os.path.basename(path), 'uncompressed')
         return
     tmp = path + '.tmp.glb'
-    subprocess.run([tool, '-i', path, '-o', tmp, '-cc', '-kn', '-km', '-ke', '-kv', '-vpf', '-vtf'], check=True,
-                   stdout=subprocess.DEVNULL)
+    subprocess.run([tool, '-i', src or path, '-o', tmp, '-cc', '-kn', '-km', '-ke', '-kv', '-vpf', '-vtf', *extra],
+                   check=True, stdout=subprocess.DEVNULL)
     os.replace(tmp, path)
 
 

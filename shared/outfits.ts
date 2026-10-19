@@ -7,7 +7,7 @@
 // Signature items are a character's own clothes (CJ WAWA's tee and chain,
 // Yot's tee): only that character can wear them, they are what it wears by
 // default, and the game draws them from the character's own model (garment
-// nodes in characters.glb) instead of outfits.glb. Picking another item for the
+// nodes in models/characters/<id>.glb) instead of outfits.glb. Picking another item for the
 // slot, or nothing, takes the garment off.
 
 import type { CharacterId } from './characters.ts';
@@ -27,7 +27,7 @@ export interface OutfitItemDef {
   name: string;
   /** A signature item: only this character wears it (and does by default). */
   only?: CharacterId;
-  /** Its garment node in characters.glb (`<only>_<node>`), shown while it is worn. */
+  /** Its garment node in the character's model, models/characters/<only>.glb (`<only>_<node>`), shown while it is worn. */
   node?: string;
 }
 
