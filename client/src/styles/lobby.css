@@ -1,0 +1,107 @@
+/* ---- lobby, member view: everyone but the host ----
+   The host's full set-up panels stay in index.css (.lobby-panels). Members get
+   a header, a read-only summary of what the host picked, a big chat and the
+   player list. Desktop: one screen, chat in the middle filling the height.
+   Phone: header, summary, chat, players, stacked. */
+
+.lm {
+  position: relative; z-index: 1; display: grid; gap: 14px; padding: 16px;
+  max-width: 1320px; margin: 0 auto; box-sizing: border-box;
+  height: 100dvh;
+  grid-template-columns: 270px minmax(0, 1fr) 310px;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "head head head" "sum chat players";
+}
+.lm > * { min-width: 0; min-height: 0; }
+.lobby-member.no-chat .lm { grid-template-columns: 270px minmax(0, 1fr); grid-template-areas: "head head" "sum players"; }
+
+/* Header: whose table, the code, and what we are waiting for. */
+.lm-head { grid-area: head; display: flex; align-items: center; justify-content: space-between; gap: 12px 18px; flex-wrap: wrap; padding: 14px 18px; }
+.lm-title { min-width: 0; }
+.lm-title h2 { margin: 0; font-size: 30px; line-height: 1.1; gap: 10px; flex-wrap: wrap; }
+.lm-name { min-width: 0; overflow-wrap: anywhere; }
+.lm-code {
+  font: 400 18px var(--display); letter-spacing: 0.12em; color: var(--hi);
+  background: rgba(0, 20, 70, 0.45); border: 2px solid color-mix(in srgb, var(--line) 60%, transparent);
+  border-radius: 10px; padding: 2px 10px; text-shadow: var(--outline);
+}
+.lm-status { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin: 6px 0 0; font-size: 15px; }
+.lm-count { color: var(--muted); }
+.lm-count b { color: var(--text); }
+.lm-pulse { width: 10px; height: 10px; border-radius: 50%; background: var(--good, #3ddc84); flex: none; box-shadow: 0 0 0 0 color-mix(in srgb, var(--good, #3ddc84) 60%, transparent); animation: lm-pulse 1.8s ease-out infinite; }
+@keyframes lm-pulse { to { box-shadow: 0 0 0 10px transparent; } }
+.lm-watch { margin: 4px 0 0; }
+.lm-actions { gap: 8px; flex-wrap: wrap; margin-left: auto; }
+
+/* Summary: read-only, compact, updated live. */
+.lm-summary { grid-area: sum; overflow-y: auto; padding: 14px 16px; }
+.lm-summary h3 { margin-top: 0; }
+.ls-board { display: flex; align-items: center; gap: 10px; }
+.ls-thumb { width: 64px; height: 64px; object-fit: cover; border-radius: 12px; flex: none; border: 2px solid color-mix(in srgb, var(--line) 60%, transparent); background: rgba(0, 20, 70, 0.45); }
+.ls-board-text { display: flex; flex-direction: column; min-width: 0; }
+.ls-board-text b { font: 400 20px/1.1 var(--display); text-shadow: var(--outline); }
+.ls-facts { margin: 12px 0 0; display: flex; flex-direction: column; gap: 6px; }
+.ls-facts > div { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 6px 10px; background: rgba(0, 20, 70, 0.35); border-radius: 10px; }
+.ls-facts dt { color: var(--muted); font-size: 13px; }
+.ls-facts dd { margin: 0; text-align: right; min-width: 0; }
+.ls-swatches { display: inline-flex; margin: 0 6px 0 0; vertical-align: middle; }
+.ls-swatches i { width: 8px; height: 12px; }
+.ls-rules-head { margin: 14px 0 8px; font-size: 15px; }
+.ls-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ls-chip {
+  display: inline-flex; align-items: center; font-size: 12px; padding: 3px 9px; border-radius: 99px;
+  background: color-mix(in srgb, var(--accent) 22%, rgba(0, 20, 70, 0.45));
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.ls-private { background: rgba(0, 20, 70, 0.45); border-color: var(--line); }
+.lm-summary .req-summary { margin-top: 12px; }
+.ls-val { display: inline-block; border-radius: 6px; }
+.ls-val.changed { animation: ls-flash 1.6s ease-out; }
+@keyframes ls-flash {
+  0%, 25% { background: color-mix(in srgb, var(--hi) 45%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--hi) 45%, transparent); }
+  100% { background: transparent; box-shadow: 0 0 0 3px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ls-val.changed, .lm-pulse { animation: none; }
+}
+
+/* Chat: the main area. */
+.lm-chat { grid-area: chat; max-height: none; height: 100%; box-sizing: border-box; padding: 14px 16px; }
+.lm-chat h3 { margin-top: 0; }
+.lm-chat .chat { min-height: 0; }
+.lm-chat .chat-lines { max-height: none; font-size: 15px; }
+
+/* Players, then our own character folded underneath. */
+.lm-players { grid-area: players; overflow-y: auto; padding: 14px 16px; }
+.lm-players h3 { margin-top: 0; }
+.lm-players h3 .muted { font-family: var(--font); }
+.lm-me { margin-top: 6px; border-radius: 14px; background: rgba(0, 20, 70, 0.35); border: 2px solid color-mix(in srgb, var(--line) 50%, transparent); }
+.lm-me > summary { display: flex; align-items: center; gap: 10px; padding: 8px 10px; cursor: pointer; list-style: none; }
+.lm-me > summary::-webkit-details-marker { display: none; }
+.lm-me > summary .grow { display: flex; flex-direction: column; min-width: 0; }
+.lm-me-caret { transition: transform 0.15s; color: var(--muted); }
+.lm-me[open] .lm-me-caret { transform: rotate(180deg); }
+.lm-me-body { padding: 2px 10px 10px; }
+
+/* Narrower desktops: slimmer side columns. */
+@media (max-width: 1100px) {
+  .lm { grid-template-columns: 230px minmax(0, 1fr) 270px; }
+}
+
+/* Tablets and phones: one column, header, summary, chat, players. */
+@media (max-width: 860px) {
+  .lm, .lobby-member.no-chat .lm {
+    height: auto; min-height: 100dvh; grid-template-columns: minmax(0, 1fr); grid-template-rows: none;
+    grid-template-areas: "head" "sum" "chat" "players"; gap: 12px; padding: 12px 16px 80px;
+  }
+  .lobby-member.no-chat .lm { grid-template-areas: "head" "sum" "players"; }
+  .lm-head { padding: 12px 14px; }
+  .lm-title h2 { font-size: 24px; }
+  .lm-actions { margin-left: 0; }
+  .lm-summary, .lm-players { overflow: visible; }
+  /* Summary: board on top, facts in two columns, to keep the chat near the top. */
+  .ls-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ls-facts > div { flex-direction: column; align-items: flex-start; gap: 0; }
+  .ls-facts dd { text-align: left; }
+  .lm-chat { height: min(62dvh, 520px); min-height: 340px; }
+}
