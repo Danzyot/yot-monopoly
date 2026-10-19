@@ -1,6 +1,8 @@
-import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { call, useConnected, useRoomList } from '../net.ts';
+import { getToken } from '../api.ts';
 import { THEMES, resolveTheme } from '../../../shared/themes.ts';
 import { MAPS, getMap } from '../../../shared/maps.ts';
 import { BRAND } from '../../../shared/brand.ts';
@@ -9,15 +11,13 @@ import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { requirementBadge, requirementSentence } from '../community.tsx';
 
-// The turning board behind the hero is three.js: it streams in after the page
-// itself, so the buttons are there before the 3D is.
-const BoardScene = lazy(() => import('../three/BoardScene.tsx'));
-/** How long after the page has loaded the backdrop starts (then at the browser's next idle moment). */
-const BACKDROP_DELAY_MS = 1000;
-const preloadEnvironment = (env: string, themeId: string) => {
-  void import('../three/environments/index.tsx').then(m => m.preloadEnvironment(env as Parameters<typeof m.preloadEnvironment>[0], themeId));
-};
-import { HowToPlayButton } from '../components/HowToPlay.tsx';
+// The home page has no WebGL at all: the board behind the hero is a still
+// (client/public/home/, drifted by styles/home.css), so the page is up at once
+// and the mouse wheel scrolls it. "How to play" lists the camera views, which
+// live beside three.js, so its dialog is fetched when it is wanted (or the
+// pointer heads for the button), never with the page.
+const loadHowToPlay = () => import('../components/HowToPlay.tsx');
+const HowToPlay = lazy(loadHowToPlay);
 
 const STEPS: { icon: string; title: string; body: string }[] = [
   { icon: '🎲', title: 'Create a table', body: 'Pick a board, a theme and your house rules. Sign in with just a name.' },
@@ -25,92 +25,33 @@ const STEPS: { icon: string; title: string; body: string }[] = [
   { icon: '🚀', title: 'Roll', body: 'Buy, build, trade and auction your way to the last player standing.' },
 ];
 
-/** The rooms the hero tours, one at a time, with a dip to dark between them. */
-const DIORAMA: { themeId: string; mapId: string }[] = [
-  { themeId: 'classic', mapId: 'classic' }, { themeId: 'chog', mapId: 'classic' }, { themeId: 'classic', mapId: 'speed' },
-  { themeId: 'tptv', mapId: 'classic' }, { themeId: 'classic', mapId: 'metropolis' },
-];
 /** The two characters the home page puts first. */
 const FEATURED: CharacterId[] = ['snacky', 'starer'];
-const DIORAMA_MS = 16000;
-const DIP_MS = 900;
 
-/** Data saver on, or the browser reckons the connection is 3G or slower. */
-function slowConnection(): boolean {
-  const c = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
-  return !!c && (c.saveData === true || /(^|-)(2g|3g)$/.test(c.effectiveType ?? ''));
-}
-
-/**
- * True once the page is up and settled: a second after load, at the next idle
- * moment. The backdrop (three.js, its models and shaders) waits for this, so
- * a slow machine spends its first seconds on the buttons, not the 3D.
- */
-function useAfterLoad(): boolean {
-  const [ok, setOk] = useState(false);
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let idle: number | null = null;
-    const go = () => {
-      timer = setTimeout(() => {
-        if (typeof requestIdleCallback === 'function') idle = requestIdleCallback(() => setOk(true), { timeout: 2000 });
-        else setOk(true);
-      }, BACKDROP_DELAY_MS);
-    };
-    if (document.readyState === 'complete') go();
-    else window.addEventListener('load', go, { once: true });
-    return () => {
-      window.removeEventListener('load', go);
-      if (timer) clearTimeout(timer);
-      if (idle !== null) cancelIdleCallback(idle);
-    };
-  }, []);
-  return ok;
-}
-
-/** Whether `el` is on screen (true until known). */
-function useOnScreen(ref: React.RefObject<Element | null>): boolean {
-  const [on, setOn] = useState(true);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof IntersectionObserver !== 'function') return;
-    const io = new IntersectionObserver(([e]) => setOn(e.isIntersecting));
-    io.observe(el);
-    return () => io.disconnect();
-  }, [ref]);
-  return on;
-}
-
-function useDiorama(): [{ themeId: string; mapId: string }, boolean] {
-  const [i, setI] = useState(0);
-  const [dim, setDim] = useState(false);
-  useEffect(() => {
-    // Stay on one room for people who have asked their system for less motion,
-    // and on a slow or metered connection (each room is a ~1.5 MB download).
-    if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    if (slowConnection()) return;
-    let swap: ReturnType<typeof setTimeout> | null = null;
-    let at = 0;
-    // Fetch the next room while this one is on, so the swap is seamless.
-    const ahead = () => { const n = DIORAMA[(at + 1) % DIORAMA.length]; preloadEnvironment(getMap(n.mapId).environment, n.themeId); };
-    const warm = setTimeout(ahead, 3000);
-    const tick = setInterval(() => {
-      setDim(true);
-      swap = setTimeout(() => { at = (at + 1) % DIORAMA.length; setI(at); setDim(false); ahead(); }, DIP_MS);
-    }, DIORAMA_MS);
-    return () => { clearInterval(tick); clearTimeout(warm); if (swap) clearTimeout(swap); };
-  }, []);
-  return [DIORAMA[i], dim];
+/** The hero's "How to play" button; the same as components/HowToPlay's HowToPlayButton, without its code in the page. */
+function HowToButton({ label }: { label: string }) {
+  const [open, setOpen] = useState(false);
+  const warm = () => { void loadHowToPlay(); };
+  return (
+    <>
+      <button type="button" className="btn small ghost" onPointerEnter={warm} onFocus={warm}
+        onClick={() => { setOpen(true); void loadHowToPlay().then(m => m.markHowToSeen()); }}>{label}</button>
+      {open && createPortal(<Suspense fallback={null}><HowToPlay onClose={() => setOpen(false)} /></Suspense>, document.body)}
+    </>
+  );
 }
 
 export default function Home() {
   const nav = useNavigate();
-  const { profile, config, openSignIn } = useAuth();
+  const { profile, config, ready, openSignIn } = useAuth();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const rooms = useRoomList();
   const connected = useConnected();
   const canCreate = !!profile && (config.features.publicRooms || profile.isAdmin);
+  // While a stored sign-in is still being checked, show the button it will most
+  // likely turn into, so the hero does not change shape a moment after it appears.
+  const checking = !ready && !!getToken();
 
   const create = async () => {
     if (!profile) return openSignIn();
@@ -132,33 +73,22 @@ export default function Home() {
   };
 
   const live = rooms.filter(r => r.status !== 'lobby').length;
-  const [scene, dim] = useDiorama();
-  const backdrop = useAfterLoad();
-  // The backdrop rests once the hero is scrolled away: the panels below cover it.
-  const hero = useRef<HTMLElement>(null);
-  const heroOnScreen = useOnScreen(hero);
   // Names come from the catalogue, so a rename there shows up here.
   const featured = FEATURED.map(id => CHARACTER_DEFS.find(c => c.id === id)).filter((c): c is CharacterDef => !!c);
   const others = CHARACTER_DEFS.filter(c => !FEATURED.includes(c.id));
 
   return (
     <div className="home">
-      {/* A live board slowly turning behind the hero, touring every room: shows what the game is before a word is read. */}
-      <div className={`home-bg ${dim ? 'dim' : ''}`} aria-hidden>
-        {backdrop && (
-          <Suspense fallback={null}>
-            <BoardScene themeId={scene.themeId} mapId={scene.mapId} game={null} spin ambient paused={!heroOnScreen} />
-          </Suspense>
-        )}
-      </div>
+      {/* The board in its room behind the hero, drifting slowly: shows what the game is before a word is read. */}
+      <div className="home-bg home-still" aria-hidden />
 
-      <section className="home-hero gd" ref={hero}>
+      <section className="home-hero gd">
         <h1>{BRAND.name}</h1>
         <p className="home-tag">Roll the dice. Buy it all. Bankrupt your friends!</p>
         <div className="hero-actions">
-          {profile ? (
+          {profile || checking ? (
             <button className="btn primary hero-cta" disabled={busy || !connected || !canCreate} onClick={create}>
-              {canCreate ? 'Create Game' : 'Room creation is operators-only right now'}
+              {canCreate || checking ? 'Create Game' : 'Room creation is operators-only right now'}
             </button>
           ) : (
             <button className="btn primary hero-cta" onClick={openSignIn}>Sign In to Play</button>
@@ -171,7 +101,7 @@ export default function Home() {
           </form>
         </div>
         <div className="hero-howto">
-          <HowToPlayButton className="btn small ghost" label="❓ New here? How to play" />
+          <HowToButton label="❓ New here? How to play" />
           <Link className="btn small ghost" to="/characters">🎭 Meet the characters</Link>
         </div>
         <p className="hero-status muted small" role="status">
@@ -225,7 +155,7 @@ export default function Home() {
                 const open = r.status === 'lobby';
                 return (
                   <li key={r.code} className={`room-card ${r.status}`}>
-                    <img className="room-thumb" src={`/maps/${map.id}.webp`} alt="" loading="lazy" />
+                    <img className="room-thumb" src={`/maps/${map.id}.webp`} alt="" width={84} height={58} loading="lazy" decoding="async" />
                     <div className="room-main">
                       <div className="room-top">
                         <b className="mono room-code">{r.code}</b>
@@ -256,7 +186,7 @@ export default function Home() {
           <div className="card-grid">
             {MAPS.map(m => (
               <div key={m.id} className="info-card">
-                <img className="map-thumb" src={`/maps/${m.id}.webp`} alt="" loading="lazy" />
+                <img className="map-thumb" src={`/maps/${m.id}.webp`} alt="" width={320} height={200} loading="lazy" decoding="async" />
                 <b>{m.name}</b>
                 <span className="small muted">{m.description}</span>
                 <span className="info-meta">{m.spaces.length} spaces · {m.players[0]}–{m.players[1]} players · {m.look.name} look</span>
@@ -269,7 +199,7 @@ export default function Home() {
             {THEMES.map(t => (
               <div key={t.id} className="info-card edition-card" style={{ background: t.palette.board, color: t.palette.boardText, borderColor: t.palette.boardLine }}>
                 <div className="row">
-                  {t.logoUrl && <img className="edition-logo" src={t.logoUrl} alt="" />}
+                  {t.logoUrl && <img className="edition-logo" src={t.logoUrl} alt="" width={34} height={34} loading="lazy" decoding="async" />}
                   <b>{t.name}</b>
                 </div>
                 <div className="swatches" aria-hidden>
