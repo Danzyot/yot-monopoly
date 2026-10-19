@@ -124,3 +124,24 @@ test('lobby: switching board or look resets what the last one brought', () => {
   r.configure('h', false, { rules: { maxPlayers: 8 } });
   assert.equal(r.rules.maxPlayers, 5, 'and cannot be raised past it');
 });
+
+test('lobby: a smaller board sheds bots down to its cap, never people', () => {
+  const reg = new Registry(hooks(), 1e9);
+  const r = reg.create('h');
+  r.join(m('h', 'Host'));
+  for (let i = 0; i < 5; i++) r.addBot('h', false);
+  assert.equal(r.seats.length, 6);
+  r.configure('h', false, { mapId: 'speed' });
+  assert.equal(r.rules.maxPlayers, 5);
+  assert.equal(r.seats.length, 5, 'one bot made room');
+  assert.ok(r.seats.some(s => s.id === 'h'));
+});
+
+test('registry: never hands out a code another game already uses', () => {
+  const reg = new Registry(hooks(), 1e9);
+  let calls = 0;
+  reg.taken = () => calls++ < 3; // the first three draws are "taken" elsewhere
+  const r = reg.create('h');
+  assert.ok(calls >= 4, 'kept drawing until a free code came up');
+  assert.equal(r.code.length, 5);
+});

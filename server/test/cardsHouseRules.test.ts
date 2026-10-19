@@ -270,3 +270,37 @@ test('7-0: swapping away the last-but-one card hands over no call duty', () => {
   assert.deepEqual(g.view().oneCard, [], 'receiving a one-card hand is not going down to one');
   assertConserved(g);
 });
+
+// ---- a drawn Wild Draw Four under forced play ----------------------------------------
+
+test('forced play never forces a bluff: a drawn Draw Four stays in hand while the colour is held', () => {
+  const { g, act } = table(3, { rules: { forcedPlay: true } });
+  setHand(g, 'p0', ['g2']); // holds the colour in play (green 9 on the table)
+  putOnTop(g, 'W4');
+  act('p0', { type: 'draw' });
+  // Not playable from the draw: the turn passes, the card is kept, nothing to challenge.
+  assert.equal(g.current.id, 'p1');
+  assert.equal(g.player('p0').hand.length, 2);
+  assertRefused(g, () => act('p1', { type: 'challenge' }), /nothing to challenge/);
+
+  // Holding none of the colour, the same draw may be played (and is legal).
+  const t = table(3, { rules: { forcedPlay: true } });
+  setHand(t.g, 'p0', ['r2']);
+  putOnTop(t.g, 'W4');
+  t.act('p0', { type: 'draw' });
+  assert.equal(t.g.view('p0').you!.canPass, false);
+  t.play('p0', 'W4', { color: 'red' });
+  assert.equal(t.g.top?.kind, 'wild4');
+  assert.equal(t.g.current.id, 'p1');
+});
+
+test('7-0: a single card handed over by a swap shows no "Last card!" prompt', () => {
+  const { g, play } = table(3, { rules: { sevenZero: true } });
+  setHand(g, 'p0', ['g7', 'g1', 'g2']); // two left after the 7: no call duty of p0's own
+  setHand(g, 'p1', ['r5']);
+  play('p0', 'g7', { target: 'p1' });
+  assert.equal(g.player('p0').hand.length, 1);
+  // No window was opened, so nobody can catch p0 and p0 is not asked to call.
+  assert.equal(g.view('p0').you!.canCallLastCard, false);
+  assert.equal(g.view('p2').you!.canCatch.length, 0);
+});
