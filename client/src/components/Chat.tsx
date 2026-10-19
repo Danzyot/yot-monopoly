@@ -39,7 +39,13 @@ export function groupChat(chat: Line[], system: SystemLine[]): Entry[] {
 
 const clock = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-export default function Chat({ chat, system = [], me }: { chat: ChatMsg[]; system?: SystemLine[]; me?: string }) {
+/**
+ * `send`: where messages go (another game's chat event); the table's own
+ * `chat` event when absent. Quick-chat chips go the same way.
+ */
+export default function Chat({ chat, system = [], me, send: sendTo, quick = true }: {
+  chat: ChatMsg[]; system?: SystemLine[]; me?: string; send?: (text: string, quick?: boolean) => Promise<unknown>; quick?: boolean;
+}) {
   const [text, setText] = useState('');
   const { profile, openSignIn } = useAuth();
   const list = useRef<HTMLDivElement>(null);
@@ -73,7 +79,7 @@ export default function Chat({ chat, system = [], me }: { chat: ChatMsg[]; syste
 
   const send = () => {
     if (!text.trim()) return;
-    call('chat', { text }).catch(toastError);
+    (sendTo ? sendTo(text) : call('chat', { text })).catch(toastError);
     setText('');
   };
   const entries = groupChat(chat, system);
@@ -109,7 +115,7 @@ export default function Chat({ chat, system = [], me }: { chat: ChatMsg[]; syste
       </div>
       {profile ? (
         <>
-          <QuickChatRow />
+          {quick && <QuickChatRow send={sendTo} />}
           <form className="row" onSubmit={e => { e.preventDefault(); send(); }}>
             <input value={text} maxLength={300} placeholder="Message" onChange={e => setText(e.target.value)} />
             <button className="btn small" type="submit">Send</button>
@@ -123,12 +129,12 @@ export default function Chat({ chat, system = [], me }: { chat: ChatMsg[]; syste
 }
 
 /** The canned phrases as chips. Scrolls sideways on a phone. */
-export function QuickChatRow({ onSent }: { onSent?: () => void }) {
+export function QuickChatRow({ onSent, send }: { onSent?: () => void; send?: (text: string, quick?: boolean) => Promise<unknown> }) {
   const [busy, setBusy] = useState<string | null>(null);
   const fire = (phrase: string) => {
     if (busy) return;
     setBusy(phrase);
-    sendQuickChat(phrase).catch(toastError).finally(() => { setBusy(null); onSent?.(); });
+    (send ? send(phrase, true) : sendQuickChat(phrase)).catch(toastError).finally(() => { setBusy(null); onSent?.(); });
   };
   return (
     <div className="quick-chat" role="group" aria-label="Quick chat">
