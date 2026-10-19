@@ -107,7 +107,7 @@ function Extras({ rules }: { rules?: Partial<RuleConfig> }) {
             );
           })}
           {(rules?.turnSeconds ?? 0) > 0 && (
-            <li><b>Turn clock</b><em className="howto-flag on">{rules!.turnSeconds}s</em><span>Out of time and autopilot plays that step for you.</span></li>
+            <li><b>Turn clock</b><em className="howto-flag on">{rules!.turnSeconds}s</em><span>Out of time and auto-play plays that step for you.</span></li>
           )}
           {(rules?.timeLimitMin ?? 0) > 0 && (
             <li><b>Game clock</b><em className="howto-flag on">{rules!.timeLimitMin} min</em><span>When it runs out the richest player wins.</span></li>

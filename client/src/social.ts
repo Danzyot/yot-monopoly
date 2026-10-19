@@ -152,7 +152,7 @@ export function useSystemLines(room: RoomView | null | undefined): SystemLine[] 
         const left = Math.round((AUTOPILOT_GRACE_MS - AWAY_LINE_DELAY_MS) / 1000);
         away.current.set(id, setTimeout(() => {
           away.current.delete(id);
-          post([{ t: Date.now(), text: `${s.name} lost connection — autopilot takes over in ${left} s if not back`, kind: 'away' }]);
+          post([{ t: Date.now(), text: `${s.name} lost connection — auto-play takes over in ${left} s if not back`, kind: 'away' }]);
         }, AWAY_LINE_DELAY_MS));
       } else if (!was.connected && s.connected && !unpost(id)) out.push({ t, text: `${s.name} is back`, kind: 'back' });
     }

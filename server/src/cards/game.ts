@@ -956,7 +956,7 @@ export class CardsGame {
     this.timeoutStreak[p.id] = n;
     if (n >= AFK_AFTER && !p.afk && !p.left) {
       p.afk = true;
-      this.say(`${p.name} seems to be away — autopilot plays for them until they are back.`, p.id);
+      this.say(`${p.name} seems to be away — auto-play is on for them until they are back.`, p.id);
     }
   }
 

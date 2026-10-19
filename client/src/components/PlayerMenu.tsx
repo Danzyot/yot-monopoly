@@ -61,7 +61,7 @@ export default function PlayerMenu({ room, player, me }: { room: RoomView; playe
   const autopilot = () => {
     setOpen(null);
     call('room:autopilot', { id: player.id, on: !onAutopilot })
-      .then(() => toast(onAutopilot ? `${player.name} is off autopilot` : `Autopilot is playing for ${player.name}`), toastError);
+      .then(() => toast(onAutopilot ? `${player.name} is off auto-play` : `Auto-play is playing for ${player.name}`), toastError);
   };
 
   const remove = async () => {
@@ -94,8 +94,8 @@ export default function PlayerMenu({ room, player, me }: { room: RoomView; playe
           {canProfile && <button role="menuitem" onClick={viewProfile}>View profile ↗</button>}
           {canMakeHost && <button role="menuitem" onClick={makeHost}>Make host</button>}
           {canAutopilot && (
-            <button role="menuitem" onClick={autopilot} title="Autopilot never buys, builds or trades; they take over again by acting">
-              {onAutopilot ? 'Take off autopilot' : 'Hand to autopilot'}
+            <button role="menuitem" onClick={autopilot} title="Auto-play never buys, builds or trades; they take over again by acting">
+              {onAutopilot ? 'Take off auto-play' : 'Hand to auto-play'}
             </button>
           )}
           {canRemove && <button role="menuitem" onClick={remove}>Remove from game</button>}

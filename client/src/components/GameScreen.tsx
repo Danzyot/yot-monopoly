@@ -162,7 +162,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
     if (myPlayer && !myPlayer.bankrupt && game.phase !== 'over' && room.status !== 'finished'
       && !(await askConfirm({
         icon: '🚪', title: 'Leave the game?', danger: true, confirm: 'Leave & forfeit', cancel: 'Keep playing',
-        body: 'Leaving forfeits the game — your property goes back to the bank. (Just closing the tab keeps your seat: autopilot plays until you are back.)',
+        body: 'Leaving forfeits the game — your property goes back to the bank. (Just closing the tab keeps your seat: auto-play plays until you are back.)',
       }))) return;
     await call('room:leave').catch(() => {});
     nav('/');
@@ -410,7 +410,7 @@ function Players({ game, room, me, onTrade, reactions, onPortfolio }: {
                 <span className="pname-text">{p.name}</span>{p.id === me && <em className="tag you">you</em>}
                 {p.isBot && <em className="tag">bot</em>}
                 {seat && !seat.connected && !p.isBot && <em className="tag warn">away</em>}
-                {!p.bankrupt && (p.afk || seat?.autopilot) && <em className="tag warn" title="Autopilot is playing until they act again">{p.afk ? 'afk' : 'autopilot'}</em>}
+                {!p.bankrupt && (p.afk || seat?.autopilot) && <em className="tag warn" title="Auto-play is playing until they act again">auto-play</em>}
               </div>
               <div className="pmoney">
                 {p.bankrupt ? <span className="muted">bankrupt</span> : <>
@@ -674,9 +674,9 @@ function AutopilotBanner({ game, room, me }: { game: GameView; room: RoomView; m
     <div className="autopilot-banner" role="alertdialog" aria-labelledby="ap-title" aria-describedby="ap-why">
       <span className="ap-bot" aria-hidden>🤖</span>
       <div className="ap-text">
-        <b id="ap-title">Autopilot is playing for you</b>
+        <b id="ap-title">Auto-play is on for you</b>
         <span id="ap-why">
-          {p.afk ? 'You were away for a few turns — the turn clock ran out each time.' : 'The host handed your seat to autopilot.'}
+          {p.afk ? 'You were away for a few turns — the turn clock ran out each time.' : 'The host switched your seat to auto-play.'}
           {' '}It keeps your game moving but never buys, builds or trades for you.
         </span>
       </div>

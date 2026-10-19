@@ -85,7 +85,7 @@ function PlayerRow({ p, fix }: {
   useEffect(() => { setCash(String(p.cash)); }, [p.cash]);
   return (
     <tr>
-      <td className="adm-ellipsis">{p.name}{(p.afk || p.autopilot) && <em className="tag warn">autopilot</em>}</td>
+      <td className="adm-ellipsis">{p.name}{(p.afk || p.autopilot) && <em className="tag warn">auto-play</em>}</td>
       <td>
         <form className="row" onSubmit={e => {
           e.preventDefault();

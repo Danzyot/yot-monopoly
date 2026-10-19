@@ -586,7 +586,7 @@ export class Room {
     if (!auto && s?.autopilot) {
       // Acting yourself takes the seat back from autopilot.
       s.autopilot = false;
-      this.hooks.onEvent(this, `${s.name} took back control from autopilot`);
+      this.hooks.onEvent(this, `${s.name} took back control from auto-play`);
     }
     this.afterChange();
   }
@@ -644,8 +644,8 @@ export class Room {
     // Taking someone off autopilot also clears the away flag it may be covering for.
     if (!on) g.player(target).afk = false;
     this.hooks.onEvent(this, on
-      ? `${s.name} was handed to autopilot by ${this.seat(byId)?.name ?? 'an operator'}`
-      : `${s.name} was taken off autopilot by ${this.seat(byId)?.name ?? 'an operator'}`);
+      ? `${s.name} was switched to auto-play by ${this.seat(byId)?.name ?? 'an operator'}`
+      : `${s.name} was taken off auto-play by ${this.seat(byId)?.name ?? 'an operator'}`);
     this.schedule();
   }
 

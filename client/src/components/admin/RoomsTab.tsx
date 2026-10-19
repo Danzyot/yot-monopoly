@@ -133,7 +133,7 @@ function RoomCard({ room: r, reload, onBan }: { room: AdminRoom; reload: () => u
               {s.id === r.hostId && <em className="tag">host</em>}
               {s.isBot && <em className="tag">bot</em>}
               {s.bankrupt && <em className="tag warn">bankrupt</em>}
-              {!s.bankrupt && s.afk && <em className="tag warn">autopilot</em>}
+              {!s.bankrupt && s.afk && <em className="tag warn">auto-play</em>}
             </span>
             {s.cash !== null && <span className="small cash">${s.cash.toLocaleString()}</span>}
             {!s.isBot && s.id !== me && (

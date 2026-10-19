@@ -434,7 +434,7 @@ export default function Lobby({ room, me, spectating, chat }: {
                 {[2, 3, 4, 5, 6, 7, 8].map(n => <option key={n}>{n}</option>)}
               </select>
             </label>
-            <label className="rule" title="Time for each step of a turn; on timeout the safe move is made (never buying). Twice in a row and autopilot takes over.">
+            <label className="rule" title="Time for each step of a turn; on timeout the safe move is made (never buying). Three times in a row and auto-play takes over.">
               <span>Turn timer</span>
               <select disabled={!isHost} value={room.rules.turnSeconds}
                 onChange={e => configure({ rules: { turnSeconds: Number(e.target.value) } })}>
