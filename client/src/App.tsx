@@ -17,13 +17,17 @@ const Leaderboard = lazy(() => import('./pages/Leaderboard.tsx'));
 const Profile = lazy(() => import('./pages/Profile.tsx'));
 const AdminPage = lazy(() => import('./pages/AdminPage.tsx'));
 const WalletPage = lazy(() => import('./wallet/WalletPage.tsx'));
+// Chog Cards: its own pages (and styles), loaded only when opened.
+const CardsHome = lazy(() => import('./cards/CardsHome.tsx'));
+const CardsRoomPage = lazy(() => import('./cards/CardsRoomPage.tsx'));
 
 /** Shown for the moment a page's code is still on its way. */
 const PageLoading = () => <div className="center-msg"><p className="muted">Loading…</p></div>;
 
 function Shell() {
   // The game screen is full-bleed 3D; everything else gets the site header.
-  const inRoom = useLocation().pathname.startsWith('/r/');
+  const path = useLocation().pathname;
+  const inRoom = path.startsWith('/r/') || path.startsWith('/cards/r/');
   return (
     <>
       {!inRoom && <Header />}
@@ -36,6 +40,8 @@ function Shell() {
         <Route path="/u/:id" element={<Profile />} />
         <Route path="/admin/*" element={<AdminPage />} />
         <Route path="/wallet" element={<WalletPage />} />
+        <Route path="/cards" element={<CardsHome />} />
+        <Route path="/cards/r/:code" element={<CardsRoomPage />} />
         <Route path="*" element={<Home />} />
       </Routes>
       </Suspense>

@@ -23,6 +23,9 @@ import { mountTextOverrides } from './routes/textOverrides.ts';
 import { mountContent } from './routes/content.ts';
 import { walletRoutes } from './routes/wallet.ts';
 import { attachSockets } from './sockets.ts';
+import { attachCardsSockets } from './cards/sockets.ts';
+import { armCardsPersistence, restoreCardsLive } from './cards/persist.ts';
+import { cardsLeaderboard, loadCardsResults, recentCardsResults } from './cards/stats.ts';
 import { staticClient } from './staticFiles.ts';
 import { allResults, leaderboard, loadResults } from './stats.ts';
 import { buildProfile } from './profiles.ts';
@@ -44,6 +47,7 @@ loadMutes();
 loadAccounts();
 loadEvents();
 loadResults();
+loadCardsResults();
 loadGraphics();
 void primeVerifyChannel();
 
@@ -105,6 +109,11 @@ mountContent(app);
 const restored = restoreLive(sockets.registry);
 if (restored) console.log(`Restored ${restored} live room(s) from the last snapshot`);
 armPersistence(sockets.registry);
+// Chog Cards tables: their own registry and events (cards:*), same server and sign-in.
+const cards = attachCardsSockets(io, { taken: code => !!sockets.registry.get(code) });
+const restoredCards = restoreCardsLive(cards.registry);
+if (restoredCards) console.log(`Restored ${restoredCards} live card table(s) from the last snapshot`);
+armCardsPersistence(cards.registry);
 
 let loopLagMs = 0;
 {
@@ -142,6 +151,11 @@ app.get('/api/leaderboard', (_req, res) => {
   res.json(leaderboard(100));
 });
 
+app.get('/api/cards/leaderboard', (_req, res) => {
+  if (!isOn('leaderboard')) { res.status(404).json({ error: 'The leaderboard is switched off' }); return; }
+  res.json({ leaders: cardsLeaderboard(50), recent: recentCardsResults(10) });
+});
+
 // Public profiles ride on the leaderboard switch: both publish players' results.
 app.get('/api/players/:id', (req, res) => {
   if (!isOn('leaderboard')) { res.status(404).json({ error: 'Player profiles are switched off' }); return; }
@@ -162,6 +176,7 @@ app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,
     rooms: sockets.registry.rooms.size,
+    cardTables: cards.registry.rooms.size,
     sockets: sockets.connectedCount(),
     uptime: Math.round(process.uptime()),
     loopLagMs,
