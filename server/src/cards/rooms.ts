@@ -20,7 +20,8 @@ import {
   CARDS_AUTOPLAY_GRACE_MS, CARDS_DEFAULT_MAX_PLAYERS, CARDS_SEAT_COLORS, matchLabel,
   type CardsConfigure, type CardsRoomStatus, type CardsRoomSummary, type CardsRoomView, type CardsSeatView,
 } from '../../../shared/cards/room.ts';
-import { CHARACTERS, isCharacterId, migrateCharacter, type CharacterId } from '../../../shared/characters.ts';
+import { isCharacterId, migrateCharacter, type CharacterId } from '../../../shared/characters.ts';
+import { CHOG_SEASON, SEASON_BOT_NAMES, SEASON_CHARACTERS, characterAvailable } from '../../../shared/season.ts';
 
 /** A disconnected player's moves are made for them after this long. */
 export const CARDS_AUTOPILOT_GRACE_MS = CARDS_AUTOPLAY_GRACE_MS;
@@ -37,7 +38,15 @@ const TIMER_RETRY_MS = 5_000;
 export const CARDS_MAX_ROOMS = 500;
 export const CARDS_CREATES_PER_WINDOW = 5;
 const CREATE_WINDOW_MS = 10 * 60_000;
-const BOT_NAMES = ['Ace', 'Joker', 'Shuffles', 'Wildcard', 'Lucky', 'Maverick', 'Dazzle', 'Domino', 'Trickster', 'Dealer'];
+/** Bot names: the Chog season's (shared/season.ts), or the card table's own set. */
+const BOT_NAMES = CHOG_SEASON
+  ? SEASON_BOT_NAMES
+  : ['Ace', 'Joker', 'Shuffles', 'Wildcard', 'Lucky', 'Maverick', 'Dazzle', 'Domino', 'Trickster', 'Dealer'];
+/** Each seat has its own character only when there is a choice; with one (the Chog season) everyone shares it and the seat colour tells them apart. */
+const UNIQUE_CHARACTERS = SEASON_CHARACTERS.length > 1;
+
+/** A stored or requested character that the season does not allow becomes the first one it does. */
+const seasonCharacter = (c: CharacterId): CharacterId => (characterAvailable(c) ? c : SEASON_CHARACTERS[0]);
 const BOT_LEVELS: CardsBotLevel[] = ['easy', 'normal', 'hard'];
 /** A table's default: one quick round, with a turn timer. */
 export const CARDS_LOBBY_RULES: CardsRules = { ...DEFAULT_CARDS_RULES, match: 'single' };
@@ -168,7 +177,7 @@ export class CardsRoom {
   }
 
   private freeCharacter(): CharacterId {
-    return CHARACTERS.find(c => !this.seats.some(s => s.character === c)) ?? CHARACTERS[0];
+    return SEASON_CHARACTERS.find(c => !this.seats.some(s => s.character === c)) ?? SEASON_CHARACTERS[0];
   }
 
   private freeColor(): string {
@@ -312,8 +321,9 @@ export class CardsRoom {
     this.dirty = true;
     this.requireLobby();
     if (!isCharacterId(character)) fail('Unknown character');
+    if (!characterAvailable(character)) fail('That character is not available right now');
     const s = this.seat(id) ?? fail('You are not seated');
-    if (this.seats.some(o => o !== s && o.character === character)) fail('That character is taken');
+    if (UNIQUE_CHARACTERS && this.seats.some(o => o !== s && o.character === character)) fail('That character is taken');
     s.character = character;
   }
 
@@ -763,7 +773,7 @@ export class CardsRoom {
     // Everyone starts disconnected: they reclaim their seats on reconnect, and
     // autopilot covers anyone who never comes back.
     r.seats = s.seats.map(x => ({
-      ...x, character: migrateCharacter(x), connected: x.isBot, disconnectedAt: x.isBot ? null : now,
+      ...x, character: seasonCharacter(migrateCharacter(x)), connected: x.isBot, disconnectedAt: x.isBot ? null : now,
     }));
     if (s.game) {
       r.game = CardsGame.restore({ rng: r.rng, now: r.now, onLog: text => hooks.onEvent(r, text) }, s.game);

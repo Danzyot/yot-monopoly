@@ -14,7 +14,8 @@ import {
 } from '../../../shared/cards/room.ts';
 import type { CardsBotLevel } from '../../../shared/cards/types.ts';
 import type { Card } from '../../../shared/cards/deck.ts';
-import { CHARACTER_DEFS, getCharacter } from '../../../shared/characters.ts';
+import { getCharacter, type CharacterId } from '../../../shared/characters.ts';
+import { availableCharacters } from '../../../shared/season.ts';
 import type { ChatMsg } from '../net.ts';
 import { cardsCall, cardsChat, cardsConfigure } from './net.ts';
 import { toast, toastError } from '../toast.tsx';
@@ -26,6 +27,23 @@ import { CardBack, CardFace } from './CardFace.tsx';
 
 // The 3D character preview brings three.js: only when someone opens the picker.
 const CharacterPreview = lazy(() => import('../three/characters/CharacterPreview.tsx'));
+
+/**
+ * Start downloading what the 3D table needs while people are still in the
+ * lobby: the Chog room and its reflections, the characters at the table, and
+ * the card atlas, so the deal is seen from the first card.
+ */
+function preloadTable(characters: string) {
+  void Promise.all([
+    import('../three/environments/index.tsx'),
+    import('../three/characters/Figure.tsx'),
+    import('./three/cardAtlas.ts'),
+  ]).then(([env, fig, atlas]) => {
+    env.preloadEnvironment('lounge', 'chog');
+    fig.preloadCharacters(characters.split(',') as CharacterId[]);
+    void atlas.loadCardAtlas();
+  }).catch(() => {});
+}
 
 const withCurrent = (choices: number[], v: number) => (choices.includes(v) ? choices : [...choices, v].sort((a, b) => a - b));
 
@@ -89,8 +107,9 @@ function SeatList({ room, me, isHost }: { room: CardsRoomView; me: string; isHos
   );
 }
 
-/** Our character (the Monopoly cast) and seat colour. */
+/** Our character (the Monopoly cast, as the season allows: shared/season.ts) and seat colour. */
 function CharacterPicker({ room, me, seat }: { room: CardsRoomView; me: string; seat: CardsSeatView }) {
+  const picks = availableCharacters();
   return (
     <>
       <div className="char-picker">
@@ -103,8 +122,9 @@ function CharacterPicker({ room, me, seat }: { room: CardsRoomView; me: string; 
             <span className="small muted">{getCharacter(seat.character).blurb}</span>
           </div>
         </div>
-        <div className="char-grid">
-          {CHARACTER_DEFS.map(c => {
+        {/* During the Chog season there is one character (everyone is a Chog, told apart by colour): no grid to pick from. */}
+        {picks.length > 1 && <div className="char-grid">
+          {picks.map(c => {
             const holder = room.seats.find(s => s.character === c.id && s.id !== me);
             return (
               <button key={c.id} disabled={!!holder} aria-pressed={seat.character === c.id}
@@ -117,7 +137,7 @@ function CharacterPicker({ room, me, seat }: { room: CardsRoomView; me: string; 
               </button>
             );
           })}
-        </div>
+        </div>}
       </div>
       <div className="outfit-colors">
         <span>Colour</span>
@@ -250,6 +270,8 @@ export default function CardsLobby({ room, me, spectating, chat }: {
   const canBots = config.features.bots || !!profile?.isAdmin;
   const [botLevel, setBotLevel] = useState<CardsBotLevel>('normal');
   const [starting, setStarting] = useState(false);
+  const seatChars = room.seats.map(s => s.character).join(',');
+  useEffect(() => { if (seatChars) preloadTable(seatChars); }, [seatChars]);
   const r = room.rules;
   const rules = (p: Partial<CardsRules>) => cardsConfigure({ rules: p }).catch(toastError);
   const leave = async () => { await cardsCall('cards:leave').catch(() => {}); nav('/cards'); };
