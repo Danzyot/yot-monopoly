@@ -1,0 +1,1087 @@
+// Operator audit trail: who played, from where, and whether any pair of
+// players is behaving like the same person or a team.
+//
+// Held in memory for speed, persisted to the data volume (saveAudit /
+// loadAudit) so restarts and deploys don't wipe the operator's history.
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { CardT } from '../../shared/types.ts';
+import { reportFlaggedHands } from './discord.ts';
+import { CAT, categoryOf, evaluate7 } from './engine/evaluator.ts';
+import type { Table } from './engine/table.ts';
+import { countryOf } from './geo.ts';
+import { banAt, normaliseIp } from './bans.ts';
+import { isInfraPeer } from './net.ts';
+import { classify } from './vpn.ts';
+import { accountAgeDays, ageText, isYoung, joinsInvolving } from './invitelog.ts';
+import { DATA_DIR } from './paths.ts';
+
+export interface PlayerRecord {
+  id: string;
+  name: string;
+  avatar: string;
+  discordId: string | null;
+  discordTag: string | null;
+  firstSeen: number;
+  lastSeen: number;
+  ips: Map<string, number>; // ip -> last seen
+  // Which browsers, not just which addresses. A device id is minted once and
+  // kept in the browser's storage, so it follows a sign-out and a sign-in as
+  // somebody else — the move an address never shows. A print is a hash of the
+  // browser's own traits: survives a cleared browser, but identical phones
+  // collide, so it is a hint where the id is a fact.
+  devices: Map<string, number>; // device id -> last seen
+  prints: Map<string, number>;  // fingerprint hash -> last seen
+  handsPlayed: number;
+  gamesJoined: Set<string>;
+}
+
+const players = new Map<string, PlayerRecord>();
+
+export function noteSeen(
+  p: { id: string; name: string; avatar: string; discord?: { id: string; username: string } | null },
+  ip: string | null,
+  browser?: { device: string | null; print: string | null },
+) {
+  const now = Date.now();
+  let rec = players.get(p.id);
+  if (!rec) {
+    rec = {
+      id: p.id, name: p.name, avatar: p.avatar,
+      discordId: p.discord?.id ?? null,
+      discordTag: p.discord?.username ?? null,
+      firstSeen: now, lastSeen: now,
+      ips: new Map(), devices: new Map(), prints: new Map(),
+      handsPlayed: 0, gamesJoined: new Set(),
+    };
+    players.set(p.id, rec);
+  }
+  rec.name = p.name;
+  rec.avatar = p.avatar;
+  if (p.discord) { rec.discordId = p.discord.id; rec.discordTag = p.discord.username; }
+  rec.lastSeen = now;
+  if (ip) rec.ips.set(ip, now);
+  if (browser?.device) rec.devices.set(browser.device, now);
+  if (browser?.print) rec.prints.set(browser.print, now);
+}
+
+export function noteGame(playerId: string, gameId: string) {
+  players.get(playerId)?.gamesJoined.add(gameId);
+}
+
+// ---- per-hand action log, used for the collusion review ----
+export interface HandAction {
+  ts: number;
+  tableId: string;
+  tableName: string;
+  handNumber: number;
+  playerId: string;
+  playerName: string;
+  action: string;
+  amount: number;
+  pot: number;
+}
+
+const actions: HandAction[] = [];
+const MAX_ACTIONS = 20_000;
+
+export function noteAction(a: HandAction) {
+  actions.push(a);
+  if (actions.length > MAX_ACTIONS) actions.shift();
+  const rec = players.get(a.playerId);
+  if (rec) rec.gamesJoined.add(a.tableId);
+}
+
+// Chips moved between a pair of players when they were the only two left in a
+// hand — the shape chip dumping takes.
+export interface PairStat {
+  a: string; aName: string;
+  b: string; bName: string;
+  handsTogether: number;
+  headsUpPots: number;
+  netAtoB: number; // positive: a lost this much to b
+  sharedIps: string[];
+  sameIpOnly: boolean; // every session for both came from one shared address
+  dumpHands: number;   // hands one of them lost with an unjustifiable holding
+  dumpChips: number;   // chips moved in exactly those hands
+}
+
+// ---- move-quality analysis ----
+// Chip dumping does not just look like "chips moved"; it looks like chips
+// moved for BAD REASONS. These signals judge the decision, not the outcome,
+// so a player who loses a big pot with aces is never flagged while one who
+// shoves 7-2 into the same friend four times is.
+//
+// Everything here is ADVISORY. Nothing is ever auto-punished — a flag is an
+// invitation for the operator to look at the hand, and normal bad play will
+// occasionally trip one. Judgement stays human.
+
+// Chen-style preflop strength, roughly 0 (72o) to 20 (AA).
+export function preflopStrength(cards: CardT[]): number {
+  if (cards.length < 2) return 0;
+  const [a, b] = [...cards].sort((x, y) => y.r - x.r);
+  const HIGH: Record<number, number> = { 14: 10, 13: 8, 12: 7, 11: 6 };
+  let score = HIGH[a.r] ?? a.r / 2;
+  if (a.r === b.r) score = Math.max(5, score * 2); // pairs
+  if (a.s === b.s) score += 2;                     // suited
+  const gap = a.r - b.r;
+  if (a.r !== b.r) {
+    if (gap === 2) score -= 1;
+    else if (gap === 3) score -= 2;
+    else if (gap === 4) score -= 4;
+    else if (gap >= 5) score -= 5;
+    if (gap <= 2 && a.r < 12) score += 1; // connected low cards make straights
+  }
+  return Math.max(0, Math.round(score));
+}
+
+export interface FlaggedHand {
+  ts: number;
+  tableName: string;
+  handNumber: number;
+  playerId: string;
+  playerName: string;
+  toId: string | null;   // who received the chips
+  toName: string | null;
+  chips: number;         // how much they lost on the hand
+  stackPct: number;      // share of their stack put in
+  reason: string;        // plain-English explanation for the operator
+  cards: CardT[];
+}
+
+const flagged: FlaggedHand[] = [];
+const MAX_FLAGGED = 400;
+
+// A hand is worth the operator's attention when a player put a big share of
+// their stack in and the holding simply did not justify it.
+// Below this many big blinds, getting the rest of the chips in is not a
+// decision anybody makes — it is the only move the structure leaves. Flagging
+// it produced a list that was almost entirely short stacks doing the correct
+// thing: of 356 flags in one event, nearly every line read "100% of stack",
+// including players all-in for 100 chips at a table where the average was six
+// figures. That is not a detector, it is a census of tournament poker.
+const SHORT_STACK_BB = 12;
+
+function judgeHand(e: {
+  contenders: {
+    id: string; name: string; net: number; cards: CardT[];
+    committed: number; startStack: number; allIn: boolean; wentToShowdown: boolean;
+  }[];
+  board: CardT[];
+  tableName: string;
+  handNumber: number;
+  bb: number;
+}) {
+  const winner = [...e.contenders].sort((a, b) => b.net - a.net)[0];
+  if (!winner || winner.net <= 0) return;
+  const raised: string[] = [];
+  const bb = Math.max(1, e.bb);
+
+  for (const c of e.contenders) {
+    if (c.id === winner.id || c.net >= 0) continue;
+    const stackPct = c.startStack > 0 ? c.committed / c.startStack : 0;
+    const depth = c.startStack / bb;
+    // Only a real commitment, from a stack deep enough to have had a choice,
+    // in a pot worth having.
+    if (stackPct < 0.35) continue;
+    if (depth < SHORT_STACK_BB) continue;
+    if (c.committed < bb * 10) continue;
+
+    const pre = preflopStrength(c.cards);
+    const isPair = c.cards.length === 2 && c.cards[0].r === c.cards[1].r;
+    const hasAce = c.cards.some(x => x.r === 14);
+    // The Chen score this uses is a fine relative ranking and a terrible
+    // absolute one: it puts pocket fives (5) level with seven-deuce-ish junk,
+    // and it has no opinion at all about ace-king, which is why the old list
+    // flagged AK and AQ for "giving up with no pair". A pair or an ace is a
+    // standard holding to get chips in with — never, on its own, evidence.
+    const junk = pre <= 4 && !isPair && !hasAce;
+    const depthText = `${Math.round(depth)} BB deep`;
+    const reasons: string[] = [];
+
+    if (c.allIn && e.board.length === 0 && junk) {
+      reasons.push(`all-in preflop ${depthText} with junk (strength ${pre}/20)`);
+    } else if (c.cards.length === 2 && e.board.length >= 3) {
+      const cat = categoryOf(evaluate7([...c.cards, ...e.board]));
+      // Missing with a good hand is a lost race, not a mistake, so the
+      // holding has to be bad on its own terms before the result counts.
+      if (cat === CAT.HIGH && stackPct >= 0.6 && junk) {
+        reasons.push(`put in ${Math.round(stackPct * 100)}% of a ${depthText} stack with junk `
+          + `(strength ${pre}/20) and never made a pair`);
+      } else if (cat <= CAT.PAIR && stackPct >= 0.85 && junk) {
+        reasons.push(`committed ${Math.round(stackPct * 100)}% of a ${depthText} stack `
+          + `holding junk (strength ${pre}/20) for at most one pair`);
+      }
+    }
+    if (reasons.length === 0) continue;
+
+    flagged.push({
+      ts: Date.now(),
+      tableName: e.tableName,
+      handNumber: e.handNumber,
+      playerId: c.id, playerName: c.name,
+      toId: winner.id, toName: winner.name,
+      chips: -c.net,
+      stackPct: Math.round(stackPct * 100),
+      reason: reasons.join('; '),
+      cards: c.cards,
+    });
+    if (flagged.length > MAX_FLAGGED) flagged.shift();
+    raised.push(
+      `**${c.name}** ${cardsText(c.cards)} lost **${-c.net}** (${Math.round(stackPct * 100)}% of stack) `
+      + `to **${winner.name}** — ${reasons.join('; ')} · ${e.tableName} #${e.handNumber}`,
+    );
+
+    // Count it against the pair as a directed donation — but only if these
+    // two have actually played a pot against each other. Creating a pair
+    // record here invented one for every flagged hand, which is how the chip
+    // flow panel ended up 450 rows of "0 pots, net 0" with the three pairs
+    // that mattered buried underneath. The heads-up pot for this very hand is
+    // recorded before judging, so a blatant first-hand dump still lands.
+    const cur = pairs.get(pairKey(c.id, winner.id));
+    if (cur) {
+      cur.dumpHands += 1;
+      cur.dumpChips += -c.net;
+      cur.names[c.id] = c.name;
+      cur.names[winner.id] = winner.name;
+    }
+  }
+  // Ping the operator's private channel so a dump is caught while it happens,
+  // not whenever someone next opens the Audit page.
+  reportFlaggedHands(raised);
+}
+
+const RANK_CH: Record<number, string> = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
+const SUIT_CH = ['\u2660', '\u2665', '\u2666', '\u2663'];
+function cardsText(cards: CardT[]): string {
+  return `[${cards.map(c => `${RANK_CH[c.r] ?? c.r}${SUIT_CH[c.s] ?? ''}`).join(' ')}]`;
+}
+
+export function recordHandResult(
+  table: Table,
+  contenders: { id: string; name: string; net: number }[],
+  detail?: {
+    contenders: {
+      id: string; name: string; net: number; cards: CardT[];
+      committed: number; startStack: number; allIn: boolean; wentToShowdown: boolean;
+    }[];
+    board: CardT[]; tableName: string; handNumber: number;
+  },
+) {
+  for (const c of contenders) {
+    const rec = players.get(c.id);
+    if (rec) rec.handsPlayed += 1;
+  }
+
+  // Chip flow between exactly two players reaching the end: the classic
+  // dumping shape, tracked separately from the quality signals below. This
+  // runs BEFORE judging so that a donation on the pair's very first hand
+  // still has a pair record to attach itself to.
+  const shown = contenders.filter(c => c.net !== 0);
+  if (shown.length === 2) {
+    const [x, y] = shown;
+    const key = pairKey(x.id, y.id);
+    const cur = pairs.get(key)
+      ?? { handsTogether: 0, headsUpPots: 0, netAtoB: 0, first: x.id, dumpHands: 0, dumpChips: 0, names: {} };
+    cur.handsTogether += 1;
+    cur.headsUpPots += 1;
+    cur.names[x.id] = x.name;
+    cur.names[y.id] = y.name;
+    // Normalise direction against whichever id we stored first.
+    const delta = cur.first === x.id ? -x.net : -y.net;
+    cur.netAtoB += delta;
+    pairs.set(key, cur);
+  }
+
+  // Judged last, and told the big blind: without it there is no way to tell a
+  // reckless shove from a short stack with no other move.
+  if (detail) judgeHand({ ...detail, bb: table.bb });
+}
+
+export function flaggedHands(limit = 100): FlaggedHand[] {
+  return flagged.slice(-limit).reverse();
+}
+
+interface PairState {
+  handsTogether: number; headsUpPots: number; netAtoB: number; first: string;
+  dumpHands: number; dumpChips: number;
+  // Names captured at play time: evidence must not disappear just because a
+  // player record is missing (fresh boot, partial restore, pruned history).
+  names: Record<string, string>;
+}
+const pairs = new Map<string, PairState>();
+
+function pairKey(a: string, b: string): string {
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+// ---- reporting ----
+export interface PlayerRow {
+  id: string;
+  name: string;
+  avatar: string;
+  discordTag: string | null;
+  discordVerifiedId: string | null;
+  firstSeen: number;
+  lastSeen: number;
+  ips: string[];
+  // Countries for those addresses, same order. A player whose addresses sit
+  // in two countries at once is worth a second look.
+  countries: (string | null)[];
+  handsPlayed: number;
+  games: number;
+  // What the VPN door would make of their MOST RECENT address — the one they
+  // would arrive on next. Reported whether or not the block is switched on,
+  // so the operator can see who it would turn away before turning it on,
+  // rather than finding out from the people who cannot get in.
+  vpn: 'vpn' | 'datacenter' | null;
+}
+
+export function playerRows(): PlayerRow[] {
+  return [...players.values()]
+    .sort((a, b) => b.lastSeen - a.lastSeen)
+    .map(p => ({
+      id: p.id, name: p.name, avatar: p.avatar,
+      discordTag: p.discordTag, discordVerifiedId: p.discordId,
+      firstSeen: p.firstSeen, lastSeen: p.lastSeen,
+      ips: [...p.ips.keys()],
+      countries: [...p.ips.keys()].map(countryOf),
+      handsPlayed: p.handsPlayed,
+      games: p.gamesJoined.size,
+      vpn: classify([...p.ips.keys()].at(-1) ?? null).kind,
+    }));
+}
+
+// Accounts sharing an IP — the cheapest alt-account signal there is.
+export interface AltGroup {
+  // Stable identity for the group: its addresses, sorted and joined. The panel
+  // is keyed on this rather than on a single address, because a group is a set
+  // of people, not a set of routers.
+  key: string;
+  // Each address carries the accounts seen from it, so the panel can offer
+  // "ban this address AND the accounts behind it" without a second round trip
+  // and without the operator having to guess how many people that is.
+  addresses: { ip: string; country: string | null; accounts: { id: string; name: string; avatar: string; discordTag: string | null; discordId: string | null }[] }[];
+  score: number;      // 0-100, higher = more worth a look
+  reasons: string[];
+  playedTogether: number; // pairs in this group who shared at least one game
+  players: { id: string; name: string; discordTag: string | null; lastSeen: number }[];
+}
+
+// One account, and everyone the addresses connect it to.
+//
+// The shared-address panel is organised the wrong way round for this
+// question. It lists addresses, so a person with three accounts across two
+// addresses appears in two unrelated-looking rows, and answering "does this
+// player have alts" means reading the whole page and joining it up by eye.
+// This starts from the player instead and walks outwards.
+//
+// It walks more than one step: if A and B share an address, and B and C share
+// a different one, C is worth seeing on A's card — that is exactly the shape
+// somebody takes when they are trying not to be obvious. But it refuses to
+// expand through a crowded address, because a mobile carrier or a VPN exit
+// puts hundreds of strangers behind one, and hopping through those would
+// eventually connect the entire site to itself and prove nothing at all.
+const CROWD_LIMIT = 8;
+
+export interface LinkedAccount {
+  id: string;
+  name: string;
+  avatar: string;
+  discordTag: string | null;
+  discordVerifiedId: string | null;
+  // Addresses this account holds in common with the subject. Empty when the
+  // link is indirect — the path is named in `via` instead.
+  sharedIps: string[];
+  // 1 = shares an address with the subject directly. 2+ = reached through
+  // that many links, so weigh it accordingly.
+  hops: number;
+  via: string | null; // name of the account that bridges an indirect link
+  // How many accounts sit on the busiest address behind this link. Two is a
+  // household; forty is a carrier and means close to nothing.
+  crowd: number;
+  playedTogether: number; // games this account and the subject were both in
+  handsPlayed: number;
+  firstSeen: number;
+  lastSeen: number;
+}
+
+export interface PlayerConnections {
+  subject: PlayerRow;
+  // The subject's own addresses, with how many accounts each one carries.
+  addresses: { ip: string; country: string | null; accounts: number }[];
+  linked: LinkedAccount[];
+  // Plain-language summary of what the numbers above add up to.
+  verdict: string;
+}
+
+// Find one account from whatever the operator has to hand: the site id, a bare
+// Discord id, a Discord tag, or a name.
+export function findPlayer(query: string): PlayerRecord | null {
+  const q = String(query ?? '').trim();
+  if (!q) return null;
+  const bare = q.replace(/^@/, '');
+  const direct = players.get(q) ?? players.get(`dc_${bare}`);
+  if (direct) return direct;
+  const lower = bare.toLowerCase();
+  // Ids and Discord tags are unique; display names are not, and two people
+  // called the same thing is exactly the situation somebody exploits. When a
+  // name is all there is, answer with the account seen most recently and let
+  // the operator follow it from there rather than picking one at random.
+  const all = [...players.values()].sort((a, b) => b.lastSeen - a.lastSeen);
+  return all.find(p => p.discordId === bare)
+    ?? all.find(p => (p.discordTag ?? '').toLowerCase() === lower)
+    ?? all.find(p => p.name.toLowerCase() === lower)
+    ?? all.find(p => p.name.toLowerCase().includes(lower))
+    ?? null;
+}
+
+export function connectionsFor(query: string): PlayerConnections | null {
+  const subject = findPlayer(query);
+  if (!subject) return null;
+
+  // Addresses -> accounts, our own plumbing left out. Recorded before the
+  // proxy handling was fixed, those entries are all in infrastructure ranges
+  // and would link everybody to everybody.
+  const byIp = new Map<string, PlayerRecord[]>();
+  for (const p of players.values()) {
+    for (const ip of p.ips.keys()) {
+      if (isInfraPeer(ip)) continue;
+      const list = byIp.get(ip) ?? [];
+      list.push(p);
+      byIp.set(ip, list);
+    }
+  }
+  const ipsOf = (p: PlayerRecord) => [...p.ips.keys()].filter(ip => !isInfraPeer(ip));
+  const sharesGame = (a: PlayerRecord, b: PlayerRecord) => {
+    let n = 0;
+    for (const g of a.gamesJoined) if (b.gamesJoined.has(g)) n += 1;
+    return n;
+  };
+
+  const found = new Map<string, LinkedAccount>();
+  const seen = new Set<string>([subject.id]);
+  let frontier: { rec: PlayerRecord; hops: number }[] = [{ rec: subject, hops: 0 }];
+
+  while (frontier.length > 0 && found.size < 200) {
+    const next: { rec: PlayerRecord; hops: number }[] = [];
+    for (const { rec, hops } of frontier) {
+      for (const ip of ipsOf(rec)) {
+        const crowd = byIp.get(ip)?.length ?? 1;
+        const crowded = crowd > CROWD_LIMIT;
+        // A carrier-sized address is reported when the subject sits on it
+        // directly — flagged by `crowd`, for the operator to weigh — but two
+        // steps out it is only noise, so it is not even enumerated there.
+        if (hops > 0 && crowded) continue;
+        for (const other of byIp.get(ip) ?? []) {
+          if (other.id === subject.id) continue;
+          const existing = found.get(other.id);
+          const direct = hops === 0;
+          if (existing) {
+            if (direct && !existing.sharedIps.includes(ip)) existing.sharedIps.push(ip);
+            existing.crowd = Math.max(existing.crowd, crowd);
+            continue;
+          }
+          found.set(other.id, {
+            id: other.id, name: other.name, avatar: other.avatar,
+            discordTag: other.discordTag, discordVerifiedId: other.discordId,
+            sharedIps: direct ? [ip] : [],
+            hops: hops + 1,
+            via: direct ? null : rec.name,
+            crowd,
+            playedTogether: sharesGame(subject, other),
+            handsPlayed: other.handsPlayed,
+            firstSeen: other.firstSeen, lastSeen: other.lastSeen,
+          });
+          // And nobody reached ACROSS a crowd is walked onward from. Every
+          // stranger on a mobile carrier would otherwise hand over their own
+          // household, and the next round would hand over that household's
+          // strangers, until the tool connects the entire site to itself and
+          // means nothing. Only a small, household-sized address earns a step.
+          if (!crowded && !seen.has(other.id)) {
+            seen.add(other.id);
+            next.push({ rec: other, hops: hops + 1 });
+          }
+        }
+      }
+    }
+    frontier = next;
+  }
+
+  const linked = [...found.values()].sort((a, b) =>
+    a.hops - b.hops
+    || b.playedTogether - a.playedTogether
+    || a.crowd - b.crowd
+    || b.lastSeen - a.lastSeen);
+
+  const addresses = ipsOf(subject).map(ip => ({
+    ip, country: countryOf(ip), accounts: byIp.get(ip)?.length ?? 1,
+  })).sort((a, b) => a.accounts - b.accounts);
+
+  // The reading, in words, so nobody has to infer it from three numbers.
+  const close = linked.filter(l => l.hops === 1 && l.crowd <= CROWD_LIMIT);
+  const together = close.filter(l => l.playedTogether > 0);
+  let verdict: string;
+  if (linked.length === 0) {
+    verdict = addresses.length === 0
+      ? 'No addresses recorded for this account yet — nothing to compare.'
+      : 'No other account has ever been seen from this player\'s addresses.';
+  } else if (close.length === 0) {
+    verdict = `Shares an address only with large groups (${linked.length} account(s)), `
+      + 'which is what a mobile network or VPN looks like. No usable link.';
+  } else if (together.length === 0) {
+    verdict = `${close.length} other account(s) on a small shared address, but none of them `
+      + 'has ever been in the same game. Consistent with a household or one person on two devices.';
+  } else {
+    verdict = `${together.length} of ${close.length} closely linked account(s) have played in the `
+      + 'same game as this player — worth reading the hands before deciding anything.';
+  }
+
+  return { subject: rowFor(subject), addresses, linked, verdict };
+}
+
+// One PlayerRow, without rebuilding the whole table to get it.
+function rowFor(p: PlayerRecord): PlayerRow {
+  return {
+    id: p.id, name: p.name, avatar: p.avatar,
+    discordTag: p.discordTag, discordVerifiedId: p.discordId,
+    firstSeen: p.firstSeen, lastSeen: p.lastSeen,
+    ips: [...p.ips.keys()],
+    countries: [...p.ips.keys()].map(countryOf),
+    vpn: classify([...p.ips.keys()].at(-1) ?? null).kind,
+    handsPlayed: p.handsPlayed,
+    games: p.gamesJoined.size,
+  };
+}
+
+// How many pairs in the group were ever in the same game.
+function pairsSharingAGame(list: PlayerRecord[]): number {
+  let n = 0;
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      for (const g of list[i].gamesJoined) {
+        if (list[j].gamesJoined.has(g)) { n += 1; break; }
+      }
+    }
+  }
+  return n;
+}
+
+// Everyone on one address.
+//
+// Lives here rather than being written out at the one call site because two
+// separate decisions depend on it — who gets thrown out of a live game, and
+// whose account goes with the address when an operator asks for that — and
+// they must not be allowed to disagree about who "on this address" means.
+// Addresses are compared after normalisation, so an account recorded as
+// ::ffff:1.2.3.4 is the same person as one recorded as 1.2.3.4.
+export function accountsOnAddress(ip: string): { id: string; name: string }[] {
+  const want = normaliseIp(ip);
+  if (!want) return [];
+  const out: { id: string; name: string }[] = [];
+  for (const p of players.values()) {
+    for (const held of p.ips.keys()) {
+      if (normaliseIp(held) === want) { out.push({ id: p.id, name: p.name }); break; }
+    }
+  }
+  return out;
+}
+
+// Everyone who looks like the same person as one account: the list the ban
+// screen offers to ban in the same breath. Banning one alt of four achieves
+// nothing — the other three are still sitting in the event.
+//
+// Two kinds of evidence, strongest first:
+//   - same browser: the stored browser id matches. One phone, two accounts.
+//   - shared address: seen from the same address, unless that address is
+//     crowded (more than CROWD_LIMIT accounts) — a carrier or a VPN exit holds
+//     strangers, and offering to ban all of them would be a trap.
+// Same browser TRAITS alone are not listed: identical phones produce identical
+// traits, so on its own it names a model of phone, not a person.
+export interface SuspectedAlt {
+  id: string; name: string; avatar: string;
+  discordTag: string | null; discordId: string | null;
+  reasons: string[];
+  // 'invite': only linked through a Discord invite, to or from a fresh
+  // Discord account. Weaker than either of the others, and listed last.
+  strength: 'browser' | 'address' | 'invite';
+  lastSeen: number;
+  alreadyBanned: boolean;
+}
+
+export function suspectedAlts(playerId: string): SuspectedAlt[] {
+  const me = players.get(playerId);
+  if (!me) return [];
+  type Found = Omit<SuspectedAlt, 'reasons' | 'strength' | 'alreadyBanned'> & { reasons: Set<string>; rank: number };
+  const found = new Map<string, Found>();
+  // rank: 0 same browser, 1 same address, 2 Discord invite only.
+  const note = (rec: PlayerRecord, why: string, rank: number) => {
+    if (rec.id === me.id) return;
+    const f = found.get(rec.id) ?? {
+      id: rec.id, name: rec.name, avatar: rec.avatar, discordTag: rec.discordTag, discordId: rec.discordId,
+      lastSeen: rec.lastSeen, reasons: new Set<string>(), rank,
+    };
+    f.reasons.add(why);
+    f.rank = Math.min(f.rank, rank);
+    found.set(rec.id, f);
+  };
+  for (const p of players.values()) {
+    if ([...me.devices.keys()].some(d => p.devices.has(d))) note(p, 'same browser', 0);
+  }
+  for (const ip of me.ips.keys()) {
+    if (isInfraPeer(ip)) continue;
+    const here = [...players.values()].filter(p => [...p.ips.keys()].some(x => normaliseIp(x) === normaliseIp(ip)));
+    if (here.length > CROWD_LIMIT) continue;
+    for (const p of here) note(p, `same address ${ip}`, 1);
+  }
+
+  // Discord invites: who they brought into the Discord, and who brought them.
+  // An account already found above just gains a chip. One found ONLY through
+  // an invite is listed when the account that joined was fresh — friends
+  // invite friends, but a member bringing in week-old accounts is the alt
+  // pattern. Someone who never signed in to the site is still listed, by
+  // their Discord id, so they can be banned here and on Discord before they do.
+  if (me.discordId) {
+    const { invited, invitedBy } = joinsInvolving(me.discordId);
+    const links = [
+      ...invited.map(j => ({ j, other: j.memberId, name: j.memberName, avatar: j.memberAvatar,
+        why: `joined the Discord through their invite · account ${ageText(accountAgeDays(j))}` })),
+      ...invitedBy.map(j => ({ j, other: j.inviterId!, name: j.inviterName ?? j.inviterId!, avatar: null as string | null,
+        why: `invited them to the Discord · their account was ${ageText(accountAgeDays(j))}` })),
+    ];
+    for (const l of links) {
+      if (l.other === me.discordId) continue;
+      const rec = [...players.values()].find(p => p.discordId === l.other);
+      const known = found.get(rec?.id ?? l.other);
+      if (known) { known.reasons.add('Discord invite'); continue; }
+      if (!isYoung(l.j)) continue;
+      if (rec) { note(rec, l.why, 2); continue; }
+      found.set(l.other, {
+        id: l.other, name: l.name, avatar: l.avatar ?? '', discordTag: null, discordId: l.other,
+        lastSeen: l.j.joinedAt, reasons: new Set([`${l.why} · never signed in here`]), rank: 2,
+      });
+    }
+  }
+
+  const strength = ['browser', 'address', 'invite'] as const;
+  return [...found.values()]
+    .map(f => ({
+      id: f.id, name: f.name, avatar: f.avatar,
+      discordTag: f.discordTag, discordId: f.discordId,
+      reasons: [...f.reasons],
+      strength: strength[f.rank],
+      lastSeen: f.lastSeen,
+      alreadyBanned: !!banAt('player', f.id) || (!!f.discordId && !!banAt('player', `dc_${f.discordId}`)),
+    }))
+    .sort((a, b) => strength.indexOf(a.strength) - strength.indexOf(b.strength) || b.lastSeen - a.lastSeen)
+    .slice(0, 30);
+}
+
+export function altGroups(): AltGroup[] {
+  const byIp = new Map<string, PlayerRecord[]>();
+  for (const p of players.values()) {
+    for (const ip of p.ips.keys()) {
+      // Our own plumbing is not a player. Addresses recorded before the
+      // proxy handling was fixed are all in these ranges, so leaving them
+      // out is also what clears the historical rubbish out of the panel
+      // without deleting anything from the record.
+      if (isInfraPeer(ip)) continue;
+      const list = byIp.get(ip) ?? [];
+      list.push(p);
+      byIp.set(ip, list);
+    }
+  }
+  const shared = [...byIp.entries()].filter(([, list]) => list.length > 1);
+
+  // A group is a set of people, not a set of routers.
+  //
+  // Listing one row per address meant a household on four addresses appeared
+  // four times, each row identical apart from the number at the top, and the
+  // operator had to notice by eye that it was the same two people over and
+  // over. Addresses that share an account are folded together instead, so
+  // those four rows become one that says "Nimbu and LOVÈ, from these four
+  // addresses".
+  //
+  // Crowded addresses are never used to fold. A mobile carrier or a VPN exit
+  // holds hundreds of unrelated strangers; merging through one would collapse
+  // half the site into a single meaningless row.
+  const parent = new Map<string, string>();
+  const find = (x: string): string => {
+    parent.set(x, parent.get(x) ?? x);
+    while (parent.get(x) !== x) {
+      parent.set(x, parent.get(parent.get(x)!)!);
+      x = parent.get(x)!;
+    }
+    return x;
+  };
+  const union = (a: string, b: string) => {
+    const ra = find(a); const rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  };
+  const seenBy = new Map<string, string[]>(); // player id -> their small addresses
+  for (const [ip, list] of shared) {
+    find(ip);
+    if (list.length > CROWD_LIMIT) continue;
+    for (const p of list) {
+      const mine = seenBy.get(p.id) ?? [];
+      mine.push(ip);
+      seenBy.set(p.id, mine);
+    }
+  }
+  for (const ips of seenBy.values()) {
+    for (let i = 1; i < ips.length; i++) union(ips[0], ips[i]);
+  }
+
+  const groups = new Map<string, { ips: string[]; players: Map<string, PlayerRecord> }>();
+  for (const [ip, list] of shared) {
+    const root = find(ip);
+    const g = groups.get(root)
+      ?? { ips: [] as string[], players: new Map<string, PlayerRecord>() };
+    g.ips.push(ip);
+    for (const p of list) g.players.set(p.id, p);
+    groups.set(root, g);
+  }
+
+  return [...groups.values()].map(g => {
+    const list = [...g.players.values()];
+    const size = list.length;
+    const together = pairsSharingAGame(list);
+    // Size counts against a group rather than recommending it.
+    const sizeScore = size === 2 ? 45 : size <= 4 ? 30 : size <= 8 ? 12 : 3;
+    const score = Math.min(100, sizeScore + (together > 0 ? 40 : 0));
+
+    const ips = [...g.ips].sort();
+    const reasons: string[] = [];
+    if (size === 2) reasons.push('Only two accounts');
+    else if (size > CROWD_LIMIT) reasons.push(`${size} accounts — typical of a mobile network or VPN, not a household`);
+    else reasons.push(`${size} accounts`);
+    if (ips.length > 1) {
+      reasons.push(`Seen together on ${ips.length} addresses`);
+    }
+    reasons.push(together > 0
+      ? `${together} pair${together === 1 ? '' : 's'} played in the same game`
+      : 'Never played in the same game');
+
+    return {
+      key: ips.join(','),
+      addresses: ips.map(ip => ({
+        ip,
+        country: countryOf(ip),
+        // From byIp rather than the group's roster: the group may span four
+        // addresses, and banning one of them must only reach the people
+        // actually behind THAT one.
+        accounts: (byIp.get(ip) ?? []).map(p => ({
+          id: p.id, name: p.name, avatar: p.avatar, discordTag: p.discordTag, discordId: p.discordId,
+        })),
+      })),
+      score,
+      reasons,
+      playedTogether: together,
+      players: list
+        .sort((a, b) => b.lastSeen - a.lastSeen)
+        .map(p => ({ id: p.id, name: p.name, discordTag: p.discordTag, lastSeen: p.lastSeen })),
+    };
+  })
+    // Worth-a-look first; among equals, the smaller group is the sharper lead.
+    .sort((a, b) => (b.score - a.score) || (a.players.length - b.players.length));
+}
+
+// Pairs worth a look: they meet heads-up often, and chips flow one way.
+export function suspiciousPairs(minHands = 5): PairStat[] {
+  const out: PairStat[] = [];
+  for (const [key, v] of pairs) {
+    // Two people who have never played a pot against each other are not a
+    // pair, whatever else is true of them. Every row in the old panel that
+    // read "0 pots, net 0" was one of these, and there were hundreds.
+    if (v.headsUpPots === 0) continue;
+    // Past that, qualify either by playing enough pots together OR by one
+    // hand where the chips moved for no good reason — waiting for five
+    // heads-up pots would miss a fast, blatant dump.
+    if (v.headsUpPots < minHands && v.dumpHands === 0) continue;
+    const [a, b] = key.split('|');
+    const pa = players.get(a); const pb = players.get(b);
+    // Missing directory entries must not hide a flagged pair — fall back to
+    // the names recorded when the hands were actually played.
+    const shared = pa && pb ? [...pa.ips.keys()].filter(ip => pb.ips.has(ip)) : [];
+    out.push({
+      a, aName: pa?.name ?? v.names?.[a] ?? a,
+      b, bName: pb?.name ?? v.names?.[b] ?? b,
+      handsTogether: v.handsTogether,
+      headsUpPots: v.headsUpPots,
+      // Report the flow relative to `a`, whichever way it was stored.
+      netAtoB: v.first === a ? v.netAtoB : -v.netAtoB,
+      sharedIps: shared,
+      sameIpOnly: shared.length > 0 && !!pa && !!pb && pa.ips.size === 1 && pb.ips.size === 1,
+      dumpHands: v.dumpHands ?? 0,
+      dumpChips: v.dumpChips ?? 0,
+    });
+  }
+  // Size of the one-way flow leads, because that is the thing that cannot be
+  // explained away: chips moving one direction, repeatedly, between the same
+  // two people. Sorting by flagged-hand count first put every one-off bad
+  // beat above the two pairs in the last event that had moved a million
+  // chips each. Donations break the tie.
+  return out.sort((x, y) =>
+    (Math.abs(y.netAtoB) - Math.abs(x.netAtoB)) || (y.dumpHands - x.dumpHands));
+}
+
+export function recentActions(limit = 300, playerId?: string): HandAction[] {
+  const src = playerId ? actions.filter(a => a.playerId === playerId) : actions;
+  return src.slice(-limit).reverse();
+}
+
+export function auditCounts() {
+  return { players: players.size, actions: actions.length, pairs: pairs.size, flagged: flagged.length };
+}
+
+// Drop everything the audit holds about one player.
+//
+// This is for clearing out accounts that were never really players — test
+// sign-ins, a demo run, someone who connected once by mistake — so the list
+// shows the room rather than its history of setup. It is not a punishment and
+// not a ban: a removed player who comes back is simply recorded again.
+//
+// What goes: their record, their moves, and any pairing they are half of.
+// What stays: a flagged hand where they were only the one who *received* the
+// chips. That flag is evidence about the other player, and the names on it
+// were captured at play time, so it still reads correctly with this account
+// gone. Removing it would delete somebody else's case.
+export function forgetPlayer(id: string): {
+  found: boolean; actions: number; pairs: number; flagged: number;
+} {
+  const found = players.delete(id);
+
+  let removedActions = 0;
+  for (let i = actions.length - 1; i >= 0; i--) {
+    if (actions[i].playerId === id) { actions.splice(i, 1); removedActions++; }
+  }
+
+  let removedPairs = 0;
+  for (const key of [...pairs.keys()]) {
+    const [a, b] = key.split('|');
+    if (a === id || b === id) { pairs.delete(key); removedPairs++; }
+  }
+
+  let removedFlags = 0;
+  for (let i = flagged.length - 1; i >= 0; i--) {
+    if (flagged[i].playerId === id) { flagged.splice(i, 1); removedFlags++; }
+  }
+
+  if (found || removedActions || removedPairs || removedFlags) saveAudit();
+  return { found, actions: removedActions, pairs: removedPairs, flagged: removedFlags };
+}
+
+// ---- persistence ----
+const AUDIT_FILE = join(DATA_DIR, 'audit.json');
+// The action log is the bulky part; keep the persisted slice bounded so the
+// file stays small and writes stay cheap.
+const PERSIST_ACTIONS = 5_000;
+
+export function saveAudit(): void {
+  try {
+    const payload = {
+      v: 1,
+      players: [...players.values()].map(p => ({
+        ...p,
+        ips: [...p.ips.entries()],
+        devices: [...p.devices.entries()],
+        prints: [...p.prints.entries()],
+        gamesJoined: [...p.gamesJoined],
+      })),
+      actions: actions.slice(-PERSIST_ACTIONS),
+      pairs: [...pairs.entries()],
+      flagged: flagged.slice(-MAX_FLAGGED),
+    };
+    mkdirSync(DATA_DIR, { recursive: true });
+    const tmp = `${AUDIT_FILE}.tmp`;
+    writeFileSync(tmp, JSON.stringify(payload));
+    renameSync(tmp, AUDIT_FILE);
+  } catch (e) {
+    console.error('Audit save failed:', e);
+  }
+}
+
+export function loadAudit(): void {
+  try {
+    if (!existsSync(AUDIT_FILE)) return;
+    const raw = JSON.parse(readFileSync(AUDIT_FILE, 'utf8'));
+    if (!raw || raw.v !== 1) return;
+    for (const p of raw.players ?? []) {
+      players.set(p.id, {
+        ...p,
+        ips: new Map(p.ips ?? []),
+        // Absent in files written before browsers were recorded.
+        devices: new Map(p.devices ?? []),
+        prints: new Map(p.prints ?? []),
+        gamesJoined: new Set(p.gamesJoined ?? []),
+      });
+    }
+    for (const a of raw.actions ?? []) actions.push(a);
+    for (const [k, v] of raw.pairs ?? []) {
+      pairs.set(k, { dumpHands: 0, dumpChips: 0, names: {}, ...v });
+    }
+    for (const f of raw.flagged ?? []) flagged.push(f);
+    console.log(`Audit history loaded: ${players.size} players, ${actions.length} actions`);
+  } catch (e) {
+    console.error('Audit load failed:', e);
+  }
+}
+
+// ---------- who is who, for the live standings ----------
+//
+// The standings list is broadcast to every player at the event, and it is
+// built ONCE and shared across all of them for cost. So neither of these
+// columns can ride in it: a site player id is a Discord snowflake with `dc_`
+// in front, and shared-address flags would out households and alt accounts to
+// the whole room. This is fetched separately, by the operator, on request.
+//
+// It also keeps the address walk off the hot path — that work would otherwise
+// run on every broadcast, several times a second, for the whole field.
+export interface StandingIdentity {
+  id: string;
+  /** The bare Discord snowflake, when the account is a linked one. */
+  discordId: string | null;
+  /** Other players sharing an address with them, by name. */
+  sharesWith: string[];
+  /** Other players who have signed in from the SAME BROWSER, by name. */
+  sharesDeviceWith: string[];
+}
+
+export function standingIdentities(ids: string[]): StandingIdentity[] {
+  const want = new Set(ids);
+
+  // Same address map, and the same two exclusions, as the audit's alt groups —
+  // so a flag here means what the audit means by it. Our own proxies are not
+  // players, and a crowded address is a carrier or a VPN exit holding
+  // strangers, not a household: folding through one would mark most of the
+  // field as everybody's alt.
+  const byIp = new Map<string, PlayerRecord[]>();
+  for (const p of players.values()) {
+    for (const ip of p.ips.keys()) {
+      if (isInfraPeer(ip)) continue;
+      const list = byIp.get(ip) ?? [];
+      list.push(p);
+      byIp.set(ip, list);
+    }
+  }
+
+  const sharers = new Map<string, Set<string>>();
+  for (const [, list] of byIp) {
+    if (list.length < 2 || list.length > CROWD_LIMIT) continue;
+    for (const p of list) {
+      if (!want.has(p.id)) continue;
+      const mine = sharers.get(p.id) ?? new Set<string>();
+      for (const other of list) if (other.id !== p.id) mine.add(other.name);
+      sharers.set(p.id, mine);
+    }
+  }
+
+  // Same browser. No crowd limit here: a device id is minted per browser, so
+  // many accounts on one id is not a carrier, it is one person with many
+  // accounts — the more the worse.
+  const byDevice = new Map<string, PlayerRecord[]>();
+  for (const p of players.values()) {
+    for (const d of p.devices.keys()) {
+      const list = byDevice.get(d) ?? [];
+      list.push(p);
+      byDevice.set(d, list);
+    }
+  }
+  const deviceSharers = new Map<string, Set<string>>();
+  for (const [, list] of byDevice) {
+    if (list.length < 2) continue;
+    for (const p of list) {
+      if (!want.has(p.id)) continue;
+      const mine = deviceSharers.get(p.id) ?? new Set<string>();
+      for (const other of list) if (other.id !== p.id) mine.add(other.name);
+      deviceSharers.set(p.id, mine);
+    }
+  }
+
+  return ids.map(id => {
+    const rec = players.get(id);
+    return {
+      id,
+      discordId: rec?.discordId ?? (id.startsWith('dc_') ? id.slice(3) : null),
+      sharesWith: [...(sharers.get(id) ?? [])].sort(),
+      sharesDeviceWith: [...(deviceSharers.get(id) ?? [])].sort(),
+    };
+  });
+}
+
+// ---- shared devices ----
+//
+// Accounts that have signed in from the same browser. This is the signal an
+// address cannot give: an alt on a hotspot, a second SIM or a friend's wifi
+// has a different address every time and the same phone every time.
+export interface DeviceGroup {
+  key: string;
+  // 'device': the same stored browser id — one browser, several accounts.
+  // 'print': the same browser traits — could be one browser with its storage
+  // cleared, could be two identical phones. Listed, but as a hint.
+  strength: 'device' | 'print';
+  players: { id: string; name: string; discordTag: string | null; lastSeen: number }[];
+  // Addresses the group's accounts have in common, if any — a print match
+  // that also shares an address is a much stronger hint than one that does
+  // not.
+  sharedIps: string[];
+  lastSeen: number;
+}
+
+// Identical phones on one OS version collide on the print. Past this many
+// accounts, a print is describing a popular handset, not a person.
+const PRINT_CROWD = 5;
+
+export function sharedDevices(): DeviceGroup[] {
+  const groups: DeviceGroup[] = [];
+  const seenPair = new Set<string>(); // player-id sets already reported by device id
+
+  const collect = (pick: (p: PlayerRecord) => Iterable<string>, strength: 'device' | 'print', crowd: number) => {
+    const by = new Map<string, PlayerRecord[]>();
+    for (const p of players.values()) {
+      for (const k of pick(p)) {
+        const list = by.get(k) ?? [];
+        list.push(p);
+        by.set(k, list);
+      }
+    }
+    for (const [key, list] of by) {
+      // The same account seen from one browser many times is one account.
+      const uniq = [...new Map(list.map(p => [p.id, p] as [string, PlayerRecord])).values()];
+      if (uniq.length < 2 || uniq.length > crowd) continue;
+      const ids = uniq.map(p => p.id).sort().join('|');
+      // A print group that says nothing a device group has not already said
+      // is noise; a device group is always reported.
+      if (strength === 'print' && seenPair.has(ids)) continue;
+      if (strength === 'device') seenPair.add(ids);
+      // Addresses every account in the group has used. Written as a plain
+      // loop with a typed intermediate: the ternary form of this made the
+      // checker narrow `common` to null across the loop and reject the spread.
+      let common: Set<string> | null = null;
+      for (const p of uniq) {
+        const mine = new Set<string>([...p.ips.keys()].filter(ip => !isInfraPeer(ip)));
+        if (common === null) { common = mine; continue; }
+        const prev: Set<string> = common;
+        common = new Set<string>([...prev].filter(ip => mine.has(ip)));
+      }
+      groups.push({
+        key: `${strength}:${key}`,
+        strength,
+        players: uniq
+          .map(p => ({ id: p.id, name: p.name, discordTag: p.discordTag, lastSeen: p.lastSeen }))
+          .sort((a, b) => b.lastSeen - a.lastSeen),
+        sharedIps: [...(common ?? [])].sort(),
+        lastSeen: Math.max(...uniq.map(p => p.lastSeen)),
+      });
+    }
+  };
+
+  collect(p => p.devices.keys(), 'device', Number.POSITIVE_INFINITY);
+  collect(p => p.prints.keys(), 'print', PRINT_CROWD);
+
+  // Facts before hints, biggest groups first, then most recent.
+  return groups.sort((a, b) =>
+    (a.strength === b.strength ? 0 : a.strength === 'device' ? -1 : 1)
+    || b.players.length - a.players.length
+    || b.lastSeen - a.lastSeen);
+}
