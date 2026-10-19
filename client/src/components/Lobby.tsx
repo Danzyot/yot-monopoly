@@ -28,7 +28,7 @@ const TOGGLES: [keyof RuleConfig, string, string][] = [
   ['auctions', 'Auctions', 'Unbought property goes to auction'],
   ['evenBuild', 'Even building', 'Build houses evenly across a set'],
   ['limitedBuildings', 'Limited houses', 'Bank has 32 houses / 12 hotels'],
-  ['freeParkingPot', 'Free Parking jackpot', 'Taxes & fines pile up on Free Parking'],
+  ['freeParkingPot', 'Free Parking jackpot', 'Taxes, card fines & arcade losses (not jail bail) pile up on Free Parking'],
   ['doubleOnGo', 'Double on GO', 'Landing exactly on GO pays double'],
   ['minigames', 'Mini-games', 'Arcade spaces start a quick mini-game for cash prizes'],
   ['arcadeParking', 'Free Parking arcade', 'Free Parking is an arcade too (mini-games on Classic)'],

@@ -28,6 +28,17 @@ export default function Deed({ game, index, me, onClose }: {
     mortgage: blocked ?? mortgageProblem(game, theme.spaces, index),
     unmortgage: blocked ?? unmortgageProblem(game, theme.spaces, index, cash),
   };
+  // Touch screens never show a title tooltip: a disabled button says why
+  // right under it (once for the whole card when nothing can be done now).
+  const action = (key: keyof typeof why, label: string, wide = false) => (
+    <div className={`deed-act ${wide ? 'wide' : ''}`}>
+      <button className="btn small" disabled={!!why[key]} title={why[key] ?? undefined}
+        aria-describedby={why[key] && !blocked ? `deed-why-${key}` : undefined} onClick={() => run(key)}>{label}</button>
+      {why[key] && !blocked && <span id={`deed-why-${key}`} className="deed-why">{why[key]}</span>}
+    </div>
+  );
+  // The engine's utility rule: 10× needs every utility on this board (and at least two of them).
+  const utilities = theme.spaces.filter(x => x.kind === 'utility').length;
 
   return (
     <div className="deed">
@@ -55,7 +66,9 @@ export default function Deed({ game, index, me, onClose }: {
             {[1, 2, 3, 4].map(n => <tr key={n}><td>{n} owned</td><td>{cur(25 * 2 ** (n - 1))}</td></tr>)}
           </tbody></table>
         )}
-        {s.kind === 'utility' && <p className="small">Rent is 4× the dice roll with one utility, 10× with both.</p>}
+        {s.kind === 'utility' && (
+          <p className="small">Rent: {utilities < 2 ? '4× dice roll' : `4× dice, 10× if you own all ${utilities}`}.</p>
+        )}
         {s.kind === 'tax' && <p>Pay {cur(s.tax!)}{game.rules.freeParkingPot ? ' into the Free Parking pot' : ''}.</p>}
         {(s.kind === 'chance' || s.kind === 'chest') && <p>Draw a {theme.deckNames[s.kind]} card.</p>}
         {s.kind === 'go' && <p>Collect {cur(game.rules.goSalary)} as you pass.</p>}
@@ -83,21 +96,14 @@ export default function Deed({ game, index, me, onClose }: {
           <div className="deed-actions">
             {s.kind === 'property' && (
               <>
-                <button className="btn small" disabled={!!why.build} title={why.build ?? undefined} onClick={() => run('build')}>
-                  {o.houses === 4 ? 'Build hotel' : 'Build house'} · {cur(s.houseCost!)}
-                </button>
-                <button className="btn small" disabled={!!why.sell} title={why.sell ?? undefined} onClick={() => run('sell')}>
-                  Sell · +{cur(Math.floor(s.houseCost! / 2))}
-                </button>
+                {action('build', `${o.houses === 4 ? 'Build hotel' : 'Build house'} · ${cur(s.houseCost!)}`)}
+                {action('sell', `Sell · +${cur(Math.floor(s.houseCost! / 2))}`)}
               </>
             )}
-            {o.mortgaged ? (
-              <button className="btn small" disabled={!!why.unmortgage} title={why.unmortgage ?? undefined}
-                onClick={() => run('unmortgage')}>Unmortgage · {cur(liftCost(theme.spaces, index, o))}</button>
-            ) : (
-              <button className="btn small" disabled={!!why.mortgage} title={why.mortgage ?? undefined}
-                onClick={() => run('mortgage')}>Mortgage · +{cur(mortgageValue(s))}</button>
-            )}
+            {o.mortgaged
+              ? action('unmortgage', `Unmortgage · ${cur(liftCost(theme.spaces, index, o))}`, true)
+              : action('mortgage', `Mortgage · +${cur(mortgageValue(s))}`, true)}
+            {blocked && <p className="deed-why wide">{blocked}</p>}
           </div>
         )}
       </div>

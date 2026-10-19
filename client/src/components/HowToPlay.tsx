@@ -4,6 +4,7 @@
 // devices that have a keyboard. Every line below was checked against the
 // engine (server/src/engine/game.ts) and the action bar, so keep them in step.
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { RuleConfig } from '../../../shared/themes.ts';
 import { MINIGAME_INFO, MINIGAME_KINDS } from '../../../shared/minigames.ts';
 import { CAMERA_MODES } from '../three/camera.ts';
@@ -29,9 +30,9 @@ export function howToSteps(rules?: Partial<RuleConfig>, cur = '$'): Step[] {
     },
     { icon: '💰', title: 'Rent', text: 'Land on someone else\'s deed and you pay them rent. A full colour set pays double, houses and hotels pay far more, stations pay more for each one owned, and utilities pay a multiple of your dice. Mortgaged deeds pay nothing.' },
     { icon: '🏗️', title: 'Build', text: `Own every deed of a colour (none mortgaged) and tap Build. Houses go up one at a time${even ? ', evenly across the set' : ''}: four houses, then a hotel.${limited ? ' The bank only has 32 houses and 12 hotels.' : ''} Selling a building gives back half.` },
-    { icon: '🤝', title: 'Trade', text: 'Tap Trade (or the ⇄ on a player) to offer deeds, cash and jail cards for theirs. They can accept, decline or counter. Anytime, not only on your turn. No loans, and a set with buildings has to be sold down before its deeds can move.' },
+    { icon: '🤝', title: 'Trade', text: 'Tap Trade (or the ⇄ on a player) to offer deeds, cash and jail cards for theirs. They can accept, decline or counter. Anytime, not only on your turn, though a deal waits while an auction or mini-game runs. No loans, a set with buildings has to be sold down before its deeds can move, and taking a mortgaged deed costs 10% interest at once.' },
     { icon: '🔒', title: 'Jail', text: `In via the Go to Jail square, three doubles or a card. To get out, pick one at the start of your turn: roll for doubles (three tries; miss the third and you pay ${fine} and move anyway), pay ${fine} bail, or use a Get Out of Jail Free card. ${rules?.noRentInJail ? 'At this table jailed owners collect no rent.' : 'You still collect rent while locked up.'}` },
-    { icon: '💸', title: 'Short on cash?', text: 'Tap Raise cash to sell buildings and mortgage deeds (you get half the price; lifting a mortgage costs 10% extra). If you cannot pay what you owe you go bankrupt: your things go to who you owe, or back to the bank.' },
+    { icon: '💸', title: 'Short on cash?', text: `Tap Raise cash to sell buildings and mortgage deeds (you get half the price; lifting a mortgage costs 10% extra). If you cannot pay what you owe you go bankrupt: your things go to who you owe, or back to the bank${auctions ? ', which auctions the deeds' : ''}.` },
     {
       icon: '🏆', title: 'Win',
       text: timed
@@ -42,7 +43,7 @@ export function howToSteps(rules?: Partial<RuleConfig>, cur = '$'): Step[] {
 }
 
 const HOUSE_RULES: { key: keyof RuleConfig; label: string; text: string }[] = [
-  { key: 'freeParkingPot', label: 'Free Parking jackpot', text: 'Taxes and fines pile up in the middle. Land on Free Parking to scoop the lot.' },
+  { key: 'freeParkingPot', label: 'Free Parking jackpot', text: 'Taxes, card fines (repairs included) and arcade losses pile up in the middle. Jail bail goes to the bank. Land on Free Parking to scoop the lot.' },
   { key: 'doubleOnGo', label: 'Double on GO', text: 'Land exactly on GO and the salary is doubled.' },
   { key: 'noRentInJail', label: 'No rent in jail', text: 'Owners sitting in jail collect no rent.' },
   { key: 'speedDie', label: 'Speed Die', text: 'Once you have passed GO a third die joins: Mr. Monopoly sends you on to the next deed to buy or pay, the Bus lets you pick one die or the sum, and triples let you jump anywhere.' },
@@ -68,11 +69,18 @@ function Steps({ rules, cur }: { rules?: Partial<RuleConfig>; cur: string }) {
 /** Arcades, house rules and the camera: what the first page leaves out. */
 function Extras({ rules }: { rules?: Partial<RuleConfig> }) {
   const arcades = rules?.minigames !== false;
+  // At a table, what Free Parking does there; on the home page, what it can do.
+  const jackpot = !!rules?.freeParkingPot, parkArcade = !!rules?.arcadeParking && arcades;
+  const parking = !rules
+    ? 'Free Parking is a rest stop, unless the table turns on the Free Parking jackpot (land there to scoop the taxes, card fines and arcade losses paid in) or the Free Parking arcade (it starts a mini-game)'
+    : jackpot && parkArcade ? 'Free Parking pays out the jackpot and starts a mini-game'
+      : jackpot ? 'Free Parking pays out the jackpot (the taxes, card fines and arcade losses paid in)'
+        : parkArcade ? 'Free Parking starts a mini-game' : 'Free Parking is a rest stop';
   return (
     <div className="howto-extras">
       <section>
         <h3>🃏 Chance, Chest, tax</h3>
-        <p>Those squares draw a card or take a fee. Go to Jail sends you straight there, and Free Parking is a rest stop.</p>
+        <p>Those squares draw a card or take a fee. Go to Jail sends you straight there, and {parking}.</p>
       </section>
       {arcades && (
         <section>
@@ -163,7 +171,11 @@ export function markHowToSeen(): void {
   try { localStorage.setItem(SEEN_KEY, '1'); } catch { /* private mode */ }
 }
 
-/** A "How to play" button that opens the dialog (home page, lobby). */
+/**
+ * A "How to play" button that opens the dialog (home page, lobby). The dialog
+ * goes to <body>: inside the home page's hero it sat in the hero's stacking
+ * layer, under the character cards below it.
+ */
 export function HowToPlayButton({ rules, className = 'btn small ghost', label = '❓ How to play' }: {
   rules?: Partial<RuleConfig>; className?: string; label?: string;
 }) {
@@ -171,7 +183,7 @@ export function HowToPlayButton({ rules, className = 'btn small ghost', label = 
   return (
     <>
       <button type="button" className={className} onClick={() => { setOpen(true); markHowToSeen(); }}>{label}</button>
-      {open && <HowToPlay rules={rules} onClose={() => setOpen(false)} />}
+      {open && createPortal(<HowToPlay rules={rules} onClose={() => setOpen(false)} />, document.body)}
     </>
   );
 }
