@@ -19,8 +19,6 @@ export interface AdminTab {
   Component: ComponentType;
 }
 
-/** Stand-in until the music module lands on its own branch. */
-
 export const ADMIN_TABS: AdminTab[] = [
   { id: 'overview', label: 'Overview', icon: '📊', Component: OverviewTab },
   { id: 'rooms', label: 'Rooms', icon: '🎲', Component: RoomsTab },

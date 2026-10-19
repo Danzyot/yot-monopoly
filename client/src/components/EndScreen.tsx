@@ -98,6 +98,7 @@ export default function EndScreen({ room, game, me, onLeave }: {
           : <h2 id="end-title" className="end-title">Game over!</h2>}
         {myPlace > 0 && !iWon && <p className="end-you">You finished <b>{ordinal(myPlace)}</b> of {order.length}</p>}
         {iWon && <p className="end-you">Property tycoon! 🎉</p>}
+        {game.timeUp && <p className="end-timeup">⏰ Time's up — richest player wins</p>}
         <p className="muted small end-meta">
           {game.turnNumber} {game.turnNumber === 1 ? 'turn' : 'turns'} · {duration(ended - game.startedAt)} · {theme.name}
         </p>
@@ -153,6 +154,7 @@ export default function EndScreen({ room, game, me, onLeave }: {
           </>
         )}
 
+        {/* Sticky at the bottom of the scrolling dialog (ui-polish.css), so Rematch is always in view. */}
         <div className="end-actions">
           {isHost
             ? <button className="btn primary chunky rematch-btn" disabled={busy} onClick={rematch} data-autofocus>🔁 Rematch!</button>

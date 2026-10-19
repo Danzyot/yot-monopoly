@@ -318,3 +318,43 @@ body.te-on .te-hover { outline: 2px dashed var(--hi, #ffd23f); outline-offset: 2
 @media (min-width: 761px) and (max-width: 1399px) {
   .actionbar .ab-hint { display: none; }
 }
+
+/* ---- end screen: Rematch / Leave always in view ----
+   The results dialog scrolls (podium, standings, awards), which pushed the
+   actions below the fold. They now sit in a footer stuck to the bottom of the
+   dialog, edge to edge, on the dialog's own background with a soft shadow
+   over whatever scrolls beneath. --end-px mirrors the dialog's side padding. */
+.modal.end-screen { --end-px: 20px; --end-pb: 16px; padding-bottom: 0; }
+.modal.end-screen .end-actions {
+  position: sticky; bottom: 0; z-index: 3;
+  margin: 6px calc(-1 * var(--end-px)) 0;
+  padding: 12px var(--end-px) var(--end-pb);
+  background: var(--panel, var(--panel-solid)); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  box-shadow: 0 -14px 18px -8px rgba(0, 0, 0, 0.45);
+}
+.modal.end-screen .end-actions .row { justify-content: center; }
+.end-timeup {
+  margin: 0; align-self: center; padding: 4px 12px; border-radius: 999px;
+  font-weight: 800; font-size: 14px; color: var(--hi, #ffd23f);
+  background: color-mix(in srgb, var(--hi, #ffd23f) 14%, transparent);
+}
+@media (max-width: 760px) {
+  .modal.end-screen { --end-px: 12px; --end-pb: 14px; }
+  .modal.end-screen .end-actions { padding-top: 10px; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .modal.end-screen { --end-px: 12px; --end-pb: 10px; }
+  .modal.end-screen .end-actions { padding-top: 8px; gap: 6px; }
+}
+
+/* ---- admin: the tab strip wraps on phones ----
+   It used to scroll sideways with no hint, hiding Alts through Music
+   off-screen. Every tab is now on screen, on two or three short rows. */
+@media (max-width: 700px) {
+  .adm-tabs {
+    flex-wrap: wrap; overflow-x: visible; margin: 0; padding: 0 0 8px;
+    gap: 4px; -webkit-mask-image: none; mask-image: none;
+  }
+  .adm-tabs a { flex: 0 1 auto; font-size: 14px; padding: 6px 9px; }
+}
