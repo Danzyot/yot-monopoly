@@ -103,3 +103,24 @@ test('rules are clamped', () => {
   assert.equal(r.maxPlayers, 8);
   assert.equal(r.auctions, false);
 });
+
+test('lobby: switching board or look resets what the last one brought', () => {
+  const reg = new Registry(hooks(), 1e9);
+  const r = reg.create('h');
+  r.join(m('h', 'Host'));
+  r.configure('h', false, { mapId: 'speed' });
+  assert.equal(r.rules.startingCash, 1200);
+  r.configure('h', false, { mapId: 'classic' });
+  assert.equal(r.rules.startingCash, 1500, 'Classic states its own $1,500');
+  r.configure('h', false, { themeId: 'chog' });
+  assert.equal(r.rules.freeParkingPot, true);
+  assert.equal(r.rules.doubleOnGo, true);
+  r.configure('h', false, { themeId: 'classic' });
+  assert.equal(r.rules.freeParkingPot, false, 'back to the Original look: no jackpot');
+  assert.equal(r.rules.doubleOnGo, false);
+  r.configure('h', false, { rules: { maxPlayers: 8 } });
+  r.configure('h', false, { mapId: 'speed' });
+  assert.equal(r.rules.maxPlayers, 5, 'Speedway seats five');
+  r.configure('h', false, { rules: { maxPlayers: 8 } });
+  assert.equal(r.rules.maxPlayers, 5, 'and cannot be raised past it');
+});

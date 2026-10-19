@@ -159,7 +159,8 @@ export const CLASSIC: Edition = {
     boardText: '#251e18',
     accent: '#ba2b28',
   },
-  rules: {},
+  // Spelled out so switching here from an edition with them (Chog) turns them off again.
+  rules: { freeParkingPot: false, doubleOnGo: false },
 };
 
 /** Build an edition from another; `names` renames spaces on the Classic map. */
@@ -240,7 +241,8 @@ export const TPTV: Edition = edition(CLASSIC, {
     go: '#ff9e2c',
     goText: '#1a0f00',
   },
-  rules: {},
+  // Spelled out so switching here from an edition with them (Chog) turns them off again.
+  rules: { freeParkingPot: false, doubleOnGo: false },
 });
 
 // Chog, built from the chog-poker room's design system: purple grounds, Chog

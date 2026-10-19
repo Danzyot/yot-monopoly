@@ -382,6 +382,9 @@ export class Room {
       this.rules = sanitizeRules({ ...this.rules, ...getTheme(this.themeId).rules });
     }
     if (p.rules) this.rules = sanitizeRules({ ...this.rules, ...p.rules });
+    // A board seats at most its own maximum (Speedway: 5).
+    const most = getMap(this.mapId).players[1];
+    if (this.rules.maxPlayers > most) this.rules = { ...this.rules, maxPlayers: Math.max(most, this.seats.length) };
     if (typeof p.private === 'boolean') this.private = p.private;
     while (this.seats.length > this.rules.maxPlayers) {
       const bot = [...this.seats].reverse().find(s => s.isBot);

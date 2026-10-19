@@ -97,8 +97,8 @@ function houseCostFor(price: number): number {
   return price <= 120 ? 50 : price <= 200 ? 100 : price <= 280 ? 150 : 200;
 }
 
-const P = (name: string, group: string, price: number): SpaceDef =>
-  ({ kind: 'property', name, group, price, houseCost: houseCostFor(price), rent: rentFor(price) });
+const P = (name: string, group: string, price: number, houseCost = houseCostFor(price)): SpaceDef =>
+  ({ kind: 'property', name, group, price, houseCost, rent: rentFor(price) });
 const RR = (name: string): SpaceDef => ({ kind: 'railroad', name, price: 200 });
 const UT = (name: string): SpaceDef => ({ kind: 'utility', name, price: 150 });
 const TAX = (name: string, tax: number): SpaceDef => ({ kind: 'tax', name, tax });
@@ -119,6 +119,8 @@ export const CLASSIC_MAP: MapDef = {
   chest: CLASSIC_CHEST,
   environment: 'lounge',
   players: [2, 6],
+  // Stated, not left to the default: a table switched here from Speedway must not keep its $1,200.
+  startingCash: 1500,
   look: HERITAGE,
 };
 
@@ -147,6 +149,10 @@ export const SPEED_MAP: MapDef = {
   look: RAINBOW,
 };
 
+// Teal is a two-street set with three-street rents: at the usual $150 a house its owner won half
+// of all simulated 4–6 player games; at $200 it sits with Classic's best sets (orange, light blue).
+const TEAL_HOUSE = 200;
+
 // 48 spaces and ten colour sets — room for big tables and long, deal-heavy games.
 const METRO_SPACES: SpaceDef[] = [
   GO, P('Harbor Road', 'brown', 60), CC, P('Canal Street', 'brown', 60), P('Mill Lane', 'brown', 80),
@@ -154,8 +160,8 @@ const METRO_SPACES: SpaceDef[] = [
   P('Bakers Row', 'lightblue', 100), P('Library Walk', 'lightblue', 120), AR,
   JAIL, P('Theatre Lane', 'pink', 140), UT('Power Plant'), P('Gallery Road', 'pink', 140),
   P('Opera Avenue', 'pink', 160), RR('Harbour Line'), P('Garden Street', 'orange', 180), CC,
-  P('Park View', 'orange', 180), P('Riverside', 'orange', 200), P('Marina Bay', 'teal', 210),
-  P('Lighthouse Point', 'teal', 230),
+  P('Park View', 'orange', 180), P('Riverside', 'orange', 200), P('Marina Bay', 'teal', 210, TEAL_HOUSE),
+  P('Lighthouse Point', 'teal', 230, TEAL_HOUSE),
   PARK, P('Stadium Way', 'red', 220), CH, P('Arena Drive', 'red', 220), P('Coliseum Road', 'red', 240),
   RR('Airport Line'), P('Silicon Street', 'yellow', 260), P('Startup Row', 'yellow', 260),
   UT('Data Center'), P('Unicorn Plaza', 'yellow', 280), P('Embassy Row', 'purple', 290),
