@@ -15,7 +15,7 @@ import MusicPlayer from './MusicPlayer.tsx';
 import { useGameSounds } from '../useGameSounds.ts';
 import { useAmbience } from '../ambience.ts';
 import { useMusicScene } from '../music.ts';
-import { CARD_FLIGHT_MS, useSceneBusy, useStagedLog } from '../three/sequence.ts';
+import { CARD_FLIGHT_MS, markRoll, useMoveBusy, useSceneBusy, useStaged, useStagedLog } from '../three/sequence.ts';
 import { useCinematicPref } from '../three/cinematic.ts';
 import { CAMERA_MODES, useCameraMode } from '../three/camera.ts';
 import { QUALITY_LEVELS, useQuality } from '../three/quality.ts';
@@ -45,6 +45,14 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   room: RoomView; game: GameView; me: string; chat: ChatMsg[]; skew: number;
 }) {
   const theme = resolveTheme(game.themeId, game.mapId);
+  // Stage this view before any of the HUD below renders: the throw (the dice
+  // mark it too, but the board renders after the HUD) and the move it brought,
+  // so the action bar, tips and player cards already hold back what it led to.
+  const mounted = useRef(false);
+  markRoll(game.rollSeq, !mounted.current);
+  mounted.current = true;
+  stageView(game);
+  const moveBusy = useMoveBusy(game);
   const [selected, setSelected] = useState<number | null>(null);
   const [tradeWith, setTradeWith] = useState<string | null>(null);
   const { config } = useAuth();
@@ -189,7 +197,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
           at the bottom. Phones stack both at the bottom (see the HUD CSS). */}
       <div className="hud-bottom">
       <EventFeed game={game} me={me} />
-      <CoachHint game={game} me={me} busy={dialogOpen || game.phase === 'auction' || game.phase === 'minigame'}
+      <CoachHint game={game} me={me} busy={dialogOpen || moveBusy || game.phase === 'auction' || game.phase === 'minigame'}
         onHelp={openHelp} onBuild={() => openManage('build')} onRaise={() => openManage('raise')} onTrade={openTrade} />
       {/* The dock: bottom-left on desktop and landscape phones (both lay the
           bottom wrapper out as `display: contents`); on portrait phones one
@@ -335,14 +343,26 @@ function Players({ game, room, me, onTrade, reactions, onPortfolio }: {
       else if (b > row.scrollTop + row.clientHeight) row.scrollTo({ top: b - row.clientHeight, behavior });
     }
   }, [game.current, chips, expanded, game.players.length]);
+  // Cash, deeds and the rest as the board has shown them: what a roll led to
+  // (salary, rent, jail) changes the cards once the move has played, not as
+  // the dice leave the hand.
+  const live = Object.fromEntries(game.players.map(p => [p.id, {
+    cash: p.cash,
+    inJail: p.inJail,
+    jailCards: p.jailCards.length,
+    owes: game.debts.filter(d => d.from === p.id).reduce((a, d) => a + d.amount, 0),
+    worth: game.netWorth?.[p.id],
+    deeds: Object.entries(game.owned).filter(([, o]) => o.owner === p.id).map(([k, o]) => [Number(k), o] as const).sort((a, b) => a[0] - b[0]),
+  }]));
+  const staged = useStaged(live, JSON.stringify(live));
   return (
     <div className={`players ${chips ? 'compact' : ''}`} ref={rowRef}>
       {game.players.map(p => {
         const seat = room.seats.find(s => s.id === p.id);
-        const props = Object.values(game.owned).filter(o => o.owner === p.id).length;
-        const owes = game.debts.filter(d => d.from === p.id).reduce((a, d) => a + d.amount, 0);
+        const st = staged[p.id] ?? live[p.id];
+        const { cash, owes, worth, deeds } = st;
+        const props = deeds.length;
         const reaction = latestReaction(reactions, p.id);
-        const worth = game.netWorth?.[p.id];
         const chip = chips && expanded !== p.id;
         // A chip opens into the full card first; the full card opens the portfolio.
         const open = () => (chip ? setExpanded(p.id) : onPortfolio(p.id));
@@ -358,7 +378,7 @@ function Players({ game, room, me, onTrade, reactions, onPortfolio }: {
             </span>
             <div className="grow pf-open" role="button" tabIndex={0}
               title={chip ? `${p.name}${p.id === game.current ? ' — playing' : ''}. Tap for more` : `${p.name}'s portfolio`}
-              aria-label={chip ? `${p.name}, ${p.bankrupt ? 'bankrupt' : `${theme.currency}${p.cash.toLocaleString()}`}${p.id === game.current ? ', playing now' : ''}` : undefined}
+              aria-label={chip ? `${p.name}, ${p.bankrupt ? 'bankrupt' : `${theme.currency}${cash.toLocaleString()}`}${p.id === game.current ? ', playing now' : ''}` : undefined}
               onClick={open} onKeyDown={e => { if (e.key === 'Enter') open(); }}>
               <div className="pname">
                 <span className="pname-text">{p.name}</span>{p.id === me && <em className="tag you">you</em>}
@@ -368,22 +388,21 @@ function Players({ game, room, me, onTrade, reactions, onPortfolio }: {
               </div>
               <div className="pmoney">
                 {p.bankrupt ? <span className="muted">bankrupt</span> : <>
-                  <b className="cash"><i className="coin" aria-hidden>{theme.currency}</i>{p.cash.toLocaleString()}</b>
+                  <b className="cash"><i className="coin" aria-hidden>{theme.currency}</i>{cash.toLocaleString()}</b>
                   <span className="muted pdeeds">{props} {props === 1 ? 'deed' : 'deeds'}</span>
-                  {p.inJail && <span className="pchip" title="In jail">🔒</span>}
-                  {p.jailCards.length > 0 && <span className="pchip" title="Get Out of Jail Free cards">🎫{p.jailCards.length > 1 ? `×${p.jailCards.length}` : ''}</span>}
+                  {st.inJail && <span className="pchip" title="In jail">🔒</span>}
+                  {st.jailCards > 0 && <span className="pchip" title="Get Out of Jail Free cards">🎫{st.jailCards > 1 ? `×${st.jailCards}` : ''}</span>}
                   {owes > 0 && <span className="pchip warn" title="Owes money">owes {theme.currency}{owes.toLocaleString()}</span>}
                 </>}
               </div>
               {!p.bankrupt && props > 0 && (
                 <div className="pdeed-strip" aria-label={`${p.name}'s deeds`}>
-                  {Object.entries(game.owned).filter(([, o]) => o.owner === p.id).map(([k, o]) => [Number(k), o] as const)
-                    .sort((a, b) => a[0] - b[0]).map(([i, o]) => {
-                      const sp = theme.spaces[i];
-                      const c = sp.group ? theme.groupColors[sp.group] : sp.kind === 'railroad' ? '#2f3340' : '#a9b3c6';
-                      return <i key={i} className={o.mortgaged ? 'mort' : undefined} style={{ background: c }}
-                        title={`${sp.name}${o.houses === 5 ? ' · hotel' : o.houses ? ` · ${o.houses} house${o.houses > 1 ? 's' : ''}` : ''}${o.mortgaged ? ' · mortgaged' : ''}`} />;
-                    })}
+                  {deeds.map(([i, o]) => {
+                    const sp = theme.spaces[i];
+                    const c = sp.group ? theme.groupColors[sp.group] : sp.kind === 'railroad' ? '#2f3340' : '#a9b3c6';
+                    return <i key={i} className={o.mortgaged ? 'mort' : undefined} style={{ background: c }}
+                      title={`${sp.name}${o.houses === 5 ? ' · hotel' : o.houses ? ` · ${o.houses} house${o.houses > 1 ? 's' : ''}` : ''}${o.mortgaged ? ' · mortgaged' : ''}`} />;
+                  })}
                 </div>
               )}
             </div>
@@ -412,7 +431,8 @@ function ActionBar({ game, me, skew, selected, onManage, onLeave, onTrade }: {
     act(a).catch(toastError).finally(() => setBusy(false));
   };
 
-  const sceneBusy = useSceneBusy();
+  // The scene, or the latest move (to its planned end), is still playing.
+  const sceneBusy = useMoveBusy(game);
   const diceShown = useDiceShown(game);
   const dice = <DiceRead game={game} />;
 
@@ -493,12 +513,14 @@ function ActionBar({ game, me, skew, selected, onManage, onLeave, onTrade }: {
   if (game.phase === 'choose') return <ChooseBar game={game} me={me} selected={selected} />;
   if (game.phase === 'auction') return auctionBar();
   if (game.current !== me) {
-    // While their roll plays out, say so rather than giving away what it led to.
-    const what = sceneBusy ? (diceShown ? 'is on the move' : 'is rolling')
-      : game.phase === 'buy' ? 'is eyeing a property' : game.phase === 'done' ? 'is wheeling and dealing' : 'is rolling';
+    // While their roll plays out, say so rather than giving away what it led to;
+    // before they throw, it is only their turn to roll.
+    const what = sceneBusy ? (diceShown ? ' is on the move…' : ' is rolling…')
+      : game.phase === 'buy' ? ' is eyeing a property…' : game.phase === 'done' ? ' is wheeling and dealing…'
+      : game.phase === 'roll' ? '\'s turn to roll' : '\'s turn';
     return (
       <div className="actionbar">
-        <span className="ab-status"><b style={{ color: current.color }} data-user-text>{current.name}</b> {what}…</span>
+        <span className="ab-status"><b style={{ color: current.color }} data-user-text>{current.name}</b>{what}</span>
         {dice}
         {buildable && buildBtn(false)}
       </div>

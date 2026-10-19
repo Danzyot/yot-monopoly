@@ -12,7 +12,7 @@
 // every half second) skips ahead rather than falls behind, and the HUD is
 // held once, for the planned length.
 
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   CARD_FLIGHT_MS, CARD_MS, DICE_MS, HOP_MS, MAX_HOPS, RESULT_HOLD_MS, RESULT_IN_MS, RESULT_MS, SETTLE_MS, WALK_DELAY_MS, legWalkMs,
 } from '../../../shared/pacing.ts';
@@ -37,13 +37,15 @@ export interface RollStage { seq: number; beat: RollBeat }
 let stage: RollStage = { seq: -1, beat: 'done' };
 const stageListeners = new Set<() => void>();
 let stageTimers: ReturnType<typeof setTimeout>[] = [];
-const listeners = new Set<(b: boolean) => void>();
+const listeners = new Set<() => void>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 
 function setBusy(b: boolean) {
   if (b === busy) return;
   busy = b;
-  for (const l of listeners) l(b);
+  // Often set during a render (markRoll, stageView): components rendered after
+  // that read the new value at once (useSceneBusy); tell the rest afterwards.
+  queueMicrotask(() => { for (const l of listeners) l(); });
 }
 
 function schedule() {
@@ -131,13 +133,73 @@ function subscribeStage(l: () => void) {
 
 /** True while the dice roll or a piece walks: hold buttons and cards until it's over. */
 export function useSceneBusy(): boolean {
-  const [b, setB] = useState(busy);
+  return useSyncExternalStore(subscribeBusy, () => busy);
+}
+
+function subscribeBusy(l: () => void) {
+  listeners.add(l);
+  return () => { listeners.delete(l); };
+}
+
+/**
+ * When the HUD may show what move `seq` led to: its planned end, but never
+ * more than PLAN_HOLD_MS after it was planned (0: not staged, or already over
+ * when this page saw it).
+ */
+export function moveHeldUntil(seq: number | undefined): number {
+  const p = seq === undefined ? undefined : plans.get(seq);
+  return p && !p.initial ? Math.min(p.end, p.planned + PLAN_HOLD_MS) : 0;
+}
+
+/** True until `t` (performance.now() time); re-renders when it passes (a timer, not a frame loop). */
+export function useUntil(t: number): boolean {
+  const [, tick] = useState(0);
+  const left = t - performance.now();
   useEffect(() => {
-    listeners.add(setB);
-    setB(busy);
-    return () => { listeners.delete(setB); };
-  }, []);
-  return b;
+    const wait = t - performance.now();
+    if (wait <= 0) return;
+    const id = setTimeout(() => tick(n => n + 1), wait + 10);
+    return () => clearTimeout(id);
+  }, [t]);
+  return left > 0;
+}
+
+/**
+ * The scene is busy, or the view's latest move has not played to its end:
+ * hold anything that gives away where it led (buttons, prompts, tips). Call it
+ * after the view has been staged (stageView, markRoll), so a move that has
+ * just arrived counts.
+ */
+export function useMoveBusy(game: Pick<GameView, 'lastMove'>): boolean {
+  const busyNow = useSceneBusy();
+  const held = useUntil(moveHeldUntil(game.lastMove?.seq));
+  return busyNow || held;
+}
+
+/**
+ * `live` as the board has caught up with it: a change (a new `key`) shows once
+ * everything staged when it arrived has played out (the dice, the walk, the
+ * landing), so a player card's cash and deeds don't move before the piece
+ * does. Held at most PLAN_HOLD_MS; with nothing playing it shows at once.
+ */
+export function useStaged<T>(live: T, key: string): T {
+  const [shown, setShown] = useState({ key, value: live });
+  const hold = useRef<{ key: string; until: number } | null>(null);
+  const now = performance.now();
+  if (key === shown.key) hold.current = null;
+  else if (hold.current?.key !== key) {
+    // Never sooner than a change still waiting before it.
+    const prev = hold.current && hold.current.until > now ? hold.current.until : 0;
+    hold.current = { key, until: Math.min(Math.max(sceneFreeAt(), movesFreeAt(), prev), now + PLAN_HOLD_MS) };
+  }
+  const until = key === shown.key ? 0 : hold.current!.until;
+  // (`live` goes with `key`: no need to re-arm when only its identity changes.)
+  useEffect(() => {
+    if (key === shown.key) return;
+    const id = setTimeout(() => setShown({ key, value: live }), Math.max(0, until - performance.now()));
+    return () => clearTimeout(id);
+  }, [key, shown.key, until]);
+  return until <= now ? live : shown.value;
 }
 
 /**
@@ -198,6 +260,8 @@ export interface MovePlan {
   end: number;
   /** Already over when this page first saw it (a reload, joining mid-game): nothing to play. */
   initial: boolean;
+  /** When this page planned it (performance.now() time). */
+  planned: number;
 }
 
 let stagedGame: number | null = null;
@@ -241,7 +305,7 @@ function planMove(m: NonNullable<GameView['lastMove']>, initial: boolean): MoveP
   const now = performance.now();
   if (initial) {
     for (const l of m.legs) if (l.card) cardSeen = Math.max(cardSeen, l.card.seq);
-    return { seq: m.seq, player: m.player, legs: m.legs.map(l => ({ ...l, t0: now, walkMs: 0 })), start: now, end: now, initial: true };
+    return { seq: m.seq, player: m.player, legs: m.legs.map(l => ({ ...l, t0: now, walkMs: 0 })), start: now, end: now, initial: true, planned: now };
   }
   let start = now;
   if (m.roll !== undefined) {
@@ -268,7 +332,7 @@ function planMove(m: NonNullable<GameView['lastMove']>, initial: boolean): MoveP
   freeAt = Math.max(freeAt, end);
   // Hold the HUD once, for the whole plan.
   if (end > now) holdUntil(end, PLAN_HOLD_MS);
-  return { seq: m.seq, player: m.player, legs, start, end, initial: false };
+  return { seq: m.seq, player: m.player, legs, start, end, initial: false, planned: now };
 }
 
 /** When move `seq` is over (undefined: not staged). */
