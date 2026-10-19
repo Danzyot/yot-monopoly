@@ -12,6 +12,8 @@ import { CHARACTER_DEFS, type CharacterId } from '../../../shared/characters.ts'
 import { outfitForCharacter, type Outfit } from '../../../shared/outfits.ts';
 import { CHARACTER_PREF_KEY } from '../components/Lobby.tsx';
 import OutfitPicker, { loadOutfitPref, saveOutfitPref } from '../components/OutfitPicker.tsx';
+import ChogPicker, { ChogArt, loadChogTokenPref, saveChogTokenPref } from '../components/ChogPicker.tsx';
+import { chogLook, chogName, isChogTokenId, traitsOf } from '../../../shared/chogs/traits.ts';
 import { toast } from '../toast.tsx';
 import {
   CharacterFigure, EMOTE_MS, EMOTE_OUT, emotePose, newRig, poseRig, useCharacterMaterials, type EmoteKind, type PoseInput,
@@ -63,16 +65,18 @@ const FEATURED: CharacterId[] = ['chog', 'snacky', 'starer'];
 
 const COLORS = ['#e53935', '#1e88e5', '#43a047', '#fdd835', '#8e24aa', '#fb8c00', '#00acc1', '#ec407a'];
 
-function Turntable({ id, color, outfit, move, startedAt, frozen, x = 0 }: {
+function Turntable({ id, color, outfit, move, startedAt, frozen, x = 0, chogToken }: {
   id: CharacterId; color: string; outfit: Outfit; move: Move; startedAt: number;
   /** Filmstrip: hold the move at this many ms in, silently. */
   frozen?: number;
   x?: number;
+  /** Chog only: a holder's own Chog Genesis token. */
+  chogToken?: number;
 }) {
   const spin = useRef<Group>(null);
   const body = useRef<Group>(null);
   const rig = useMemo(newRig, []);
-  const mats = useCharacterMaterials(id, color);
+  const mats = useCharacterMaterials(id, color, chogToken);
   const fx = useMemo(() => new MoveFX(), []);
   useEffect(() => () => fx.dispose(), [fx]);
   const mirror = propHandMirrored(id);
@@ -162,7 +166,7 @@ function Turntable({ id, color, outfit, move, startedAt, frozen, x = 0 }: {
   return (
     <group ref={spin} position={[x, 0, 0]}>
       <group ref={body}>
-        <CharacterFigure id={id} mats={mats} rig={rig} outfit={outfit} lite={false} />
+        <CharacterFigure id={id} mats={mats} rig={rig} outfit={outfit} lite={false} chogToken={chogToken} />
         <primitive object={fx.fx} />
       </group>
     </group>
@@ -201,6 +205,11 @@ export default function Gallery() {
   // A shared link (/characters?c=cj-wawa) opens on that character; links made with the old ids still work.
   const fromLink = Math.max(0, CHARACTER_DEFS.findIndex(c => slugOf(c.name) === params.get('c') || c.id === params.get('c')));
   const [i, setI] = useState(fromLink);
+  // A holder's own Chog Genesis token on the Chog (?t=<id>, or the last one chosen).
+  const [token, setToken] = useState<number | null>(() => {
+    const t = Number(params.get('t'));
+    return isChogTokenId(t) ? t : loadChogTokenPref();
+  });
   const [color, setColor] = useState(COLORS[1]);
   const [outfit, setOutfit] = useState<Outfit>(() => loadOutfitPref(CHARACTER_DEFS[fromLink].id));
   // ?move=cheer opens on that move; ?strip=8 lays it out as a filmstrip of 8 frames (for reviewing timing).
@@ -209,6 +218,9 @@ export default function Gallery() {
   const [move, setMove] = useState<Move>(linked ?? 'idle');
   const [startedAt, setStartedAt] = useState(() => performance.now());
   const def = CHARACTER_DEFS[i];
+  const chogToken = def.id === 'chog' && token && isChogTokenId(token) ? token : undefined;
+  const look = chogToken ? chogLook(chogToken) : null;
+  const title = chogToken ? chogName(chogToken) : def.name;
   // Another character: the outfit carries over (their own clothes come off, the new one's go on).
   const [dressedFor, setDressedFor] = useState<CharacterId>(def.id);
   if (dressedFor !== def.id) {
@@ -218,17 +230,23 @@ export default function Gallery() {
   const pick = (m: Move) => { setMove(m); setStartedAt(performance.now()); };
   const go = (d: number) => setI(x => (x + d + CHARACTER_DEFS.length) % CHARACTER_DEFS.length);
   useEffect(() => {
-    document.title = `${def.name} · Characters`;
+    document.title = `${title} · Characters`;
     const slug = slugOf(def.name);
-    if (params.get('c') !== slug) setParams(p => { p.set('c', slug); return p; }, { replace: true });
+    const t = chogToken ? String(chogToken) : null;
+    if (params.get('c') !== slug || params.get('t') !== t) {
+      setParams(p => { p.set('c', slug); if (t) p.set('t', t); else p.delete('t'); return p; }, { replace: true });
+    }
     return () => { document.title = 'Yot Monopoly'; };
-  }, [def, params, setParams]);
+  }, [def, title, chogToken, params, setParams]);
   const playAs = () => {
     try { localStorage.setItem(CHARACTER_PREF_KEY, def.id); } catch { /* private mode */ }
+    saveChogTokenPref(chogToken ?? null);
     saveOutfitPref(outfit, def.id);
-    toast(`${def.emoji} You'll play as ${def.name}`);
+    toast(`${def.emoji} You'll play as ${title}`);
     nav('/');
   };
+  /** The token's traits in a line (pass 1 renders Skin, Eyes, Mouth, Aura and Background; Head, Body and Accessory are pass 2). */
+  const traitLine = chogToken ? (t => t && [t.Skin, t.Eyes, t.Mouth, t.Aura, t.Background].filter(Boolean).join(' · '))(traitsOf(chogToken)) : '';
   const dress = (o: Outfit) => { setOutfit(o); saveOutfitPref(o, def.id); };
   const thumb = (c: (typeof CHARACTER_DEFS)[number]) => {
     const k = CHARACTER_DEFS.indexOf(c);
@@ -251,14 +269,15 @@ export default function Gallery() {
           <directionalLight position={[-1.8, 1, -1.4]} intensity={0.8} color={color} />
           <mesh receiveShadow position={[0, -0.03, 0]}>
             <cylinderGeometry args={[0.36, 0.4, 0.06, 64]} />
-            <meshStandardMaterial color="#f4c542" metalness={0.6} roughness={0.35} />
+            {/* The stand takes a token's background colour. */}
+            <meshStandardMaterial color={look?.background ?? '#f4c542'} metalness={look ? 0.3 : 0.6} roughness={0.35} />
           </mesh>
           {strip
             ? Array.from({ length: strip }, (_, k) => (
-              <Turntable key={`${def.id}${k}`} id={def.id} color={color} outfit={outfit} move={move} startedAt={startedAt}
-                frozen={(stripMs(move) * k) / strip} x={(k - (strip - 1) / 2) * 0.4} />
+              <Turntable key={`${def.id}${chogToken ?? ''}${k}`} id={def.id} color={color} outfit={outfit} move={move} startedAt={startedAt}
+                frozen={(stripMs(move) * k) / strip} x={(k - (strip - 1) / 2) * 0.4} chogToken={chogToken} />
             ))
-            : <Turntable key={`${def.id}`} id={def.id} color={color} outfit={outfit} move={move} startedAt={startedAt} />}
+            : <Turntable key={`${def.id}${chogToken ?? ''}`} id={def.id} color={color} outfit={outfit} move={move} startedAt={startedAt} chogToken={chogToken} />}
           {strip ? <StripCamera n={strip} /> : (
             <OrbitControls enablePan={false} target={[0, 0.22, 0]} minDistance={0.7} maxDistance={2.4}
               minPolarAngle={0.4} maxPolarAngle={Math.PI / 2.05} />
@@ -268,11 +287,19 @@ export default function Gallery() {
         <button className="btn gallery-arrow right" onClick={() => go(1)} aria-label="Next character">›</button>
       </div>
       <section className="panel gallery-panel" aria-live="polite">
-        <h1 className="gallery-title"><span aria-hidden>{def.emoji}</span> {def.name}</h1>
-        <p className="gallery-blurb">{def.blurb}</p>
+        <h1 className="gallery-title">
+          {chogToken ? <span className="gallery-token"><ChogArt token={chogToken} size={36} /> {title}</span> : <><span aria-hidden>{def.emoji}</span> {def.name}</>}
+        </h1>
+        <p className="gallery-blurb">
+          {look?.legendary ? `Legendary 1:1 #${chogToken} — one of ten hand-painted Chogs, shown as the base Chog until its portrait is modelled.`
+            : look ? traitLine : def.blurb}
+        </p>
+        {look && !look.legendary && look.fallback && <p className="gallery-legend">Some of its traits are still being modelled; the nearest ones stand in.</p>}
         <div className="gallery-cta">
-          <button className="btn primary chunky" onClick={playAs}>Play as {def.name}</button>
+          <button className="btn primary chunky" onClick={playAs}>Play as {title}</button>
+          {chogToken && <button className="btn" onClick={() => setToken(null)}>Base Chog</button>}
         </div>
+        {def.id === 'chog' && <ChogPicker selected={chogToken ?? null} onPick={id => setToken(t => (t === id ? null : id))} label="Show" />}
         <h2 className="gallery-sub gallery-section-head">Base characters</h2>
         <div className="gallery-thumbs" role="group" aria-label="Base characters">
           {CHARACTER_DEFS.filter(c => !FEATURED.includes(c.id)).map(thumb)}

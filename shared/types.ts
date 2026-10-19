@@ -20,6 +20,8 @@ export interface PlayerState {
   color: string;
   /** Items worn over the character (shared/outfits.ts); none when absent. */
   outfit?: Outfit;
+  /** Playing as their own Chog Genesis token (character 'chog' only; shared/chogs/traits.ts). */
+  chogToken?: number;
   cash: number;
   position: number;
   inJail: boolean;
@@ -285,6 +287,8 @@ export interface RoomSeat {
   color: string;
   /** Items worn over the character (shared/outfits.ts). */
   outfit?: Outfit;
+  /** A verified holder playing as their own Chog Genesis token (character 'chog' only). */
+  chogToken?: number;
   isBot: boolean;
   connected: boolean;
   /** The host (or an operator) handed this player to autopilot. */

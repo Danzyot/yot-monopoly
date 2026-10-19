@@ -5,6 +5,7 @@ import App from './App.tsx';
 import './fonts/fonts.css';
 import './index.css';
 import './styles/outfits.css';
+import './styles/chogs.css';
 import './styles/turnflow.css';
 import './styles/ui-polish.css';
 import './styles/boards.css';

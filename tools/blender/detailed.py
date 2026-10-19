@@ -869,10 +869,15 @@ def superell(name, p, rad, mat, e=3.0, f=2.4, seg=(40, 28), deform=None, fuse=Fa
     return _finish(name, bm, mat, fuse)
 
 
-def chog(m):
-    cid = 'chog'
-    body, head = [], []
-    # ---- body: a plain onesie, a little pear-shaped, with ankle cuffs over the sneakers.
+# Where the face parts go, in head space (shared with chog_traits.py, which swaps them per token).
+CHOG_EYE = (0.031, 0.033, 0.012)
+CHOG_EYE_AT = (0.053, -0.02)
+CHOG_SMILE = [(-0.02, -0.0795), (-0.009, -0.0865), (0.004, -0.0878), (0.0155, -0.0845), (0.0235, -0.0775)]
+
+
+def chog_body(cid, m):
+    """The onesie, a little pear-shaped, with ankle cuffs over the sneakers; and the mitten hands out of violet cuffs."""
+    body = []
     TRUNK = ((0, 0.12, 0), (0.073, 0.084, 0.063))
 
     def pear(v):
@@ -888,79 +893,105 @@ def chog(m):
     for side in (-1, 1):
         body.append(torus(f'{cid}_Cuff{side}', (side * 0.042, 0.047, 0.006), 0.025, 0.0065, m['cloth'], r=(math.pi / 2, 0, 0)))
     hi_sneakers(cid, m, body, tongue='white')
+    hl = mitten(cid, 'HandL', m, 'skin', 1) + [cyl(f'{cid}_CuffL', (0, 0.026, 0), 0.0215, 0.02, m['cloth'], r_top=0.019)]
+    hr = mitten(cid, 'HandR', m, 'skin', -1) + [cyl(f'{cid}_CuffR', (0, 0.026, 0), 0.0215, 0.02, m['cloth'], r_top=0.019)]
+    return {'Body': body, 'HandL': hl, 'HandR': hr}
 
-    # ---- head: the face, a rounded square a touch narrower at the chin.
+
+class ChogFace:
+    """The face's geometry: a rounded square a touch narrower at the chin, sloping back under the hair.
+
+    `face_z(x, y)` is its front surface, `on_face(x, y, lift)` a frame on it (local z along the normal),
+    `outline(phi, k)` a point on its outline. Build the surface itself with `build()`."""
     FC, FR, E, F = Vector((0, -0.014, 0.016)), Vector((0.113, 0.104, 0.09)), 3.0, 2.4
     CHIN = FC.y - 0.03
 
-    def chin_k(y):
-        t = min(1.0, (CHIN - y) / 0.07) if y < CHIN else 0.0
+    def chin_k(self, y):
+        t = min(1.0, (self.CHIN - y) / 0.07) if y < self.CHIN else 0.0
         return 1 - 0.1 * t * t
 
-    def tuck(y):
+    def tuck(self, y):
         """How far the top of the face slopes back under the hair."""
-        t = max(0.0, (y - FC.y - 0.055) / (FR.y - 0.055))
+        t = max(0.0, (y - self.FC.y - 0.055) / (self.FR.y - 0.055))
         return 0.06 * t * t
 
-    def chin(v):
-        v.x *= chin_k(v.y)
-        v.z -= tuck(v.y)
+    def chin(self, v):
+        v.x *= self.chin_k(v.y)
+        v.z -= self.tuck(v.y)
         return v
 
-    def face_z(x, y):
-        """The face's front surface at (x, y)."""
-        u, w = abs(x / chin_k(y) - FC.x) / FR.x, abs(y - FC.y) / FR.y
+    def face_z(self, x, y):
+        FC, FR, E, F = self.FC, self.FR, self.E, self.F
+        u, w = abs(x / self.chin_k(y) - FC.x) / FR.x, abs(y - FC.y) / FR.y
         s = (u ** E + w ** E) ** (F / E)
-        return FC.z + FR.z * max(0.0, 1 - s) ** (1 / F) - tuck(y)
+        return FC.z + FR.z * max(0.0, 1 - s) ** (1 / F) - self.tuck(y)
 
-    def on_face(x, y, lift=0.0):
-        """A frame on the face at (x, y), local z along its normal."""
+    def on_face(self, x, y, lift=0.0):
         e = 1e-4
-        n = Vector((-(face_z(x + e, y) - face_z(x - e, y)) / (2 * e), -(face_z(x, y + e) - face_z(x, y - e)) / (2 * e), 1)).normalized()
-        return frame_z(Vector((x, y, face_z(x, y))) + n * lift, n)
-    face = superell(f'{cid}_Skull', tuple(FC), tuple(FR), m['skin'], e=E, f=F, deform=chin, fuse=True)
-    face['budget'] = 4000
-    head.append(face)
+        fz = self.face_z
+        n = Vector((-(fz(x + e, y) - fz(x - e, y)) / (2 * e), -(fz(x, y + e) - fz(x, y - e)) / (2 * e), 1)).normalized()
+        return frame_z(Vector((x, y, fz(x, y))) + n * lift, n)
 
-    # Eyes: big and glossy, set wide and low; a black iris filling most of the
-    # white, glancing to his left, a big catchlight, a thin black upper lid line.
-    EYE = (0.031, 0.033, 0.012)
+    def outline(self, phi, k=1.0):
+        """A point on the face's outline at angle phi (0 straight up, + to his left)."""
+        FC, FR, E = self.FC, self.FR, self.E
+        s, c = math.sin(phi), math.cos(phi)
+        y = FC.y + FR.y * k * math.copysign(abs(c) ** (2 / E), c)
+        return Vector((FR.x * k * self.chin_k(y) * math.copysign(abs(s) ** (2 / E), s), y))
+
+    def build(self, name, mat, budget=4000):
+        face = superell(name, tuple(self.FC), tuple(self.FR), mat, e=self.E, f=self.F, deform=self.chin, fuse=True)
+        face['budget'] = budget
+        return face
+
+
+def chog_eyes(cid, head, m, f, blink=True):
+    """Big glossy eyes, set wide and low; a black iris filling most of the white, glancing to his
+    left, a big catchlight, a thin black upper lid line (and blinking lids, split off by the build)."""
+    rx, ry, rz = CHOG_EYE
     for side in (-1, 1):
-        G = on_face(side * 0.053, -0.02, -0.004)
-        rx, ry, rz = EYE
+        G = f.on_face(side * CHOG_EYE_AT[0], CHOG_EYE_AT[1], -0.004)
         head.append(ell(f'{cid}_EyeRim{side}', (0, 0, -0.0012), (rx + 0.0022, ry + 0.0022, rz), m['ink'], parent=G, seg=(24, 16)))
-        head.append(ell(f'{cid}_Sclera{side}', (0, 0, 0), EYE, m['white'], parent=G, seg=(24, 16)))
+        head.append(ell(f'{cid}_Sclera{side}', (0, 0, 0), CHOG_EYE, m['white'], parent=G, seg=(24, 16)))
         head.append(ell(f'{cid}_Iris{side}', (0.0075, -0.001, 0.0078), (0.0215, 0.025, 0.0052), m['ink'], parent=G, seg=(20, 14)))
         head.append(ell(f'{cid}_Glint{side}', (0.0005, 0.0095, 0.0124), (0.0072, 0.0072, 0.0022), m['white'], parent=G, seg=(12, 8)))
         head.append(ell(f'{cid}_Glint2{side}', (0.0155, -0.0105, 0.0112), (0.003, 0.003, 0.0016), m['white'], parent=G, seg=(8, 6)))
         head.append(strand(f'{cid}_Lid{side}', [(-rx * 1.04, ry * 0.25, rz * 0.45), (-rx * 0.6, ry * 0.86, rz * 0.62), (0, ry * 1.04, rz * 0.62),
                                                  (rx * 0.6, ry * 0.88, rz * 0.62), (rx * 1.06, ry * 0.3, rz * 0.45)],
                            0.0019, 0.0013, m['ink'], parent=G, ring=6, n=6))
-        blink_lid(cid, head, m, G, side, (rx + 0.0012, ry + 0.001, rz + 0.003))
-        # Round pink cheeks just under the outer corner of each eye.
-        head.append(ell(f'{cid}_Blush{side}', (0, 0, 0), (0.0175, 0.0155, 0.004), m['accent'], parent=on_face(side * 0.083, -0.047, -0.0012),
+        if blink:
+            blink_lid(cid, head, m, G, side, (rx + 0.0012, ry + 0.001, rz + 0.003))
+
+
+def chog_cheeks(cid, head, m, f):
+    """Round pink cheeks just under the outer corner of each eye."""
+    for side in (-1, 1):
+        head.append(ell(f'{cid}_Blush{side}', (0, 0, 0), (0.0175, 0.0155, 0.004), m['accent'], parent=f.on_face(side * 0.083, -0.047, -0.0012),
                         seg=(18, 10)))
-    # A tiny pink nose: a rounded triangle pointing down.
+
+
+def chog_nose(cid, head, m, f, mat='c1'):
+    """A tiny pink nose: a rounded triangle pointing down."""
     bm = bmesh.new()
     bmesh.ops.create_uvsphere(bm, u_segments=16, v_segments=10, radius=1.0)
     for v in bm.verts:
         x, y, z = v.co
         v.co = Vector((x * 0.0105 * (0.3 + 0.7 * (y + 1) / 2), y * 0.0072, z * 0.0045))
-    bm.transform(on_face(0, -0.06, 0.0012))
-    head.append(_finish(f'{cid}_Nose', bm, m['c1'], False))
-    # A small, smug closed smile, its left (+x) corner tucked up.
-    sm = [(-0.02, -0.0795), (-0.009, -0.0865), (0.004, -0.0878), (0.0155, -0.0845), (0.0235, -0.0775)]
-    head.append(strand(f'{cid}_Mouth', [(x, y, face_z(x, y) + 0.0008) for x, y in sm], 0.0017, 0.0014, m['ink'], ring=6, n=6))
+    bm.transform(f.on_face(0, -0.06, 0.0012))
+    head.append(_finish(f'{cid}_Nose', bm, m[mat], False))
 
-    # ---- hair: a hood round the face, a fringe, and the mane of spikes.
+
+def chog_mouth(cid, head, m, f):
+    """A small, smug closed smile, its left (+x) corner tucked up."""
+    head.append(strand(f'{cid}_Mouth', [(x, y, f.face_z(x, y) + 0.0008) for x, y in CHOG_SMILE], 0.0017, 0.0014, m['ink'], ring=6, n=6))
+
+
+def chog_hair(cid, head, m, f):
+    """The hair: a hood round the face, a fringe, and the mane of spikes (all fused into one surface)."""
+    FC = f.FC
+    face_z, outline = f.face_z, f.outline
     HC, HR = Vector((0, 0.025, -0.05)), Vector((0.118, 0.122, 0.112))
     hair = [ell(f'{cid}_HairMass', tuple(HC), tuple(HR), m['hair'], seg=(36, 24))]
-
-    def outline(phi, k=1.0):
-        """A point on the face's outline at angle phi (0 straight up, + to his left)."""
-        s, c = math.sin(phi), math.cos(phi)
-        y = FC.y + FR.y * k * math.copysign(abs(c) ** (2 / E), c)
-        return Vector((FR.x * k * chin_k(y) * math.copysign(abs(s) ** (2 / E), s), y))
     # The hood's brim: a soft roll of hair along the top of the face, in two halves
     # from the middle thinning toward the temples; below that the face sits clear.
     for side in (-1, 1):
@@ -1007,10 +1038,20 @@ def chog(m):
         o['budget'] = 8000
     head += hair
 
-    # ---- hands: cream mittens out of violet cuffs.
-    hl = mitten(cid, 'HandL', m, 'skin', 1) + [cyl(f'{cid}_CuffL', (0, 0.026, 0), 0.0215, 0.02, m['cloth'], r_top=0.019)]
-    hr = mitten(cid, 'HandR', m, 'skin', -1) + [cyl(f'{cid}_CuffR', (0, 0.026, 0), 0.0215, 0.02, m['cloth'], r_top=0.019)]
-    return {'Body': body, 'Head': head, 'HandL': hl, 'HandR': hr}
+
+def chog(m):
+    cid = 'chog'
+    parts = chog_body(cid, m)
+    head = []
+    f = ChogFace()
+    head.append(f.build(f'{cid}_Skull', m['skin']))
+    chog_eyes(cid, head, m, f)
+    chog_cheeks(cid, head, m, f)
+    chog_nose(cid, head, m, f)
+    chog_mouth(cid, head, m, f)
+    chog_hair(cid, head, m, f)
+    parts['Head'] = head
+    return parts
 
 
 BUILDERS = {'snacky': snacky, 'starer': starer, 'chog': chog}

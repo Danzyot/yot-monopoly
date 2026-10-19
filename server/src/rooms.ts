@@ -12,6 +12,7 @@ import { getMap } from '../../shared/maps.ts';
 import * as PACE from '../../shared/pacing.ts';
 import { DEFAULT_TABLE_STYLE, sanitizeTableStyle, type TableStyle } from '../../shared/tableStyles.ts';
 import { migrateCharacter } from '../../shared/characters.ts';
+import { isChogTokenId } from '../../shared/chogs/traits.ts';
 import { defaultOutfit, outfitForCharacter, parseOutfit, randomOutfit, sanitizeOutfit } from '../../shared/outfits.ts';
 import { cutsceneSnap, cutscenesMs, pickCutscenes, type CutsceneSnap } from '../../shared/cutscenes.ts';
 import { sanitizeRequirements } from './requirements.ts';
@@ -121,6 +122,11 @@ export interface RoomHooks {
   onFinished(room: Room): void;
   /** The last human left the lobby (bots don't count): the registry closes it. */
   onEmpty?(room: Room): void;
+  /**
+   * Whether this account's linked wallets hold Chog Genesis token `tokenId`
+   * (server/src/wallet/holders.ts). Without it nobody may play as a token.
+   */
+  holdsChog?(userId: string, tokenId: number): boolean;
 }
 
 export class RoomError extends Error {}
@@ -410,15 +416,27 @@ export class Room {
     this.style = sanitizeTableStyle(raw);
   }
 
-  pickCharacter(id: string, character: CharacterId) {
+  /**
+   * Pick a character; with `chogToken`, play as that Chog Genesis token, which
+   * only a verified holder of it may (the wallet store is asked, never the
+   * client). Two Chogs may share a table when they are different tokens.
+   */
+  pickCharacter(id: string, character: CharacterId, chogToken?: number) {
     this.dirty = true;
     this.requireLobby();
     if (!CHARACTERS.includes(character)) fail('Unknown character');
     const s = this.seat(id) ?? fail('You are not seated');
-    if (this.seats.some(o => o !== s && o.character === character)) fail('That character is taken');
+    if (chogToken !== undefined) {
+      if (character !== 'chog') fail('Only Chog can play as a Chog Genesis token');
+      if (!isChogTokenId(chogToken)) fail('Unknown Chog token');
+      if (s.isBot || !this.hooks.holdsChog?.(id, chogToken)) fail('That Chog is not in a wallet linked to your account');
+    }
+    if (this.seats.some(o => o !== s && o.character === character && (o.chogToken ?? 0) === (chogToken ?? 0))) fail('That character is taken');
     // The outfit comes along, minus the old character's own clothes, plus the new one's.
     if (character !== s.character) s.outfit = outfitForCharacter(s.outfit ?? {}, character);
     s.character = character;
+    if (chogToken !== undefined) s.chogToken = chogToken;
+    else delete s.chogToken;
   }
 
   pickColor(id: string, color: string) {
@@ -512,7 +530,10 @@ export class Room {
     this.game = new Game({
       theme: resolveTheme(this.themeId, this.mapId),
       rules: this.rules,
-      players: order.map(s => ({ id: s.id, name: s.name, character: s.character, color: s.color, outfit: s.outfit ?? {}, isBot: s.isBot })),
+      players: order.map(s => ({
+        id: s.id, name: s.name, character: s.character, color: s.color, outfit: s.outfit ?? {}, isBot: s.isBot,
+        ...(s.chogToken !== undefined ? { chogToken: s.chogToken } : {}),
+      })),
       rng: n => randomInt(n),
       onLog: text => this.hooks.onEvent(this, text),
       // The operator's site-wide switch wins over the room's house rule, even mid-game.
@@ -937,9 +958,12 @@ export class Room {
     // Snapshots from before characters existed carry `token`; migrateCharacter
     // maps those (and anything unknown) onto a character.
     const withCharacter = <T extends object>(x: T) => {
-      const { token: _legacy, ...rest } = x as T & { token?: unknown };
+      const { token: _legacy, chogToken, ...rest } = x as T & { token?: unknown; chogToken?: unknown };
       const character = migrateCharacter(x);
-      return { ...rest, character, outfit: sanitizeOutfit((x as { outfit?: unknown }).outfit, character) };
+      return {
+        ...rest, character, outfit: sanitizeOutfit((x as { outfit?: unknown }).outfit, character),
+        ...(character === 'chog' && isChogTokenId(chogToken) ? { chogToken } : {}),
+      };
     };
     r.seats = s.seats.map(x => ({ ...withCharacter(x), connected: x.isBot, disconnectedAt: x.isBot ? null : now }));
     if (s.game) {
