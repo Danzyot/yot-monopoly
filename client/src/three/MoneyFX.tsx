@@ -9,7 +9,10 @@
 // line plays when the move it came with is over (three/sequence.ts plans that
 // on the clock; salary as the piece passes GO), so rent lands after the piece
 // does, never on the next player's turn, and one state that brings several
-// turns' lines plays each with its own move.
+// turns' lines plays each with its own move. Each batch goes up on a timer
+// set for its planned time, not on the next frame that notices it is due: a
+// slow device (few frames, or none while the board is busy) shows it on time
+// and lets the coins skip ahead rather than show it late.
 
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
@@ -32,6 +35,8 @@ interface LabelDraft {
   /** The player's id: several labels over one piece go up one after another. */
   id: string; pos: [number, number, number]; text: string; gain: boolean;
   name: string; color: string; what?: string;
+  /** Salary for passing GO: within one move it goes up before the rest (a card's payment), as the piece passed GO first. */
+  salary?: boolean;
 }
 /** What plays together, from `at` (performance.now() time). */
 interface Batch { flights: Omit<Flight, 'start'>[]; labels: LabelDraft[]; at: number }
@@ -135,7 +140,7 @@ export function MoneyFX({ game, n, currency }: { game: GameView; n: number; curr
   const lastLine = useRef<LogEntry | undefined>(game.log.at(-1));
   // Each batch waits for the move it came with (its planned end), not for
   // later moves: a bot's rent must not wait behind the next player's dice.
-  const pending = useRef<Batch[]>([]);
+  const pending = useRef(new Set<ReturnType<typeof setTimeout>>());
   /** When each player's piece is free for its next label (labels over one piece queue up, LABEL_GAP_MS apart). */
   const nextLabel = useRef(new Map<string, number>());
   const flights = useRef<Flight[]>([]);
@@ -143,7 +148,12 @@ export function MoneyFX({ game, n, currency }: { game: GameView; n: number; curr
   // there only while they show (no drei <Html> per slot).
   const pins = usePins();
   const shown = useRef<{ pin: ReturnType<typeof pins.add>; timer: ReturnType<typeof setTimeout> }[]>([]);
-  useEffect(() => () => { for (const l of shown.current) clearTimeout(l.timer); shown.current = []; }, []);
+  useEffect(() => () => {
+    for (const l of shown.current) clearTimeout(l.timer);
+    shown.current = [];
+    pending.current.forEach(clearTimeout);
+    pending.current.clear();
+  }, []);
   const showLabel = (l: LabelDraft, now: number) => {
     const delay = Math.max(0, (nextLabel.current.get(l.id) ?? 0) - now);
     nextLabel.current.set(l.id, now + delay + LABEL_GAP_MS);
@@ -201,11 +211,11 @@ export function MoneyFX({ game, n, currency }: { game: GameView; n: number; curr
       if (!b) batches.set(at, b = { flights: [], labels: [], at });
       return b;
     };
-    const label = (id: string, d: number, what: string | undefined, s: Vector3): LabelDraft => {
+    const label = (id: string, d: number, what: string | undefined, s: Vector3, salary = false): LabelDraft => {
       const p = byId.get(id)!;
       return {
         id, pos: [s.x, s.y + 0.35, s.z], text: `${d > 0 ? '+' : '−'}${currency}${Math.abs(d).toLocaleString()}`, gain: d > 0,
-        name: p.name, color: p.color, what,
+        name: p.name, color: p.color, what, salary,
       };
     };
     const explained = new Map<string, number>();
@@ -220,8 +230,9 @@ export function MoneyFX({ game, n, currency }: { game: GameView; n: number; curr
       const b = batch(at);
       // Salary popping as the piece passes GO shows over GO, not where the piece ends up.
       const spot = (p: { position: number }) => spotOf(go ? 0 : p.position);
-      if (from) { b.labels.push(label(from.id, -l.amount, what, spot(from))); credit(from.id, -l.amount); }
-      if (to) { b.labels.push(label(to.id, l.amount, what, spot(to))); credit(to.id, l.amount); }
+      const salary = l.reason === 'salary';
+      if (from) { b.labels.push(label(from.id, -l.amount, what, spot(from), salary)); credit(from.id, -l.amount); }
+      if (to) { b.labels.push(label(to.id, l.amount, what, spot(to), salary)); credit(to.id, l.amount); }
       b.flights.push({ from: from ? spot(from) : BANK.clone(), to: to ? spot(to) : BANK.clone(), coins: coinsFor(l.amount) });
     });
     // Whatever the lines don't account for (a purchase, a trade, building, an older server): the net change,
@@ -250,20 +261,25 @@ export function MoneyFX({ game, n, currency }: { game: GameView; n: number; curr
       }
       rest.forEach((x, i) => batch(atOf(x)).labels.push(label(x.p.id, x.d, why[i]?.what, spotOf(x.p.position))));
     }
-    // Oldest first, so labels over one piece queue up in the order they happened.
-    pending.current.push(...[...batches.values()].sort((a, b) => a.at - b.at));
+    // Oldest first, so labels over one piece queue up in the order they happened
+    // (timers due at the same moment fire in the order they were set).
+    const now = performance.now();
+    for (const b of [...batches.values()].sort((x, y) => x.at - y.at)) {
+      // Passing GO comes before whatever the move ends with (sort is stable).
+      b.labels.sort((x, y) => Number(!x.salary) - Number(!y.salary));
+      const timer = setTimeout(() => {
+        pending.current.delete(timer);
+        // Timed from when the batch was due, not when the timer got round to it.
+        for (const f of b.flights) flights.current.push({ ...f, start: b.at });
+        for (const l of b.labels) showLabel(l, b.at);
+      }, Math.max(0, b.at - now));
+      pending.current.add(timer);
+    }
   }, [game.players, game.phase, game.log, spotOf, currency, n]);
 
+  // Only the coins move here (the labels' pins place themselves, three/overlay.ts).
   useFrame(() => {
     const now = performance.now();
-    if (pending.current.some(b => now >= b.at)) {
-      const batch = pending.current.filter(b => now >= b.at);
-      pending.current = pending.current.filter(b => now < b.at);
-      for (const b of batch) {
-        for (const f of b.flights) flights.current.push({ ...f, start: now });
-        for (const l of b.labels) showLabel(l, now);
-      }
-    }
     const m = mesh.current;
     if (!m) return;
     let k = 0;

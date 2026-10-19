@@ -108,6 +108,14 @@ function rememberReaction(emoji: string) {
 export interface SystemLine { t: number; text: string; kind: 'join' | 'leave' | 'away' | 'back' }
 
 /**
+ * A disconnected player's turn is auto-played after this long. Keep in step
+ * with AUTOPILOT_GRACE_MS in server/src/rooms.ts (not shared with the client).
+ */
+const AUTOPILOT_GRACE_MS = 45_000;
+/** "Lost connection" waits this long, and a player back by then (a refresh, a blip) gets neither line. */
+const AWAY_LINE_DELAY_MS = 10_000;
+
+/**
  * Chat has no server-side system messages; derive them from the seats as they
  * change (someone sits down, leaves, drops offline, comes back). Lives in
  * GameScreen so the list survives the chat tab being closed.
@@ -115,6 +123,9 @@ export interface SystemLine { t: number; text: string; kind: 'join' | 'leave' | 
 export function useSystemLines(room: RoomView | null | undefined): SystemLine[] {
   const [lines, setLines] = useState<SystemLine[]>([]);
   const prev = useRef<Map<string, { name: string; connected: boolean }> | null>(null);
+  /** "Lost connection" lines still waiting out AWAY_LINE_DELAY_MS, by player. */
+  const away = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  useEffect(() => () => { away.current.forEach(clearTimeout); away.current.clear(); }, []);
   const seatsKey = room?.seats.map(s => `${s.id}:${s.connected ? 1 : 0}:${s.isBot ? 1 : 0}`).join('|') ?? '';
   useEffect(() => {
     if (!room) return;
@@ -124,14 +135,33 @@ export function useSystemLines(room: RoomView | null | undefined): SystemLine[] 
     if (!before) return; // first sight of the room: nothing has changed yet
     const out: SystemLine[] = [];
     const t = Date.now();
+    const post = (add: SystemLine[]) => setLines(l => [...l.slice(-60), ...add]);
+    /** Forget a "lost connection" line not posted yet; true if there was one. */
+    const unpost = (id: string) => {
+      const timer = away.current.get(id);
+      if (timer === undefined) return false;
+      clearTimeout(timer);
+      away.current.delete(id);
+      return true;
+    };
     for (const [id, s] of now) {
       const was = before.get(id);
       if (!was) out.push({ t, text: `${s.name} joined`, kind: 'join' });
-      else if (was.connected && !s.connected) out.push({ t, text: `${s.name} lost connection — autopilot plays on`, kind: 'away' });
-      else if (!was.connected && s.connected) out.push({ t, text: `${s.name} is back`, kind: 'back' });
+      else if (was.connected && !s.connected) {
+        unpost(id);
+        const left = Math.round((AUTOPILOT_GRACE_MS - AWAY_LINE_DELAY_MS) / 1000);
+        away.current.set(id, setTimeout(() => {
+          away.current.delete(id);
+          post([{ t: Date.now(), text: `${s.name} lost connection — autopilot takes over in ${left} s if not back`, kind: 'away' }]);
+        }, AWAY_LINE_DELAY_MS));
+      } else if (!was.connected && s.connected && !unpost(id)) out.push({ t, text: `${s.name} is back`, kind: 'back' });
     }
-    for (const [id, was] of before) if (!now.has(id)) out.push({ t, text: `${was.name} left the game`, kind: 'leave' });
-    if (out.length) setLines(l => [...l.slice(-60), ...out]);
+    for (const [id, was] of before) {
+      if (now.has(id)) continue;
+      unpost(id);
+      out.push({ t, text: `${was.name} left the game`, kind: 'leave' });
+    }
+    if (out.length) post(out);
   }, [seatsKey, room?.code]);
   return lines;
 }
