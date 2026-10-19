@@ -17,6 +17,10 @@
 // glides home at once, so the camera is never off at some other tile while
 // the next player's dice are in the air. Other players' builds get no shot:
 // the camera reacts to the move being played and to the viewer's own doings.
+//
+// However a shot ends, the camera rig gets the camera back: unmounting mid-shot
+// (Rematch or Leave during the winner's circle) hands it back, and no shot
+// outlives MAX_SHOT_MS.
 
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useRef } from 'react';
@@ -65,6 +69,8 @@ const STALE_OUT_MS = 420;
 const GAP_MS = 2500;
 /** A shot that has waited this long for the scene to be still is history: dropped. */
 const MAX_WAIT_MS = 15_000;
+/** No shot plays longer than this, whatever its hold (the winner's circle is the longest, ~16 s). */
+const MAX_SHOT_MS = 20_000;
 
 /** Low over the board edge, looking back in at tile `i`. */
 function tileShot(i: number, n: number, opts: { height?: number; dist?: number; side?: number; hold?: number } = {}): Shot {
@@ -159,6 +165,15 @@ export function CameraDirector({ game, me, n, enabled, mode }: { game: GameView;
     if (shots.length) queue.current = [{ ...shots[shots.length - 1], epoch: epochOf(game), at: performance.now() }];
   }, [game, me, n, enabled]);
 
+  // Leaving mid-shot (Rematch or Leave during the winner's circle): give the
+  // camera back, or the rig would sit out every frame of the next game.
+  useEffect(() => () => {
+    if (!playing.current) return;
+    playing.current = null;
+    setDirectorActive(false);
+    if (ctl.current) ctl.current.enabled = true;
+  }, []);
+
   // Grabbing the camera (drag, pinch, wheel) cuts the shot short. The controls
   // are off during a shot, so listen on the canvas itself.
   useEffect(() => {
@@ -193,8 +208,17 @@ export function CameraDirector({ game, me, n, enabled, mode }: { game: GameView;
   }, [enabled]);
 
   useFrame(() => {
-    if (!controls) return;
     const now = performance.now();
+    // A shot past its hard limit (or with no controls left to drive) ends here, wherever it stands.
+    const over = playing.current;
+    if (over && (!controls || now - over.t0 > MAX_SHOT_MS)) {
+      if (controls && !steer.current) { camera.position.copy(over.homePos); controls.target.copy(over.homeTarget); }
+      playing.current = null;
+      setDirectorActive(false);
+      lastEnd.current = now;
+      if (controls) controls.enabled = true;
+    }
+    if (!controls) return;
     cameraDebug.shot = playing.current ? `${playing.current.shot.label ?? 'shot'}:${playing.current.stage}` : null;
     cameraDebug.queued = queue.current.length;
     // A cutscene (three/cinematics) has the camera: drop any shot, and put a running one back home first.

@@ -97,6 +97,23 @@ export interface MinigameState {
   openedAt?: number;
 }
 
+/**
+ * The last trade a player accepted: who offered it (`from`), who took it
+ * (`to`), the deeds each side handed over and the turn it happened on. The
+ * view carries it as `lastTrade`, so a page can tell a deal from any other
+ * change of owner (an operator's move, a bankruptcy).
+ */
+export interface CompletedTrade {
+  /** The accepted offer's id: unique within the game. */
+  id: string;
+  turn: number;
+  from: string;
+  to: string;
+  /** Deeds `from` gave `to`, and deeds `to` gave `from`. */
+  give: number[];
+  get: number[];
+}
+
 /** Everything needed to rebuild a game after a restart (see Game.restore). */
 export interface GameSnapshot {
   players: PlayerState[];
@@ -127,6 +144,8 @@ export interface GameSnapshot {
   outOrder: string[];
   /** Optional: snapshots written before moves were recorded leg by leg lack these. */
   lastMove?: LastMove | null;
+  /** Optional: snapshots written before accepted trades were recorded lack it. */
+  lastTrade?: CompletedTrade | null;
   moveSeq?: number;
   /** Optional: snapshots written before mini-games existed lack these. */
   minigame?: MinigameState | null;
@@ -201,6 +220,8 @@ export class Game {
   /** Bids placed in the running auction (for the one-line result; the log only keeps the notable ones). */
   private auctionBids = 0;
   trades: Trade[] = [];
+  /** The last trade accepted (see CompletedTrade). */
+  lastTrade: CompletedTrade | null = null;
   pot = 0;
   housesLeft = 32;
   hotelsLeft = 12;
@@ -1323,6 +1344,7 @@ export class Game {
     this.trades = this.trades.filter(x => x.id !== id);
     this.transfer(from, p, t.give);
     this.transfer(p, from, t.get);
+    this.lastTrade = { id: t.id, turn: this.turnNumber, from: from.id, to: p.id, give: [...t.give.spaces], get: [...t.get.spaces] };
     this.say(`${p.name} accepted ${from.name}'s trade.`, p.id);
     // Official rule: taking over a mortgaged deed costs 10% of its mortgage value at once.
     this.mortgageInterest(p, t.give.spaces);
@@ -1903,7 +1925,7 @@ export class Game {
     return structuredClone({
       players: this.players, owned: this.owned, currentIdx: this.currentIdx, phase: this.phase,
       dice: this.dice, rollSeq: this.rollSeq, rollTurn: this.rollTurn, rollBy: this.rollBy, doublesCount: this.doublesCount, extraRoll: this.extraRoll,
-      debts: this.debts, auction: this.auction, trades: this.trades, pot: this.pot,
+      debts: this.debts, auction: this.auction, trades: this.trades, lastTrade: this.lastTrade, pot: this.pot,
       housesLeft: this.housesLeft, hotelsLeft: this.hotelsLeft, lastCard: this.lastCard,
       lastMove: this.lastMove, moveSeq: this.moveSeq,
       winner: this.winner, log: this.log, turnNumber: this.turnNumber, decks: this.decks,
@@ -1940,6 +1962,7 @@ export class Game {
     g.choice = snap.choice ?? null;
     g.speedPending = snap.speedPending ?? null;
     g.lastMove = snap.lastMove ?? null;
+    g.lastTrade = snap.lastTrade ?? null;
     g.moveSeq = snap.moveSeq ?? 0;
     g.endAfter = snap.endAfter ?? false;
     g.estateQueue = snap.estateQueue ?? [];
@@ -2000,7 +2023,8 @@ export class Game {
     return [...alive, ...out].map(p => ({ id: p.id, netWorth: worth.get(p.id)! }));
   }
 
-  view(): GameView {
+  /** What players see. `lastTrade` rides along for pages that read it (see CompletedTrade). */
+  view(): GameView & { lastTrade: CompletedTrade | null } {
     return structuredClone({
       themeId: this.theme.id,
       mapId: this.theme.mapId,
@@ -2018,6 +2042,7 @@ export class Game {
       debts: this.debts,
       auction: this.auction,
       trades: this.trades,
+      lastTrade: this.lastTrade,
       pot: this.pot,
       housesLeft: this.housesLeft,
       hotelsLeft: this.hotelsLeft,

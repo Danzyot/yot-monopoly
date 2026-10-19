@@ -34,9 +34,11 @@ function card(kind: 'winner' | 'bankrupt', title: string, subtitle: string, colo
   setOverlay({ seq: ++overlaySeq, kind, title, subtitle, color, titleAt: 80, titleMs: Math.max(600, dur - 300), sirenUntil: 0, beats: [], dur, leaving: false });
 }
 
+/** Bars away, then the card gone: unless a newer card took its place meanwhile, which stays. */
 function dropOverlay() {
   overlayLeaving();
-  window.setTimeout(() => setOverlay(null), 520);
+  const seq = overlaySeq;
+  window.setTimeout(() => { if (overlaySeq === seq) setOverlay(null); }, 520);
 }
 
 /** The resting view: across the table from our seat; portrait screens see it from higher up. */
@@ -78,7 +80,8 @@ export function CardsCamera({ state, compact }: { state: RefObject<SceneState | 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') askSkip(); };
     window.addEventListener('keydown', onKey);
-    return () => { window.removeEventListener('keydown', onKey); setOverlay(null); };
+    // Leaving the table: a card still on its way out is cleared now, and its timer must not clear anyone else's.
+    return () => { window.removeEventListener('keydown', onKey); overlaySeq++; setOverlay(null); };
   }, []);
 
   useFrame((_, delta) => {
