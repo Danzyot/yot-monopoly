@@ -7,6 +7,7 @@ import type { GameView, RoomView } from '../../../shared/types.ts';
 import { call } from '../net.ts';
 import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
+import { useSceneBusy } from '../three/sequence.ts';
 
 /** Below this many seconds a countdown turns urgent. */
 const URGENT_S = 10;
@@ -34,13 +35,21 @@ export function clockText(s: number): string {
     : `${m}:${String(s % 60).padStart(2, '0')}`;
 }
 
-/** Ring + seconds for the current player's turn step. Everyone sees it. */
+/**
+ * Ring + seconds for the current player's turn step. Everyone sees it. The
+ * server starts a step's clock once the move before it has played out
+ * (Game.holdTurnClock), so its deadline can sit more than a full turn away
+ * while the dice still roll: until the scene is over the clock shows the full
+ * turn, standing still, then counts down from the real deadline, never
+ * showing more than a full turn.
+ */
 export function TurnClock({ game, me, skew }: { game: GameView; me: string; skew: number }) {
   const deadline = game.turnEndsAt;
   const now = useServerNow(skew, deadline !== null && !game.paused);
+  const sceneBusy = useSceneBusy();
   if (deadline === null || game.phase === 'over') return null;
   const total = Math.max(1, game.rules.turnSeconds);
-  const left = secondsLeft(game, deadline, now);
+  const left = sceneBusy && !game.paused ? total : Math.min(total, secondsLeft(game, deadline, now));
   const cur = game.players.find(p => p.id === game.current);
   if (!cur) return null;
   const frac = Math.min(1, left / total);
