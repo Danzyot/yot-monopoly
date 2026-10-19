@@ -21,6 +21,7 @@ import { mountMusic } from './routes/music.ts';
 import { mountGraphics } from './routes/graphics.ts';
 import { mountTextOverrides } from './routes/textOverrides.ts';
 import { mountContent } from './routes/content.ts';
+import { walletRoutes } from './routes/wallet.ts';
 import { attachSockets } from './sockets.ts';
 import { staticClient } from './staticFiles.ts';
 import { allResults, leaderboard, loadResults } from './stats.ts';
@@ -131,6 +132,7 @@ app.get('/api/config', (_req, res) => {
 
 app.use('/api/auth', authRoutes());
 app.use('/api/admin', adminRoutes(sockets, () => loopLagMs));
+app.use('/api/wallet', walletRoutes());
 mountMusic(app);
 mountGraphics(app, sockets);
 mountTextOverrides(app);

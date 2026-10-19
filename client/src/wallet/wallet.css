@@ -1,0 +1,61 @@
+/* ---- /wallet: link a wallet, verified Chog holders ---- */
+.wl-page { display: flex; flex-direction: column; gap: 14px; max-width: 760px; }
+
+/* Header badge: a tick next to "Wallet" once a linked wallet holds a Chog. */
+.wl-navlink { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.wl-nav-ico { display: none; font-size: 15px; line-height: 1; }
+.wl-nav-badge { display: inline-block; color: var(--good); font-weight: 900; }
+@media (max-width: 480px) {
+  .wl-nav-ico { display: inline; }
+  .wl-nav-label { display: none; }
+  .wl-navlink { padding: 4px 6px; }
+}
+
+/* The verdict, big, at the top. */
+.wl-hero { display: flex; align-items: center; gap: 16px; padding: 18px 20px; border: 3px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.wl-hero.holder { border-color: color-mix(in srgb, var(--good) 70%, transparent); background: color-mix(in srgb, var(--good) 12%, var(--panel)); }
+.wl-hero-icon { font-size: 40px; line-height: 1; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.3)); flex: none; }
+.wl-hero-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wl-hero-text b { font: 400 24px/1.1 var(--display); text-shadow: var(--outline); }
+.wl-hero.holder .wl-hero-text b { color: var(--hi); }
+.wl-hero-text span { color: color-mix(in srgb, var(--text) 85%, transparent); overflow-wrap: anywhere; }
+
+/* Connect panel: the four steps, then the button. */
+.wl-steps { list-style: none; margin: 0 0 14px; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.wl-steps li { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 14px; background: rgba(0, 20, 70, 0.4); border: 2px solid color-mix(in srgb, var(--line) 45%, transparent); font-weight: 800; font-size: 13px; }
+.wl-steps li b { flex: none; width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font: 400 14px var(--display); color: #1a1a1a; background: linear-gradient(180deg, #ffe16a, #f0a800); box-shadow: inset 0 1px 0 rgba(255,255,255,0.5), 0 2px 0 #8a5600; }
+.wl-actions { gap: 12px; }
+.wl-actions .btn.chunky { min-width: 220px; }
+.wl-err { margin: 12px 0 0; font-weight: 800; }
+.wl-nowallet { display: flex; flex-direction: column; gap: 10px; }
+.wl-nowallet p { margin: 0; }
+
+/* Linked wallets as cards. */
+.wl-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.wl-card { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 16px; background: rgba(0, 20, 70, 0.45); border: 3px solid color-mix(in srgb, var(--line) 55%, transparent); box-shadow: 0 4px 0 rgba(0, 0, 0, 0.25); }
+.wl-card.holder { border-color: color-mix(in srgb, var(--good) 65%, var(--line)); }
+.wl-card-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.wl-addr { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; }
+.wl-badge { font: 400 13px var(--display); letter-spacing: 0.02em; padding: 4px 10px 5px; border-radius: 99px; background: rgba(0, 0, 0, 0.3); color: var(--muted); border: 2px solid color-mix(in srgb, var(--line) 50%, transparent); }
+.wl-badge.ok { color: #1a1a1a; background: linear-gradient(180deg, #8df58d, var(--good)); border-color: color-mix(in srgb, var(--good) 50%, #000); text-shadow: none; }
+.wl-unlink { margin-left: auto; }
+.wl-card-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+
+/* One chip per Chog, each a link to OpenSea. */
+.wl-tokens { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.wl-token { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px 6px; border-radius: 99px; text-decoration: none; font-weight: 900; font-size: 13px; background: rgba(0, 0, 0, 0.3); border: 2px solid color-mix(in srgb, var(--hi) 55%, transparent); color: var(--text); }
+.wl-token:hover { border-color: var(--hi); color: var(--hi); }
+.wl-token:focus-visible { outline: 3px solid var(--hi); outline-offset: 2px; }
+.wl-token-emoji { font-size: 14px; }
+.wl-token-ext { font-size: 11px; color: var(--muted); }
+
+@media (max-width: 600px) {
+  .wl-page { gap: 10px; }
+  .wl-hero { padding: 14px; gap: 12px; }
+  .wl-hero-icon { font-size: 32px; }
+  .wl-hero-text b { font-size: 20px; }
+  .wl-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wl-actions .btn.chunky { width: 100%; min-width: 0; }
+  .wl-card { padding: 10px 12px; }
+  .wl-unlink { margin-left: 0; }
+}

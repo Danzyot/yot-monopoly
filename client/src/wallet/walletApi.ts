@@ -1,0 +1,98 @@
+// The wallet API as the client sees it, plus the whole link flow. The last
+// status is kept here so the header badge and the wallet page agree, and so
+// anyone (the character picker, say) can ask for a fresh read with
+// refreshHolderStatus().
+import { useEffect, useState } from 'react';
+import { api } from '../api.ts';
+import { getProvider, requestAccount, signMessage, switchToMonad, walletError } from './eth.ts';
+
+export const CHOG_CONTRACT = '0xc96d31f8626c6d03fae5dcd3d61e3fb9f4a73763';
+
+export interface WalletRow {
+  address: string;
+  linkedAt: number;
+  balance: number;
+  tokenIds: number[];
+  checkedAt: number;
+  method: 'none' | 'enumerable' | 'queryable' | 'logs';
+  partial: boolean;
+  error?: string;
+}
+
+export interface WalletStatus {
+  wallets: WalletRow[];
+  holder: boolean;
+  chogs: number[];
+  contract: string;
+  chainId: number;
+  refreshed: boolean;
+}
+
+export const openSeaUrl = (tokenId: number, contract = CHOG_CONTRACT) => `https://opensea.io/item/monad/${contract}/${tokenId}`;
+
+let last: WalletStatus | null = null;
+const listeners = new Set<(s: WalletStatus | null) => void>();
+
+function publish(s: WalletStatus | null) {
+  last = s;
+  listeners.forEach(f => f(s));
+}
+
+/** The linked wallets and their Chogs. `refresh` asks the server to re-read the chain. */
+export async function fetchWalletStatus(refresh = false): Promise<WalletStatus> {
+  const s = await api<WalletStatus>(`/api/wallet/me${refresh ? '?refresh=1' : ''}`);
+  publish(s);
+  return s;
+}
+
+/** For the character picker and friends: re-verify holdings (the server rate-limits this). */
+export const refreshHolderStatus = () => fetchWalletStatus(true);
+
+/** Forget what we knew (sign-out). */
+export function clearWalletStatus() {
+  publish(null);
+}
+
+export function useWalletStatus(): WalletStatus | null {
+  const [s, set] = useState(last);
+  useEffect(() => {
+    listeners.add(set);
+    return () => { listeners.delete(set); };
+  }, []);
+  return s;
+}
+
+export type LinkStep = 'connect' | 'network' | 'sign' | 'verify';
+
+/**
+ * Connect → switch to Monad → sign the challenge → link on the server.
+ * `onStep` is told where it is, for the button label.
+ */
+export async function linkWalletFlow(onStep: (s: LinkStep) => void): Promise<WalletStatus & { wallet: WalletRow }> {
+  const p = getProvider();
+  if (!p) throw new Error('No wallet extension found in this browser');
+  let address: string;
+  try {
+    onStep('connect');
+    address = await requestAccount(p);
+    onStep('network');
+    await switchToMonad(p);
+  } catch (e) { throw walletError(e); }
+
+  const c = await api<{ nonce: string; message: string }>('/api/wallet/nonce');
+  let signature: string;
+  try {
+    onStep('sign');
+    signature = await signMessage(p, address, c.message);
+  } catch (e) { throw walletError(e); }
+
+  onStep('verify');
+  const r = await api<WalletStatus & { wallet: WalletRow }>('/api/wallet/link', { method: 'POST', json: { address, signature, nonce: c.nonce } });
+  publish(r);
+  return r;
+}
+
+export async function unlinkWallet(address: string): Promise<WalletStatus> {
+  await api('/api/wallet/unlink', { method: 'POST', json: { address } });
+  return fetchWalletStatus();
+}
