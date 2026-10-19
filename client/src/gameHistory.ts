@@ -3,6 +3,9 @@
 // completed a colour set (the deal that decided it). The server keeps only
 // totals and the last few log lines, so the page notes these as the game goes,
 // per game (GameView.startedAt), in sessionStorage so a reload keeps them.
+// Deals come only from the server's record of the last accepted trade
+// (lastTrade), never from a deed changing hands, which an operator's move or
+// a bankruptcy also does.
 // Someone who joined late has a shorter history; the end screen only uses
 // what it has enough of.
 
@@ -14,17 +17,27 @@ export interface WorthPoint { turn: number; worth: Record<string, number> }
 /** A trade that handed `to` the last deed of a colour set. */
 export interface SetDeal { turn: number; to: string; from: string; group: string }
 
-export interface GameHistory { game: number; points: WorthPoint[]; deals: SetDeal[] }
+export interface GameHistory {
+  game: number; points: WorthPoint[]; deals: SetDeal[];
+  /** The accepted trade (CompletedTrade.id) last looked at: each one is weighed once. */
+  trade?: string;
+}
+
+/** The server's record of the last accepted trade (server/src/engine/game.ts CompletedTrade; absent from older servers). */
+interface CompletedTrade { id: string; turn: number; from: string; to: string; give: number[]; get: number[] }
 
 const KEY = 'yot:history';
 const MAX_POINTS = 600;
 
+/**
+ * The history of the game on screen, keyed by its id (startedAt). It only
+ * mirrors sessionStorage and holds no diff of its own, so a screen that
+ * remounts, or a later game, picks up from the record and nothing stale.
+ */
 let hist: GameHistory | null = null;
-let prevOwned: GameView['owned'] | null = null;
 
 function load(game: number): GameHistory {
   if (hist?.game === game) return hist;
-  prevOwned = null;
   try {
     const h = JSON.parse(sessionStorage.getItem(KEY) ?? 'null') as GameHistory | null;
     if (h && h.game === game && Array.isArray(h.points) && Array.isArray(h.deals)) return (hist = h);
@@ -51,23 +64,24 @@ export function recordHistory(game: GameView, spaces: SpaceDef[]) {
     last.worth = worth;
     changed = true;
   }
-  // A deed that went from one player still in the game to another is a trade
-  // (a bankruptcy hands deeds over too, but its giver is out).
-  if (prevOwned) {
-    for (const [k, o] of Object.entries(game.owned)) {
-      const i = Number(k);
-      const was = prevOwned[i];
-      if (!was || was.owner === o.owner) continue;
-      const giver = game.players.find(p => p.id === was.owner);
-      if (!giver || giver.bankrupt) continue;
-      const group = spaces[i]?.kind === 'property' ? spaces[i].group : undefined;
-      if (!group || !groupIndices(spaces, group).every(j => game.owned[j]?.owner === o.owner)) continue;
-      if (h.deals.some(d => d.to === o.owner && d.group === group)) continue;
-      h.deals.push({ turn: game.turnNumber, to: o.owner, from: was.owner, group });
-      changed = true;
+  // A trade the server says was accepted, weighed once: did it complete a set?
+  // Only one seen in the turn it happened, so the owners below are the ones it left.
+  const t = (game as GameView & { lastTrade?: CompletedTrade | null }).lastTrade;
+  if (t && t.id !== h.trade) {
+    h.trade = t.id;
+    changed = true;
+    if (t.turn === game.turnNumber) {
+      for (const [to, from, deeds] of [[t.to, t.from, t.give], [t.from, t.to, t.get]] as const) {
+        for (const i of deeds) {
+          const group = spaces[i]?.kind === 'property' ? spaces[i].group : undefined;
+          if (!group || game.owned[i]?.owner !== to) continue;
+          if (!groupIndices(spaces, group).every(j => game.owned[j]?.owner === to)) continue;
+          if (h.deals.some(d => d.to === to && d.group === group)) continue;
+          h.deals.push({ turn: t.turn, to, from, group });
+        }
+      }
     }
   }
-  prevOwned = game.owned;
   if (changed) save(h);
 }
 

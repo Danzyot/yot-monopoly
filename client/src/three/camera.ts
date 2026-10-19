@@ -24,12 +24,18 @@ export const CAMERA_MODES: { id: CameraMode; icon: string; label: string; hint: 
 
 const KEY = 'yot:camera';
 
+/** Auto keeps the camera on the move; anyone who has asked their system for less motion starts at the still table view. */
+function fallback(): CameraMode {
+  const calm = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return calm ? 'table' : 'auto';
+}
+
 function read(): CameraMode {
   try {
     const v = localStorage.getItem(KEY);
-    return CAMERA_MODES.some(m => m.id === v) ? (v as CameraMode) : 'auto';
+    return CAMERA_MODES.some(m => m.id === v) ? (v as CameraMode) : fallback();
   } catch {
-    return 'auto';
+    return fallback();
   }
 }
 

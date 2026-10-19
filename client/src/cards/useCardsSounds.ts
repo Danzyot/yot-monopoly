@@ -2,7 +2,9 @@
 // is given its sound at the moment it animates, on timers set from the plan
 // (a card's slap as it lands, each penalty card's whoosh as it leaves the
 // pile), so the ear and the eye agree. Your own plays are a touch louder
-// than everyone else's, as the Monopoly pieces are.
+// than everyone else's, as the Monopoly pieces are. A hidden tab stays
+// quiet: nothing is scheduled while it is hidden, and a sound that falls due
+// after the tab was hidden is skipped.
 
 import { useEffect, useRef } from 'react';
 import { CARDS_DRAW_GAP_MS, CARDS_DRAW_MS } from '../../../shared/cards/pacing.ts';
@@ -15,15 +17,24 @@ import {
 
 export function useCardsSounds(frame: CardsFrame | null, me: string | null, myTurn: boolean): void {
   const seen = useRef(-1);
-  const timers = useRef<number[]>([]);
-  useEffect(() => () => { timers.current.forEach(clearTimeout); timers.current = []; }, []);
+  /** Sounds still to come; each one leaves the set as it fires. */
+  const timers = useRef(new Set<number>());
+  useEffect(() => () => { timers.current.forEach(clearTimeout); timers.current.clear(); }, []);
 
   const play = frame?.play ?? null;
   useEffect(() => {
     if (!play || play.seq === seen.current) return;
     seen.current = play.seq;
+    // A play staged while nobody is looking is not heard later either.
+    if (document.hidden) return;
     const now = performance.now();
-    const sched = (ms: number, fn: () => void) => { timers.current.push(window.setTimeout(fn, Math.max(0, ms - now))); };
+    const sched = (ms: number, fn: () => void) => {
+      const id = window.setTimeout(() => {
+        timers.current.delete(id);
+        if (!document.hidden) fn();
+      }, Math.max(0, ms - now));
+      timers.current.add(id);
+    };
     // Plays queue one after another: a new one never cancels the sounds the one before still owes.
     for (const s of play.steps) {
       const st = s.step;

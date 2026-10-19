@@ -23,13 +23,31 @@ function duration(ms: number): string {
   return `${Math.floor(m / 60)} h ${m % 60} min`;
 }
 
+/** Players already warned about (dev only), so a re-render does not repeat it. */
+const warned = new Set<string>();
+
+/**
+ * A player's final net worth, as the server counts it (0 once bankrupt).
+ * Only game.netWorth, never cash, so the order always matches the server's
+ * winner; a missing entry counts as 0.
+ */
+function netWorthOf(game: GameView, p: PlayerState): number {
+  if (p.bankrupt) return 0;
+  const v = game.netWorth?.[p.id];
+  if (v === undefined) {
+    if (import.meta.env.DEV && !warned.has(p.id)) { warned.add(p.id); console.warn(`EndScreen: no net worth for ${p.id}; counting 0`); }
+    return 0;
+  }
+  return v;
+}
+
 /**
  * Finishing order, as the server's results record it: the winner, then
  * survivors by net worth (an operator can end a game early), then the
  * bankrupt, last one out first.
  */
 function standings(game: GameView): PlayerState[] {
-  const worth = (p: PlayerState) => game.netWorth?.[p.id] ?? p.cash;
+  const worth = (p: PlayerState) => netWorthOf(game, p);
   const alive = game.players.filter(p => !p.bankrupt).sort((a, b) =>
     Number(b.id === game.winner) - Number(a.id === game.winner) || worth(b) - worth(a));
   const out = [...(game.outOrder ?? [])].reverse()
@@ -96,22 +114,24 @@ function moments(game: GameView, spaces: SpaceDef[], cur: (n: number) => string,
   }
 
   // The biggest single rent, when it was a real blow: at least a third of a starting stake.
+  // (Not "on the way out": the record does not say whether that rent is what broke them.)
   let hit: [PlayerState, number] | null = null;
   for (const p of game.players) {
     const v = game.stats?.[p.id]?.biggestRentPaid ?? 0;
     if (v > (hit?.[1] ?? 0)) hit = [p, v];
   }
   if (hit && hit[1] >= start / 3) {
-    out.push({ icon: '💥', title: 'Biggest hit', who: hit[0], text: `paid ${cur(hit[1])} rent in one go${hit[0].bankrupt ? ' on the way out' : ''}` });
+    out.push({ icon: '💥', title: 'Biggest hit', who: hit[0], text: `paid ${cur(hit[1])} rent in one go` });
   }
 
-  // Top rent collector, only when it was not the winner (whose rent is in the line above) and it was serious money.
+  // Top rent collector, only when there was a winner and it was someone else
+  // (whose rent is in the line above): not the winner, not whoever finished first, and serious money.
   let rent: [PlayerState, number] | null = null;
   for (const p of game.players) {
     const v = game.stats?.[p.id]?.rentCollected ?? 0;
     if (v > (rent?.[1] ?? 0)) rent = [p, v];
   }
-  if (rent && rent[0].id !== game.winner && rent[1] >= start) {
+  if (rent && game.winner && rent[0].id !== game.winner && rent[0].id !== order[0]?.id && rent[1] >= start) {
     out.push({ icon: '👑', title: 'Rent king', who: rent[0], text: `took ${cur(rent[1])} in rent and still didn't win` });
   }
   // One each: a player's second moment would read as a pile-up.
@@ -150,7 +170,7 @@ export default function EndScreen({ room, game, me, onLeave }: {
   const ended = game.endedAt ?? room.now;
   const myPlace = order.findIndex(p => p.id === me) + 1;
   const iWon = !!winner && winner.id === me;
-  const worth = (p: PlayerState) => (p.bankrupt ? 0 : game.netWorth?.[p.id] ?? p.cash);
+  const worth = (p: PlayerState) => netWorthOf(game, p);
   const top = Math.max(1, ...order.map(worth));
   // Podium: 2nd · 1st · 3rd, the classic silhouette; missing places simply stay empty.
   const podium = [order[1], order[0], order[2]].map((p, k) => ({ p, place: [2, 1, 3][k] }));
