@@ -13,7 +13,7 @@ import * as PACE from '../../shared/pacing.ts';
 import { DEFAULT_TABLE_STYLE, sanitizeTableStyle, type TableStyle } from '../../shared/tableStyles.ts';
 import { migrateCharacter } from '../../shared/characters.ts';
 import { defaultOutfit, outfitForCharacter, parseOutfit, randomOutfit, sanitizeOutfit } from '../../shared/outfits.ts';
-import { CUTSCENE_MS, cutsceneSnap, pickCutscene, type CutsceneSnap } from '../../shared/cutscenes.ts';
+import { cutsceneSnap, cutscenesMs, pickCutscenes, type CutsceneSnap } from '../../shared/cutscenes.ts';
 import { sanitizeRequirements } from './requirements.ts';
 import {
   PLAYER_COLORS, CHARACTERS, type Action, type CharacterId, type JoinRequirements, type RoomSeat, type RoomSummary, type RoomView,
@@ -651,14 +651,18 @@ export class Room {
     };
     if (!seen) return;
     let ms = sceneMs(seen, g);
-    // Then the cinematic cutscene the change calls for, if any (jail, bankruptcy, a jackpot).
-    const cue = pickCutscene(seen.cut, this.seen.cut);
-    if (cue) ms += CUTSCENE_MS[cue.kind] + (ms ? 0 : SCENE_SETTLE_MS);
+    // Then the cinematic cutscenes the change calls for, if any (jail, bankruptcy, a jackpot;
+    // a game-ending bankruptcy plays BANKRUPT, then WINNER), back to back.
+    const cut = cutscenesMs(pickCutscenes(seen.cut, this.seen.cut));
+    if (cut) ms += cut + (ms ? 0 : SCENE_SETTLE_MS);
     // A later, shorter scene never cuts short one still playing.
     if (ms) this.sceneUntil = Math.max(this.sceneUntil, Date.now() + ms);
     // The turn clock starts once the players have seen the move, not while the
     // dice and the walk are still playing.
     if (ms) g.holdTurnClock(this.sceneUntil);
+    // So does an arcade round the move landed on: clients keep its panel out of
+    // the way until then, and its clocks (and the bots playing it) wait too.
+    if (this.sceneUntil > Date.now()) g.holdMinigame(this.sceneUntil);
   }
 
   /** Re-arm timers after any change. */

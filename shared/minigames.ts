@@ -77,6 +77,12 @@ export interface MinigameViewBase {
   stage: 'play' | 'result';
   /** Server-clock deadline for the current stage; null while it is secret (Reaction Race). */
   endsAt: number | null;
+  /**
+   * Server-clock time play begins (stage 'play'): the server holds the round
+   * until the move that landed here has played out, so clients keep the panel
+   * out of the way until then. Absent from older servers.
+   */
+  startsAt?: number;
   result: MinigameResult | null;
 }
 

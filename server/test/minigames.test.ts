@@ -513,3 +513,78 @@ test('rooms: sanitised rules carry the mini-game switches; the site switch reach
     room.dispose();
   }
 });
+
+// ---- held behind the scene ---------------------------------------------------
+
+test('holdMinigame: a round waits for the move that landed on it, clocks and bots alike', () => {
+  for (const kind of ['diceDuel', 'highLow', 'reaction', 'quickMath', 'wheel'] as MinigameKind[]) {
+    const { g, start, tick, clock } = setup();
+    start(kind);
+    const due = g.minigameDeadline()!;
+    const shown = g.view().minigame!;
+    assert.equal(shown.startsAt, clock, `${kind}: play starts now`);
+    // The dice, the walk and a card still have 6 s to play.
+    g.holdMinigame(clock + 6000);
+    assert.equal(g.minigameDeadline(), due + 6000, `${kind}: every deadline moves on`);
+    const view = g.view().minigame!;
+    assert.equal(view.startsAt, clock + 6000);
+    if (shown.endsAt !== null) assert.equal(view.endsAt, shown.endsAt + 6000, `${kind}: the clients' countdown too`);
+    // A shorter hold later (or the same one again) changes nothing.
+    g.holdMinigame(clock + 2000);
+    g.holdMinigame(clock + 6000);
+    assert.equal(g.minigameDeadline(), due + 6000);
+    // Bots wait for the scene like everyone else: nothing while it plays.
+    for (let t = 0; t < 6000; t += 250) {
+      for (const p of g.players) assert.equal(g.minigameBotMove(p.id), null, `${kind}: a bot moved ${t} ms into the scene`);
+      tick(250);
+    }
+    assert.equal(g.minigameTimeout(), false, `${kind}: no deadline passes during the scene`);
+    // Once play has begun the round's clocks are live and stay put.
+    tick(1);
+    g.holdMinigame(clock + 12_000);
+    assert.equal(g.minigameDeadline(), due + 6000, `${kind}: not moved once play began`);
+  }
+});
+
+test('holdMinigame: never moves a round that is decided, or one from an old snapshot', () => {
+  const a = setup();
+  a.start<DuelState>('diceDuel');
+  a.queue.push(0, 0, 1, 1);
+  a.move('p0', { kind: 'roll' });
+  a.move('p1', { kind: 'roll' });
+  assert.equal(a.g.minigame?.stage, 'result');
+  const res = a.g.minigameDeadline();
+  a.g.holdMinigame(a.clock + 5000);
+  assert.equal(a.g.minigameDeadline(), res, 'the result screen keeps its time');
+
+  const b = setup();
+  b.start<DuelState>('diceDuel');
+  delete b.g.minigame!.playFrom; // a round saved before holds existed
+  const due = b.g.minigameDeadline();
+  b.g.holdMinigame(b.clock + 5000);
+  assert.equal(b.g.minigameDeadline(), due);
+  assert.equal(b.g.view().minigame!.startsAt, undefined);
+});
+
+test('room: an arcade round starts once the move that got there has played out', async () => {
+  process.env.DATA_DIR ??= mkdtempSync(join(tmpdir(), 'yot-mg-'));
+  const { Room } = await import('../src/rooms.ts');
+  const room = new Room('MGHLD', 'h', { onChange() {}, onEvent() {}, onFinished() {} });
+  room.join({ id: 'h', name: 'Host', avatar: '🙂' });
+  room.join({ id: 'g', name: 'Guest', avatar: '🙂' });
+  room.configure('h', false, { mapId: 'speed' });
+  room.start('h', false);
+  try {
+    const before = Date.now();
+    // Walked six spaces onto the Arcade: clients play that walk before the round.
+    room.adminFix(g => { g.current.position = 6; g.phase = 'done'; g['startMinigame'](g.current, 'diceDuel'); }, 'arcade', 'Operator');
+    const g = room.game!;
+    const until = (room as unknown as { sceneUntil: number }).sceneUntil;
+    assert.ok(until > before, 'the walk is a scene');
+    assert.equal(g.minigame!.playFrom, until, 'play starts when the scene is over');
+    assert.equal(g.minigameDeadline(), until + DUEL_MS, 'the full 10 s count from there');
+    assert.equal(g.view().minigame!.endsAt, until + DUEL_MS);
+  } finally {
+    room.dispose();
+  }
+});

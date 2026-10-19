@@ -7,6 +7,7 @@ import type { GameView, PlayerState } from '../../../shared/types.ts';
 import { act } from '../net.ts';
 import { playArcadeLose, playArcadeWin, playCountdownBeep, playRight, playTick } from '../sound.ts';
 import { toastError } from '../toast.tsx';
+import { movesFreeAt, stageView, useSceneBusy } from '../three/sequence.ts';
 
 /** How long the client-side wheel animation runs; the server's result screen outlasts it. */
 const SPIN_MS = 4_000;
@@ -41,6 +42,11 @@ interface Ctx {
  * participants get buttons. All state comes from the server's view; the client
  * adds the show: the wheel's spin, tumbling dice, card flips, the lights, the
  * confetti, and the sounds that go with them.
+ *
+ * A round waits for the move that landed on the arcade to play out (the dice,
+ * the walk, a card, a cutscene): the server starts its clocks then
+ * (Game.holdMinigame, MinigameView.startsAt), and the panel stays out of the
+ * way until then too.
  */
 export default function MinigamePanel({ game, me, skew }: { game: GameView; me: string; skew: number }) {
   const mg = game.minigame;
@@ -56,6 +62,11 @@ export default function MinigamePanel({ game, me, skew }: { game: GameView; me: 
   const sungFor = useRef<number | null>(null);
   const beepedAt = useRef<string>('');
   const stageKey = mg ? `${mg.seq}:${mg.stage}` : '';
+  // The scene is still playing the move that got here (sequence.ts: its plan, and anything else holding the HUD).
+  stageView(game);
+  const sceneBusy = useSceneBusy();
+  /** The round the panel has already come up for: once up, it stays up. */
+  const shownSeq = useRef<number | null>(null);
   useEffect(() => {
     if (!mg) return;
     const t = setInterval(() => setNow(Date.now()), 100);
@@ -80,6 +91,13 @@ export default function MinigamePanel({ game, me, skew }: { game: GameView; me: 
 
   const info = MINIGAME_INFO[mg.kind];
   const clock = game.paused ? game.paused.at : now + skew;
+  if (shownSeq.current !== mg.seq) {
+    const waiting = mg.stage === 'play' && !game.paused
+      && (sceneBusy || movesFreeAt() > performance.now() || (mg.startsAt !== undefined && clock < mg.startsAt));
+    // (Re-rendered every 100 ms while a round is on, so it comes up on time.)
+    if (waiting) return null;
+    shownSeq.current = mg.seq;
+  }
   // Frozen at the pause while the game is paused.
   const left = mg.endsAt === null ? null : Math.max(0, Math.ceil((mg.endsAt - clock) / 1000));
   let frac: number | null = null;

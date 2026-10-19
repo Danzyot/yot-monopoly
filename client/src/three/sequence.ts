@@ -14,7 +14,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import {
-  CARD_FLIGHT_MS, CARD_MS, DICE_MS, RESULT_HOLD_MS, RESULT_IN_MS, RESULT_MS, SETTLE_MS, WALK_DELAY_MS, legWalkMs,
+  CARD_FLIGHT_MS, CARD_MS, DICE_MS, HOP_MS, MAX_HOPS, RESULT_HOLD_MS, RESULT_IN_MS, RESULT_MS, SETTLE_MS, WALK_DELAY_MS, legWalkMs,
 } from '../../../shared/pacing.ts';
 import type { CardShown, GameView, MoveLeg } from '../../../shared/types.ts';
 
@@ -274,6 +274,41 @@ function planMove(m: NonNullable<GameView['lastMove']>, initial: boolean): MoveP
 /** When move `seq` is over (undefined: not staged). */
 export function planEnd(seq: number): number | undefined {
   return plans.get(seq)?.end;
+}
+
+/** Move `seq` as staged (undefined: not staged). */
+export function planOf(seq: number): MovePlan | undefined {
+  return plans.get(seq);
+}
+
+/**
+ * When every move staged before move `seq` has played out: the moment move
+ * `seq` takes over the board (performance.now() time; now if they have).
+ */
+export function freeBefore(seq: number): number {
+  let t = performance.now();
+  for (const p of plans.values()) if (p.seq < seq) t = Math.max(t, p.end);
+  return t;
+}
+
+/**
+ * When the piece on move `seq` lands on or passes GO, once per leg that does,
+ * in order (performance.now() times): the hop onto GO for a walk, the landing
+ * for a flight. Legs that fly with no step count (teleports) are left out.
+ * Empty when the move is not staged or was already over when it arrived.
+ */
+export function goPassTimes(seq: number, n: number): number[] {
+  const p = plans.get(seq);
+  if (!p || p.initial) return [];
+  const out: number[] = [];
+  for (const l of p.legs) {
+    if (l.kind === 'jail' || l.kind === 'teleport' || !l.steps || l.steps <= 0) continue;
+    const origin = ((l.to - l.steps) % n + n) % n;
+    if (origin + l.steps < n) continue;
+    // Pieces.tsx addLeg: one hop per space, the first one twice as long when it is a leap out of the cell.
+    out.push(l.steps <= MAX_HOPS ? l.t0 + (n - origin) * HOP_MS + (l.leap ? HOP_MS : 0) : l.t0 + l.walkMs);
+  }
+  return out;
 }
 
 /** Player `id`'s staged moves after `afterSeq`, oldest first. */

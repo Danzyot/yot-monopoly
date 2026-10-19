@@ -5,16 +5,18 @@
 // when it goes out. Each payment gets its own label (passing GO and paying
 // rent on the same move are two, not one net number), read from the log lines
 // that came with the change; whatever those don't explain shows as a net
-// change. A batch plays when the move it came with is over (three/sequence.ts
-// plans that on the clock), so rent lands after the piece does, never on the
-// next player's turn.
+// change, with what it was for when a line says ("bought Boardwalk"). Each
+// line plays when the move it came with is over (three/sequence.ts plans that
+// on the clock; salary as the piece passes GO), so rent lands after the piece
+// does, never on the next player's turn, and one state that brings several
+// turns' lines plays each with its own move.
 
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import { CylinderGeometry, InstancedMesh, MeshStandardMaterial, Object3D, Vector3 } from 'three';
 import type { GameView, LogEntry } from '../../../shared/types.ts';
 import { tile } from './layout.ts';
-import { movesFreeAt, planEnd, stageView } from './sequence.ts';
+import { freeBefore, goPassTimes, movesFreeAt, planEnd, stageView } from './sequence.ts';
 import { usePins } from './overlay.ts';
 
 const MAX_COINS = 64;
@@ -25,11 +27,14 @@ const LABEL_MS = 1700;
 const LABEL_GAP_MS = 520;
 
 interface Flight { from: Vector3; to: Vector3; coins: number; start: number }
-interface Label {
-  id: number; pos: [number, number, number]; text: string; gain: boolean; start: number;
-  name: string; color: string; what?: string; delay: number;
+/** A floating amount: over whose piece, how much, and what for. */
+interface LabelDraft {
+  /** The player's id: several labels over one piece go up one after another. */
+  id: string; pos: [number, number, number]; text: string; gain: boolean;
+  name: string; color: string; what?: string;
 }
-type LabelDraft = Omit<Label, 'start' | 'id'>;
+/** What plays together, from `at` (performance.now() time). */
+interface Batch { flights: Omit<Flight, 'start'>[]; labels: LabelDraft[]; at: number }
 
 const coinGeo = new CylinderGeometry(0.085, 0.085, 0.022, 18);
 const coinMat = new MeshStandardMaterial({ color: '#f4c542', metalness: 0.8, roughness: 0.28, emissive: '#5a3c00', emissiveIntensity: 0.4 });
@@ -64,20 +69,84 @@ function linesSince(log: LogEntry[], last: LogEntry | undefined): LogEntry[] {
   return k >= 0 ? log.slice(k + 1) : log.filter(l => l.t > last.t);
 }
 
+/**
+ * When each of `lines` plays (performance.now() times), and whether it is a
+ * salary popping as the piece passes GO:
+ *   - a line that came with a move plays when that move is over (three/sequence.ts
+ *     planEnd), except salary for passing GO, which pops as the piece hops onto GO;
+ *   - a line with no move (a jail fine paid before rolling, a trade, building)
+ *     plays at once or, while a move is still playing, as soon as the board is
+ *     free: when the move after it takes over, or once everything has played.
+ */
+function lineTimes(lines: LogEntry[], n: number): { at: number; go: boolean }[] {
+  const go = new Map<number, number[]>();
+  return lines.map((l, i) => {
+    if (l.move !== undefined) {
+      const end = planEnd(l.move) ?? movesFreeAt();
+      if (l.reason === 'salary') {
+        let times = go.get(l.move);
+        if (!times) go.set(l.move, times = goPassTimes(l.move, n));
+        const t = times.shift();
+        if (t !== undefined) return { at: Math.min(t, end), go: true };
+      }
+      return { at: end, go: false };
+    }
+    const next = lines.slice(i + 1).find(x => x.move !== undefined && planEnd(x.move) !== undefined);
+    return { at: next ? freeBefore(next.move!) : movesFreeAt(), go: false };
+  });
+}
+
+/** Log lines that change someone's cash without saying how much (the net change covers that), and what they were for. */
+const NET_REASONS: { re: RegExp; what: (m: RegExpMatchArray) => string; pays: boolean }[] = [
+  { re: / bought (.+) for \S+\.$/, what: m => `bought ${m[1]}`, pays: true },
+  { re: / won (.+) for \S+?( after \d+ bids)?\.$/, what: m => `won ${m[1]}`, pays: true },
+  { re: / built (?:a house|a hotel) on (.+)\.$/, what: m => `built on ${m[1]}`, pays: true },
+  { re: / lifted the mortgage on (.+) for /, what: m => `unmortgaged ${m[1]}`, pays: true },
+  { re: / sold (a house|the hotel) on /, what: m => (m[1] === 'a house' ? 'sold a house' : 'sold a hotel'), pays: false },
+  { re: / mortgaged (.+) for /, what: m => `mortgaged ${m[1]}`, pays: false },
+  { re: / won \S+ from the bank \((.+)\)\.$/, what: m => m[1], pays: false },
+];
+const TRADE = / accepted .+'s trade\.$/;
+
+/**
+ * What an unexplained change of `id`'s cash (`d`) was for, from the lines
+ * about them ("bought Boardwalk"), and when to show it: with the first of
+ * those lines. Several different reasons read "3 deals".
+ */
+function netReason(lines: LogEntry[], id: string, d: number, when: { at: number }[]): { what?: string; at: number } | undefined {
+  const found: { what: string; at: number }[] = [];
+  lines.forEach((l, i) => {
+    if (l.amount) return;
+    // A trade's cash moves both ways: the accepting line is about one side only.
+    if (TRADE.test(l.text)) { found.push({ what: 'trade', at: when[i].at }); return; }
+    if (l.who !== id) return;
+    const r = NET_REASONS.find(x => x.re.test(l.text));
+    // Buying and building only ever cost, selling and mortgaging only pay.
+    if (r && r.pays === d < 0) found.push({ what: r.what(l.text.match(r.re)!), at: when[i].at });
+  });
+  if (!found.length) return undefined;
+  const kinds = [...new Set(found.map(f => f.what))];
+  return { what: kinds.length === 1 ? kinds[0] : `${kinds.length} deals`, at: found[0].at };
+}
+
 export function MoneyFX({ game, n, currency }: { game: GameView; n: number; currency: string }) {
   stageView(game);
   const prev = useRef<Map<string, number> | null>(null);
   const lastLine = useRef<LogEntry | undefined>(game.log.at(-1));
   // Each batch waits for the move it came with (its planned end), not for
   // later moves: a bot's rent must not wait behind the next player's dice.
-  const pending = useRef<{ flights: Omit<Flight, 'start'>[]; labels: LabelDraft[]; at: number }[]>([]);
+  const pending = useRef<Batch[]>([]);
+  /** When each player's piece is free for its next label (labels over one piece queue up, LABEL_GAP_MS apart). */
+  const nextLabel = useRef(new Map<string, number>());
   const flights = useRef<Flight[]>([]);
   // The floating amounts: plain DOM pinned over the board (three/overlay.ts),
   // there only while they show (no drei <Html> per slot).
   const pins = usePins();
   const shown = useRef<{ pin: ReturnType<typeof pins.add>; timer: ReturnType<typeof setTimeout> }[]>([]);
   useEffect(() => () => { for (const l of shown.current) clearTimeout(l.timer); shown.current = []; }, []);
-  const showLabel = (l: LabelDraft) => {
+  const showLabel = (l: LabelDraft, now: number) => {
+    const delay = Math.max(0, (nextLabel.current.get(l.id) ?? 0) - now);
+    nextLabel.current.set(l.id, now + delay + LABEL_GAP_MS);
     if (shown.current.length >= MAX_LABELS) {
       const old = shown.current.shift()!;
       clearTimeout(old.timer);
@@ -85,7 +154,7 @@ export function MoneyFX({ game, n, currency }: { game: GameView; n: number; curr
     }
     const el = document.createElement('span');
     el.className = `fx-money ${l.gain ? 'gain' : 'loss'}`;
-    Object.assign(el.style, { animationDelay: `${l.delay}ms`, animationFillMode: 'both', textAlign: 'center' });
+    Object.assign(el.style, { animationDelay: `${delay}ms`, animationFillMode: 'both', textAlign: 'center' });
     const chip = document.createElement('b');
     Object.assign(chip.style, CHIP, { background: l.color, maxWidth: `${CHIP.maxWidth}px`, margin: CHIP.margin, padding: CHIP.padding, borderRadius: `${CHIP.borderRadius}px` });
     chip.textContent = l.name;
@@ -102,7 +171,7 @@ export function MoneyFX({ game, n, currency }: { game: GameView; n: number; curr
       timer: setTimeout(() => {
         pins.remove(pin);
         shown.current = shown.current.filter(x => x !== entry);
-      }, l.delay + LABEL_MS + 50),
+      }, delay + LABEL_MS + 50),
     };
     shown.current.push(entry);
   };
@@ -122,56 +191,68 @@ export function MoneyFX({ game, n, currency }: { game: GameView; n: number; curr
     lastLine.current = game.log.at(-1);
     if (!was || game.phase === 'over') return;
     const byId = new Map(game.players.map(p => [p.id, p]));
-    const out: Omit<Flight, 'start'>[] = [];
-    const items: { id: string; d: number; what?: string }[] = [];
+    // One state can bring several turns' worth of lines (the server coalesces
+    // its broadcasts): each line plays with its own move, not all of them at
+    // the end of the latest one.
+    const when = lineTimes(fresh, n);
+    const batches = new Map<number, Batch>();
+    const batch = (at: number) => {
+      let b = batches.get(at);
+      if (!b) batches.set(at, b = { flights: [], labels: [], at });
+      return b;
+    };
+    const label = (id: string, d: number, what: string | undefined, s: Vector3): LabelDraft => {
+      const p = byId.get(id)!;
+      return {
+        id, pos: [s.x, s.y + 0.35, s.z], text: `${d > 0 ? '+' : '−'}${currency}${Math.abs(d).toLocaleString()}`, gain: d > 0,
+        name: p.name, color: p.color, what,
+      };
+    };
     const explained = new Map<string, number>();
     const credit = (id: string, d: number) => explained.set(id, (explained.get(id) ?? 0) + d);
-    for (const l of fresh) {
-      if (!l.amount || l.owed) continue;
+    fresh.forEach((l, i) => {
+      if (!l.amount || l.owed) return;
       const from = l.from ? byId.get(l.from) : undefined;
       const to = l.to ? byId.get(l.to) : undefined;
-      if (!from && !to) continue;
+      if (!from && !to) return;
       const what = whatFor(l.reason);
-      if (from) { items.push({ id: from.id, d: -l.amount, what }); credit(from.id, -l.amount); }
-      if (to) { items.push({ id: to.id, d: l.amount, what }); credit(to.id, l.amount); }
-      out.push({ from: from ? spotOf(from.position) : BANK.clone(), to: to ? spotOf(to.position) : BANK.clone(), coins: coinsFor(l.amount) });
-    }
-    // Whatever the lines don't account for (a purchase, a trade, a card, an older server): the net change.
+      const { at, go } = when[i];
+      const b = batch(at);
+      // Salary popping as the piece passes GO shows over GO, not where the piece ends up.
+      const spot = (p: { position: number }) => spotOf(go ? 0 : p.position);
+      if (from) { b.labels.push(label(from.id, -l.amount, what, spot(from))); credit(from.id, -l.amount); }
+      if (to) { b.labels.push(label(to.id, l.amount, what, spot(to))); credit(to.id, l.amount); }
+      b.flights.push({ from: from ? spot(from) : BANK.clone(), to: to ? spot(to) : BANK.clone(), coins: coinsFor(l.amount) });
+    });
+    // Whatever the lines don't account for (a purchase, a trade, building, an older server): the net change,
+    // saying what it was for when a line does ("bought Boardwalk").
     const rest = game.players
       .map(p => ({ p, d: p.cash - (was.get(p.id) ?? p.cash) - (explained.get(p.id) ?? 0) }))
       .filter(x => x.d !== 0);
-    const losers = rest.filter(x => x.d < 0);
-    const gainers = rest.filter(x => x.d > 0);
-    const lost = -losers.reduce((a, x) => a + x.d, 0);
-    const won = gainers.reduce((a, x) => a + x.d, 0);
-    if (lost === won && (gainers.length === 1 || losers.length === 1)) {
-      // Player to player (a trade's cash, "pay each player", a birthday).
-      for (const l of losers) for (const g of gainers) {
-        const amount = gainers.length === 1 ? -l.d : g.d;
-        out.push({ from: spotOf(l.p.position), to: spotOf(g.p.position), coins: coinsFor(amount) });
+    if (rest.length) {
+      // With the line that explains it; unexplained, once everything this state brought has played.
+      const latest = Math.max(movesFreeAt(), ...when.map(w => w.at));
+      const why = rest.map(x => netReason(fresh, x.p.id, x.d, when));
+      const atOf = (x: typeof rest[number]) => why[rest.indexOf(x)]?.at ?? latest;
+      const losers = rest.filter(x => x.d < 0);
+      const gainers = rest.filter(x => x.d > 0);
+      const lost = -losers.reduce((a, x) => a + x.d, 0);
+      const won = gainers.reduce((a, x) => a + x.d, 0);
+      if (lost === won && (gainers.length === 1 || losers.length === 1)) {
+        // Player to player (a trade's cash, "pay each player", a birthday).
+        for (const l of losers) for (const g of gainers) {
+          const amount = gainers.length === 1 ? -l.d : g.d;
+          batch(Math.max(atOf(l), atOf(g))).flights.push({ from: spotOf(l.p.position), to: spotOf(g.p.position), coins: coinsFor(amount) });
+        }
+      } else {
+        for (const l of losers) batch(atOf(l)).flights.push({ from: spotOf(l.p.position), to: BANK.clone(), coins: coinsFor(-l.d) });
+        for (const g of gainers) batch(atOf(g)).flights.push({ from: BANK.clone(), to: spotOf(g.p.position), coins: coinsFor(g.d) });
       }
-    } else {
-      for (const l of losers) out.push({ from: spotOf(l.p.position), to: BANK.clone(), coins: coinsFor(-l.d) });
-      for (const g of gainers) out.push({ from: BANK.clone(), to: spotOf(g.p.position), coins: coinsFor(g.d) });
+      rest.forEach((x, i) => batch(atOf(x)).labels.push(label(x.p.id, x.d, why[i]?.what, spotOf(x.p.position))));
     }
-    for (const x of rest) items.push({ id: x.p.id, d: x.d });
-    if (!items.length) return;
-    const per = new Map<string, number>();
-    const lbls: LabelDraft[] = items.map(({ id, d, what }) => {
-      const p = byId.get(id)!;
-      const s = spotOf(p.position);
-      const k = per.get(id) ?? 0;
-      per.set(id, k + 1);
-      return {
-        pos: [s.x, s.y + 0.35, s.z], text: `${d > 0 ? '+' : '−'}${currency}${Math.abs(d).toLocaleString()}`, gain: d > 0,
-        name: p.name, color: p.color, what, delay: k * LABEL_GAP_MS,
-      };
-    });
-    // Play when the move these lines came with is over; anything else once whatever is moving has.
-    let at = movesFreeAt();
-    for (const l of fresh) if (l.move !== undefined) at = Math.max(at, planEnd(l.move) ?? 0);
-    pending.current.push({ flights: out, labels: lbls, at });
-  }, [game.players, game.phase, game.log, spotOf, currency]);
+    // Oldest first, so labels over one piece queue up in the order they happened.
+    pending.current.push(...[...batches.values()].sort((a, b) => a.at - b.at));
+  }, [game.players, game.phase, game.log, spotOf, currency, n]);
 
   useFrame(() => {
     const now = performance.now();
@@ -180,7 +261,7 @@ export function MoneyFX({ game, n, currency }: { game: GameView; n: number; curr
       pending.current = pending.current.filter(b => now < b.at);
       for (const b of batch) {
         for (const f of b.flights) flights.current.push({ ...f, start: now });
-        for (const l of b.labels) showLabel(l);
+        for (const l of b.labels) showLabel(l, now);
       }
     }
     const m = mesh.current;

@@ -82,6 +82,12 @@ export interface MinigameState {
   resultEndsAt: number;
   result: MinigameResult | null;
   data: unknown;
+  /**
+   * When play begins: the moment the round was started, pushed back by
+   * holdMinigame() while the move that led here is still playing out on
+   * screen. Absent in older snapshots.
+   */
+  playFrom?: number;
 }
 
 /** Everything needed to rebuild a game after a restart (see Game.restore). */
@@ -1357,7 +1363,7 @@ export class Game {
     const k = kind ?? MINIGAME_KINDS[this.rng(MINIGAME_KINDS.length)];
     const others = this.active().filter(o => o !== p).map(o => o.id);
     const data = MINIGAMES[k].start({ ...this.minigameCtx(), host: p.id, others });
-    this.minigame = { seq: ++this.minigameSeq, kind: k, host: p.id, stage: 'play', resultEndsAt: 0, result: null, data };
+    this.minigame = { seq: ++this.minigameSeq, kind: k, host: p.id, stage: 'play', resultEndsAt: 0, result: null, data, playFrom: this.now() };
     this.phase = 'minigame';
     const info = MINIGAME_INFO[k];
     const vs = k === 'diceDuel' ? ` — ${p.name} vs ${this.player((data as { opponent: string }).opponent).name}` : '';
@@ -1383,6 +1389,22 @@ export class Game {
       throw e;
     }
     if (def.done(mg.data)) this.settleMinigame();
+  }
+
+  /**
+   * The room's players are still watching the move that landed on the arcade
+   * until `until` (the dice, the walk, a card, a cutscene): a round that has
+   * not begun yet begins then instead. Every deadline of the round (and the
+   * stage timers bots time their moves from) moves on by the difference, so
+   * nobody's clock runs, and no bot plays, while the panel is still hidden.
+   */
+  holdMinigame(until: number) {
+    const mg = this.minigame;
+    if (!mg || mg.stage !== 'play' || this.phase !== 'minigame' || this.paused || mg.playFrom === undefined) return;
+    // Once play has begun the round's clocks are live: never move them under the players.
+    if (this.now() > mg.playFrom || until <= mg.playFrom) return;
+    MINIGAMES[mg.kind].shift(mg.data, until - mg.playFrom);
+    mg.playFrom = until;
   }
 
   /** When the room must call minigameTimeout() next (internal: may be a secret GO time). */
@@ -1498,6 +1520,7 @@ export class Game {
       players: [...def.players(mg.data)],
       stage: mg.stage,
       endsAt: mg.stage === 'result' ? mg.resultEndsAt : def.publicEndsAt(mg.data),
+      ...(mg.stage === 'play' && mg.playFrom !== undefined && { startsAt: mg.playFrom }),
       result: mg.result,
       ...def.body(mg.data),
     };
@@ -1692,7 +1715,10 @@ export class Game {
     const mg = this.minigame;
     if (mg) {
       if (mg.stage === 'result') mg.resultEndsAt += ms;
-      else MINIGAMES[mg.kind].shift(mg.data, ms);
+      else {
+        MINIGAMES[mg.kind].shift(mg.data, ms);
+        if (mg.playFrom !== undefined) mg.playFrom += ms;
+      }
     }
   }
 
