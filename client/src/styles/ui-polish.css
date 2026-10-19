@@ -8,7 +8,7 @@
 .dock-text { display: none; }
 
 @media (min-width: 761px) {
-  .social-dock { flex-wrap: wrap; align-items: flex-end; max-width: min(430px, 40vw); gap: 6px; }
+  .social-dock { flex-wrap: wrap; align-items: flex-end; max-width: var(--dock-w, min(430px, 40vw)); gap: 6px; }
   .dock-btn {
     flex-direction: column; gap: 3px; height: auto; min-height: 52px; min-width: 62px;
     padding: 6px 9px 5px; border-radius: 18px;
@@ -180,24 +180,38 @@ body.te-on .te-hover { outline: 2px dashed var(--hi, #ffd23f); outline-offset: 2
 .dock-more, .panel-toggle, .tabs .tab-close { display: none; }
 .dock-extra { display: contents; }
 
-/* ---- portrait phones: tiny labels under the dock icons ---- */
+/* ---- portrait phones: the dock is one compact row above the tab row ----
+   The board is framed edge to edge in portrait, so nothing may stand over it:
+   React, Quick chat (and Poke when it's possible) plus "⋯" sit in the bottom
+   stack; "⋯" opens the labelled sheet with the rest (as on landscape phones). */
 @media (max-width: 760px) and (orientation: portrait) {
-  .social-dock { gap: 4px; }
+  .hud-bottom .social-dock {
+    position: relative; inset: auto; z-index: 4; align-self: flex-start; width: auto; max-width: 100%; max-height: none;
+    flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 6px;
+  }
   .social-dock .dock-btn {
-    flex-direction: column; gap: 2px; height: auto; min-height: 42px; width: 46px; min-width: 46px;
-    padding: 4px 2px 3px; border-radius: 14px;
+    flex-direction: row; gap: 5px; height: 40px; min-height: 40px; width: auto; min-width: 40px;
+    padding: 0 10px; border-radius: 99px;
   }
   .social-dock .dock-ico { font-size: 17px; line-height: 1; }
   .social-dock .dock-text, .social-dock .poke-label {
-    display: block; max-width: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font: 800 8.5px/1 var(--font), sans-serif; letter-spacing: 0.01em;
-    color: color-mix(in srgb, var(--text) 85%, transparent); text-shadow: var(--outline, none);
+    display: block; max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font: 800 12px/1 var(--font), sans-serif; letter-spacing: 0.01em;
+    color: var(--text); text-shadow: var(--outline, none);
   }
-  .social-dock .poke-btn .poke-face { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 17px; line-height: 1; }
+  .social-dock .dock-more .dock-text { max-width: none; }
+  .social-dock .poke-btn .poke-face { display: flex; flex-direction: row; align-items: center; gap: 5px; font-size: 17px; line-height: 1; }
+  /* With Poke in the row, "⋯" alone says "more" (the row stays one line at 360px). */
+  .social-dock:has(.poke-btn) .dock-more { padding: 0; }
+  .social-dock:has(.poke-btn) .dock-more .dock-text { display: none; }
+  /* Popovers open upwards from the row, not leftwards from a column. */
+  .social-dock .react-pop { top: auto; bottom: calc(100% + 8px); left: 0; right: auto; transform-origin: bottom left; max-width: calc(100vw - 24px); }
+  .social-dock .react-wrap, .social-dock .quick-wrap { display: inline-flex; }
 
-  /* A full table (4+ players): each player is a chip of avatar, cash, turn
-     ring and deed strip, so the whole table fits across; a tap opens one
-     into its full card (and the card's body then opens the portfolio). */
+  /* When the full cards don't fit across (3+ players on most phones), each
+     player is a chip of avatar, cash, turn ring and deed strip, so the whole
+     table fits; a tap opens one into its full card (and the card's body then
+     opens the portfolio). */
   .players.compact { gap: 4px; }
   .player.mini, .player.mini:has(.pmenu-btn) { min-width: 0; padding: 3px 8px 3px 3px; gap: 5px; border-radius: 99px; align-items: center; }
   .player.mini .pname, .player.mini .pdeeds, .player.mini .pchip, .player.mini .ptrade,
@@ -227,16 +241,6 @@ body.te-on .te-hover { outline: 2px dashed var(--hi, #ffd23f); outline-offset: 2
   .social-dock .dock-text, .social-dock .poke-label { display: none; }
   .social-dock .poke-btn .poke-face { flex-direction: row; }
   .social-dock .dock-ico { font-size: 17px; }
-  .dock-more { display: inline-flex; }
-  .dock-more .dock-ico { font-size: 20px; font-weight: 900; }
-  .dock-extra { display: none; }
-  .social-dock.more-open .dock-extra {
-    display: grid; grid-template-columns: repeat(3, 66px); gap: 6px; position: absolute; left: 0; bottom: calc(100% + 8px);
-    padding: 8px; z-index: 9; background: var(--panel-solid); border: 2px solid var(--line); border-radius: 16px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-  }
-  .social-dock .dock-extra .dock-btn { flex-direction: column; gap: 3px; height: auto; min-height: 48px; padding: 5px 4px 4px; border-radius: 14px; box-shadow: none; }
-  .social-dock .dock-extra .dock-text { display: block; font: 700 10px/1 var(--font), sans-serif; white-space: nowrap; }
   /* The player column runs down to the one-row dock. */
   .players, .players:has(.pmenu-btn) { max-height: calc(100dvh - 46px - 56px - env(safe-area-inset-bottom, 0px)); }
 
@@ -255,4 +259,62 @@ body.te-on .te-hover { outline: 2px dashed var(--hi, #ffd23f); outline-offset: 2
 
   /* Tips would sit right over the board: none in landscape. */
   .hud-bottom .coach { display: none; }
+}
+
+/* ---- phones, either way up: the "⋯" sheet holds the rest of the dock ---- */
+@media (max-height: 500px) and (orientation: landscape), (max-width: 760px) and (orientation: portrait) {
+  .dock-more { display: inline-flex; }
+  .dock-more .dock-ico { font-size: 20px; font-weight: 900; }
+  .dock-extra { display: none; }
+  .social-dock.more-open .dock-extra {
+    display: grid; grid-template-columns: repeat(3, 70px); gap: 6px; position: absolute; left: 0; bottom: calc(100% + 8px);
+    padding: 8px; z-index: 9; background: var(--panel-solid); border: 2px solid var(--line); border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  }
+  .social-dock .dock-extra .dock-btn {
+    flex-direction: column; gap: 4px; width: auto; height: auto; min-width: 0; min-height: 52px; padding: 6px 4px 5px;
+    border-radius: 14px; box-shadow: none;
+  }
+  .social-dock .dock-extra .dock-ico { font-size: 19px; }
+  .social-dock .dock-extra .dock-text { display: block; max-width: none; font: 800 11px/1 var(--font), sans-serif; white-space: nowrap; }
+}
+
+/* ---- portrait phones: two players share the row as full cards ---- */
+@media (max-width: 760px) and (orientation: portrait) {
+  .players:not(.compact) .player { flex: 1 1 0; min-width: 0; gap: 5px; padding-right: 4px; }
+  .players:not(.compact) .pname { font-size: 13px; }
+  .players:not(.compact) .pname-text { max-width: none; }
+  .players:not(.compact) .player .token-badge { width: 26px; height: 26px; font-size: 14px; }
+  /* Room for a whole first name: slimmer tags and ⋯ button. */
+  .players:not(.compact) .pname .tag { font-size: 9px; padding: 1px 4px; letter-spacing: 0.02em; }
+  .players:not(.compact) .player .pmenu-btn { width: 28px; min-width: 0; padding: 2px 0; margin-left: 0; }
+}
+
+/* ---- landscape phones: the 176px player column ----
+   Names wrap onto a second line instead of "Rich …", and the BOT / YOU tags
+   drop under the name when they don't fit beside it (never under the ⋯ menu). */
+@media (max-height: 500px) and (orientation: landscape) {
+  .pname { flex-wrap: wrap; row-gap: 1px; }
+  .pname-text {
+    white-space: normal; overflow-wrap: anywhere; line-height: 1.15;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+  }
+  .pname .tag { font-size: 9px; padding: 1px 4px; line-height: 1.2; }
+}
+
+/* ---- desktop: the action bar never runs over the dock ----
+   The bar used to be centred with left: 50%, which capped it at half the
+   screen and wrapped it onto two rows on top of the dock. Now it is as wide
+   as its content, centred, and kept clear of a dock-sized strip on each side
+   (the dock is bottom-left, or bottom-right on narrow windows). */
+@media (min-width: 761px) and (min-height: 501px) {
+  .game { --dock-w: clamp(150px, calc(50vw - 290px), 300px); }
+  .actionbar {
+    left: 0; right: 0; margin-inline: auto; width: fit-content; transform: none;
+    max-width: calc(100vw - 2 * (var(--dock-w) + 24px));
+  }
+}
+/* "Trade or manage — then" only where the done bar still fits on one row. */
+@media (min-width: 761px) and (max-width: 1399px) {
+  .actionbar .ab-hint { display: none; }
 }

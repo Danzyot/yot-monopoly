@@ -67,7 +67,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   };
   // Phones (held either way) start with the side panel folded so the board stays visible.
   const [panelOpen, setPanelOpen] = useState(() => window.innerWidth > 760 && window.innerHeight > 500);
-  /** Landscape phones: the dock's secondary buttons live in a small "⋯" sheet. */
+  /** Phones: the dock's secondary buttons live in a small "⋯" sheet. */
   const [dockMore, setDockMore] = useState(false);
   const dockRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -188,6 +188,47 @@ export default function GameScreen({ room, game, me, chat, skew }: {
       <EventFeed game={game} me={me} />
       <CoachHint game={game} me={me} busy={dialogOpen || game.phase === 'auction' || game.phase === 'minigame'}
         onHelp={openHelp} onBuild={() => openManage('build')} onRaise={() => openManage('raise')} onTrade={openTrade} />
+      {/* The dock: bottom-left on desktop and landscape phones (both lay the
+          bottom wrapper out as `display: contents`); on portrait phones one
+          compact row in the bottom stack, just above the tab row. */}
+      <div className={`social-dock ${dockMore ? 'more-open' : ''}`} ref={dockRef}>
+        {me && reactionsOn && <ReactionPicker sentSeq={social.sentSeq} />}
+        {me && config.features.chat && <QuickChatButton />}
+        {reactionsOn && !over && <PokeButton room={room} game={game} me={me} skew={skew} />}
+        {/* Only shown on phones: the rest of the dock folds into this sheet. */}
+        <button className={`dock-btn dock-more ${dockMore ? 'on' : ''}`} onClick={() => setDockMore(o => !o)}
+          aria-expanded={dockMore} aria-label="More: camera, graphics, alerts, help" title="More">
+          <span className="dock-ico" aria-hidden>⋯</span><span className="dock-text">More</span>
+        </button>
+        {/* On desktop this wrapper is transparent to layout. */}
+        <div className="dock-extra">
+        {myPlayer && !over && (
+          <button className={`dock-btn ${notify ? 'on' : ''}`} onClick={toggleNotify}
+            title={notify ? 'Turn alerts on — click to turn off' : 'Notify me when it\'s my turn (while this tab is hidden)'}
+            aria-pressed={notify}>
+            <span className="dock-ico" aria-hidden>{notify ? '🔔' : '🔕'}</span><span className="dock-text">{notify ? 'Alerts on' : 'Alerts'}</span>
+          </button>
+        )}
+        <button className="dock-btn on cam-btn" onClick={cycleCamera} aria-label={`Camera: ${camInfo.label}. Change view`}
+          title={`Camera: ${camInfo.label} — ${camInfo.hint}. Click (or C) for the next view`}>
+          <span className="dock-ico" aria-hidden>{camInfo.icon}</span><span className="dock-text">Camera</span>
+        </button>
+        <button className={`dock-btn ${cinematic ? 'on' : ''}`} onClick={toggleCinematic} aria-pressed={cinematic}
+          title={cinematic ? 'Cinematic camera on — big moments get a close-up. Click to turn off' : 'Cinematic camera off — click to turn on'}>
+          <span className="dock-ico" aria-hidden>🎬</span><span className="dock-text">Cinematic</span>
+        </button>
+        <button className="dock-btn" onClick={cycleQuality} aria-label={`${qualityInfo.label}. Change`}
+          title={`${qualityInfo.label} — ${qualityInfo.hint}. Click for the next setting`}>
+          <span className="dock-ico" aria-hidden>{qualityInfo.icon}</span><span className="dock-text">Graphics</span>
+        </button>
+        <button className="dock-btn" onClick={() => window.open(`/r/${room.code}?tv=1`, '_blank', 'noopener')} title="Broadcast view — a clean TV / stream picture of this table, in a new tab" aria-label="Open broadcast view">
+          <span className="dock-ico" aria-hidden>📺</span><span className="dock-text">TV</span>
+        </button>
+        <button className={`dock-btn ${helpOpen ? 'on' : ''}`} onClick={openHelp} title="How to play (?)" aria-label="How to play">
+          <span className="dock-ico" aria-hidden>?</span><span className="dock-text">Help</span>
+        </button>
+        </div>
+      </div>
       <aside className={`sidepanel ${panelOpen ? '' : 'closed'}`}>
         <TradeOffers game={game} me={me} onCounter={t => setCounter(counterDraft(t))} />
         {/* Landscape phones: the folded panel is one small button (with the unread count). */}
@@ -235,44 +276,6 @@ export default function GameScreen({ room, game, me, chat, skew }: {
       <PausedBanner game={game} />
       {theme.logoUrl && <img className="corner-mark" src={theme.logoUrl} alt={theme.name} />}
 
-      <div className={`social-dock ${dockMore ? 'more-open' : ''}`} ref={dockRef}>
-        {me && reactionsOn && <ReactionPicker sentSeq={social.sentSeq} />}
-        {me && config.features.chat && <QuickChatButton />}
-        {reactionsOn && !over && <PokeButton room={room} game={game} me={me} skew={skew} />}
-        {/* Only shown on landscape phones: the rest of the dock folds into this sheet. */}
-        <button className={`dock-btn dock-more ${dockMore ? 'on' : ''}`} onClick={() => setDockMore(o => !o)}
-          aria-expanded={dockMore} aria-label="More: camera, graphics, alerts, help" title="More">
-          <span className="dock-ico" aria-hidden>⋯</span><span className="dock-text">More</span>
-        </button>
-        {/* On desktop and portrait phones this wrapper is transparent to layout. */}
-        <div className="dock-extra">
-        {myPlayer && !over && (
-          <button className={`dock-btn ${notify ? 'on' : ''}`} onClick={toggleNotify}
-            title={notify ? 'Turn alerts on — click to turn off' : 'Notify me when it\'s my turn (while this tab is hidden)'}
-            aria-pressed={notify}>
-            <span className="dock-ico" aria-hidden>{notify ? '🔔' : '🔕'}</span><span className="dock-text">{notify ? 'Alerts on' : 'Alerts'}</span>
-          </button>
-        )}
-        <button className="dock-btn on cam-btn" onClick={cycleCamera} aria-label={`Camera: ${camInfo.label}. Change view`}
-          title={`Camera: ${camInfo.label} — ${camInfo.hint}. Click (or C) for the next view`}>
-          <span className="dock-ico" aria-hidden>{camInfo.icon}</span><span className="dock-text">Camera</span>
-        </button>
-        <button className={`dock-btn ${cinematic ? 'on' : ''}`} onClick={toggleCinematic} aria-pressed={cinematic}
-          title={cinematic ? 'Cinematic camera on — big moments get a close-up. Click to turn off' : 'Cinematic camera off — click to turn on'}>
-          <span className="dock-ico" aria-hidden>🎬</span><span className="dock-text">Cinematic</span>
-        </button>
-        <button className="dock-btn" onClick={cycleQuality} aria-label={`${qualityInfo.label}. Change`}
-          title={`${qualityInfo.label} — ${qualityInfo.hint}. Click for the next setting`}>
-          <span className="dock-ico" aria-hidden>{qualityInfo.icon}</span><span className="dock-text">Graphics</span>
-        </button>
-        <button className="dock-btn" onClick={() => window.open(`/r/${room.code}?tv=1`, '_blank', 'noopener')} title="Broadcast view — a clean TV / stream picture of this table, in a new tab" aria-label="Open broadcast view">
-          <span className="dock-ico" aria-hidden>📺</span><span className="dock-text">TV</span>
-        </button>
-        <button className={`dock-btn ${helpOpen ? 'on' : ''}`} onClick={openHelp} title="How to play (?)" aria-label="How to play">
-          <span className="dock-ico" aria-hidden>?</span><span className="dock-text">Help</span>
-        </button>
-        </div>
-      </div>
       <SpectatorReactions reactions={social.reactions} />
       <PokeNotice poke={social.poke} game={game} me={me} />
 
@@ -291,20 +294,46 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   );
 }
 
+/** The narrowest a full player card gets on a phone (with the gap between cards). */
+const PLAYER_CARD_W = 168;
+
 function Players({ game, room, me, onTrade, reactions, onPortfolio }: {
   game: GameView; room: RoomView; me: string; onTrade: (id: string) => void;
   reactions: ReactionMsg[]; onPortfolio: (id: string) => void;
 }) {
   const theme = resolveTheme(game.themeId, game.mapId);
   const amIn = game.players.some(p => p.id === me && !p.bankrupt);
-  // Portrait phones with a full table: each player is a compact chip (avatar,
-  // cash, turn ring, deed strip); tapping one opens it into the full card.
+  // Portrait phones: when the full cards don't fit across the screen (three or
+  // more players on most phones), each player is a compact chip (avatar, cash,
+  // turn ring, deed strip); tapping one opens it into the full card. Two
+  // players always get full cards, sharing the width.
   const portraitPhone = useMedia('(max-width: 760px) and (orientation: portrait)');
-  const chips = portraitPhone && game.players.length >= 4;
+  const cardsFit = useMedia(`(min-width: ${game.players.length * PLAYER_CARD_W + 16}px)`);
+  const chips = portraitPhone && game.players.length > 2 && !cardsFit;
   const [expanded, setExpanded] = useState<string | null>(null);
   useEffect(() => { if (!chips) setExpanded(null); }, [chips]);
+  // Whoever is playing (and a chip just opened) is always in view: the row
+  // scrolls sideways on portrait phones and down in the landscape column.
+  const rowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const row = rowRef.current;
+    const el = row?.querySelector<HTMLElement>(expanded ? '.player.expanded' : '.player.turn');
+    if (!row || !el) return;
+    const behavior: ScrollBehavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+    const pad = 8;
+    if (row.scrollWidth > row.clientWidth) {
+      const l = el.offsetLeft - pad, r = el.offsetLeft + el.offsetWidth + pad;
+      if (l < row.scrollLeft) row.scrollTo({ left: l, behavior });
+      else if (r > row.scrollLeft + row.clientWidth) row.scrollTo({ left: r - row.clientWidth, behavior });
+    }
+    if (row.scrollHeight > row.clientHeight) {
+      const t = el.offsetTop - pad, b = el.offsetTop + el.offsetHeight + pad;
+      if (t < row.scrollTop) row.scrollTo({ top: t, behavior });
+      else if (b > row.scrollTop + row.clientHeight) row.scrollTo({ top: b - row.clientHeight, behavior });
+    }
+  }, [game.current, chips, expanded, game.players.length]);
   return (
-    <div className={`players ${chips ? 'compact' : ''}`}>
+    <div className={`players ${chips ? 'compact' : ''}`} ref={rowRef}>
       {game.players.map(p => {
         const seat = room.seats.find(s => s.id === p.id);
         const props = Object.values(game.owned).filter(o => o.owner === p.id).length;
