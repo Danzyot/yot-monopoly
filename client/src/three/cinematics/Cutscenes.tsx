@@ -207,7 +207,14 @@ export function Cutscenes({ game, n, enabled, low, currency, houseColor, hotelCo
     prev.current = { snap, game };
     if (!was || !enabled) { queued.current = []; return; }
     const [cue, ...then] = pickCutscenes(was.snap, snap);
-    if (!cue || live.current) return;
+    if (!cue) return;
+    if (live.current) {
+      // Busy with another: the winner's still plays after it (the game is over, nothing else
+      // comes next); anything else would run late against the turn clock, so it is let go.
+      const win = [cue, ...then].find(c => c.kind === 'winner');
+      if (win && !queued.current.some(q => q.cue.kind === 'winner')) queued.current.push({ cue: win, game });
+      return;
+    }
     queued.current = then.map(c => ({ cue: c, game }));
     begin(cue, was.game, game);
   }, [game, enabled]);
