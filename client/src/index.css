@@ -1792,6 +1792,7 @@ input.tr-slider { width: 100%; padding: 0; height: 26px; accent-color: var(--hi)
 .mga-ring b { font: 400 17px var(--display); font-variant-numeric: tabular-nums; text-shadow: var(--outline); position: relative; }
 .mga-ring.hot .arc { stroke: #ff5a5a; }
 .mga-ring.hot b { color: #ffb0b0; animation: mgaPulse 0.5s ease-in-out infinite alternate; }
+.mga-hint { flex: none; max-width: 92px; font: 700 10px/1.25 var(--font), sans-serif; color: var(--muted); text-align: right; }
 .mga-secret { font: 400 15px var(--display); padding: 4px 10px; border-radius: 99px; background: rgba(0,0,0,0.35); border: 1px solid var(--line); color: var(--muted); }
 @keyframes mgaPulse { to { transform: scale(1.18); } }
 @keyframes mgaPop { from { transform: scale(0.6); } }

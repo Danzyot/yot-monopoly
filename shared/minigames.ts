@@ -9,11 +9,11 @@ export type MinigameKind = 'diceDuel' | 'highLow' | 'reaction' | 'quickMath' | '
 export const MINIGAME_KINDS: MinigameKind[] = ['diceDuel', 'highLow', 'reaction', 'quickMath', 'wheel'];
 
 export const MINIGAME_INFO: Record<MinigameKind, { title: string; icon: string; blurb: string }> = {
-  diceDuel: { title: 'Dice Duel', icon: '🎲', blurb: 'Both roll two dice — the higher total wins. Ties split the prize.' },
-  highLow: { title: 'High or Low', icon: '🃏', blurb: 'Will the next card be higher or lower? Each right guess doubles the prize. Cash out any time.' },
+  diceDuel: { title: 'Dice Duel', icon: '🎲', blurb: 'Both roll two dice — the higher total wins. Ties split the prize. Too slow and the clock rolls for you.' },
+  highLow: { title: 'High or Low', icon: '🃏', blurb: 'Will the next card be higher or lower? Aces are low, and an equal rank counts as right. Each right guess doubles the prize. Cash out any time; if time runs out, the pot is banked for you.' },
   reaction: { title: 'Reaction Race', icon: '⚡', blurb: 'Wait for GO, then tap first. Tap too early and you are out.' },
   quickMath: { title: 'Quick Math', icon: '🧮', blurb: 'First correct answer wins. One wrong answer and you are locked out.' },
-  wheel: { title: 'Wheel Spin', icon: '🎡', blurb: 'Spin the wheel and take what it lands on.' },
+  wheel: { title: 'Wheel Spin', icon: '🎡', blurb: 'Spin the wheel and take what it lands on. Too slow and the clock spins for you.' },
 };
 
 /** The one `minigame` action's payload. Which moves are legal depends on the game. */
