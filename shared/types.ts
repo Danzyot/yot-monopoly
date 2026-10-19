@@ -29,7 +29,7 @@ export interface PlayerState {
   jailCards: DeckId[];
   bankrupt: boolean;
   isBot: boolean;
-  /** Timed out twice in a row: autopilot plays for them until they act again. */
+  /** Timed out three times in a row: autopilot plays for them until they act again (or say they are back). */
   afk?: boolean;
   /** Has passed GO at least once (the Speed Die joins in from then on). */
   passedGo?: boolean;
@@ -270,7 +270,9 @@ export type Action =
   | { type: 'rejectTrade'; id: string }
   | { type: 'minigame'; move: MinigameMove }
   /** Phase 'choose': Bus = steps to move; triples = the space to jump to. */
-  | { type: 'choose'; value: number };
+  | { type: 'choose'; value: number }
+  /** "I'm back": take the seat back from autopilot. Allowed any time, even paused or on someone else's turn. */
+  | { type: 'back' };
 
 // ---- rooms -----------------------------------------------------------------
 

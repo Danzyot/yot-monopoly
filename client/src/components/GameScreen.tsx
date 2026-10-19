@@ -20,7 +20,7 @@ import { useCinematicPref } from '../three/cinematic.ts';
 import { CAMERA_MODES, useCameraMode } from '../three/camera.ts';
 import { QUALITY_LEVELS, useQuality } from '../three/quality.ts';
 import PlayerMenu from './PlayerMenu.tsx';
-import { TradeModal, TradeOffers, counterDraft, type CounterDraft } from './Trade.tsx';
+import { TradeCenter, TradeModal, TradeOffers, TradePing, counterDraft, incomingTrades, type CounterDraft } from './Trade.tsx';
 import MinigamePanel from './MinigamePanel.tsx';
 import { DebtClock, PauseButton, PausedBanner, TimeLeft, TurnClock } from './GameClock.tsx';
 import { ChooseBar, DiceRead } from './SpeedChoice.tsx';
@@ -59,6 +59,10 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   // Chat is the main tab (the log is one tap away); with chat switched off the log leads.
   const [tab, setTab] = useState<'log' | 'chat' | 'mine' | 'table'>(config.features.chat ? 'chat' : 'log');
   const [counter, setCounter] = useState<CounterDraft | null>(null);
+  /** The Trades dialog (every open offer), scrolled to `focus` when it opened from one. */
+  const [tradeView, setTradeView] = useState<{ focus: string | null } | null>(null);
+  const viewTrade = (id: string | null) => setTradeView({ focus: id });
+  const counterTrade = (t: Parameters<typeof counterDraft>[0]) => { setTradeView(null); setCounter(counterDraft(t)); };
   /** Portfolio dialog, focused on this player (undefined = closed). */
   const [portfolio, setPortfolio] = useState<string | undefined>(undefined);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -125,12 +129,14 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   // The results wait for the last move and the bankruptcy/winner cutscenes to play.
   const endReady = useEndReady(over);
   const closeDialogs = () => {
-    setTradeWith(null); setCounter(null); setPortfolio(undefined); setHelpOpen(false); setSelected(null); setManage(null);
+    setTradeWith(null); setCounter(null); setTradeView(null); setPortfolio(undefined); setHelpOpen(false); setSelected(null); setManage(null);
   };
   const amIn = !!myPlayer && !myPlayer.bankrupt && !over;
+  /** Offers waiting for my answer: the badge on Trades and the Players tab. */
+  const offersForMe = amIn ? incomingTrades(game, me).length : 0;
   // Trade and manage dialogs only show while I'm still playing (see below).
   // The end screen is a modal (Shortcuts skips keys inside it); once dismissed to view the board, C and ? work again.
-  const dialogOpen = (amIn && (!!tradeWith || !!counter || !!manage)) || portfolio !== undefined || helpOpen;
+  const dialogOpen = (amIn && (!!tradeWith || !!counter || !!manage)) || !!tradeView || portfolio !== undefined || helpOpen;
   useShortcuts(game, me, {
     dialogOpen,
     onEscape: closeDialogs,
@@ -206,6 +212,17 @@ export default function GameScreen({ room, game, me, chat, skew }: {
         {me && reactionsOn && <ReactionPicker sentSeq={social.sentSeq} />}
         {me && config.features.chat && <QuickChatButton />}
         {reactionsOn && !over && <PokeButton room={room} game={game} me={me} skew={skew} />}
+        {/* Every open trade (mine and everyone else's); the badge counts offers waiting for me. */}
+        {!over && (
+          <button className={`dock-btn trades-btn ${offersForMe ? 'hot' : ''}`} onClick={() => viewTrade(null)}
+            aria-label={`Trades${game.trades.length ? `: ${game.trades.length} open` : ''}${offersForMe ? `, ${offersForMe} for you` : ''}`}
+            title={offersForMe ? `${offersForMe} trade offer${offersForMe > 1 ? 's' : ''} waiting for your answer` : 'Open trades at the table'}>
+            <span className="dock-ico" aria-hidden>🤝</span><span className="dock-text">Trades</span>
+            {(offersForMe > 0 || game.trades.length > 0) && (
+              <span className={`dock-badge ${offersForMe ? '' : 'quiet'}`} aria-hidden>{offersForMe || game.trades.length}</span>
+            )}
+          </button>
+        )}
         {/* Only shown on phones: the rest of the dock folds into this sheet. */}
         <button className={`dock-btn dock-more ${dockMore ? 'on' : ''}`} onClick={() => setDockMore(o => !o)}
           aria-expanded={dockMore} aria-label="More: camera, graphics, alerts, help" title="More">
@@ -241,7 +258,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
         </div>
       </div>
       <aside className={`sidepanel ${panelOpen ? '' : 'closed'}`}>
-        <TradeOffers game={game} me={me} onCounter={t => setCounter(counterDraft(t))} />
+        <TradeOffers game={game} me={me} onCounter={counterTrade} onView={viewTrade} />
         {/* Landscape phones: the folded panel is one small button (with the unread count). */}
         {!panelOpen && (
           <button className="panel-toggle" onClick={() => setPanelOpen(true)} aria-expanded={false}
@@ -258,13 +275,16 @@ export default function GameScreen({ room, game, me, chat, skew }: {
           )}
           <button role="tab" aria-selected={tab === 'log' && panelOpen} className={tab === 'log' && panelOpen ? 'on' : ''} onClick={() => pickTab('log')}>Log</button>
           {myPlayer && !myPlayer.bankrupt && <button role="tab" aria-selected={tab === 'mine' && panelOpen} className={tab === 'mine' && panelOpen ? 'on' : ''} onClick={() => pickTab('mine')}>Deeds</button>}
-          <button role="tab" aria-selected={tab === 'table' && panelOpen} className={tab === 'table' && panelOpen ? 'on' : ''} onClick={() => pickTab('table')}>Players</button>
+          <button role="tab" aria-selected={tab === 'table' && panelOpen} className={tab === 'table' && panelOpen ? 'on' : ''} onClick={() => pickTab('table')}>
+            Players{offersForMe > 0 && <span className="tab-badge" aria-label={`${offersForMe} trade offer${offersForMe > 1 ? 's' : ''} for you`}>{offersForMe}</span>}
+          </button>
           {panelOpen && <button className="tab-close" onClick={() => setPanelOpen(false)} aria-label="Close the panel" title="Close">✕</button>}
         </div>
         <div className="tab-body">
           {(tab === 'log' || (tab === 'chat' && !config.features.chat)) && <Log game={game} />}
           {tab === 'chat' && config.features.chat && <Chat chat={chat} system={systemLines} me={me} />}
           {tab === 'mine' && <MyDeeds game={game} me={me} onPick={setSelected} onManage={() => openManage(debtOf(game, me) > (myPlayer?.cash ?? 0) ? 'raise' : 'build')} />}
+          {tab === 'table' && <TradesStrip game={game} me={me} onOpen={() => viewTrade(null)} />}
           {tab === 'table' && <Portfolio game={game} me={me} onPick={setSelected} onTrade={setTradeWith} compact />}
         </div>
       </aside>
@@ -285,6 +305,8 @@ export default function GameScreen({ room, game, me, chat, skew }: {
       {myPlayer && <TurnBanner game={game} me={me} />}
       <TurnClock game={game} me={me} skew={skew} />
       <PausedBanner game={game} />
+      {amIn && <AutopilotBanner game={game} room={room} me={me} />}
+      {amIn && !tradeView && <TradePing game={game} me={me} onView={viewTrade} />}
       {theme.logoUrl && <img className="corner-mark" src={theme.logoUrl} alt={theme.name} />}
 
       <SpectatorReactions reactions={social.reactions} />
@@ -292,6 +314,10 @@ export default function GameScreen({ room, game, me, chat, skew }: {
 
       {tradeWith && amIn && <TradeModal game={game} me={me} withId={tradeWith} onClose={() => setTradeWith(null)} />}
       {counter && amIn && <TradeModal key={counter.counterOf} game={game} me={me} withId={counter.withId} counter={counter} onClose={() => setCounter(null)} />}
+      {tradeView && (
+        <TradeCenter game={game} me={me} focus={tradeView.focus} onClose={() => setTradeView(null)}
+          onCounter={amIn ? counterTrade : undefined} onNew={amIn ? () => { setTradeView(null); openTrade(); } : undefined} />
+      )}
       {portfolio !== undefined && (
         <PortfolioModal game={game} me={me} focus={portfolio} onPick={setSelected}
           onTrade={id => { setPortfolio(undefined); setTradeWith(id); }} onClose={() => setPortfolio(undefined)} />
@@ -627,6 +653,52 @@ function TurnBanner({ game, me }: { game: GameView; me: string }) {
   }, [mine, busy, key]);
   if (!show) return null;
   return <div className="turn-banner" aria-hidden><span>Your turn!</span></div>;
+}
+
+/**
+ * Autopilot is playing for me (I timed out turn after turn, or the host handed
+ * my seat over): say so over the HUD, with one big button to take the seat
+ * back. It only goes when I press it or make a move myself; the server gives
+ * me a moment before autopilot takes each step, so there is time to press it.
+ */
+function AutopilotBanner({ game, room, me }: { game: GameView; room: RoomView; me: string }) {
+  const p = game.players.find(x => x.id === me);
+  const handedOver = !!room.seats.find(s => s.id === me)?.autopilot;
+  const [busy, setBusy] = useState(false);
+  if (!p || p.bankrupt || game.phase === 'over' || !(p.afk || handedOver)) return null;
+  const back = () => {
+    setBusy(true);
+    act({ type: 'back' }).catch(toastError).finally(() => setBusy(false));
+  };
+  return (
+    <div className="autopilot-banner" role="alertdialog" aria-labelledby="ap-title" aria-describedby="ap-why">
+      <span className="ap-bot" aria-hidden>🤖</span>
+      <div className="ap-text">
+        <b id="ap-title">Autopilot is playing for you</b>
+        <span id="ap-why">
+          {p.afk ? 'You were away for a few turns — the turn clock ran out each time.' : 'The host handed your seat to autopilot.'}
+          {' '}It keeps your game moving but never buys, builds or trades for you.
+        </span>
+      </div>
+      <button className="btn primary chunky ap-back" disabled={busy} onClick={back}>I'm back!</button>
+    </div>
+  );
+}
+
+/** Players tab: how many trades are open, one tap from the full list. */
+function TradesStrip({ game, me, onOpen }: { game: GameView; me: string; onOpen: () => void }) {
+  const n = game.trades.length;
+  if (!n) return null;
+  const mine = incomingTrades(game, me).length;
+  const sent = game.trades.filter(t => t.from === me).length;
+  const parts = [mine && `${mine} for you`, sent && `${sent} sent`, n - mine - sent && `${n - mine - sent} between others`].filter(Boolean);
+  return (
+    <button className={`trades-strip ${mine ? 'hot' : ''}`} onClick={onOpen}>
+      <span aria-hidden>🤝</span>
+      <span className="grow"><b>{n} open trade{n > 1 ? 's' : ''}</b> · {parts.join(' · ')}</span>
+      <span className="trades-strip-go">View</span>
+    </button>
+  );
 }
 
 // (Card staging lives in three/sequence.ts; imported here to keep this edit to CardPopup.)

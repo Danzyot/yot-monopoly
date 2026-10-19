@@ -1,17 +1,19 @@
 // Trading: the offer builder (pick a player, what you give, what you get,
-// a summary with rough values and every reason the offer can't go yet) and
-// the incoming / outgoing offer cards with accept, decline and counter.
+// a summary with rough values and every reason the offer can't go yet), the
+// short offer cards in the side panel, the full side-by-side view of any open
+// trade (the Trades dialog: mine, sent and other players') with accept,
+// decline and counter, and the pop-up notice for a new offer.
 // The checks mirror the engine's (validateTrade in the engine): ownership,
 // cash on hand, jail cards, no buildings in a traded deed's colour set, and
 // no paying out cash that is already owed.
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { groupIndices, mortgageInterest, mortgageValue, type SpaceDef } from '../../../shared/board.ts';
 import { resolveTheme, type Theme } from '../../../shared/themes.ts';
 import type { GameView, PlayerState, Trade, TradeSide } from '../../../shared/types.ts';
 import { act } from '../net.ts';
 import { toastError } from '../toast.tsx';
 import { characterEmoji } from '../format.ts';
-import { debtOf, groupLabel, ownedBy } from '../gameHelpers.ts';
+import { debtOf, groupLabel, ownedBy, ownsSet } from '../gameHelpers.ts';
 import { CloseX, Modal } from './Modal.tsx';
 
 const EMPTY: TradeSide = { cash: 0, spaces: [], jailCards: 0 };
@@ -252,24 +254,278 @@ export function TradeModal({ game, me, withId, onClose, counter }: {
   );
 }
 
-function SideList({ game, theme, s }: { game: GameView; theme: Theme; s: TradeSide }) {
+// ---- viewing offers ----------------------------------------------------------
+
+/** The band colour of a deed: its colour set, else railroad dark or utility grey. */
+const deedColor = (theme: Theme, s: SpaceDef) => (s.group ? theme.groupColors[s.group] : s.kind === 'railroad' ? '#30343c' : '#9aa3b2');
+
+/** Open offers made to me: they need an answer (the badge counts). */
+export function incomingTrades(game: GameView, me: string): Trade[] {
+  return game.trades.filter(t => t.to === me);
+}
+
+/** One direction of a deal: `giver` hands `side` to `taker`, who hands `back` the other way. */
+interface Leg { giver: PlayerState; taker: PlayerState; side: TradeSide; back: TradeSide }
+
+/** How many of `kind` (railroads, utilities) `taker` would hold after the deal. */
+function heldAfter(game: GameView, spaces: SpaceDef[], kind: SpaceDef['kind'], leg: Leg): number {
+  return spaces.filter((s, j) => s.kind === kind
+    && (leg.side.spaces.includes(j) || (game.owned[j]?.owner === leg.taker.id && !leg.back.spaces.includes(j)))).length;
+}
+
+/** A deed changing hands: colour band, price, rent for the new owner, mortgage, and what it does to sets. */
+function DeedRow({ game, theme, me, i, leg }: { game: GameView; theme: Theme; me: string; i: number; leg: Leg }) {
+  const spaces = theme.spaces;
+  const s = spaces[i];
+  const o = game.owned[i];
+  const cur = (n: number) => `${theme.currency}${n.toLocaleString()}`;
+  const { giver, taker } = leg;
+  const label = s.group ? groupLabel(s.group) : '';
+  const completes = completesSet(game, spaces, taker.id, i, leg.side.spaces, leg.back.spaces);
+  // Giving away a deed of a set you hold whole breaks it up (the set's double rent goes).
+  const breaks = !!s.group && s.kind === 'property' && ownsSet(game, spaces, giver.id, s.group);
+  let rent = '';
+  if (s.kind === 'property' && s.rent) {
+    rent = completes ? `rent ${cur(s.rent[0] * 2)} with the set` : `rent ${cur(s.rent[0])}`;
+  } else if (s.kind === 'railroad') {
+    const n = Math.max(1, heldAfter(game, spaces, 'railroad', leg));
+    rent = `rent ${cur(25 * 2 ** (n - 1))} with ${n} railroad${n > 1 ? 's' : ''}`;
+  } else if (s.kind === 'utility') {
+    const all = spaces.filter(x => x.kind === 'utility').length;
+    rent = all >= 2 && heldAfter(game, spaces, 'utility', leg) === all ? 'rent 10× dice' : 'rent 4× dice';
+  }
+  const payer = taker.id === me ? 'you pay' : `${taker.name} pays`;
+  return (
+    <li className={`tc-deed ${o?.mortgaged ? 'mort' : ''}`} style={{ ['--set' as string]: deedColor(theme, s) }}>
+      <i className="tc-band" aria-hidden />
+      <div className="tc-deed-body">
+        <b className="tc-deed-name">{s.name}</b>
+        <span className="tc-deed-meta">
+          {label && <span className="tc-group">{label}</span>}
+          <span>{cur(s.price ?? 0)}</span>
+          {rent && <span>{rent}</span>}
+        </span>
+        {o?.mortgaged && (
+          <span className="tc-flag mort" title="Worth half its price until the mortgage is lifted">
+            Mortgaged · {payer} {cur(mortgageInterest(s))} interest on taking it
+          </span>
+        )}
+        {completes && (
+          <span className={`tc-flag ${taker.id === me ? 'good' : giver.id === me ? 'warn' : 'info'}`}>
+            {taker.id === me ? `⭐ Completes your ${label} set!` : `${giver.id === me ? '⚠' : '⭐'} Completes ${taker.name}'s ${label} set`}
+          </span>
+        )}
+        {breaks && (
+          <span className={`tc-flag ${giver.id === me ? 'warn' : 'info'}`}>
+            💔 Breaks up {giver.id === me ? 'your' : `${giver.name}'s`} {label} set
+          </span>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function TradeSideView({ game, theme, me, leg, title }: { game: GameView; theme: Theme; me: string; leg: Leg; title: string }) {
+  const { side, giver } = leg;
+  const cur = (n: number) => `${theme.currency}${n.toLocaleString()}`;
+  const nothing = !side.cash && !side.spaces.length && !side.jailCards;
+  return (
+    <section className="tc-side" style={{ ['--who' as string]: giver.color }}>
+      <h4 className="tc-side-title"><span className="tr-dot" aria-hidden>{characterEmoji(giver.character)}</span>{title}</h4>
+      {nothing ? <p className="tc-nothing">Nothing</p> : (
+        <ul className="tc-items">
+          {side.spaces.map(i => <DeedRow key={i} game={game} theme={theme} me={me} i={i} leg={leg} />)}
+          {side.cash > 0 && <li className="tc-cash"><span className="tr-coin" aria-hidden>{theme.currency}</span><b>{cur(side.cash)}</b> cash</li>}
+          {side.jailCards > 0 && (
+            <li className="tc-jail"><span aria-hidden>🎫</span><b>{side.jailCards}</b> Get Out of Jail Free card{side.jailCards > 1 ? 's' : ''}</li>
+          )}
+        </ul>
+      )}
+      <div className="tc-worth">Worth ≈ <b>{cur(sideValue(game, theme.spaces, side))}</b></div>
+    </section>
+  );
+}
+
+/**
+ * One open offer in full: both sides next to each other (what I give on the
+ * left, what I get on the right; for someone else's trade, the proposer
+ * first), each deed with its set colour, price, rent and mortgage, flags for
+ * sets it completes or breaks, each side's rough value and the balance, then
+ * big answer buttons for an offer made to me.
+ */
+export function TradeCard({ game, me, trade: t, onCounter, focused }: {
+  game: GameView; me: string; trade: Trade;
+  /** Start a counter-offer (absent: no Counter button). */
+  onCounter?: (t: Trade) => void;
+  /** Opened from a notice: stands out from the rest. */
+  focused?: boolean;
+}) {
+  const theme = resolveTheme(game.themeId, game.mapId);
+  const cur = (n: number) => `${theme.currency}${n.toLocaleString()}`;
+  const [busy, setBusy] = useState(false);
+  const from = game.players.find(p => p.id === t.from);
+  const to = game.players.find(p => p.id === t.to);
+  if (!from || !to) return null;
+  const incoming = t.to === me, outgoing = t.from === me;
+  const proposed: Leg = { giver: from, taker: to, side: t.give, back: t.get };
+  const asked: Leg = { giver: to, taker: from, side: t.get, back: t.give };
+  // Mine on the left: what I give, then what I get.
+  const [left, right] = incoming ? [asked, proposed] : [proposed, asked];
+  const titles = incoming || outgoing ? ['You give', `You get from ${(incoming ? from : to).name}`] : [`${from.name} gives`, `${to.name} gives`];
+  const leftValue = sideValue(game, theme.spaces, left.side), rightValue = sideValue(game, theme.spaces, right.side);
+  // Positive: the left side's giver comes out ahead (they get more than they give).
+  const diff = rightValue - leftValue;
+  const ahead = diff > 0 ? left.giver : right.giver;
+  const verdict = diff === 0 ? 'About even'
+    : ahead.id === me ? `About ${cur(Math.abs(diff))} in your favour` : `About ${cur(Math.abs(diff))} in ${ahead.name}'s favour`;
+  const tone = diff === 0 || !(incoming || outgoing) ? '' : ahead.id === me ? 'up' : 'down';
+  const problem = tradeProblem(game, theme.spaces, from, to, t.give, t.get);
+  const lockedPhase = game.phase === 'auction' ? 'after the auction' : game.phase === 'minigame' ? 'after the mini-game' : null;
+  const run = (a: Parameters<typeof act>[0]) => {
+    setBusy(true);
+    act(a).catch(toastError).finally(() => setBusy(false));
+  };
+  return (
+    <article className={`tcard ${incoming ? 'in' : outgoing ? 'out' : 'watch'} ${focused ? 'focus' : ''}`} data-trade={t.id}
+      style={{ ['--from' as string]: from.color, ['--to' as string]: to.color }} aria-label={`Trade: ${from.name} to ${to.name}`}>
+      <header className="tc-head">
+        <span className="tc-icon" aria-hidden>{incoming ? '📨' : outgoing ? '⏳' : '👀'}</span>
+        <span className="tc-headline">
+          {incoming ? <><b style={{ color: from.color }}>{from.name}</b> offers you a trade</>
+            : outgoing ? <>Your offer to <b style={{ color: to.color }}>{to.name}</b> · waiting for an answer</>
+              : <><b style={{ color: from.color }}>{from.name}</b> offers <b style={{ color: to.color }}>{to.name}</b> a trade</>}
+        </span>
+      </header>
+      <div className="tc-sides">
+        <TradeSideView game={game} theme={theme} me={me} leg={left} title={titles[0]} />
+        <div className="tc-swap" aria-hidden>⇄</div>
+        <TradeSideView game={game} theme={theme} me={me} leg={right} title={titles[1]} />
+      </div>
+      <p className={`tc-verdict ${tone}`}>
+        <span>⚖ {verdict}</span>
+        <span className="tc-verdict-note">deeds at price, half when mortgaged</span>
+      </p>
+      {problem && <p className="tc-problem">⚠ {problem}</p>}
+      {incoming && !problem && lockedPhase && <p className="tc-note">You can accept {lockedPhase}.</p>}
+      {incoming && (
+        <div className="tc-actions">
+          <button className="btn danger chunky" disabled={busy} onClick={() => run({ type: 'rejectTrade', id: t.id })}>✕ Decline</button>
+          {onCounter && <button className="btn chunky" disabled={busy} onClick={() => onCounter(t)}>↩ Counter</button>}
+          <button className="btn primary chunky" disabled={busy || !!problem || !!lockedPhase}
+            onClick={() => run({ type: 'acceptTrade', id: t.id })}>✓ Accept</button>
+        </div>
+      )}
+      {outgoing && (
+        <div className="tc-actions">
+          <button className="btn ghost" disabled={busy} onClick={() => run({ type: 'rejectTrade', id: t.id })}>Withdraw offer</button>
+        </div>
+      )}
+    </article>
+  );
+}
+
+/**
+ * Every open trade at the table: offers made to me first (they need an
+ * answer), then mine waiting on others, then other players' deals to watch.
+ */
+export function TradeCenter({ game, me, focus, onClose, onCounter, onNew }: {
+  game: GameView; me: string;
+  /** Scroll to and highlight this offer. */
+  focus?: string | null;
+  onClose: () => void;
+  onCounter?: (t: Trade) => void;
+  /** Make a new offer (absent: not playing). */
+  onNew?: () => void;
+}) {
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!focus) return;
+    listRef.current?.querySelector(`[data-trade="${CSS.escape(focus)}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [focus]);
+  const playing = game.players.some(p => p.id === me);
+  const groups: { key: string; title: string; trades: Trade[]; empty?: string }[] = [
+    ...(playing ? [
+      { key: 'in', title: 'Offers for you', trades: incomingTrades(game, me), empty: 'No offers waiting for you.' },
+      { key: 'out', title: 'Your offers', trades: game.trades.filter(t => t.from === me), empty: 'You have no offers out.' },
+    ] : []),
+    { key: 'others', title: playing ? 'Between other players' : 'Open trades', trades: game.trades.filter(t => t.from !== me && t.to !== me) },
+  ];
+  return (
+    <Modal onClose={onClose} labelledBy="trades-title" className="wide trades-center">
+      <div className="tr-head">
+        <h2 id="trades-title">🤝 Trades</h2>
+        {onNew && <button className="btn small primary" onClick={onNew}>+ New offer</button>}
+        <CloseX onClick={onClose} />
+      </div>
+      <div className="tcs-list" ref={listRef}>
+        {!game.trades.length && <p className="muted tcs-empty">No open trades right now.{onNew ? ' Make an offer: deeds, cash or jail cards for theirs.' : ''}</p>}
+        {game.trades.length > 0 && groups.map(g => (g.trades.length || g.empty) && (
+          <section key={g.key} className={`tcs-group ${g.key}`}>
+            <h3 className="tcs-title">{g.title}{g.trades.length > 0 && <span className="tcs-count">{g.trades.length}</span>}</h3>
+            {g.trades.length
+              ? g.trades.map(t => <TradeCard key={t.id} game={game} me={me} trade={t} focused={t.id === focus}
+                onCounter={g.key === 'in' ? onCounter : undefined} />)
+              : <p className="muted small tcs-none">{g.empty}</p>}
+          </section>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+/** A new offer for me pops up with a link to it, even with the side panel folded away. */
+export function TradePing({ game, me, onView }: { game: GameView; me: string; onView: (id: string) => void }) {
+  const seen = useRef(new Set(game.trades.map(t => t.id)));
+  const [ping, setPing] = useState<string | null>(null);
+  useEffect(() => {
+    const fresh = game.trades.find(t => t.to === me && !seen.current.has(t.id));
+    for (const t of game.trades) seen.current.add(t.id);
+    if (fresh) setPing(fresh.id);
+  }, [game.trades, me]);
+  useEffect(() => {
+    if (!ping) return;
+    const h = setTimeout(() => setPing(null), 10_000);
+    return () => clearTimeout(h);
+  }, [ping]);
+  // Answered or withdrawn meanwhile: nothing left to show.
+  const t = ping ? game.trades.find(x => x.id === ping) : undefined;
+  const from = t && game.players.find(p => p.id === t.from);
+  if (!t || !from) return null;
+  return (
+    <div className="trade-ping" role="status" style={{ ['--who' as string]: from.color }}>
+      <span className="tp-icon" aria-hidden>📨</span>
+      <span className="tp-text"><b style={{ color: from.color }}>{from.name}</b> sent you a trade offer</span>
+      <button className="btn small primary" onClick={() => { setPing(null); onView(t.id); }}>View offer</button>
+      <button className="tp-x" aria-label="Dismiss" onClick={() => setPing(null)}>✕</button>
+    </div>
+  );
+}
+
+function SideList({ game, theme, s, me, leg }: { game: GameView; theme: Theme; s: TradeSide; me: string; leg: Leg }) {
   const items: React.ReactNode[] = [];
   if (s.cash) items.push(<span key="c" className="of-chip cash">{theme.currency}{s.cash.toLocaleString()}</span>);
   for (const i of s.spaces) {
     const sp = theme.spaces[i];
-    const color = sp.group ? theme.groupColors[sp.group] : sp.kind === 'railroad' ? '#30343c' : '#9aa3b2';
-    items.push(<span key={i} className="of-chip" style={{ ['--set' as string]: color }}><i />{sp.name}{game.owned[i]?.mortgaged ? ' (m)' : ''}</span>);
+    // A deed that completes my set gets a star, even in the short list.
+    const star = leg.taker.id === me && completesSet(game, theme.spaces, me, i, leg.side.spaces, leg.back.spaces);
+    items.push(<span key={i} className={`of-chip ${star ? 'star' : ''}`} style={{ ['--set' as string]: deedColor(theme, sp) }}
+      title={star ? `Completes your ${groupLabel(sp.group!)} set` : undefined}>
+      <i />{sp.name}{game.owned[i]?.mortgaged ? ' (m)' : ''}{star ? ' ⭐' : ''}</span>);
   }
   if (s.jailCards) items.push(<span key="j" className="of-chip">🎫 ×{s.jailCards}</span>);
   return <div className="of-items">{items.length ? items : <span className="muted small">nothing</span>}</div>;
 }
 
-export function TradeOffers({ game, me, onCounter }: {
+/** My offers in short, in the side panel: the ones made to me with quick answers, mine with Withdraw. */
+export function TradeOffers({ game, me, onCounter, onView }: {
   game: GameView; me: string;
   /** Start a counter-offer to this incoming trade (absent: no Counter button). */
   onCounter?: (t: Trade) => void;
+  /** Open the full view of an offer. */
+  onView?: (id: string) => void;
 }) {
   const theme = resolveTheme(game.themeId, game.mapId);
+  const cur = (n: number) => `${theme.currency}${n.toLocaleString()}`;
   const [busy, setBusy] = useState<string | null>(null);
   const player = (id: string) => game.players.find(p => p.id === id);
   const relevant = game.trades.filter(t => t.to === me || t.from === me);
@@ -288,18 +544,26 @@ export function TradeOffers({ game, me, onCounter }: {
         if (!from || !to) return null;
         const incoming = t.to === me;
         const problem = tradeProblem(game, theme.spaces, from, to, t.give, t.get);
+        const mine: Leg = incoming ? { giver: to, taker: from, side: t.get, back: t.give } : { giver: from, taker: to, side: t.give, back: t.get };
+        const theirs: Leg = incoming ? { giver: from, taker: to, side: t.give, back: t.get } : { giver: to, taker: from, side: t.get, back: t.give };
+        const diff = sideValue(game, theme.spaces, theirs.side) - sideValue(game, theme.spaces, mine.side);
+        const other = incoming ? from : to;
         return (
-          <div key={t.id} className={`offer ${incoming ? 'in' : 'out'}`} style={{ ['--who' as string]: (incoming ? from : to).color }}>
+          <div key={t.id} className={`offer ${incoming ? 'in' : 'out'}`} style={{ ['--who' as string]: other.color }}>
             <div className="of-head">
               {incoming
-                ? <><span className="of-icon" aria-hidden>📨</span><span><b style={{ color: from.color }}>{from.name}</b> offers you a trade</span></>
-                : <><span className="of-icon" aria-hidden>⏳</span><span className="grow">Waiting for <b style={{ color: to.color }}>{to.name}</b>…</span>
-                  <button className="btn tiny ghost" disabled={busy === t.id} onClick={() => run(t.id, { type: 'rejectTrade', id: t.id })}>Withdraw</button></>}
+                ? <><span className="of-icon" aria-hidden>📨</span><span className="grow"><b style={{ color: from.color }}>{from.name}</b> offers you a trade</span></>
+                : <><span className="of-icon" aria-hidden>⏳</span><span className="grow">Waiting for <b style={{ color: to.color }}>{to.name}</b>…</span></>}
+              {onView && <button className="btn tiny of-view" onClick={() => onView(t.id)} aria-label={`View the trade with ${other.name} in full`}>View</button>}
+              {!incoming && <button className="btn tiny ghost" disabled={busy === t.id} onClick={() => run(t.id, { type: 'rejectTrade', id: t.id })}>Withdraw</button>}
             </div>
             <div className="of-cols">
-              <div><span className="of-label">You get</span><SideList game={game} theme={theme} s={incoming ? t.give : t.get} /></div>
-              <div><span className="of-label">You give</span><SideList game={game} theme={theme} s={incoming ? t.get : t.give} /></div>
+              <div><span className="of-label">You get</span><SideList game={game} theme={theme} s={theirs.side} me={me} leg={theirs} /></div>
+              <div><span className="of-label">You give</span><SideList game={game} theme={theme} s={mine.side} me={me} leg={mine} /></div>
             </div>
+            <p className={`of-verdict ${diff > 0 ? 'up' : diff < 0 ? 'down' : ''}`}>
+              ⚖ {diff === 0 ? 'About even' : diff > 0 ? `About ${cur(diff)} in your favour` : `About ${cur(-diff)} in ${other.name}'s favour`}
+            </p>
             {problem && <p className="of-problem small">⚠ {problem}</p>}
             {incoming && !problem && lockedPhase && <p className="small muted of-note">You can accept {lockedPhase}.</p>}
             {incoming && (

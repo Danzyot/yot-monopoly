@@ -21,6 +21,12 @@ import {
 
 const BOT_DELAY_MS = 900;
 /**
+ * Autopilot waits at least this long before each move it makes for a human,
+ * so someone coming back to the screen has a moment to press "I'm back"
+ * before it takes their turn.
+ */
+export const AUTOPILOT_DELAY_MS = 1_500;
+/**
  * How long clients take to stage what just happened (shared/pacing.ts, which
  * the client's three/sequence.ts, Dice.tsx and characters/Pieces.tsx read
  * too): the dice tumble, the result pops up and flies to the action bar, then
@@ -571,9 +577,9 @@ export class Room {
     if (!auto) this.lastActivity = Date.now();
     const offer = a?.type === 'proposeTrade' && !auto;
     if (offer) this.checkOfferRate(id);
-    this.game.apply(id, a, { auto });
-    if (offer) this.offerTimes.set(id, [...(this.offerTimes.get(id) ?? []), Date.now()]);
     const s = this.seat(id);
+    this.game.apply(id, a, { auto, away: !!s?.autopilot });
+    if (offer) this.offerTimes.set(id, [...(this.offerTimes.get(id) ?? []), Date.now()]);
     if (!auto && s?.autopilot) {
       // Acting yourself takes the seat back from autopilot.
       s.autopilot = false;
@@ -772,7 +778,8 @@ export class Room {
           }
         }
         this.hooks.onChange(this);
-      }), next.action.type === 'minigame' ? MINIGAME_BOT_DELAY_MS : Math.max(botThinkMs(g, next.id, BOT_DELAY_MS), this.sceneUntil - now));
+      }), next.action.type === 'minigame' ? MINIGAME_BOT_DELAY_MS
+        : Math.max(botThinkMs(g, next.id, next.mode === 'autopilot' ? AUTOPILOT_DELAY_MS : BOT_DELAY_MS), this.sceneUntil - now));
       return;
     }
 
@@ -785,7 +792,7 @@ export class Room {
     }
   }
 
-  private nextAutomatedAction(now: number): { id: string; action: Action } | null {
+  private nextAutomatedAction(now: number): { id: string; action: Action; mode: 'bot' | 'autopilot' } | null {
     const g = this.game;
     if (!g || g.phase === 'over') return null;
     const order = [g.current.id, ...g.players.map(p => p.id).filter(id => id !== g.current.id)];
@@ -809,7 +816,7 @@ export class Room {
         if (!action) continue;
       }
       if (this.failedMoves.get(id) === JSON.stringify(action)) continue;
-      return { id, action };
+      return { id, action, mode };
     }
     return null;
   }

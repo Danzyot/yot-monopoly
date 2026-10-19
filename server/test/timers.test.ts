@@ -2,9 +2,9 @@
 // fixes, the Speed Die and operator fixes.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AUCTION_MS, Game, PAUSE_MAX_MS, type GameSnapshot } from '../src/engine/game.ts';
+import { AFK_AFTER, AUCTION_MS, Game, PAUSE_MAX_MS, type GameSnapshot } from '../src/engine/game.ts';
 import { botAction } from '../src/engine/bot.ts';
-import { Room, type RoomHooks } from '../src/rooms.ts';
+import { AUTOPILOT_DELAY_MS, Room, type RoomHooks } from '../src/rooms.ts';
 import { DEFAULT_RULES, resolveTheme } from '../../shared/themes.ts';
 import { SPEED_FACES } from '../../shared/types.ts';
 import { scripted } from './helpers.ts';
@@ -53,7 +53,7 @@ test('turn timer: roll, buy and done each time out to the safe default', () => {
   assert.equal(g.owned[3], undefined);
   assert.equal(g.player('p0').cash, 1500);
   assert.equal(g.turnEndsAt, null, 'auctions run their own clock');
-  assert.equal(g.player('p0').afk, true, 'two timeouts in a row: away');
+  assert.ok(!g.player('p0').afk, 'two timeouts in a row: not away yet');
 
   tick(AUCTION_MS);
   g.auctionTimeout();
@@ -62,6 +62,8 @@ test('turn timer: roll, buy and done each time out to the safe default', () => {
   tick(60_000);
   g.clockTimeout();
   assert.equal(g.current.id, 'p1', 'ended the turn');
+  assert.equal(g.player('p0').afk, true, `${AFK_AFTER} timeouts in a row: away`);
+  assert.ok(g.log.some(l => /P0 seems to be away/.test(l.text)));
 
   // Acting yourself clears the away flag; autopilot moves (auto) do not.
   act('p1', { type: 'proposeTrade', to: 'p0', give: { cash: 1, spaces: [], jailCards: 0 }, get: { cash: 0, spaces: [], jailCards: 0 } });
@@ -643,7 +645,7 @@ test('room: autopilot plays a handed-over player until they act again', async ()
   assert.throws(() => r.setAutopilot('b', cur, true, false), /host/);
   r.setAutopilot('a', cur, true, false);
   assert.equal(r.view().seats.find(s => s.id === cur)!.autopilot, true);
-  await sleep(1_300);
+  await sleep(AUTOPILOT_DELAY_MS + 400);
   assert.ok(g.rollSeq > 0, 'autopilot rolled for them');
   assert.equal(r.seat(cur)!.autopilot, true, 'autopilot moves do not hand control back');
   r.act(cur, { type: 'proposeTrade', to: other, give: { cash: 1, spaces: [], jailCards: 0 }, get: { cash: 0, spaces: [], jailCards: 0 } });
@@ -657,11 +659,76 @@ test('room: an afk player is played by autopilot until they act', async () => {
   const cur = g.current.id;
   g.player(cur).afk = true;
   r.setConnected(cur, true); // re-arm timers, as any change does
-  await sleep(1_300);
+  await sleep(AUTOPILOT_DELAY_MS + 400);
   assert.ok(g.rollSeq > 0, 'autopilot rolled for the away player');
   assert.equal(g.player(cur).afk, true);
   const other = cur === 'a' ? 'b' : 'a';
   r.act(cur, { type: 'proposeTrade', to: other, give: { cash: 1, spaces: [], jailCards: 0 }, get: { cash: 0, spaces: [], jailCards: 0 } });
   assert.equal(g.player(cur).afk, false);
+  r.dispose();
+});
+
+test('room: autopilot gives an away player a moment to say they are back before it moves', async () => {
+  const { r, g } = room();
+  const cur = g.current.id;
+  g.player(cur).afk = true;
+  r.setConnected(cur, true); // re-arm timers, as any change does
+  await sleep(AUTOPILOT_DELAY_MS - 500);
+  assert.equal(g.rollSeq, 0, 'autopilot has not moved yet');
+  // "I'm back" in that window: the turn is theirs again.
+  r.act(cur, { type: 'back' });
+  await sleep(AUTOPILOT_DELAY_MS + 400);
+  assert.equal(g.rollSeq, 0, 'autopilot never took the turn');
+  assert.equal(g.current.id, cur);
+  assert.equal(g.phase, 'roll');
+  r.dispose();
+});
+
+test('engine: "back" clears afk and the timeout streak, any time (not my turn, paused)', () => {
+  const { g, dice, tick, act } = scripted(2, { turnSeconds: 30 });
+  // Two timeouts in a row (roll, then buy), one short of being away...
+  assert.equal(AFK_AFTER, 3);
+  dice(1, 2);
+  tick(30_000); g.clockTimeout();
+  tick(30_000); g.clockTimeout();
+  tick(AUCTION_MS); g.auctionTimeout();
+  assert.equal(g.phase, 'done');
+  // ...then "I'm back" starts the count over: the next timeout is the first again.
+  act('p0', { type: 'back' });
+  tick(30_000); g.clockTimeout();
+  assert.equal(g.current.id, 'p1');
+  assert.ok(!g.player('p0').afk, 'the streak was reset');
+
+  // Away, on someone else's turn, while paused: "back" still works.
+  g.player('p0').afk = true;
+  act('p1', { type: 'proposeTrade', to: 'p0', give: { cash: 1, spaces: [], jailCards: 0 }, get: { cash: 0, spaces: [], jailCards: 0 } });
+  g.pause('Host');
+  assert.throws(() => act('p0', { type: 'roll' }), /paused/);
+  act('p0', { type: 'back' });
+  assert.equal(g.player('p0').afk, false);
+  assert.equal(g.log.filter(l => l.text === 'P0 is back.').length, 1);
+  assert.equal(g.trades.length, 1, '"back" changes nothing else');
+  assert.equal(g.current.id, 'p1');
+  // Saying it again (or when not away) is harmless and says nothing.
+  act('p0', { type: 'back' });
+  assert.equal(g.log.filter(l => l.text === 'P0 is back.').length, 1);
+});
+
+test('room: "back" takes a handed-over seat off autopilot and says so', () => {
+  const { r, g, events } = room();
+  const other = g.current.id === 'a' ? 'b' : 'a';
+  r.setAutopilot('a', other, true, false);
+  g.player(other).afk = true;
+  r.act(other, { type: 'back' });
+  assert.equal(r.seat(other)!.autopilot, false);
+  assert.equal(g.player(other).afk, false);
+  assert.ok(g.log.some(l => l.text === `${r.seat(other)!.name} is back.`));
+  assert.ok(events.some(e => e.includes('took back control')));
+  // Handed over without being away: coming back is still news.
+  r.setAutopilot('a', other, true, false);
+  const before = g.log.length;
+  r.act(other, { type: 'back' });
+  assert.equal(r.seat(other)!.autopilot, false);
+  assert.ok(g.log.slice(before).some(l => l.text.endsWith('is back.')));
   r.dispose();
 });
