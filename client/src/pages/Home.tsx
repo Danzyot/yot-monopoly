@@ -30,8 +30,8 @@ const DIORAMA: { themeId: string; mapId: string }[] = [
   { themeId: 'classic', mapId: 'classic' }, { themeId: 'chog', mapId: 'classic' }, { themeId: 'classic', mapId: 'speed' },
   { themeId: 'tptv', mapId: 'classic' }, { themeId: 'classic', mapId: 'metropolis' },
 ];
-/** The two characters the home page puts first. */
-const FEATURED: CharacterId[] = ['snacky', 'starer'];
+/** The characters the home page puts first. */
+const FEATURED: CharacterId[] = ['chog', 'snacky', 'starer'];
 const DIORAMA_MS = 16000;
 const DIP_MS = 900;
 

@@ -111,10 +111,11 @@ def _spline(points, n=10):
     return out
 
 
-def strand(name, points, r0, r1, mat, parent=None, fuse=False, ring=10, round_tip=True, n=10, up=None, flat=1.0):
+def strand(name, points, r0, r1, mat, parent=None, fuse=False, ring=10, round_tip=True, n=10, up=None, flat=1.0, taper=1.0):
     """A tapered tube along a smooth path (hair clumps, brows, lash lines, a moustache); n samples per segment.
 
-    With `up` (roughly the surface normal under it) and `flat` < 1, the tube is a flattened ribbon lying on that surface."""
+    With `up` (roughly the surface normal under it) and `flat` < 1, the tube is a flattened ribbon lying on that surface.
+    `taper` > 1 pinches the radius in faster than a straight cone (a thorn's concave sides)."""
     path = _spline(points, n)
     if parent is not None:
         path = [parent @ q for q in path]
@@ -124,7 +125,7 @@ def strand(name, points, r0, r1, mat, parent=None, fuse=False, ring=10, round_ti
     up = Vector(up) if up is not None else Vector((0, 1, 0))
     for i, c in enumerate(path):
         t = i / (n - 1)
-        rad = r0 + (r1 - r0) * t
+        rad = r0 + (r1 - r0) * t if taper == 1.0 else r1 + (r0 - r1) * (1 - t) ** taper
         d = (path[min(i + 1, n - 1)] - path[max(i - 1, 0)]).normalized()
         side = d.cross(up)
         if side.length < 1e-4:
@@ -843,11 +844,180 @@ def starer(m):
     return {'Body': body, 'Head': head, 'HandL': hand_l, 'HandR': hand_r}
 
 
-BUILDERS = {'snacky': snacky, 'starer': starer}
+# --------------------------------------------------------------------------
+# Chog (id `chog`), the Chog community's mascot: a big, rounded-square cream
+# face set in a hood of violet hair, long pointed spikes radiating out from it
+# on every side and over the top like a mane, a short fringe over the
+# forehead; big glossy black eyes set wide with a catchlight and a thin upper
+# lid line, glancing aside; round pink cheeks, a tiny pink triangle of a nose,
+# a small smug closed smile. A plain violet onesie (part of him, not an outfit
+# item), cream hands, sneakers in the player's colour.
+# --------------------------------------------------------------------------
+
+def superell(name, p, rad, mat, e=3.0, f=2.4, seg=(40, 28), deform=None, fuse=False):
+    """A superellipsoid: squareness e across its x-y outline, f front to back (2, 2 is an ellipsoid)."""
+    bm = bmesh.new()
+    bmesh.ops.create_uvsphere(bm, u_segments=seg[0], v_segments=seg[1], radius=1.0)
+    for v in bm.verts:
+        d = v.co.normalized()
+        r = ((abs(d.x) ** e + abs(d.y) ** e) ** (f / e) + abs(d.z) ** f) ** (1 / f)
+        v.co = d / r
+    bm.transform(M(p, (0, 0, 0), rad))
+    if deform:
+        for v in bm.verts:
+            v.co = deform(v.co.copy())
+    return _finish(name, bm, mat, fuse)
+
+
+def chog(m):
+    cid = 'chog'
+    body, head = [], []
+    # ---- body: a plain onesie, a little pear-shaped, with ankle cuffs over the sneakers.
+    TRUNK = ((0, 0.12, 0), (0.073, 0.084, 0.063))
+
+    def pear(v):
+        if v.y < 0.12:
+            t = min(1.0, (0.12 - v.y) / 0.084)
+            v.x *= 1 + 0.08 * t
+            v.z *= 1 + 0.06 * t
+        return v
+    body.append(ell(f'{cid}_Trunk', TRUNK[0], TRUNK[1], m['cloth'], seg=(32, 20), deform=pear, fuse=True))
+    for side in (-1, 1):
+        body.append(ell(f'{cid}_Shoulder{side}', (side * 0.056, 0.165, 0), (0.027, 0.023, 0.027), m['cloth'], r=(0, 0, -side * 0.5), fuse=True))
+    legs(cid, m, body, 'cloth', top=0.075, r=0.024)
+    for side in (-1, 1):
+        body.append(torus(f'{cid}_Cuff{side}', (side * 0.042, 0.047, 0.006), 0.025, 0.0065, m['cloth'], r=(math.pi / 2, 0, 0)))
+    hi_sneakers(cid, m, body, tongue='white')
+
+    # ---- head: the face, a rounded square a touch narrower at the chin.
+    FC, FR, E, F = Vector((0, -0.014, 0.016)), Vector((0.113, 0.104, 0.09)), 3.0, 2.4
+    CHIN = FC.y - 0.03
+
+    def chin_k(y):
+        t = min(1.0, (CHIN - y) / 0.07) if y < CHIN else 0.0
+        return 1 - 0.1 * t * t
+
+    def tuck(y):
+        """How far the top of the face slopes back under the hair."""
+        t = max(0.0, (y - FC.y - 0.055) / (FR.y - 0.055))
+        return 0.06 * t * t
+
+    def chin(v):
+        v.x *= chin_k(v.y)
+        v.z -= tuck(v.y)
+        return v
+
+    def face_z(x, y):
+        """The face's front surface at (x, y)."""
+        u, w = abs(x / chin_k(y) - FC.x) / FR.x, abs(y - FC.y) / FR.y
+        s = (u ** E + w ** E) ** (F / E)
+        return FC.z + FR.z * max(0.0, 1 - s) ** (1 / F) - tuck(y)
+
+    def on_face(x, y, lift=0.0):
+        """A frame on the face at (x, y), local z along its normal."""
+        e = 1e-4
+        n = Vector((-(face_z(x + e, y) - face_z(x - e, y)) / (2 * e), -(face_z(x, y + e) - face_z(x, y - e)) / (2 * e), 1)).normalized()
+        return frame_z(Vector((x, y, face_z(x, y))) + n * lift, n)
+    face = superell(f'{cid}_Skull', tuple(FC), tuple(FR), m['skin'], e=E, f=F, deform=chin, fuse=True)
+    face['budget'] = 4000
+    head.append(face)
+
+    # Eyes: big and glossy, set wide and low; a black iris filling most of the
+    # white, glancing to his left, a big catchlight, a thin black upper lid line.
+    EYE = (0.031, 0.033, 0.012)
+    for side in (-1, 1):
+        G = on_face(side * 0.053, -0.02, -0.004)
+        rx, ry, rz = EYE
+        head.append(ell(f'{cid}_EyeRim{side}', (0, 0, -0.0012), (rx + 0.0022, ry + 0.0022, rz), m['ink'], parent=G, seg=(24, 16)))
+        head.append(ell(f'{cid}_Sclera{side}', (0, 0, 0), EYE, m['white'], parent=G, seg=(24, 16)))
+        head.append(ell(f'{cid}_Iris{side}', (0.0075, -0.001, 0.0078), (0.0215, 0.025, 0.0052), m['ink'], parent=G, seg=(20, 14)))
+        head.append(ell(f'{cid}_Glint{side}', (0.0005, 0.0095, 0.0124), (0.0072, 0.0072, 0.0022), m['white'], parent=G, seg=(12, 8)))
+        head.append(ell(f'{cid}_Glint2{side}', (0.0155, -0.0105, 0.0112), (0.003, 0.003, 0.0016), m['white'], parent=G, seg=(8, 6)))
+        head.append(strand(f'{cid}_Lid{side}', [(-rx * 1.04, ry * 0.25, rz * 0.45), (-rx * 0.6, ry * 0.86, rz * 0.62), (0, ry * 1.04, rz * 0.62),
+                                                 (rx * 0.6, ry * 0.88, rz * 0.62), (rx * 1.06, ry * 0.3, rz * 0.45)],
+                           0.0019, 0.0013, m['ink'], parent=G, ring=6, n=6))
+        blink_lid(cid, head, m, G, side, (rx + 0.0012, ry + 0.001, rz + 0.003))
+        # Round pink cheeks just under the outer corner of each eye.
+        head.append(ell(f'{cid}_Blush{side}', (0, 0, 0), (0.0175, 0.0155, 0.004), m['accent'], parent=on_face(side * 0.083, -0.047, -0.0012),
+                        seg=(18, 10)))
+    # A tiny pink nose: a rounded triangle pointing down.
+    bm = bmesh.new()
+    bmesh.ops.create_uvsphere(bm, u_segments=16, v_segments=10, radius=1.0)
+    for v in bm.verts:
+        x, y, z = v.co
+        v.co = Vector((x * 0.0105 * (0.3 + 0.7 * (y + 1) / 2), y * 0.0072, z * 0.0045))
+    bm.transform(on_face(0, -0.06, 0.0012))
+    head.append(_finish(f'{cid}_Nose', bm, m['c1'], False))
+    # A small, smug closed smile, its left (+x) corner tucked up.
+    sm = [(-0.02, -0.0795), (-0.009, -0.0865), (0.004, -0.0878), (0.0155, -0.0845), (0.0235, -0.0775)]
+    head.append(strand(f'{cid}_Mouth', [(x, y, face_z(x, y) + 0.0008) for x, y in sm], 0.0017, 0.0014, m['ink'], ring=6, n=6))
+
+    # ---- hair: a hood round the face, a fringe, and the mane of spikes.
+    HC, HR = Vector((0, 0.025, -0.05)), Vector((0.118, 0.122, 0.112))
+    hair = [ell(f'{cid}_HairMass', tuple(HC), tuple(HR), m['hair'], seg=(36, 24))]
+
+    def outline(phi, k=1.0):
+        """A point on the face's outline at angle phi (0 straight up, + to his left)."""
+        s, c = math.sin(phi), math.cos(phi)
+        y = FC.y + FR.y * k * math.copysign(abs(c) ** (2 / E), c)
+        return Vector((FR.x * k * chin_k(y) * math.copysign(abs(s) ** (2 / E), s), y))
+    # The hood's brim: a soft roll of hair along the top of the face, in two halves
+    # from the middle thinning toward the temples; below that the face sits clear.
+    for side in (-1, 1):
+        rim = []
+        for k, phi in enumerate(np.linspace(0, side * 1.38, 7)):
+            q = outline(phi, 0.97)
+            # The ends sink back into the temples.
+            rim.append((q.x, q.y, face_z(q.x * 0.9, FC.y + (q.y - FC.y) * 0.9) - 0.008 - 0.03 * max(0, k - 4) / 2))
+        hair.append(strand(f'{cid}_HairRim{side}', rim, 0.02, 0.012, m['hair'], ring=12, n=4))
+    # Sides: the hood comes forward to meet the edge of the face from temple to jaw.
+    for side in (-1, 1):
+        hair.append(ell(f'{cid}_HairSide{side}', (side * 0.086, 0.0, -0.022), (0.046, 0.094, 0.068), m['hair'], r=(0, 0, side * 0.12)))
+    # Temples: a short spike either side wraps the top corners of the face.
+    for side in (-1, 1):
+        hair.append(strand(f'{cid}_HairTemple{side}', [(side * 0.06, 0.05, -0.004), (side * 0.112, 0.058, -0.004), (side * 0.168, 0.078, -0.03)],
+                           0.05, 0.001, m['hair'], ring=12, round_tip=False, up=(0, 0, 1), flat=0.55, taper=1.35))
+    # Fringe: three short pointed tufts falling onto the forehead.
+    for k, (x, dx, ty, r0) in enumerate(((-0.05, -0.01, 0.05, 0.024), (0.004, 0.003, 0.058, 0.02), (0.058, 0.008, 0.054, 0.022))):
+        root = Vector((x, 0.088, face_z(x, 0.075) - 0.006))
+        tip = Vector((x + dx, ty, face_z(x + dx, ty) + 0.0015))
+        mid = Vector((x + dx * 0.5, (0.088 + ty) / 2 + 0.002, face_z(x, 0.07) + 0.005))
+        hair.append(strand(f'{cid}_HairFringe{k}', [root, mid, tip], r0, 0.001, m['hair'], ring=10, round_tip=False,
+                           up=(0, 0, 1), flat=0.4, taper=1.6))
+    # The mane: long pointed spikes radiating out all round the face (angle from
+    # straight up, + to his left), sweeping a little upward like flames, then a
+    # ring of them out of the back of the head.
+    C = Vector((0, 0.03, -0.03))
+    FRONT = [(-0.15, 0.18, 0.11), (0.6, 0.13, 0.1), (-0.88, 0.16, 0.1), (1.25, 0.12, 0.092), (-1.55, 0.14, 0.092),
+             (1.9, 0.09, 0.076), (-2.2, 0.09, 0.07)]
+    BACK = [(0.25, 0.11, 0.08), (-0.9, 0.1, 0.078), (1.15, 0.1, 0.078), (-2.0, 0.09, 0.072), (2.3, 0.08, 0.07)]
+    for ring_k, (spikes, back, z0) in enumerate(((FRONT, 0.22, -0.02), (BACK, 1.05, -0.055))):
+        for k, (a, length, r0) in enumerate(spikes):
+            d = Vector((math.sin(a), math.cos(a), -back)).normalized()
+            o = Vector((C.x, C.y, z0))
+            # Sideways spikes lift at the tip; the top ones lean a touch to his right.
+            sweep = Vector((0, 1, 0)) * 0.025 * abs(math.sin(a)) + Vector((-0.012, 0, 0)) * max(0.0, math.cos(a))
+            root = o + d * 0.045
+            tip = o + d * (0.128 + length) + sweep
+            mid = o + d * (0.128 + length * 0.45) + sweep * 0.3
+            hair.append(strand(f'{cid}_HairSpike{ring_k}{k}', [root, mid, tip], r0, 0.0012, m['hair'], ring=12, round_tip=False,
+                               up=(0, 0, 1), flat=0.45, taper=1.35))
+    for o in hair:
+        o['fuse'] = 1
+        o['budget'] = 8000
+    head += hair
+
+    # ---- hands: cream mittens out of violet cuffs.
+    hl = mitten(cid, 'HandL', m, 'skin', 1) + [cyl(f'{cid}_CuffL', (0, 0.026, 0), 0.0215, 0.02, m['cloth'], r_top=0.019)]
+    hr = mitten(cid, 'HandR', m, 'skin', -1) + [cyl(f'{cid}_CuffR', (0, 0.026, 0), 0.0215, 0.02, m['cloth'], r_top=0.019)]
+    return {'Body': body, 'Head': head, 'HandL': hl, 'HandR': hr}
+
+
+BUILDERS = {'snacky': snacky, 'starer': starer, 'chog': chog}
 
 # Shoulder points and limb radius (mirrors `arms` in looks.tsx) — used only to
 # draw arms in preview renders; the game builds the limbs itself.
-ARMS = {'snacky': ((0.085, 0.165, 0.0), 0.019), 'starer': ((0.072, 0.16, 0.0), 0.018)}
+ARMS = {'snacky': ((0.085, 0.165, 0.0), 0.019), 'starer': ((0.072, 0.16, 0.0), 0.018), 'chog': ((0.072, 0.16, 0.0), 0.019)}
 
 
 # --------------------------------------------------------------------------
@@ -1714,6 +1884,7 @@ ARMS.update({'robot': ((0.085, 0.165, 0.0), 0.012), 'wizard': ((0.065, 0.17, 0.0
 # live from the hip to its stepping foot; used here only for previews.
 LEGS = {
     'snacky': ((0.033, 0.075, 0.0), 0.025), 'starer': ((0.036, 0.062, 0.002), 0.024),
+    'chog': ((0.034, 0.07, 0.0), 0.024),
     'spiky': ((0.034, 0.07, 0.0), 0.022), 'robot': ((0.034, 0.068, 0.0), 0.014),
     'cat': ((0.034, 0.07, 0.0), 0.022), 'knight': ((0.034, 0.07, 0.0), 0.024),
     'astronaut': ((0.034, 0.07, 0.0), 0.026), 'pirate': ((0.034, 0.068, 0.0), 0.024),

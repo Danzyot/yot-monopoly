@@ -415,7 +415,41 @@ const starer: Look = {
   ),
 };
 
+// Chog, the Chog community's mascot: a cream face in a hood of violet spikes
+// that radiate out all round it, big glossy eyes, pink cheeks, a smug little
+// smile; a plain violet onesie. Modelled in Blender too; this shows while it loads.
+const CHOG_SPIKES: [number, number][] = [[-0.2, 0.14], [0.55, 0.11], [-0.9, 0.12], [1.2, 0.09], [-1.5, 0.11], [1.75, 0.08], [-2.1, 0.08], [2.3, 0.06]];
+
+const chog: Look = {
+  colors: { skin: '#f4e2aa', hair: '#5b3aa8', cloth: '#56349f', accent: '#ec6f98', c1: '#e0628c' },
+  hand: 'skin',
+  foot: 'main',
+  arms: { shoulder: [0.072, 0.16, 0], radius: 0.019, mat: 'cloth' },
+  legs: { hip: [0.034, 0.07, 0], radius: 0.024, mat: 'cloth' },
+  body: m => <Part g={GEO.sphere} m={m.cloth} p={[0, 0.12, 0]} s={[0.075, 0.085, 0.065]} cast />,
+  head: m => (
+    <>
+      <Part g={GEO.sphere} m={m.hair} p={[0, 0.03, -0.035]} s={0.13} cast />
+      {CHOG_SPIKES.map(([a, len], k) => (
+        <Part key={k} g={GEO.cone} m={m.hair} p={[Math.sin(a) * (0.13 + len / 2), 0.03 + Math.cos(a) * (0.13 + len / 2), -0.04]}
+          r={[0, 0, -a]} s={[0.05, len + 0.04, 0.03]} cast />
+      ))}
+      <Part g={GEO.sphere} m={m.skin} p={[0, -0.012, 0.03]} s={[0.104, 0.098, 0.075]} />
+      {[-1, 1].map(side => (
+        <group key={side} position={[side * 0.05, -0.008, 0.1]}>
+          <Part g={GEO.sphere} m={m.white} s={[0.025, 0.028, 0.01]} />
+          <Part g={GEO.sphere} m={m.ink} p={[0.005, 0, 0.006]} s={[0.018, 0.022, 0.008]} />
+          <Part g={GEO.dot} m={m.white} p={[-0.001, 0.008, 0.013]} s={0.006} />
+          <Part g={GEO.sphere} m={m.accent} p={[side * 0.024, -0.03, -0.016]} s={[0.018, 0.016, 0.006]} />
+        </group>
+      ))}
+      <Part g={GEO.dot} m={m.c1} p={[0, -0.044, 0.104]} s={[0.008, 0.006, 0.005]} />
+      <Part g={GEO.torus(0.15, PI)} m={m.ink} p={[0.003, -0.06, 0.1]} r={[0, 0, PI]} s={0.014} />
+    </>
+  ),
+};
+
 export const LOOKS: Record<CharacterId, Look> = {
-  snacky, starer,
+  snacky, starer, chog,
   spiky, robot, cat, knight, wizard, astronaut, pirate, ninja, chef, alien,
 };
