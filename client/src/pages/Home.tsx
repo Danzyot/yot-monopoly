@@ -13,7 +13,7 @@ import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { requirementBadge, requirementSentence } from '../community.tsx';
 import { useCardsRoomList } from '../cards/net.ts';
-import { openPoker } from '../pokerLink.ts';
+import { goToPokerTable, openPoker, pokerTableId } from '../pokerLink.ts';
 import { POKER_URL } from '../../../shared/brand.ts';
 
 // The home page has no WebGL at all: the board behind the hero is a still
@@ -72,6 +72,7 @@ export default function Home() {
   const { profile, config, ready, openSignIn } = useAuth();
   const [code, setCode] = useState('');
   const [cardsCode, setCardsCode] = useState('');
+  const [pokerCode, setPokerCode] = useState('');
   const [busy, setBusy] = useState(false);
   const rooms = useRoomList();
   const cardTables = useCardsRoomList();
@@ -98,6 +99,11 @@ export default function Home() {
     const clean = c.trim().toUpperCase();
     if (clean.length < 4) return toastError(new Error('Enter a room code'));
     nav(`/r/${clean}`);
+  };
+  const joinPoker = (c: string) => {
+    const id = pokerTableId(c);
+    if (!id) return toastError(new Error('Enter a table code or paste the table link'));
+    goToPokerTable(id, !!profile);
   };
   const joinCards = (c: string) => {
     const clean = c.trim().toUpperCase();
@@ -189,6 +195,12 @@ export default function Home() {
               <span className="hub-live">{profile || checking ? 'You stay signed in there' : 'On its own site'}</span>
             </div>
             <div className="hub-actions">
+              <form className="hub-join" onSubmit={e => { e.preventDefault(); joinPoker(pokerCode); }}>
+                <input className="code-input" value={pokerCode} placeholder="CODE" aria-label="Poker table code or link"
+                  autoCapitalize="none" autoComplete="off" spellCheck={false}
+                  onChange={e => setPokerCode(e.target.value)} />
+                <button className="btn gold small" type="submit">Join</button>
+              </form>
               <a className="btn primary hub-play" href={POKER_URL} onClick={e => openPoker(e, !!profile)}>Play {GAMES.poker.name}</a>
             </div>
           </li>

@@ -32,6 +32,23 @@ export function openPoker(e: { button: number; metaKey: boolean; ctrlKey: boolea
 }
 
 /**
+ * A poker table from what a player typed: its 8-character id (`3f2a9b1c`) or a
+ * pasted table link. Null when it is neither.
+ */
+export function pokerTableId(raw: string): string | null {
+  const s = raw.trim();
+  const m = /\/table\/([0-9a-f]{8})(?:[/?#]|$)/i.exec(s) ?? /^([0-9a-f]{8})$/i.exec(s);
+  return m ? m[1].toLowerCase() : null;
+}
+
+/** Go to a poker table, carrying the sign-in when there is one. */
+export function goToPokerTable(id: string, signedIn: boolean): void {
+  const url = `${POKER_URL}/table/${id}`;
+  const token = signedIn ? getToken() : null;
+  location.assign(token ? withToken(url, token) : url);
+}
+
+/**
  * Where /sso may send a player back to: poker (the host of POKER_URL), or this
  * site itself. Anything else — another host, a non-web scheme, an unparsable
  * string — is null, so a crafted link cannot carry a token away.

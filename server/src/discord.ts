@@ -8,7 +8,7 @@
 //                       membership checks (otherwise a snapshot of the user's
 //                       guild list from OAuth time is used).
 
-import { BRAND } from '../../shared/brand.ts';
+import { BRAND, GAMES } from '../../shared/brand.ts';
 
 const API = 'https://discord.com/api/v10';
 
@@ -283,7 +283,8 @@ export async function postVerifyMessage(channelId: string, siteUrl: string | nul
           `**1.** Get your code on ${siteUrl ? `[${BRAND.name}](${siteUrl})` : BRAND.name} ` +
           '— *Sign in → Verify with a code*\n' +
           '**2.** Click **Verify** below and paste it in\n' +
-          '**3.** You are signed in automatically — no login needed',
+          '**3.** You are signed in automatically — no login needed\n\n' +
+          `One account for every game: on ${GAMES.poker.name}, press *Sign in via ${BRAND.name}*.`,
         color: 0xd53f7c,
         footer: { text: `Codes look like ${BRAND.codePrefix}XXXX and last 10 minutes.` },
       }],
