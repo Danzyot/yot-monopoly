@@ -369,6 +369,54 @@ running, and tell operators not to create one until you say so.
 
 ---
 
+## Hosting rights: who may host
+
+Operators (`ADMIN_DISCORD_IDS`) can always host. So can **Chog Genesis
+holders** (a verified wallet on `/wallet`) and players an operator approves in
+**Dashboard → Hosts** on the hub (add by Discord id or by picking a player;
+holders are listed there too, nothing to approve). The approved list is
+`hosts.json` on the hub's volume; back it up with the rest of `/data`.
+
+**No new variables.** What it needs:
+
+1. **Deploy the hub** (any time). It adds Dashboard → Hosts, `canHost` on
+   `/api/auth/me` and the signed endpoint below. Monopoly and Chog Cards
+   tables are unchanged: anyone can still open one when public rooms are on.
+2. **Deploy poker by hand afterwards** (its auto-deploy is off): Deployments →
+   latest commit → Deploy. Until then poker still lets only operators create
+   games. Respect the deploy freeze above.
+
+**How poker asks the hub.** When a non-operator presses Create on poker, the
+poker server calls `GET <HUB_URL>/api/hosting/can-host?id=<player id>` with two
+headers: `X-Chog-Timestamp` (ms since epoch) and `X-Chog-Signature` =
+`base64url(HMAC-SHA256(secret, "svc:hosting:can-host:<id>:<timestamp>"))`. The
+secret is the shared sign-in secret (hub `APP_SECRET` = poker `CHOG_SECRET`).
+The hub refuses an unsigned or wrongly signed request (401, and says nothing
+about the id, so nobody can list holders through it) and any timestamp more
+than 60 seconds from its own clock. It answers
+`{ canHost, reason: 'admin' | 'holder' | 'approved' | null }`. The player id is
+the same on both sides (`dc_<Discord id>`). Poker caches each answer for 60
+seconds and **fails closed**: if the hub is down or refuses the signature,
+non-operators see "Could not check your hosting rights…" and nothing is
+created. If Cloudflare bot protection is on for the hub, make sure it does not
+challenge `/api/hosting/*` (poker calls it from Railway, not a browser).
+
+**What a player host gets** (poker): 1 live or upcoming tournament and 2 open
+cash tables at a time; tournaments capped at 100 players, 20-minute levels and
+a start within 7 days, with no custom blind schedule. They can start, pause,
+resume and cancel their own tournament, write its prize line and close their
+own cash table. Kicking, Discord role requirements, results posted to Discord,
+bans and every other operator tool stay with operators. Player-hosted events
+are marked "Hosted by …" and say prizes are the host's responsibility, not
+Chog Games'. Operators see them in poker's Dashboard → Manage games and can
+pause, end or delete any of them. Details: "Player hosts" in
+[`poker/DEPLOY.md`](../poker/DEPLOY.md).
+
+For hub code: `canHost(playerId)` in `server/src/hosting.ts` is the single
+source of truth (operator, holder or approved).
+
+---
+
 ## For whoever builds the hub's `/sso`
 
 Poker sends the browser to `GET https://choggames.com/sso?return=<URL>` where

@@ -19,6 +19,7 @@
 .wl-hero-text b { font: 400 24px/1.1 var(--display); text-shadow: var(--outline); }
 .wl-hero.holder .wl-hero-text b { color: var(--hi); }
 .wl-hero-text span { color: color-mix(in srgb, var(--text) 85%, transparent); overflow-wrap: anywhere; }
+.wl-hero-text .wl-host-note { margin-top: 4px; font-weight: 700; color: var(--hi); }
 
 /* Connect panel: the four steps, then the button. */
 .wl-steps { list-style: none; margin: 0 0 14px; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }

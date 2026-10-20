@@ -43,14 +43,20 @@ function LiveGames() {
           <span className={`state-badge state-${t.state}`}>
             {t.state === 'registering' ? 'Registering' : t.state}
           </span>
-          <span className="lg-meta">{t.players} player{t.players === 1 ? '' : 's'}</span>
+          <span className="lg-meta">
+            {t.players} player{t.players === 1 ? '' : 's'}
+            {t.playerHosted && <> · Hosted by {t.hostName}</>}
+          </span>
         </Link>
       ))}
       {cashTables.map(t => (
         <Link key={t.id} className="live-game-row" to={`/table/${t.id}`}>
           <span className="lg-name">{t.name}</span>
           <span className="state-badge state-running">{t.sb}/{t.bb}</span>
-          <span className="lg-meta">{t.players}/{t.maxSeats} seats</span>
+          <span className="lg-meta">
+            {t.players}/{t.maxSeats} seats
+            {t.playerHosted && <> · Hosted by {t.hostName}</>}
+          </span>
         </Link>
       ))}
     </div>
@@ -59,7 +65,7 @@ function LiveGames() {
 
 export default function Home() {
   const nav = useNavigate();
-  const { profile } = useAuth();
+  const { profile, canHost } = useAuth();
   const [modal, setModal] = useState<'auth' | 'tournament' | 'cash' | null>(null);
   const isAdmin = !!profile?.isAdmin;
 
@@ -75,18 +81,25 @@ export default function Home() {
           {!profile && ' Sign in to see the games you have been invited to.'}
         </p>
 
-        {isAdmin ? (
-          <div className="landing-actions">
-            <button className="btn btn-primary btn-lg" onClick={() => setModal('tournament')}>
-              Host a tournament
-            </button>
-            <button className="btn btn-lg" onClick={() => setModal('cash')}>
-              Start a cash game
-            </button>
-            <button className="btn btn-ghost btn-lg" onClick={() => nav('/lobby')}>
-              Dashboard →
-            </button>
-          </div>
+        {canHost ? (
+          <>
+            <div className="landing-actions">
+              <button className="btn btn-primary btn-lg" onClick={() => setModal('tournament')}>
+                Host a tournament
+              </button>
+              <button className="btn btn-lg" onClick={() => setModal('cash')}>
+                Start a cash game
+              </button>
+              {isAdmin && (
+                <button className="btn btn-ghost btn-lg" onClick={() => nav('/lobby')}>
+                  Dashboard →
+                </button>
+              )}
+            </div>
+            {/* A player host still wants to find the games running now,
+                their own included. Operators have the dashboard for that. */}
+            {!isAdmin && <LiveGames />}
+          </>
         ) : profile ? (
           <LiveGames />
         ) : (

@@ -7,10 +7,12 @@ import { banMessage, findBan } from './bans.ts';
 import { isOn } from './features.ts';
 import { discordEnabled, guildMembership } from './discord.ts';
 import { Table } from './engine/table.ts';
+import { chogField, onChogChange, warmChog, withChog } from './chogs.ts';
 import { sanitizeTheme } from './graphics.ts';
 import { playerConnected, playerDisconnected } from './presence.ts';
 import { isInfraPeer, normalisePeer } from './net.ts';
 import { noteIpSample } from './ipdebug.ts';
+import { type DirectorAction, mayDirect, PLAYER_SETTINGS, playerScheduledStart } from './hosting.ts';
 import { registry } from './registry.ts';
 import { Tournament } from './tournament/tournament.ts';
 
@@ -30,13 +32,16 @@ const LOBBY = 'lobby';
 // rewrite the game, so the rule is deliberately narrow and lives here on its
 // own where it can be tested: the table's own host, or the site operator.
 // Tournament tables carry no hostId, so there the operator flag is the only
-// way in — a player at one must never qualify by default.
+// way in — a player at one must never qualify by default. Nor does the host
+// of a player-hosted table: a host who can move chips at their own table can
+// pay themselves.
 export function mayRunTable(
   hostId: string | null,
   me: { id: string; isAdmin?: boolean },
+  playerHosted = false,
 ): boolean {
   if (me.isAdmin === true) return true;
-  return hostId !== null && hostId === me.id;
+  return !playerHosted && hostId !== null && hostId === me.id;
 }
 
 // ---------- abuse limits ----------
@@ -212,6 +217,7 @@ export function attachSockets(io: IO) {
         tournamentName: t.config.name,
         name: player.name,
         avatar: player.avatar,
+        ...chogField(player.id),
         place: player.place,
         prize: player.prize,
         entrants: t.players.size,
@@ -227,7 +233,7 @@ export function attachSockets(io: IO) {
       const places = [...t.players.values()]
         .filter(p => p.place !== null && p.place <= 3)
         .sort((a, b) => (a.place ?? 9) - (b.place ?? 9))
-        .map(p => ({ playerId: p.id, place: p.place!, name: p.name, avatar: p.avatar }));
+        .map(p => ({ playerId: p.id, place: p.place!, name: p.name, avatar: p.avatar, ...chogField(p.id) }));
       const payload = {
         tournamentId: t.id,
         name: t.config.name,
@@ -258,6 +264,14 @@ export function attachSockets(io: IO) {
       if (!table.closed && table.playerSeat(playerId) !== null) pushTableState(io, table);
     }
   };
+
+  // A player's Chog avatar appeared, changed or went (picked, sold, hub back):
+  // re-push everything that shows them.
+  onChogChange(playerId => {
+    broadcastPlayerTables(playerId);
+    for (const t of registry.tournaments.values()) if (t.players.has(playerId)) pushTourneyState(io, t);
+    pushLobby(io);
+  });
 
   io.on('connection', (socket: Sock) => {
     const profile = () => (socket.data as SocketData).profile;
@@ -334,6 +348,7 @@ export function attachSockets(io: IO) {
     });
     if (pid) {
       playerConnected(pid);
+      warmChog(pid);
       broadcastPlayerTables(pid);
       // Audit trail: who connected, from which address, and from which
       // browser. The browser is the part an alt cannot change by moving to a
@@ -515,7 +530,7 @@ export function attachSockets(io: IO) {
       const me = requireAuth();
       const table = registry.findTable(p.tableId);
       if (!table) throw new Error('Table not found');
-      table.userMsg({ id: me.id, name: me.name, avatar: me.avatar }, p.text, p.replyTo);
+      table.userMsg(withChog({ id: me.id, name: me.name, avatar: me.avatar }), p.text, p.replyTo);
     }));
 
     socket.on('table:sitout', wrap((p: { tableId: string; out: boolean }) => {
@@ -550,7 +565,11 @@ export function attachSockets(io: IO) {
       const me = requireAuth();
       const table = registry.cashTables.get(String(p.tableId));
       if (!table) throw new Error('Table not found');
-      if (table.hostId !== me.id && !me.isAdmin) throw new Error('Only the table host can do that');
+      if (!mayDirect(table, me, 'settings')) {
+        throw new Error(table.playerHosted && table.hostId === me.id
+          ? 'Only an operator can change a table\'s settings — you can close it'
+          : 'Only the table host can do that');
+      }
       // Themes come off the wire — pin them to known presets and safe urls.
       if ('theme' in p) p.theme = sanitizeTheme(p.theme);
       table.updateCashSettings(p as Parameters<typeof table.updateCashSettings>[0]);
@@ -666,20 +685,26 @@ export function attachSockets(io: IO) {
       getT(id).reenter(me.id);
     }));
 
-    const requireHost = (t: Tournament): void => {
+    // The tournament director: an operator, or the event's host. A player
+    // host's own event gets the short list in hosting.ts (start, pause,
+    // resume, cancel, prizes, start time); the rest is for operators.
+    const requireHost = (t: Tournament, action: DirectorAction): PlayerProfile => {
       const me = requireAuth();
-      if (t.hostId !== me.id && !me.isAdmin) throw new Error('Only the tournament director can do that');
+      const event = { hostId: t.hostId, playerHosted: !!t.config.playerHosted };
+      if (mayDirect(event, me, action)) return me;
+      if (event.playerHosted && t.hostId === me.id) throw new Error('Only an operator can do that on a player-hosted event');
+      throw new Error('Only the tournament director can do that');
     };
     socket.on('tourney:approve', wrap((p: { id: string; playerId: string }) => {
-      const t = getT(p.id); requireHost(t); t.approve(String(p.playerId));
+      const t = getT(p.id); requireHost(t, 'approve'); t.approve(String(p.playerId));
     }));
     socket.on('tourney:approveAll', wrap((id: string) => {
-      const t = getT(id); requireHost(t); t.approveAll();
+      const t = getT(id); requireHost(t, 'approve'); t.approveAll();
     }));
     // ---------- operator interventions at a table ----------
     const requireTableHost = (table: Table): PlayerProfile => {
       const me = requireAuth();
-      if (!mayRunTable(table.hostId, me)) throw new Error('Only the host can do that');
+      if (!mayRunTable(table.hostId, me, table.playerHosted)) throw new Error('Only the host can do that');
       return me;
     };
 
@@ -703,23 +728,36 @@ export function attachSockets(io: IO) {
     }));
 
     socket.on('tourney:kick', wrap((p: { id: string; playerId: string }) => {
-      const t = getT(p.id); requireHost(t); t.kick(String(p.playerId));
+      const t = getT(p.id); requireHost(t, 'kick'); t.kick(String(p.playerId));
     }));
 
     socket.on('tourney:settings', wrap((p: { id: string } & Record<string, unknown>) => {
-      const t = getT(p.id); requireHost(t);
+      const t = getT(p.id);
+      const me = requireAuth();
+      const event = { hostId: t.hostId, playerHosted: !!t.config.playerHosted };
+      if (!mayDirect(event, me, 'settings')) {
+        // A player host may change the prize line and the start time, and
+        // nothing else: the rest of the form is an operator's.
+        const keys = Object.keys(p).filter(k => k !== 'id');
+        const allowed = keys.length > 0 && keys.every(k => {
+          const action = PLAYER_SETTINGS.get(k);
+          return !!action && mayDirect(event, me, action);
+        });
+        if (!allowed) requireHost(t, 'settings'); // throws, with the reason
+        if (typeof p.scheduledStart === 'number') playerScheduledStart(p.scheduledStart);
+      }
       if ('theme' in p) p.theme = sanitizeTheme(p.theme);
       t.updateSettings(p as Parameters<typeof t.updateSettings>[0]);
     }));
 
-    socket.on('tourney:start', wrap((id: string) => { const t = getT(id); requireHost(t); t.start(); }));
-    socket.on('tourney:pause', wrap((id: string) => { const t = getT(id); requireHost(t); t.pause(); }));
-    socket.on('tourney:resume', wrap((id: string) => { const t = getT(id); requireHost(t); t.resume(); }));
-    socket.on('tourney:cancel', wrap((id: string) => { const t = getT(id); requireHost(t); t.cancel(); }));
+    socket.on('tourney:start', wrap((id: string) => { const t = getT(id); requireHost(t, 'start'); t.start(); }));
+    socket.on('tourney:pause', wrap((id: string) => { const t = getT(id); requireHost(t, 'pause'); t.pause(); }));
+    socket.on('tourney:resume', wrap((id: string) => { const t = getT(id); requireHost(t, 'resume'); t.resume(); }));
+    socket.on('tourney:cancel', wrap((id: string) => { const t = getT(id); requireHost(t, 'cancel'); t.cancel(); }));
     // Put one specific player back — a correction, not a re-entry. Host only.
     socket.on('tourney:reinstate', wrap((p: { id: string; playerId: string; stack?: number }) => {
       const t = getT(String(p.id));
-      requireHost(t);
+      requireHost(t, 'reinstate');
       t.reinstate(String(p.playerId), typeof p.stack === 'number' ? p.stack : undefined);
     }));
     // The director's override: seat anyone, at any time, with any stack.
@@ -729,7 +767,7 @@ export function attachSockets(io: IO) {
       id: string; playerId: string; name?: string; avatar?: string; stack?: number;
     }) => {
       const t = getT(String(p.id));
-      requireHost(t);
+      requireHost(t, 'seat');
       const r = t.directorSeat({
         id: String(p.playerId),
         name: String(p.name ?? ''),
@@ -745,7 +783,7 @@ export function attachSockets(io: IO) {
     socket.on('tourney:people', wrap((id: string, cb: (rows: unknown[]) => void) => {
       if (typeof cb !== 'function') return;
       const t = getT(String(id));
-      requireHost(t);
+      requireHost(t, 'people');
       const known = playerRows()
         .slice(0, 400)
         .map(r => ({ id: r.id, name: r.name, avatar: r.avatar }));
@@ -761,13 +799,13 @@ export function attachSockets(io: IO) {
       socket.emit('tourney:assigned', { tableId });
     }));
 
-    socket.on('tourney:endNow', wrap((id: string) => { const t = getT(id); requireHost(t); t.endNow(); }));
+    socket.on('tourney:endNow', wrap((id: string) => { const t = getT(id); requireHost(t, 'endNow'); t.endNow(); }));
 
     socket.on('tourney:chatSend', wrap((p: { id: string; text: string; replyTo?: string }) => {
       if (!chatEnabled()) throw new Error('Chat is turned off right now');
       if (!isOn('chat')) throw new Error('Chat is switched off');
       const me = requireAuth();
-      getT(p.id).userChat({ id: me.id, name: me.name, avatar: me.avatar }, p.text, p.replyTo);
+      getT(p.id).userChat(withChog({ id: me.id, name: me.name, avatar: me.avatar }), p.text, p.replyTo);
     }));
 
     socket.on('disconnect', () => {

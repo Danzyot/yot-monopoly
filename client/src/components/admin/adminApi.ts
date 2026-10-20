@@ -98,6 +98,12 @@ export interface AccountDetail {
   mute: Mute | null;
 }
 
+/** GET /api/admin/hosts: approved hosts, and accounts that host because they hold a Chog. */
+export interface HostsInfo {
+  approved: { id: string; name: string; addedBy: string; addedAt: number; holder: boolean }[];
+  holders: { id: string; name: string; chogs: number; checkedAt: number }[];
+}
+
 export interface AltGroup { ip: string; country: string | null; accounts: { id: string; name: string }[] }
 
 export interface LoggedGame { gameId: string; gameName: string; events: number; from: number; to: number }

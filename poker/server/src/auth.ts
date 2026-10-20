@@ -26,6 +26,14 @@ function b64url(buf: Buffer): string {
   return buf.toString('base64url');
 }
 
+// A MAC for server-to-server requests to the Chog Games hub (asking whether a
+// player may host). The `svc:` prefix keeps it from ever passing as a session
+// token or OAuth state signed with the same key. Must match the hub's
+// serviceMac in server/src/auth.ts.
+export function serviceMac(message: string): string {
+  return b64url(createHmac('sha256', SECRET).update(`svc:${message}`).digest());
+}
+
 export function signToken(profile: PlayerProfile): string {
   const payload = b64url(Buffer.from(JSON.stringify({ ...profile, iat: Date.now() })));
   const sig = b64url(createHmac('sha256', SECRET).update(payload).digest());

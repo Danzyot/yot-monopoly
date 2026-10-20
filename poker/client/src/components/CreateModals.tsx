@@ -6,6 +6,8 @@ import { useToast } from '../toast';
 import BlindEditor, { niceChip, type LevelRow } from './BlindEditor';
 import ThemePicker from './ThemePicker';
 import type { TableTheme } from '../../../shared/types';
+import { BRAND } from '../../../shared/brand';
+import { PLAYER_HOST_LIMITS as LIMITS } from '../../../shared/hosting';
 import LateClockField, { lateClockState, lateClockValue } from './LateClockField';
 
 // Left blank on purpose. The Discord pair below fills itself in from
@@ -22,13 +24,17 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
   const nav = useNavigate();
   const toast = useToast();
   const { profile } = useAuth();
+  // A Chog holder or approved player rather than an operator: a smaller field,
+  // a bounded length, and none of the operator-only parts (the server clamps
+  // the same way; this just never offers what it would refuse).
+  const playerHost = !profile?.isAdmin;
   const [name, setName] = useState('');
   const [startingStack, setStartingStack] = useState(10000);
   const [stackCustom, setStackCustom] = useState(false);
   const [levelMinutes, setLevelMinutes] = useState(5);
   const [levelMinutesCustom, setLevelMinutesCustom] = useState(false);
   const [structure, setStructure] = useState<'turbo' | 'regular' | 'deep'>('regular');
-  const [maxPlayers, setMaxPlayers] = useState(500);
+  const [maxPlayers, setMaxPlayers] = useState(playerHost ? 45 : 500);
   const [maxPlayersCustom, setMaxPlayersCustom] = useState(false);
   // Custom blind schedule (PokerNow-style rows). Last row minutes 0 = forever.
   const [customBlinds, setCustomBlinds] = useState(false);
@@ -102,6 +108,11 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
     }
     setBusy(true);
     try {
+      if (playerHost && scheduledStart && new Date(scheduledStart).getTime() > Date.now() + LIMITS.scheduleAheadMs) {
+        toast('error', 'Pick a start time within the next 7 days.');
+        setBusy(false);
+        return;
+      }
       const { id } = await api.createTournament({
         name: name.trim(), startingStack, levelMinutes, structure,
         maxPlayers, prizeText, lateRegMinutes, joinMinutes, approveRegistrations,
@@ -111,13 +122,13 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
         rabbitHunting, displayMode, actionSeconds, timebankSeconds,
         theme: theme ?? undefined,
         scheduledStart: scheduledStart ? new Date(scheduledStart).getTime() : undefined,
-        customLevels: customBlinds
+        customLevels: customBlinds && !playerHost
           ? levels.map(r => ({ sb: r.sb, bb: r.bb, ante: 0, minutes: r.minutes, isBreak: !!r.isBreak }))
           : undefined,
-        social: showSocial
+        social: showSocial && !playerHost
           ? { xUrl, igUrl, discordInviteUrl, discordGuildId, discordRoleId, discordRoleName, requireDiscord }
           : undefined,
-        discordWebhookUrl: showSocial ? discordWebhookUrl : undefined,
+        discordWebhookUrl: showSocial && !playerHost ? discordWebhookUrl : undefined,
       });
       toast('success', 'Tournament created — share the link to invite players!');
       nav(`/t/${id}`);
@@ -131,6 +142,13 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <h3>New tournament</h3>
+        {playerHost && (
+          <p className="host-disclaimer">
+            You are hosting as a player: up to {LIMITS.maxPlayers} players, levels up to {LIMITS.levelMinutes} minutes,
+            one tournament at a time. You can start, pause and cancel it and write the prizes; an operator handles
+            removing players. <strong>Any prizes are yours to hand out — {BRAND.hub} does not hold or pay them.</strong>
+          </p>
+        )}
         <div className="field">
           <label>Tournament name</label>
           <input className="input" placeholder="e.g. Sunday Major" value={name}
@@ -148,14 +166,14 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
                 setStartingStack(Number(e.target.value));
               }}
             >
-              {[5000, 10000, 20000, 30000, 50000, 100000].map(v => (
+              {[5000, 10000, 20000, 30000, 50000, 100000].filter(v => !playerHost || v <= LIMITS.startingStack).map(v => (
                 <option key={v} value={v}>{v.toLocaleString('en-US')}</option>
               ))}
               <option value="custom">Custom…</option>
             </select>
             {stackCustom && (
-              <input className="input" type="number" min={100} max={100000000} value={startingStack}
-                onChange={e => setStartingStack(Math.max(100, Math.floor(Number(e.target.value) || 0)))} />
+              <input className="input" type="number" min={100} max={playerHost ? LIMITS.startingStack : 100000000} value={startingStack}
+                onChange={e => setStartingStack(Math.max(100, Math.min(playerHost ? LIMITS.startingStack : 100000000, Math.floor(Number(e.target.value) || 0))))} />
             )}
           </div>
           {!customBlinds && (
@@ -179,8 +197,10 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
                 standard pace: real play early, pressure building through the middle.</p>
                 <p><strong>Slow</strong> — ~30% per level (25/50 → 30/65 → 40/85 …). Deep stacks
                 stay deep; skill matters longest, and the event runs longest too.</p>
-                <p>Want exact numbers instead? Turn on <strong>custom blind levels</strong> below
-                and write the schedule yourself.</p>
+                {!playerHost && (
+                  <p>Want exact numbers instead? Turn on <strong>custom blind levels</strong> below
+                  and write the schedule yourself.</p>
+                )}
               </div>
             )}
             <select className="input" value={structure} onChange={e => setStructure(e.target.value as 'turbo' | 'regular' | 'deep')}>
@@ -197,11 +217,13 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
           )}
         </div>
         <LateClockField value={lateClock} onChange={setLateClock} />
-        <label className="check-row">
-          <input type="checkbox" checked={customBlinds} onChange={e => setCustomBlinds(e.target.checked)} />
-          <span>Custom blind levels (write the exact schedule yourself)</span>
-        </label>
-        {customBlinds && <BlindEditor levels={levels} onChange={setLevels} />}
+        {!playerHost && (
+          <label className="check-row">
+            <input type="checkbox" checked={customBlinds} onChange={e => setCustomBlinds(e.target.checked)} />
+            <span>Custom blind levels (write the exact schedule yourself)</span>
+          </label>
+        )}
+        {customBlinds && !playerHost && <BlindEditor levels={levels} onChange={setLevels} />}
         <div className="row">
           {!customBlinds && (
             <div className="field">
@@ -219,8 +241,8 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
                 <option value="custom">Custom…</option>
               </select>
               {levelMinutesCustom && (
-                <input className="input" type="number" min={1} max={60} value={levelMinutes}
-                  onChange={e => setLevelMinutes(Math.max(1, Math.min(60, Math.floor(Number(e.target.value) || 1))))} />
+                <input className="input" type="number" min={1} max={playerHost ? LIMITS.levelMinutes : 60} value={levelMinutes}
+                  onChange={e => setLevelMinutes(Math.max(1, Math.min(playerHost ? LIMITS.levelMinutes : 60, Math.floor(Number(e.target.value) || 1))))} />
               )}
             </div>
           )}
@@ -235,12 +257,12 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
                 setMaxPlayers(Number(e.target.value));
               }}
             >
-              {[9, 18, 45, 90, 180, 300, 500, 1000].map(m => <option key={m} value={m}>{m}</option>)}
+              {(playerHost ? [9, 18, 45, 90, LIMITS.maxPlayers] : [9, 18, 45, 90, 180, 300, 500, 1000]).map(m => <option key={m} value={m}>{m}</option>)}
               <option value="custom">Custom…</option>
             </select>
             {maxPlayersCustom && (
-              <input className="input" type="number" min={2} max={1000} value={maxPlayers}
-                onChange={e => setMaxPlayers(Math.max(2, Math.min(1000, Math.floor(Number(e.target.value) || 2))))} />
+              <input className="input" type="number" min={2} max={playerHost ? LIMITS.maxPlayers : 1000} value={maxPlayers}
+                onChange={e => setMaxPlayers(Math.max(2, Math.min(playerHost ? LIMITS.maxPlayers : 1000, Math.floor(Number(e.target.value) || 2))))} />
             )}
           </div>
         </div>
@@ -293,8 +315,8 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
             <div className="field">
               <label>Custom (minutes)</label>
               <input
-                className="input" type="number" min={1} max={240} value={lateRegMinutes}
-                onChange={e => setLateRegMinutes(Math.max(0, Math.min(240, Math.floor(Number(e.target.value) || 0))))}
+                className="input" type="number" min={1} max={playerHost ? LIMITS.lateRegMinutes : 240} value={lateRegMinutes}
+                onChange={e => setLateRegMinutes(Math.max(0, Math.min(playerHost ? LIMITS.lateRegMinutes : 240, Math.floor(Number(e.target.value) || 0))))}
               />
             </div>
           )}
@@ -303,8 +325,8 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
           <div className="field">
             <label>Time to join a table</label>
             <input
-              className="input" type="number" min={1} max={240} value={joinMinutes}
-              onChange={e => setJoinMinutes(Math.max(1, Math.min(240, Math.floor(Number(e.target.value) || 1))))}
+              className="input" type="number" min={1} max={playerHost ? LIMITS.joinMinutes : 240} value={joinMinutes}
+              onChange={e => setJoinMinutes(Math.max(1, Math.min(playerHost ? LIMITS.joinMinutes : 240, Math.floor(Number(e.target.value) || 1))))}
             />
             <div className="field-hint">
               Registering reserves a place; players press <strong>Join table</strong> to
@@ -322,9 +344,9 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
                 <span>On</span>
               </label>
               <input
-                className="input" type="number" min={1} max={240}
+                className="input" type="number" min={1} max={playerHost ? LIMITS.betCapMinutes : 240}
                 value={betCapMinutes} disabled={!betCapOn}
-                onChange={e => setBetCapMinutes(Math.max(1, Math.min(240, Math.floor(Number(e.target.value) || 1))))}
+                onChange={e => setBetCapMinutes(Math.max(1, Math.min(playerHost ? LIMITS.betCapMinutes : 240, Math.floor(Number(e.target.value) || 1))))}
               />
             </div>
             <div className="field-hint">
@@ -335,14 +357,16 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
         <div className="field">
-          <label>Scheduled start (optional — starts automatically when the time comes)</label>
+          <label>Scheduled start (optional — starts automatically when the time comes{playerHost ? '; within 7 days' : ''})</label>
           <input className="input" type="datetime-local" value={scheduledStart}
             onChange={e => setScheduledStart(e.target.value)} />
         </div>
-        <label className="check-row">
-          <input type="checkbox" checked={approveRegistrations} onChange={e => setApproveRegistrations(e.target.checked)} />
-          <span>Approve each registration (players wait in a queue until you accept them)</span>
-        </label>
+        {!playerHost && (
+          <label className="check-row">
+            <input type="checkbox" checked={approveRegistrations} onChange={e => setApproveRegistrations(e.target.checked)} />
+            <span>Approve each registration (players wait in a queue until you accept them)</span>
+          </label>
+        )}
         <div className="field">
           <label>Show stacks and bets as</label>
           <select className="input" value={displayMode} onChange={e => setDisplayMode(e.target.value as 'chips' | 'bb')}>
@@ -355,7 +379,9 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
           <span>Rabbit hunting (show the board that would have come when a hand ends early)</span>
         </label>
         <div className="field">
-          <label>Prizes (shown to players and in the winner announcement)</label>
+          <label>{playerHost
+            ? `Prizes (shown to players; you hand them out, not ${BRAND.hub})`
+            : 'Prizes (shown to players and in the winner announcement)'}</label>
           <textarea
             className="input" rows={2} maxLength={500}
             placeholder="e.g. 1st: prop firm evaluation account · 2nd: ..."
@@ -367,16 +393,19 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
             <label>Re-entries</label>
             <select className="input" value={maxReentries} onChange={e => setMaxReentries(Number(e.target.value))}>
               <option value={0}>No</option>
-              {[1, 2, 3, 5, 10].map(m => <option key={m} value={m}>Up to {m}</option>)}
+              {[1, 2, 3, 5, 10].filter(m => !playerHost || m <= LIMITS.maxReentries).map(m => <option key={m} value={m}>Up to {m}</option>)}
             </select>
           </div>
         </div>
 
-        <label className="check-row">
-          <input type="checkbox" checked={showSocial} onChange={e => setShowSocial(e.target.checked)} />
-          <span>Require social follows / Discord to register</span>
-        </label>
-        {showSocial && (
+        {/* Entry requirements and Discord announcements are an operator's. */}
+        {!playerHost && (
+          <label className="check-row">
+            <input type="checkbox" checked={showSocial} onChange={e => setShowSocial(e.target.checked)} />
+            <span>Require social follows / Discord to register</span>
+          </label>
+        )}
+        {showSocial && !playerHost && (
           <div className="social-config">
             <div className="field">
               <label>X (Twitter) profile to follow</label>
@@ -549,6 +578,12 @@ export function CreateCashModal({ onClose }: { onClose: () => void }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <h3>New cash table</h3>
+        {!profile?.isAdmin && (
+          <p className="host-disclaimer">
+            You are hosting as a player: up to {LIMITS.cashTables} tables open at a time. You can close yours
+            whenever you like; an operator handles anything else.
+          </p>
+        )}
         <div className="field">
           <label>Table name</label>
           <input className="input" placeholder="e.g. Friday Night Cash" value={name}

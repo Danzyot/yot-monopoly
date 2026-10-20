@@ -143,6 +143,7 @@ export default function Lobby() {
               <div className="gc-top">
                 <h3>{t.name}</h3>
                 {t.hasSocialReq && <span className="req-pill" title="Social requirements to register">Gated</span>}
+                {t.playerHosted && <span className="req-pill host-pill" title={`Hosted by ${t.hostName}, a player host — prizes are the host's responsibility`}>Player host</span>}
                 <span className={`state-badge state-${t.state}`}>
                   {t.state === 'registering' ? 'Registering' : t.state}
                 </span>
@@ -161,7 +162,7 @@ export default function Lobby() {
                   {t.topPlayers.map((p, i) => (
                     <div key={i} className="top-player-row">
                       <span className="medal">{t.state === 'finished' ? MEDALS[(p.place ?? i + 1) - 1] ?? p.place : MEDALS[i] ?? '·'}</span>
-                      <span className="tp-name"><Avatar value={p.avatar} size={15} /> {p.name}</span>
+                      <span className="tp-name"><Avatar value={p.avatar} size={15} chog={p.chog} /> {p.name}</span>
                       <span className="tp-val">
                         {t.state === 'finished'
                           ? p.prize ? `${p.prize.toLocaleString()} cr` : ''
@@ -196,6 +197,7 @@ export default function Lobby() {
             <div key={t.id} className="game-card">
               <div className="gc-top">
                 <h3>{t.name}</h3>
+                {t.playerHosted && <span className="req-pill host-pill" title={`Hosted by ${t.hostName}, a player host`}>Player host</span>}
                 <span className="state-badge state-running">{t.sb}/{t.bb}</span>
               </div>
               <div className="gc-stats">

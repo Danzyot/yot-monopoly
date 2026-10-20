@@ -35,6 +35,21 @@ function sameString(a: string, b: string): boolean {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 
+/**
+ * A MAC for server-to-server calls between Chog Games services (poker asking the hub who may
+ * host). Same secret as sessions, but every caller prefixes its own purpose, so a request
+ * signature can never pass as a session token or OAuth state (those MAC base64url text, which has
+ * no ':').
+ */
+export function serviceMac(message: string): string {
+  return mac(`svc:${message}`);
+}
+
+/** Constant-time comparison of two MACs. */
+export function sameMac(a: string, b: string): boolean {
+  return sameString(a, b);
+}
+
 export function signToken(profile: PlayerProfile): string {
   const payload = b64url(Buffer.from(JSON.stringify({ ...profile, isAdmin: undefined, iat: Date.now() })));
   return `${payload}.${mac(payload)}`;
@@ -167,6 +182,15 @@ export function adminModeConfigured(): boolean {
 /** In production the operator list must be set explicitly (an unset one fails closed). */
 export function isProduction(): boolean {
   return process.env.NODE_ENV === 'production';
+}
+
+/**
+ * Whether a profile id belongs to an operator, without a token in hand (the hosting check is
+ * asked about ids). Same rule as withAdminFlag: Discord accounts are `dc_<discord id>`.
+ */
+export function isAdminId(playerId: string): boolean {
+  if (!adminModeConfigured()) return !isProduction();
+  return playerId.startsWith('dc_') && adminDiscordIds().has(playerId.slice(3));
 }
 
 /**

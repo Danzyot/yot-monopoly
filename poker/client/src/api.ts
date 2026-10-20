@@ -1,4 +1,4 @@
-import type { PlayerProfile } from '../../shared/types';
+import type { ChogBadge, PlayerProfile } from '../../shared/types';
 
 const TOKEN_KEY = 'chog.token';
 const PROFILE_KEY = 'chog.profile';
@@ -73,10 +73,27 @@ export interface AppConfig {
   };
 }
 
+// "Your Chog" picker (server/src/chogroutes.ts). `chogs` is what the hub says
+// this player holds; `reachable` false means the hub could not be asked.
+export interface MyChogs {
+  enabled: boolean;
+  artBase: string | null;
+  pick: number | null;
+  chogs: ChogBadge[];
+  reachable: boolean;
+}
+
 export const api = {
   config: () => request<AppConfig>('/api/config'),
+  myChogs: (refresh = false) => request<MyChogs>(`/api/chogs${refresh ? '?refresh=1' : ''}`),
+  pickChog: (chogToken: number | null) =>
+    request<{ pick: number | null; chog: ChogBadge | null }>('/api/chogs/pick', {
+      method: 'POST', body: JSON.stringify({ chogToken }),
+    }),
   // The profile as the server sees it (operator flag included).
   me: () => request<{ profile: PlayerProfile }>('/api/auth/me'),
+  // Whether this player may host (operator, Chog holder or approved host; the hub decides).
+  hosting: () => request<{ canHost: boolean; reason: 'admin' | 'holder' | 'approved' | null; error?: string | null }>('/api/hosting/me'),
   discordRoles: (guildId?: string) =>
     request<{ roles: { id: string; name: string }[] }>(
       `/api/discord/roles${guildId ? `?guildId=${encodeURIComponent(guildId)}` : ''}`),
@@ -329,10 +346,12 @@ export const api = {
     tournaments: {
       id: string; name: string; state: string; players: number; alive: number;
       level: number; createdAt: number; startedAt: number | null;
+      hostId: string; hostName: string; playerHosted: boolean;
     }[];
     cashTables: {
       id: string; name: string; sb: number; bb: number; players: number;
       maxSeats: number; hands: number; closed: boolean; createdAt: number;
+      hostId: string | null; hostName: string; playerHosted: boolean;
     }[];
   }>('/api/admin/games'),
   stopGame: (kind: 'cash' | 'tournament', id: string) =>

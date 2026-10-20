@@ -107,10 +107,13 @@ Discord application at all. It is meant for demos and nothing else:
 
 Unset it before the room runs a real event.
 
-**One operator group, everyone else plays.** Only Discord ids listed in
-`ADMIN_DISCORD_IDS` can create or control games. With that variable unset,
+**One operator group, plus player hosts.** Discord ids listed in
+`ADMIN_DISCORD_IDS` can create and control any game. With that variable unset,
 *every* account is an operator — fine on a laptop, wrong in production. Set it
-before you go live.
+before you go live. Chog Genesis holders and players approved in the hub's
+Dashboard → Hosts may also open tables and tournaments, with limits, and run
+only their own (start, pause, cancel, prizes); this room asks the hub, signed
+with the shared secret. See "Player hosts" in `DEPLOY.md`.
 
 **The audit channel is for operators only.** `DISCORD_AUDIT_CHANNEL_ID`
 receives cheating alerts, including player names and IP-derived countries.
@@ -162,7 +165,7 @@ operator login.**
 | Symptom | Look at |
 |---|---|
 | Nobody can sign in | Discord client id/secret, and the redirect URI matching `PUBLIC_URL` exactly |
-| You can sign in but cannot create games | Your Discord id is not in `ADMIN_DISCORD_IDS` |
+| You can sign in but cannot create games | Your Discord id is not in `ADMIN_DISCORD_IDS`; for a player host, "Could not check your hosting rights" means the hub is unreachable or `CHOG_SECRET` differs from the hub's `APP_SECRET` |
 | Results vanished after a deploy | No volume attached, or `DATA_DIR` not set to its mount path |
 | Discord verification fails | Bot not in the server, or the Server Members Intent is off |
 | Site is slow with a big field | Memory. `GET /api/health` shows RSS; raise the Railway plan |

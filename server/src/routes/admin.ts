@@ -8,6 +8,7 @@ import { forgetAccount, getAccount, searchAccounts, sharedIpGroups } from '../co
 import { botEnabled, postVerifyMessage, sendDirectMessage } from '../discord.ts';
 import { eventsForGame, loggedGames } from '../eventlog.ts';
 import { getFeatures, setFeatures } from '../features.ts';
+import { approveHost, holderHosts, listApprovedHosts, normalizeHostId, revokeHost } from '../hosting.ts';
 import { listGraphics } from '../graphics.ts';
 import { adminLog, fail, requireAdmin } from '../http.ts';
 import { adminGameRoutes } from './adminGame.ts';
@@ -150,6 +151,36 @@ export function adminRoutes(sockets: SocketLayer, loopLag: () => number): expres
   });
 
   r.get('/alts', (_req, res) => res.json(sharedIpGroups().slice(0, 300)));
+
+  // ---- hosting rights ----
+  // Approved hosts (added here) and Chog holders (who host by holding); both
+  // may create tournaments. Operators always may and are not listed.
+  const nameOf = (id: string) => getAccount(id)?.name ?? '';
+  r.get('/hosts', (_req, res) => {
+    const holders = holderHosts().map(h => ({ ...h, name: nameOf(h.id) }));
+    const holding = new Set(holders.map(h => h.id));
+    res.json({
+      // `holder`: would be a host anyway, so removing them changes nothing until they sell.
+      approved: listApprovedHosts().map(h => ({ ...h, name: nameOf(h.id) || h.name, holder: holding.has(h.id) })),
+      holders,
+    });
+  });
+
+  r.post('/hosts', (req, res) => {
+    try {
+      const id = normalizeHostId(req.body?.id);
+      const name = nameOf(id) || String(req.body?.name ?? '').trim();
+      const row = approveHost(id, name, who(res).name);
+      adminLog(who(res), `approved ${row.name || row.id} (${row.id}) as a host`);
+      res.json(row);
+    } catch (e) { fail(res, e); }
+  });
+
+  r.delete('/hosts/:id', (req, res) => {
+    const ok = revokeHost(req.params.id);
+    if (ok) adminLog(who(res), `removed ${nameOf(req.params.id) || req.params.id} (${req.params.id}) from the approved hosts`);
+    res.json({ ok });
+  });
 
   // ---- bans ----
   r.get('/bans', (_req, res) => res.json(listBans()));

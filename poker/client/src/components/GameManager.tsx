@@ -64,13 +64,21 @@ export function LiveGames() {
   if (!data) return <p className="tag">Loading…</p>;
   const nothing = data.tournaments.length === 0 && data.cashTables.length === 0;
   if (nothing) return <div className="empty-note">No games on the server right now.</div>;
+  const byPlayers = data.tournaments.filter(t => t.playerHosted && t.state !== 'finished' && t.state !== 'cancelled').length
+    + data.cashTables.filter(t => t.playerHosted && !t.closed).length;
 
   return (
     <div className="panel game-admin">
+      {byPlayers > 0 && (
+        <p className="tag" style={{ margin: '0 0 8px' }}>
+          {byPlayers} live game{byPlayers === 1 ? '' : 's'} opened by player hosts (Chog holders and approved hosts) — marked below. Open one to pause it, or end it here.
+        </p>
+      )}
       {data.tournaments.map(t => (
         <div key={t.id} className="game-admin-row">
           <span className={`state-badge state-${t.state}`}>{t.state}</span>
           <Link className="ga-name" to={`/t/${t.id}`}>{t.name}</Link>
+          {t.playerHosted && <span className="req-pill host-pill" title="Made by a player host">Hosted by {t.hostName}</span>}
           <span className="ga-meta">
             {t.players} entrant{t.players === 1 ? '' : 's'}
             {t.state !== 'registering' && ` · ${t.alive} left · level ${t.level}`}
@@ -94,6 +102,7 @@ export function LiveGames() {
             {t.closed ? 'closed' : 'cash'}
           </span>
           <Link className="ga-name" to={`/table/${t.id}`}>{t.name}</Link>
+          {t.playerHosted && <span className="req-pill host-pill" title="Opened by a player host">Hosted by {t.hostName}</span>}
           <span className="ga-meta">
             {t.sb}/{t.bb} · {t.players}/{t.maxSeats} seated · {t.hands} hand{t.hands === 1 ? '' : 's'}
           </span>

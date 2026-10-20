@@ -1,5 +1,5 @@
 import type { ChatMsg, LobbyView, TableReaction, TournamentConfig } from '../../shared/types.ts';
-import { announceChannelId, announceWinners, type WinnerRow } from './discord.ts';
+import { announceChannelId, announceWinners, type AnnounceTarget, type WinnerRow } from './discord.ts';
 import { Table } from './engine/table.ts';
 import { noteAction, recordHandResult } from './audit.ts';
 import { addCashRecord, addRecord } from './store.ts';
@@ -10,6 +10,7 @@ export interface CashTableSnap {
   id: string; name: string; sb: number; bb: number; ante: number;
   maxSeats: number; minBuy: number; maxBuy: number;
   hostId: string | null; hostName: string;
+  playerHosted?: boolean;
   actionTimeMs: number; timebankMs: number; rabbitHunting: boolean;
   theme?: import('../../shared/types.ts').TableTheme | null;
   buttonSeat: number; handNumber: number;
@@ -84,7 +85,7 @@ export class Registry {
       displayMode?: 'chips' | 'bb';
       theme?: import('../../shared/types.ts').TableTheme | null;
     },
-    host: { id: string; name: string },
+    host: { id: string; name: string; playerHosted?: boolean },
   ): Table {
     const table = new Table({
       name: opts.name,
@@ -95,6 +96,7 @@ export class Registry {
       maxSeats: opts.maxSeats,
       cash: { minBuy: opts.minBuy, maxBuy: opts.maxBuy },
       hostId: host.id,
+      playerHosted: !!host.playerHosted,
       rabbitHunting: opts.rabbitHunting,
       actionTimeMs: (opts.actionSeconds ?? 22) * 1000,
       timebankMs: Math.max(0, opts.timebankSeconds ?? 0) * 1000,
@@ -115,6 +117,7 @@ export class Registry {
       maxSeats: t.maxSeats,
       minBuy: t.cash?.minBuy ?? 0, maxBuy: t.cash?.maxBuy ?? 0,
       hostId: t.hostId, hostName: this.hostNames.get(t.id) ?? '—',
+      playerHosted: t.playerHosted,
       actionTimeMs: t.actionTimeMs, timebankMs: t.timebankMs, rabbitHunting: t.rabbitHunting,
       theme: t.theme,
       buttonSeat: t.buttonSeat, handNumber: t.handNumber,
@@ -134,6 +137,7 @@ export class Registry {
       maxSeats: snap.maxSeats,
       cash: { minBuy: snap.minBuy, maxBuy: snap.maxBuy },
       hostId: snap.hostId ?? undefined,
+      playerHosted: !!snap.playerHosted,
       rabbitHunting: snap.rabbitHunting,
       actionTimeMs: snap.actionTimeMs,
       timebankMs: snap.timebankMs ?? 0,
@@ -217,7 +221,8 @@ export class Registry {
     discordWebhookUrl?: string | null,
   ): Tournament {
     const t = new Tournament(config, host, this.tournamentCallbacks(), scheduledStart);
-    t.discordWebhookUrl = discordWebhookUrl ?? null;
+    // Results of a player-hosted event never go to Discord (see announceTarget).
+    t.discordWebhookUrl = config.playerHosted ? null : discordWebhookUrl ?? null;
     this.tournaments.set(t.id, t);
     this.e.lobbyChanged();
     return t;
@@ -246,9 +251,19 @@ export class Registry {
     });
   }
 
+  // Where a finished tournament's results are posted, or null for nowhere.
+  // Per-tournament webhook wins; otherwise the shared bot + announce channel.
+  // Player-hosted events are never announced: the channel speaks for the
+  // operators, and a host's prizes are not Chog Games' to promise.
+  announceTarget(t: Tournament): AnnounceTarget | null {
+    if (t.config.playerHosted) return null;
+    if (!t.discordWebhookUrl && !announceChannelId()) return null;
+    return { webhookUrl: t.discordWebhookUrl, channelId: announceChannelId() };
+  }
+
   private announceTournamentWinners(t: Tournament) {
-    // Per-tournament webhook wins; otherwise the shared bot + announce channel.
-    if (!t.discordWebhookUrl && !announceChannelId()) return;
+    const target = this.announceTarget(t);
+    if (!target) return;
     const paid = t.getPayouts().length;
     const winners: WinnerRow[] = [...t.players.values()]
       .filter(p => p.place !== null && p.place <= Math.max(3, Math.min(paid, 10)))
@@ -262,7 +277,7 @@ export class Registry {
         discordVerified: p.discordVerified,
       }));
     void announceWinners(
-      { webhookUrl: t.discordWebhookUrl, channelId: announceChannelId() },
+      target,
       t.config.name, t.players.size, t.config.prizeText, winners,
     );
   }
@@ -381,6 +396,10 @@ export class Registry {
     ];
   }
 
+  hostNameOf(tableId: string): string {
+    return this.hostNames.get(tableId) ?? '—';
+  }
+
   findTable(id: string): Table | null {
     const cash = this.cashTables.get(id);
     if (cash) return cash;
@@ -408,6 +427,7 @@ export class Registry {
         startingStack: t.config.startingStack,
         structure: t.config.structure,
         hostName: t.hostName,
+        playerHosted: !!t.config.playerHosted,
         scheduledStart: t.scheduledStart,
         createdAt: t.createdAt,
         hasSocialReq: !!t.config.social,
@@ -415,12 +435,12 @@ export class Registry {
           ? t.standings()
             .filter(s => s.place !== null && s.place <= 3)
             .sort((a, b) => (a.place ?? 9) - (b.place ?? 9))
-            .map(s => ({ name: s.name, avatar: s.avatar, stack: 0, place: s.place, prize: s.prize }))
+            .map(s => ({ name: s.name, avatar: s.avatar, ...(s.chog ? { chog: s.chog } : {}), stack: 0, place: s.place, prize: s.prize }))
           : t.state === 'registering'
             ? []
             : t.standings().slice(0, 3)
               .filter(s => !s.busted)
-              .map(s => ({ name: s.name, avatar: s.avatar, stack: s.stack, place: null, prize: null })),
+              .map(s => ({ name: s.name, avatar: s.avatar, ...(s.chog ? { chog: s.chog } : {}), stack: s.stack, place: null, prize: null })),
       }));
     const cashTables = [...this.cashTables.values()]
       .filter(t => !t.closed)
@@ -437,6 +457,7 @@ export class Registry {
         maxBuy: t.cash?.maxBuy ?? 0,
         createdAt: 0,
         hostName: this.hostNames.get(t.id) ?? '—',
+        playerHosted: t.playerHosted,
       }));
     return { tournaments, cashTables, online };
   }

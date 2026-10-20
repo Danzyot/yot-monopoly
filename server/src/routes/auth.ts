@@ -5,6 +5,7 @@ import {
   demoMode, makeDemoProfile, makeDiscordProfile, signState, signToken, verifyState,
 } from '../auth.ts';
 import { banMessage, findBan } from '../bans.ts';
+import { canHost } from '../hosting.ts';
 import { authorizeUrl, completeOAuth, discordEnabled, redirectUriFor } from '../discord.ts';
 import { handleInteraction, interactionsConfigured, validSignature } from '../interactions.ts';
 import { codeStatus, startCode } from '../verifycode.ts';
@@ -146,7 +147,8 @@ export function authRoutes(): express.Router {
     if (!p) { res.status(401).json({ error: 'Not signed in' }); return; }
     const ban = findBan({ id: p.id, discordId: p.discord?.id, ip: req.ip });
     if (ban) { res.status(403).json({ error: banMessage(ban) }); return; }
-    res.json({ profile: p });
+    // Whether this player may host tournaments (operator, Chog holder or approved host).
+    res.json({ profile: p, canHost: canHost(p.id) });
   });
 
   return r;
