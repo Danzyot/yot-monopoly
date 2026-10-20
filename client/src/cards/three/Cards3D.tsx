@@ -380,7 +380,7 @@ function flyStep(
         if (mine) { const h = ourHand(st, canvas); screenToTable(h.x + (k - n / 2) * 24, h.y, canvas, camera, FELT_Y + 1.4, from); qFrom.copy(camera.quaternion); }
         else fanSlot(angleOf(step.player), k, n, from, qFrom);
         to.copy(PILE).setY(FELT_Y + 0.02);
-        arc(easeOut(tk), FLIGHT_ARC * 0.9);
+        arc(easeOut(tk), FLIGHT_ARC * 0.45);
         q.slerpQuaternions(qFrom, qDown, smooth(tk));
         const g = mine ? 1 : FAN_SCALE + (1 - FAN_SCALE) * tk;
         scl.set(g, g, 1);

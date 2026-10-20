@@ -472,6 +472,34 @@
 /* A gold shockwave where the round's last card lands. */
 .ct-shock { position: absolute; width: 260px; height: 260px; transform: translate(-50%, -50%); border-radius: 50%; border: 8px solid #ffd23f; box-shadow: 0 0 30px #ffd23f, inset 0 0 30px rgba(255, 210, 63, 0.6); animation-name: ct-shock; animation-fill-mode: both; animation-timing-function: ease-out; z-index: 6; pointer-events: none; }
 @keyframes ct-shock { from { transform: translate(-50%, -50%) scale(0.15); opacity: 1; } to { transform: translate(-50%, -50%) scale(1.9); opacity: 0; } }
+/* Going out: "OUT!" stamped over the table in gold, slammed down, with sunburst rays turning behind it. */
+.ct-win {
+  position: absolute; left: 50%; top: 56%; z-index: 9; text-align: center; pointer-events: none; white-space: nowrap;
+  animation-name: ct-win; animation-fill-mode: both; animation-timing-function: ease-out;
+}
+.ct-win b {
+  position: relative; display: block; font: 400 88px/0.95 var(--display); color: #fff3b0; letter-spacing: 2px; text-transform: uppercase;
+  -webkit-text-stroke: 3px #7a3c00; paint-order: stroke fill;
+  text-shadow: 0 5px 0 #b86a00, 0 10px 0 rgba(0, 0, 0, 0.35), 0 0 36px rgba(255, 210, 63, 0.95);
+}
+.ct-win small { position: relative; display: block; margin-top: 6px; font: 900 15px var(--font); letter-spacing: 3px; text-transform: uppercase; color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6); }
+.ct-win-rays {
+  position: absolute; left: 50%; top: 45%; width: 420px; height: 420px; margin: -210px 0 0 -210px; border-radius: 50%;
+  background: repeating-conic-gradient(rgba(255, 214, 80, 0.55) 0deg 9deg, rgba(255, 214, 80, 0) 9deg 24deg);
+  -webkit-mask: radial-gradient(circle, #000 18%, transparent 68%); mask: radial-gradient(circle, #000 18%, transparent 68%);
+  animation: ct-rays 3s linear infinite;
+}
+@keyframes ct-win {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(3) rotate(6deg); }
+  14% { opacity: 1; transform: translate(-50%, -50%) scale(0.9) rotate(-4deg); }
+  22% { transform: translate(-50%, -50%) scale(1.08) rotate(-4deg); }
+  30% { transform: translate(-50%, -50%) scale(1) rotate(-4deg); }
+  82% { opacity: 1; transform: translate(-50%, -50%) scale(1.03) rotate(-4deg); }
+  to { opacity: 0; transform: translate(-50%, -50%) scale(1.15) rotate(-4deg); }
+}
+@keyframes ct-rays { to { rotate: 360deg; } }
+.ct.compact .ct-win b { font-size: 60px; }
+.ct.compact .ct-win-rays { width: 300px; height: 300px; margin: -150px 0 0 -150px; }
 /* The table shakes for the big moments (never with reduced motion: the class is not set). */
 .ct-stage.shake { animation: ct-shake 0.42s cubic-bezier(.36, .07, .19, .97) both; }
 @keyframes ct-shake {
@@ -486,4 +514,6 @@
   .ct-flames i { animation: none; }
   .ct-combo, .ct-shock { animation-duration: 1ms !important; }
   .ct-combo { animation-name: none; transform: translate(-50%, -50%) rotate(-4deg); }
+  .ct-win { animation-name: none; transform: translate(-50%, -50%) rotate(-4deg); }
+  .ct-win-rays { animation: none; }
 }

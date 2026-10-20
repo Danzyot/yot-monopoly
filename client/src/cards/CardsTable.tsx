@@ -234,13 +234,13 @@ function SeatChip({ p, seat, at, view, frame, skew, now, canCatch, compact, pin 
  * table the cards fly in the scene and the flashes are pinned over whoever
  * they are about (data-at), so here they only get their text.
  */
-function Effects({ frame, layout, piles, names, me, three, fxRef }: {
+function Effects({ frame, layout, piles, names, me, three, cuts, fxRef }: {
   frame: CardsFrame; layout: Record<string, Pt>; piles: { pile: Pt; discard: Pt }; names: Record<string, string>; me: string | null;
-  three: boolean; fxRef?: React.RefObject<HTMLDivElement | null>;
+  three: boolean; cuts: boolean; fxRef?: React.RefObject<HTMLDivElement | null>;
 }) {
   return (
     <div className="ct-fx" aria-hidden ref={fxRef}>
-      {frame.active.map(s => <Effect key={`${frame.play?.seq}-${s.index}`} s={s} layout={layout} piles={piles} names={names} me={me} three={three} />)}
+      {frame.active.map(s => <Effect key={`${frame.play?.seq}-${s.index}`} s={s} layout={layout} piles={piles} names={names} me={me} three={three} cuts={cuts} />)}
     </div>
   );
 }
@@ -252,8 +252,21 @@ function fly(from: Pt, to: Pt, dur: number, delay = 0, extra: CSSProperties = {}
   } as CSSProperties;
 }
 
-function Effect({ s, layout, piles, names, me, three }: {
+/** The round's last card down: "OUT!" stamped over the table in gold, with rays turning behind it. */
+function WinStamp({ mine, name, dur, left }: { mine: boolean; name: string; dur: number; left: number }) {
+  return (
+    <div className="ct-win" style={{ animationDuration: `${dur}ms`, animationDelay: `${left}ms` }}>
+      <span className="ct-win-rays" />
+      <b>{mine ? 'You\'re out!' : 'Out!'}</b>
+      <small>{mine ? 'last card down' : `${name} is out of cards`}</small>
+    </div>
+  );
+}
+
+function Effect({ s, layout, piles, names, me, three, cuts }: {
   s: StagedStep; layout: Record<string, Pt>; piles: { pile: Pt; discard: Pt }; names: Record<string, string>; me: string | null; three: boolean;
+  /** The 3D camera cuts to the big moments with its own title cards (cinematic on, motion allowed). */
+  cuts: boolean;
 }) {
   const st: CardsStep = s.step;
   const dur = s.end - s.at;
@@ -362,15 +375,20 @@ function Effect({ s, layout, piles, names, me, three }: {
     case 'timeout': return flash(st.player, '⏱ Time!', 'soft');
     case 'leave': return flash(st.player, 'Left', 'soft');
     case 'reshuffle': return flash('pile', 'Reshuffle', 'soft');
-    case 'roundEnd':
-      // In 3D the camera cuts to the winner with a title card; the match's last round goes on to the podium.
-      if (three) return st.blocked ? null : <div className="ct-shock" style={{ ...pos(piles.discard), animationDuration: `${Math.min(dur, 900)}ms`, animationDelay: `${left}ms` }} />;
+    case 'roundEnd': {
+      // Out of cards: the last card is stamped "OUT!" (the 3D table rings a gold shockwave in the scene; the flat one here).
+      // In 3D the camera then cuts to the winner with a title card; the match's last round goes on to the podium.
+      const stamp = !st.blocked && <WinStamp mine={st.winner === me} name={names[st.winner]} dur={Math.min(dur, 1500)} left={left} />;
+      const result = banner(<>{names[st.winner]} {st.blocked ? 'takes' : 'wins'} the round!<small>+{st.points} points</small></>, 'win');
+      if (three) return <>{stamp}{!cuts && result}</>;
       return (
         <>
           {!st.blocked && <div className="ct-shock" style={{ ...pos(piles.discard), animationDuration: `${Math.min(dur, 900)}ms`, animationDelay: `${left}ms` }} />}
-          {banner(<>{names[st.winner]} {st.blocked ? 'takes' : 'wins'} the round!<small>+{st.points} points</small></>, 'win')}
+          {stamp}
+          {result}
         </>
       );
+    }
   }
 }
 
@@ -833,7 +851,7 @@ export default function CardsTable({ room, me, chat, skew, fromLobby }: {
             </div>
           )}
 
-          <Effects frame={frame} layout={layout} piles={piles} names={names} me={myId} three={three} fxRef={fxRef} />
+          <Effects frame={frame} layout={layout} piles={piles} names={names} me={myId} three={three} cuts={cinematic && !reduced} fxRef={fxRef} />
 
           {pd && !held && live && !(myTurn && prompt) && (
             <div className="ct-pending">+{pd.amount} waiting on {names[view.current]}</div>
