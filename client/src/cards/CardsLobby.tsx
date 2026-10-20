@@ -440,7 +440,7 @@ export default function CardsLobby({ room, me, spectating, chat }: {
             </label>
           </div>
 
-          <h3 className="cl-head">House rules <small className="muted">all off is the standard game</small></h3>
+          <h3 className="cl-head">House rules <small className="muted">stacking is on by default; turn it off for the official rules</small></h3>
           <div className="rules">
             {CARDS_HOUSE_RULES.map(h => {
               const off = h.key === 'stackMixed' && !r.stacking;
