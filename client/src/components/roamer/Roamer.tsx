@@ -14,7 +14,8 @@ import './roamer.css';
 // poses wait on a timer), nothing at all while the tab is hidden. It lives in a
 // layer over the page that takes no clicks; only the Chog and its bubble do. It
 // stops only where nothing clickable or readable is under it (the header, the
-// title, the game cards, links and buttons), and runs round them when it can.
+// title, the Play now hero, the live ticker, the game cards, the Chog of the
+// Day, links and buttons), and runs round them when it can.
 // With reduced motion it sits still in a free spot and is clickable all the same.
 
 const OPENSEA = 'https://opensea.io/collection/chog-genesis';
@@ -25,8 +26,9 @@ const AUTO_POP_STOPS = 3;
 /** The figure's feet, as a fraction of the cell (the shadow sits there). */
 const FEET = 0.9;
 
-// Never stops over these; strict also keeps it off what people read.
-const LOOSE = 'a, button:not(.roamer-chog), input, select, textarea, .hub-actions, .signin-bar, [role="dialog"]';
+// Never stops over these (the Play now hero, the live ticker and the Chog of the Day card
+// included, on any screen); strict also keeps it off what people read.
+const LOOSE = 'a, button:not(.roamer-chog), input, select, textarea, .hub-actions, .signin-bar, [role="dialog"], .qp, .ticker, .cotd-card';
 const STRICT = `${LOOSE}, h1, h2, .home-tag, .hub-game, .panel, .cast, .hero-howto`;
 
 type Sheet = { url: string; cell: number; cols: number; rows: number; runFrames: number; frames: Record<string, number> };
