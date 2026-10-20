@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { TableTheme, TournamentView } from '../../../shared/types';
+import { MAX_PLAYER_CAP } from '../../../shared/hosting';
+import { useAuth } from '../auth';
 import { getSocket } from '../socket';
 import BlindEditor, { type LevelRow } from './BlindEditor';
 import ThemePicker from './ThemePicker';
@@ -30,7 +32,11 @@ export default function SettingsModal({ view, onClose }: {
   const [actionSeconds, setActionSeconds] = useState(view.config.actionSeconds ?? 20);
   const [actionCustom, setActionCustom] = useState(
     ![10, 15, 20, 30, 45, 60].includes(view.config.actionSeconds ?? 20));
-  const [maxPlayers, setMaxPlayers] = useState(view.config.maxPlayers);
+  // Empty is no limit. Only an operator may set or lift one, so only an
+  // operator's save carries it.
+  const { profile } = useAuth();
+  const canCap = !!profile?.isAdmin;
+  const [maxPlayers, setMaxPlayers] = useState<number | null>(view.config.maxPlayers ?? null);
   const [timebankSeconds, setTimebankSeconds] = useState(view.config.timebankSeconds ?? 0);
   const [maxReentries, setMaxReentries] = useState(view.config.maxReentries);
   const [rabbitHunting, setRabbitHunting] = useState(view.config.rabbitHunting);
@@ -59,7 +65,7 @@ export default function SettingsModal({ view, onClose }: {
       approveRegistrations: approve,
       prizeText: prizeText.trim() || null,
       actionSeconds,
-      maxPlayers,
+      ...(canCap && maxPlayers !== (view.config.maxPlayers ?? null) ? { maxPlayers } : {}),
       timebankSeconds,
       maxReentries,
       rabbitHunting,
@@ -197,11 +203,16 @@ export default function SettingsModal({ view, onClose }: {
                 onChange={e => setLateRegMinutes(Math.max(0, Math.min(240, Math.floor(Number(e.target.value) || 0))))} />
             )}
           </div>
-          <div className="field">
-            <label>Max players</label>
-            <input className="input" type="number" min={2} max={1000} value={maxPlayers}
-              onChange={e => setMaxPlayers(Math.max(2, Math.min(1000, Math.floor(Number(e.target.value) || 2))))} />
-          </div>
+          {canCap && (
+            <div className="field">
+              <label>Max players</label>
+              <input className="input" type="number" min={2} max={MAX_PLAYER_CAP} value={maxPlayers ?? ''} placeholder="No limit"
+                onChange={e => {
+                  const n = Math.floor(Number(e.target.value));
+                  setMaxPlayers(e.target.value === '' || !n ? null : Math.max(2, Math.min(MAX_PLAYER_CAP, n)));
+                }} />
+            </div>
+          )}
         </div>
 
         <LateClockField value={lateClock} onChange={setLateClock} />

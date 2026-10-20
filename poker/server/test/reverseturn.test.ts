@@ -10,7 +10,7 @@ import { Table } from '../src/engine/table.ts';
 // them is cleared when the test ends, instead of holding the process open.
 function makeTable(ctx: { after: (fn: () => void) => void }): Table {
   const t = new Table(
-    { name: 'Undo', mode: 'cash', sb: 25, bb: 50, maxSeats: 6, cash: { minBuy: 1000, maxBuy: 10_000 }, hostId: 'host' },
+    { name: 'Undo', sb: 25, bb: 50, maxSeats: 6 },
     { broadcast: () => {}, chat: () => {}, event: () => {} },
   );
   t.sit(0, { id: 'a', name: 'Alice', avatar: '🙂' }, 5_000);

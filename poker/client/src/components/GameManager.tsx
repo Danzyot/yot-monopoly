@@ -1,5 +1,6 @@
 // Operator control over games that already exist: end one that is running,
-// drop one that should never have been made, and read back what finished.
+// drop one that should never have been made, and read back what finished —
+// tournaments, and the cash sessions filed before cash tables were retired.
 //
 // Deleting a finished game is the only way to free its name, so the archive
 // is not just a record — it is where name collisions get resolved.
@@ -13,6 +14,7 @@ import { useToast } from '../toast';
 import Avatar from './Avatar';
 import DmDialog, { type DmTarget } from './DmDialog';
 
+// Past games come in both kinds; live games are tournaments only.
 type Kind = 'cash' | 'tournament';
 
 function when(ts: number): string {
@@ -43,15 +45,15 @@ export function LiveGames() {
 
   // Ending a game in front of live players, or deleting one outright, is not
   // something to do on a mis-tap.
-  const run = async (kind: Kind, id: string, name: string, action: 'stop' | 'delete') => {
+  const run = async (id: string, name: string, action: 'stop' | 'delete') => {
     const msg = action === 'stop'
       ? `End "${name}" now? Players at the table will be shown the result.`
       : `Delete "${name}"? It is removed from the site entirely.`;
     if (!window.confirm(msg)) return;
     setBusy(id);
     try {
-      if (action === 'stop') await api.stopGame(kind, id);
-      else await api.deleteGame(kind, id);
+      if (action === 'stop') await api.stopGame(id);
+      else await api.deleteGame(id);
       toast('success', action === 'stop' ? `Ended ${name}` : `Deleted ${name}`);
       refresh();
     } catch (e) {
@@ -62,16 +64,14 @@ export function LiveGames() {
   };
 
   if (!data) return <p className="tag">Loading…</p>;
-  const nothing = data.tournaments.length === 0 && data.cashTables.length === 0;
-  if (nothing) return <div className="empty-note">No games on the server right now.</div>;
-  const byPlayers = data.tournaments.filter(t => t.playerHosted && t.state !== 'finished' && t.state !== 'cancelled').length
-    + data.cashTables.filter(t => t.playerHosted && !t.closed).length;
+  if (data.tournaments.length === 0) return <div className="empty-note">No tournaments on the server right now.</div>;
+  const byPlayers = data.tournaments.filter(t => t.playerHosted && t.state !== 'finished' && t.state !== 'cancelled').length;
 
   return (
     <div className="panel game-admin">
       {byPlayers > 0 && (
         <p className="tag" style={{ margin: '0 0 8px' }}>
-          {byPlayers} live game{byPlayers === 1 ? '' : 's'} opened by player hosts (Chog holders and approved hosts) — marked below. Open one to pause it, or end it here.
+          {byPlayers} live tournament{byPlayers === 1 ? '' : 's'} opened by player hosts (Chog holders and approved hosts) — marked below. Open one to pause it, or end it here.
         </p>
       )}
       {data.tournaments.map(t => (
@@ -86,35 +86,12 @@ export function LiveGames() {
           <span className="ga-when">{when(t.createdAt)}</span>
           {t.state !== 'finished' && t.state !== 'cancelled' && (
             <button className="btn btn-sm" disabled={busy === t.id}
-              onClick={() => void run('tournament', t.id, t.name, 'stop')}>
+              onClick={() => void run(t.id, t.name, 'stop')}>
               {t.state === 'registering' ? 'Cancel' : 'End now'}
             </button>
           )}
           <button className="btn btn-sm btn-danger" disabled={busy === t.id}
-            onClick={() => void run('tournament', t.id, t.name, 'delete')}>
-            Delete
-          </button>
-        </div>
-      ))}
-      {data.cashTables.map(t => (
-        <div key={t.id} className="game-admin-row">
-          <span className={`state-badge state-${t.closed ? 'cancelled' : 'running'}`}>
-            {t.closed ? 'closed' : 'cash'}
-          </span>
-          <Link className="ga-name" to={`/table/${t.id}`}>{t.name}</Link>
-          {t.playerHosted && <span className="req-pill host-pill" title="Opened by a player host">Hosted by {t.hostName}</span>}
-          <span className="ga-meta">
-            {t.sb}/{t.bb} · {t.players}/{t.maxSeats} seated · {t.hands} hand{t.hands === 1 ? '' : 's'}
-          </span>
-          <span className="ga-when">{when(t.createdAt)}</span>
-          {!t.closed && (
-            <button className="btn btn-sm" disabled={busy === t.id}
-              onClick={() => void run('cash', t.id, t.name, 'stop')}>
-              Close
-            </button>
-          )}
-          <button className="btn btn-sm btn-danger" disabled={busy === t.id}
-            onClick={() => void run('cash', t.id, t.name, 'delete')}>
+            onClick={() => void run(t.id, t.name, 'delete')}>
             Delete
           </button>
         </div>
@@ -160,6 +137,8 @@ function TournamentDetail({ rec }: { rec: TournamentRecord }) {
   );
 }
 
+// A cash session from before cash tables were retired: who bought in for
+// what and how they left.
 function CashDetail({ rec }: { rec: CashRecord }) {
   return (
     <div className="ga-detail">

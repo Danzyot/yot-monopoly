@@ -10,7 +10,7 @@ const noopCb = { broadcast: () => {}, chat: () => {}, event: () => {} };
 
 function makeTable(): Table {
   const t = new Table(
-    { name: 'T', mode: 'cash', sb: 5, bb: 10, cash: { minBuy: 100, maxBuy: 2000 }, rabbitHunting: true },
+    { name: 'T', sb: 5, bb: 10, rabbitHunting: true },
     noopCb,
   );
   t.interHandDelayMs = 1;

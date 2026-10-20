@@ -155,7 +155,7 @@ test('hub down mid-game: the table plays on and the seat simply shows no Chog', 
   wallet.dc_a = [AQUA];
   await pick('dc_a', 2);
   const t = new Table({
-    name: 'Chogs', mode: 'cash', sb: 5, bb: 10, maxSeats: 6, cash: { minBuy: 200, maxBuy: 2000 },
+    name: 'Chogs', sb: 5, bb: 10, maxSeats: 6,
   }, { broadcast: () => {}, chat: () => {}, event: () => {} } as never);
   try {
     t.sit(0, { id: 'dc_a', name: 'Ana', avatar: '🙂' }, 1000);

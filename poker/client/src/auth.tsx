@@ -5,7 +5,7 @@ import { resetSocket } from './socket';
 
 interface AuthCtx {
   profile: PlayerProfile | null;
-  // May open tables and tournaments: an operator, or a Chog Genesis holder or
+  // May host tournaments: an operator, or a Chog Genesis holder or
   // approved host (the Chog Games hub decides; the server asks it).
   canHost: boolean;
   chatEnabled: boolean;

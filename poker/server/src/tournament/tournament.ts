@@ -10,6 +10,7 @@ import { CHAT_COOLDOWN_MS, isBlocked, MAX_MENTIONS, resolveMentions, resolveRepl
 import { logGameEvent } from '../eventlog.ts';
 import { isOnline } from '../presence.ts';
 import { chogField } from '../chogs.ts';
+import { MAX_PLAYER_CAP } from '../../../shared/hosting.ts';
 
 const clamp = (n: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, Number.isFinite(n) ? n : lo));
@@ -250,7 +251,13 @@ export class Tournament {
   get lateRegOpen(): boolean {
     const ends = this.lateRegEndsAt;
     return this.state === 'running' && ends !== null && Date.now() < ends
-      && this.players.size < this.config.maxPlayers;
+      && !this.full;
+  }
+
+  // No cap (null) means the field is open to everyone; only an operator sets one.
+  get full(): boolean {
+    const cap = this.config.maxPlayers;
+    return cap !== null && cap !== undefined && this.players.size >= cap;
   }
 
   alivePlayers(): TPlayer[] {
@@ -309,7 +316,7 @@ export class Tournament {
   register(player: { id: string; name: string; avatar: string; discord?: { id: string; username: string } | null; discordVerified?: boolean }) {
     if (this.state === 'finished' || this.state === 'cancelled') throw new Error('tournament is over');
     if (this.players.has(player.id)) throw new Error('already registered');
-    if (this.players.size >= this.config.maxPlayers) throw new Error('tournament is full');
+    if (this.full) throw new Error('tournament is full');
     if (this.state !== 'registering' && !this.lateRegOpen) throw new Error('registration closed');
 
     const p: TPlayer = {
@@ -764,7 +771,6 @@ export class Tournament {
     const table = new Table({
       id: fixed?.id,
       name: fixed?.name ?? `${this.config.name} — Table ${this.tableCounter}`,
-      mode: 'tournament',
       tournamentId: this.id,
       maxSeats: this.config.seatsPerTable,
       sb: lvl.sb, bb: lvl.bb, ante: lvl.ante,
@@ -889,7 +895,7 @@ export class Tournament {
     approveRegistrations?: boolean;
     prizeText?: string | null;
     actionSeconds?: number;
-    maxPlayers?: number;
+    maxPlayers?: number | null;
     timebankSeconds?: number;
     maxReentries?: number;
     rabbitHunting?: boolean;
@@ -1000,12 +1006,14 @@ export class Tournament {
       }
     }
     if (p.maxPlayers !== undefined) {
-      // Never shrink below the people already in.
+      // Null, zero or junk lifts the cap; a number never shrinks the field
+      // below the people already in.
+      const want = p.maxPlayers === null ? NaN : Math.floor(Number(p.maxPlayers));
       const floor = Math.max(2, this.approvedPlayers().length + this.pendingPlayers().length);
-      const cap = clamp(Math.floor(p.maxPlayers), floor, 1000);
-      if (cap !== this.config.maxPlayers) {
+      const cap = Number.isFinite(want) && want > 0 ? clamp(want, floor, MAX_PLAYER_CAP) : null;
+      if (cap !== (this.config.maxPlayers ?? null)) {
         this.config.maxPlayers = cap;
-        changes.push(`max players ${cap}`);
+        changes.push(cap === null ? 'no player limit' : `max players ${cap}`);
       }
     }
     if (p.maxReentries !== undefined) {
@@ -1878,7 +1886,6 @@ export class Tournament {
           player: { ...seat.player },
           stack: seat.stack,
           sittingOut: seat.sittingOut,
-          buyInTotal: seat.buyInTotal,
           timebankMs: seat.timebankMs,
           missedTurns: 0,
           ghostHands: 0, // restart forgives — the counter starts over
@@ -1928,7 +1935,9 @@ export interface TournamentSnap {
     handNumber: number;
     seats: {
       idx: number; player: { id: string; name: string; avatar: string };
-      stack: number; sittingOut: boolean; timebankMs: number; buyInTotal: number;
+      // Snapshots written before cash tables were retired also carry a
+      // buyInTotal per seat; it is ignored.
+      stack: number; sittingOut: boolean; timebankMs: number;
     }[];
     history?: ReturnType<Table['snapshotHistory']>;
   }[];

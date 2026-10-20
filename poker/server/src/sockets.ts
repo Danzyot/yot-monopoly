@@ -30,18 +30,11 @@ const LOBBY = 'lobby';
 
 // Who may reverse a turn or move chips at a table. Both are powers that
 // rewrite the game, so the rule is deliberately narrow and lives here on its
-// own where it can be tested: the table's own host, or the site operator.
-// Tournament tables carry no hostId, so there the operator flag is the only
-// way in — a player at one must never qualify by default. Nor does the host
-// of a player-hosted table: a host who can move chips at their own table can
-// pay themselves.
-export function mayRunTable(
-  hostId: string | null,
-  me: { id: string; isAdmin?: boolean },
-  playerHosted = false,
-): boolean {
-  if (me.isAdmin === true) return true;
-  return !playerHosted && hostId !== null && hostId === me.id;
+// own where it can be tested: the site operator, and nobody else. Every table
+// belongs to a tournament, and a player at one — its host included — must
+// never qualify: a host who can move chips at a table can pay themselves.
+export function mayRunTable(me: { id: string; isAdmin?: boolean }): boolean {
+  return me.isAdmin === true;
 }
 
 // ---------- abuse limits ----------
@@ -193,14 +186,6 @@ export function attachSockets(io: IO) {
     tableChat: (table, msg) => io.to(tableRoom(table.id)).emit('table:chat', msg),
     tableEvent: (table, text) => io.to(tableRoom(table.id)).emit('table:event', { kind: 'log', text, ts: Date.now() }),
     tableReaction: (table, r) => io.to(tableRoom(table.id)).emit('table:reaction', r),
-    // Their own business, not the table's: sent to that player's sockets only.
-    cashBust: (_table, info) => {
-      for (const [, sock] of io.sockets.sockets) {
-        if ((sock.data as SocketData).profile?.id === info.playerId) {
-          sock.emit('table:cashBust', info);
-        }
-      }
-    },
     broadcastTourney: (t: Tournament) => pushTourneyState(io, t),
     tourneyChat: (t, msg: ChatMsg) => io.to(tourneyRoom(t.id)).emit('tourney:chat', msg),
     assigned: (t, playerId, tableId) => {
@@ -258,7 +243,7 @@ export function attachSockets(io: IO) {
 
   // Broadcast fresh state to every table a player sits at (presence changes).
   const broadcastPlayerTables = (playerId: string) => {
-    const tables: Table[] = [...registry.cashTables.values()];
+    const tables: Table[] = [];
     for (const t of registry.tournaments.values()) tables.push(...t.tables.values());
     for (const table of tables) {
       if (!table.closed && table.playerSeat(playerId) !== null) pushTableState(io, table);
@@ -474,33 +459,6 @@ export function attachSockets(io: IO) {
       if (table) table.spectators.delete(socket.id);
     }));
 
-    socket.on('table:sit', wrap((p: { tableId: string; seat: number; buyIn?: number }) => {
-      const me = requireAuth();
-      const table = registry.findTable(p.tableId);
-      if (!table) throw new Error('Table not found');
-      // A tournament ban follows the player to its tables, so check both the
-      // table and the event it belongs to.
-      assertMayJoin(table.id);
-      if (table.tournamentId) assertMayJoin(table.tournamentId);
-      if (table.mode === 'tournament') throw new Error('Tournament seats are assigned automatically');
-      const cash = table.cash!;
-      const buyIn = Math.floor(p.buyIn ?? cash.minBuy);
-      if (buyIn < cash.minBuy || buyIn > cash.maxBuy) {
-        throw new Error(`Buy-in must be between ${cash.minBuy} and ${cash.maxBuy}`);
-      }
-      table.sit(p.seat, { id: me.id, name: me.name, avatar: me.avatar }, buyIn);
-      table.spectators.delete(socket.id);
-    }));
-
-    socket.on('table:stand', wrap((tableId: string) => {
-      const me = requireAuth();
-      const table = registry.findTable(tableId);
-      if (!table) throw new Error('Table not found');
-      if (table.mode === 'tournament') throw new Error('You cannot leave a tournament table with chips');
-      table.stand(me.id);
-      registry.emitter?.lobbyChanged();
-    }));
-
     socket.on('table:action', wrap((p: { tableId: string; type: any; amount?: number }) => {
       const me = requireAuth();
       const table = registry.findTable(p.tableId);
@@ -540,13 +498,6 @@ export function attachSockets(io: IO) {
       table.setSitOut(me.id, !!p.out);
     }));
 
-    socket.on('table:topup', wrap((p: { tableId: string; amount: number }) => {
-      const me = requireAuth();
-      const table = registry.findTable(p.tableId);
-      if (!table) throw new Error('Table not found');
-      table.topUp(me.id, Math.floor(p.amount));
-    }));
-
     // Animated emoji reaction — broadcast to everyone watching the table.
     socket.on('table:react', wrap((p: { tableId: string; emoji: string }) => {
       const me = requireAuth();
@@ -559,32 +510,6 @@ export function attachSockets(io: IO) {
       if (!isOn('rabbitHunting')) throw new Error('Rabbit hunting is switched off');
       requireAuth();
       registry.findTable(tableId)?.showRabbit();
-    }));
-
-    socket.on('table:settings', wrap((p: { tableId: string } & Record<string, unknown>) => {
-      const me = requireAuth();
-      const table = registry.cashTables.get(String(p.tableId));
-      if (!table) throw new Error('Table not found');
-      if (!mayDirect(table, me, 'settings')) {
-        throw new Error(table.playerHosted && table.hostId === me.id
-          ? 'Only an operator can change a table\'s settings — you can close it'
-          : 'Only the table host can do that');
-      }
-      // Themes come off the wire — pin them to known presets and safe urls.
-      if ('theme' in p) p.theme = sanitizeTheme(p.theme);
-      table.updateCashSettings(p as Parameters<typeof table.updateCashSettings>[0]);
-    }));
-
-    socket.on('table:close', wrap((tableId: string) => {
-      const me = requireAuth();
-      const table = registry.cashTables.get(String(tableId));
-      if (!table) throw new Error('Table not found');
-      if (table.hostId !== me.id && !me.isAdmin) throw new Error('Only the table host can do that');
-      table.closeByHost();
-      // File it before the live object is forgotten — the operator still
-      // needs the ledger after the table is gone.
-      registry.archiveCashTable(table);
-      pushLobby(io);
     }));
 
     socket.on('table:reveal', wrap((p: { tableId: string; which: 'first' | 'second' | 'both' }) => {
@@ -704,7 +629,7 @@ export function attachSockets(io: IO) {
     // ---------- operator interventions at a table ----------
     const requireTableHost = (table: Table): PlayerProfile => {
       const me = requireAuth();
-      if (!mayRunTable(table.hostId, me, table.playerHosted)) throw new Error('Only the host can do that');
+      if (!mayRunTable(me)) throw new Error('Only an operator can do that');
       return me;
     };
 
@@ -745,6 +670,11 @@ export function attachSockets(io: IO) {
         });
         if (!allowed) requireHost(t, 'settings'); // throws, with the reason
         if (typeof p.scheduledStart === 'number') playerScheduledStart(p.scheduledStart);
+      }
+      // A tournament is open to everyone unless an operator caps it — not
+      // even the director of an operator-made event may.
+      if ('maxPlayers' in p && me.isAdmin !== true) {
+        throw new Error('Only an operator can set or lift a player limit');
       }
       if ('theme' in p) p.theme = sanitizeTheme(p.theme);
       t.updateSettings(p as Parameters<typeof t.updateSettings>[0]);
@@ -809,7 +739,6 @@ export function attachSockets(io: IO) {
     }));
 
     socket.on('disconnect', () => {
-      for (const t of registry.cashTables.values()) t.spectators.delete(socket.id);
       for (const tt of registry.tournaments.values()) {
         for (const t of tt.tables.values()) t.spectators.delete(socket.id);
       }

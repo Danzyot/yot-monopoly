@@ -1,12 +1,12 @@
 // Player hosts. Operators (ADMIN_DISCORD_IDS) have always been able to open
-// cash tables and tournaments here; Chog Games also lets Chog Genesis holders
-// and players an operator approved host their own. Who qualifies is decided
+// tournaments here; Chog Games also lets Chog Genesis holders and players an
+// operator approved host their own. Who qualifies is decided
 // on the hub (server/src/hosting.ts there), so this room asks it — signed
 // with the shared token secret — and keeps the answer for a minute.
 //
 // What a player host may do is deliberately narrow: start, pause, resume and
-// cancel their own tournament, write its prize line, set its start time, and
-// close their own cash table. Kicking, approving registrations, Discord role
+// cancel their own tournament, write its prize line and set its start time.
+// Kicking, approving registrations, Discord role
 // gating, results posted to Discord, rewriting a hand and everything else an
 // operator does stays with operators.
 import { PLAYER_HOST_LIMITS } from '../../shared/hosting.ts';
@@ -100,44 +100,32 @@ export function hubCanHost(playerId: string): Promise<HostCheck> {
 // The numbers live in shared/ so the create forms offer the same ones.
 export { PLAYER_HOST_LIMITS };
 
-/** Refuses with a message when a player host already runs as much as they may. */
+/** Refuses with a message when a player host already has a live or upcoming tournament. */
 export function assertUnderHostLimit(
-  kind: 'tournament' | 'cash',
   hostId: string,
-  live: {
-    tournaments: { values(): Iterable<{ hostId: string; state: string }> };
-    cashTables: { values(): Iterable<{ hostId: string | null; closed: boolean }> };
-  },
+  live: { tournaments: { values(): Iterable<{ hostId: string; state: string }> } },
 ): void {
-  if (kind === 'tournament') {
-    let n = 0;
-    for (const t of live.tournaments.values()) {
-      if (t.hostId === hostId && t.state !== 'finished' && t.state !== 'cancelled') n += 1;
-    }
-    if (n >= PLAYER_HOST_LIMITS.tournaments) {
-      throw new Error(`You can host ${PLAYER_HOST_LIMITS.tournaments} tournament at a time — finish or cancel the one you have first.`);
-    }
-    return;
-  }
   let n = 0;
-  for (const t of live.cashTables.values()) if (t.hostId === hostId && !t.closed) n += 1;
-  if (n >= PLAYER_HOST_LIMITS.cashTables) {
-    throw new Error(`You can run ${PLAYER_HOST_LIMITS.cashTables} cash tables at a time — close one first.`);
+  for (const t of live.tournaments.values()) {
+    if (t.hostId === hostId && t.state !== 'finished' && t.state !== 'cancelled') n += 1;
+  }
+  if (n >= PLAYER_HOST_LIMITS.tournaments) {
+    throw new Error(`You can host ${PLAYER_HOST_LIMITS.tournaments} tournament at a time — finish or cancel the one you have first.`);
   }
 }
 
 const cap = (v: number, max: number) => Math.min(v, max);
 
 /**
- * A player host's tournament: the same form, clamped to a field and a length
- * a community night needs, with the operator-only parts taken out. Mutates
- * and returns the config.
+ * A player host's tournament: the same form, clamped to a length a community
+ * night needs, with the operator-only parts taken out. Mutates and returns
+ * the config.
  */
 export function clampPlayerTournament(config: TournamentConfig): TournamentConfig {
   const L = PLAYER_HOST_LIMITS;
   config.playerHosted = true;
-  config.maxPlayers = cap(config.maxPlayers, L.maxPlayers);
-  config.minPlayers = cap(config.minPlayers, config.maxPlayers);
+  // Open to everyone: only an operator may cap the field.
+  config.maxPlayers = null;
   config.startingStack = cap(config.startingStack, L.startingStack);
   config.levelMinutes = cap(config.levelMinutes, L.levelMinutes);
   config.lateRegMinutes = cap(config.lateRegMinutes, L.lateRegMinutes);

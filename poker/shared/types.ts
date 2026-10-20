@@ -97,7 +97,6 @@ export interface SeatView {
   sittingOut: boolean; // away — auto-folds until they come back
   missedTurns: number; // consecutive turns auto-played (shown as "away (N)")
   offline: boolean; // no connected sockets for this player
-  kickAt: number | null; // cash only: epoch ms when an offline player is auto-removed
   isDealer: boolean;
   isTurn: boolean;
   lastAction: string | null;
@@ -203,7 +202,6 @@ export interface TableTheme {
 export interface TableView {
   id: string;
   name: string;
-  mode: 'cash' | 'tournament';
   tournamentId: string | null;
   maxSeats: number;
   seats: SeatView[];
@@ -216,13 +214,6 @@ export interface TableView {
   // What the host chose stacks and bets to be shown as by default. A player
   // can still flip it for themselves, per table.
   displayMode: 'chips' | 'bb';
-  // Set only when a cash table runs a rising schedule; null means the blinds
-  // stay where the host put them.
-  blindLevel?: {
-    level: number; sb: number; bb: number; ante: number;
-    endsAt: number | null;
-    next: { sb: number; bb: number; ante: number } | null;
-  } | null;
   actionOn: number | null; // seat idx
   actionDeadline: number | null; // epoch ms
   actionStarted: number | null; // epoch ms
@@ -236,16 +227,12 @@ export interface TableView {
   rabbitAvailable: boolean; // hand ended early and the table allows it
   rabbit: CardT[] | null; // populated once someone asks
   lastResults: HandResultEntry[] | null;
-  cashConfig: { minBuy: number; maxBuy: number } | null;
   paused: boolean;
   spectators: number;
-  ledger: LedgerEntry[]; // cash games: buy-ins / cash-outs / net per player
-  hostId: string | null; // cash tables: who created it (may edit settings)
-  playerHosted: boolean; // cash tables opened by a player host, not an operator
   actionSeconds: number; // per-decision clock
   rabbitHuntingOn: boolean;
   timebankSeconds: number;
-  // Tournament context for the felt overlay (null on cash tables).
+  // Tournament context for the felt overlay.
   tourney: TableTourneyInfo | null;
   // The viewer's live rank in the field, 1 = chip leader.
   myRank: number | null;
@@ -355,7 +342,9 @@ export interface TournamentConfig {
   startingStack: number;
   levelMinutes: number;
   structure: 'turbo' | 'regular' | 'deep';
-  maxPlayers: number;
+  // Null (or absent, in old saves) means no limit: everyone may register.
+  // Only an operator may set a cap.
+  maxPlayers: number | null;
   minPlayers: number;
   lateRegMinutes: number; // 0 = no late registration
   // How long after the start a registered player has to press Join table and
@@ -496,9 +485,9 @@ export interface TournamentRecord {
   results: TournamentResultRow[]; // ordered by place
 }
 
-// A finished cash session, kept for the same reason tournaments are: once a
-// table closes the live object is gone, and the operator still needs to see
-// who played and how it ended.
+// A finished cash session. Cash tables are gone; these records are what is
+// left of the ones that ran (cash-history.json), still shown under Past games
+// so the operator can see who played and how each one ended.
 export interface CashRecord {
   id: string;
   name: string;
@@ -530,7 +519,7 @@ export interface LobbyTournament {
   name: string;
   state: TournamentState;
   players: number;
-  maxPlayers: number;
+  maxPlayers: number | null; // null = no limit
   buyIn: number;
   prizePool: number;
   level: number;
@@ -545,23 +534,8 @@ export interface LobbyTournament {
   topPlayers: { name: string; avatar: string; chog?: ChogBadge; stack: number; place: number | null; prize: number | null }[];
 }
 
-export interface LobbyCashTable {
-  id: string;
-  name: string;
-  sb: number;
-  bb: number;
-  players: number;
-  maxSeats: number;
-  minBuy: number;
-  maxBuy: number;
-  createdAt: number;
-  hostName: string;
-  playerHosted: boolean;
-}
-
 export interface LobbyView {
   tournaments: LobbyTournament[];
-  cashTables: LobbyCashTable[];
   online: number;
 }
 
@@ -571,7 +545,7 @@ export interface LedgerEntry {
   avatar: string;
   buyIn: number;
   cashOut: number | null; // null while still seated (stack shown instead)
-  stack: number | null; // current stack when still seated
+  stack: number | null; // live stack while seated; null once cashed out
   net: number;
 }
 
@@ -601,12 +575,9 @@ export interface ClientToServerEvents {
   'lobby:unsub': () => void;
   'table:join': (tableId: string) => void;
   'table:leave': (tableId: string) => void;
-  'table:sit': (p: { tableId: string; seat: number; buyIn?: number }) => void;
-  'table:stand': (tableId: string) => void;
   'table:action': (p: { tableId: string; type: ActionType; amount?: number }) => void;
   'table:chatSend': (p: { tableId: string; text: string }) => void;
   'table:sitout': (p: { tableId: string; out: boolean }) => void;
-  'table:topup': (p: { tableId: string; amount: number }) => void;
   // Ack-style fetch: server invokes the callback with this table's hand history.
   'table:history': (tableId: string, cb: (hands: HandHistoryEntry[]) => void) => void;
   // Round-trip probe: the server acks immediately. Used to measure real socket
@@ -631,7 +602,7 @@ export interface ClientToServerEvents {
     approveRegistrations?: boolean;
     prizeText?: string | null;
     actionSeconds?: number;
-    maxPlayers?: number;
+    maxPlayers?: number | null; // null lifts the cap
     maxReentries?: number;
     rabbitHunting?: boolean;
     displayMode?: 'chips' | 'bb';
@@ -639,17 +610,6 @@ export interface ClientToServerEvents {
     customLevels?: CustomBlindLevel[]; // rewrite the blind schedule mid-game
     blinds?: { sb: number; bb: number; ante: number } | null; // override current level
     jumpLevel?: number; // move to a level in the structure
-  }) => void;
-  // Host edits a cash table after creation (blind changes apply next hand).
-  'table:settings': (p: {
-    tableId: string;
-    name?: string;
-    sb?: number;
-    bb?: number;
-    ante?: number;
-    actionSeconds?: number;
-    timebankSeconds?: number;
-    rabbitHunting?: boolean;
   }) => void;
   // Animated emoji reaction from a seated player or spectator.
   'table:react': (p: { tableId: string; emoji: string }) => void;

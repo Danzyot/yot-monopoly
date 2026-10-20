@@ -167,7 +167,7 @@ export default function Audit() {
     setPendingBan(null);
     try {
       const r = await api.ban({ kind, scope: 'lifetime', value, name, reason, discordBan, banPlayers, alsoBan, skipPrimary: !includeMain });
-      const gone = r.ejected.tournaments + r.ejected.tables;
+      const gone = r.ejected.tournaments;
       const also = r.alsoBanned?.length
         ? ` — and ${r.alsoBanned.length} account${r.alsoBanned.length === 1 ? '' : 's'}: ${r.alsoBanned.join(', ')}`
         : '';

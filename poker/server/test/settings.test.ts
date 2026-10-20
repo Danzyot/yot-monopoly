@@ -140,6 +140,13 @@ test('max players, re-entries, rabbit hunting and display mode are editable', ()
   t.updateSettings({ maxPlayers: 2 });
   assert.equal(t.config.maxPlayers, 6, 'cap clamps to the current field');
 
+  // A full field turns players away; lifting the cap opens it to everyone.
+  assert.throws(() => t.register({ id: 'late', name: 'Late', avatar: '🙂' }), /full/);
+  t.updateSettings({ maxPlayers: null });
+  assert.equal(t.config.maxPlayers, null);
+  t.register({ id: 'late', name: 'Late', avatar: '🙂' });
+  assert.equal(t.players.size, 7);
+
   // Rabbit hunting toggles propagate to live tables.
   t.start();
   joinEveryone(t);

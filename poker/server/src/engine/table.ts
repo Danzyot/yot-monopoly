@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type {
-  CustomBlindLevel, TableReaction, TableTheme, TableTourneyInfo,
-  ActionType, CardT, ChatMsg, HandHistoryEntry, HandResultEntry, LedgerEntry, LegalActions,
+  TableReaction, TableTheme, TableTourneyInfo,
+  ActionType, CardT, ChatMsg, HandHistoryEntry, HandResultEntry, LegalActions,
   PotView, SeatView, TableLogEntry, TableOverview, TableOverviewSeat, TableView,
 } from '../../../shared/types.ts';
 import { HoldemHand, type HandResult } from './hand.ts';
@@ -14,7 +14,6 @@ export interface TableSeatState {
   player: { id: string; name: string; avatar: string };
   stack: number;
   sittingOut: boolean;
-  buyInTotal: number; // cash: total bought in (ledger)
   timebankMs: number;
   missedTurns: number;
   // Consecutive hands finished while offline with only auto-actions —
@@ -33,26 +32,6 @@ export interface TableCallbacks {
   reaction?: (table: Table, r: TableReaction) => void;
   // Tournament hook: called after each hand with seats that busted (stack 0).
   onHandEnd?: (table: Table, busted: { id: string; name: string; startStack: number }[]) => void;
-  // Cash hook: a player has run out of chips. They are told where their
-  // session finished and offered a rebuy; the tournament has its own path.
-  cashBust?: (table: Table, info: CashBustInfo) => void;
-}
-
-// What a busted cash player is told: where their session stands, and the
-// terms of getting back in.
-export interface CashBustInfo {
-  playerId: string;
-  tableId: string;
-  tableName: string;
-  name: string;
-  avatar: string;
-  buyIn: number;
-  net: number;
-  rank: number;      // position at this table by net, 1 = best
-  of: number;        // how many players that ranking covers
-  minBuy: number;
-  maxBuy: number;
-  secondsToRebuy: number;
 }
 
 export type AuditEntry =
@@ -102,23 +81,14 @@ interface TurnSnapshot {
 export interface TableOpts {
   id?: string;
   name: string;
-  mode: 'cash' | 'tournament';
   tournamentId?: string;
   maxSeats?: number;
   sb: number;
   bb: number;
   ante?: number;
-  cash?: { minBuy: number; maxBuy: number };
-  hostId?: string;
-  // Opened by a player host rather than an operator (see hosting.ts).
-  playerHosted?: boolean;
   actionTimeMs?: number;
   timebankMs?: number;
   interHandDelayMs?: number;
-  // A cash game may run a rising blind schedule, exactly like a tournament.
-  // Without one the blinds stay where the host set them, which is what a
-  // cash game normally means.
-  levels?: CustomBlindLevel[] | null;
   displayMode?: 'chips' | 'bb';
   rabbitHunting?: boolean;
   theme?: TableTheme | null;
@@ -128,13 +98,6 @@ const DEFAULT_ACTION_MS = 22_000;
 // Extra time granted once per decision, on top of the action clock. Default 0:
 // the limit the host configures is exactly the limit players get.
 const DEFAULT_TIMEBANK_MS = 0;
-// Cash games: a player with no chips keeps their seat this long to decide
-// whether to buy back in. Holding it forever is what left a table with two
-// broke players unable to deal at all.
-const REBUY_GRACE_MS = 90_000;
-// Cash games: offline players are removed (auto cash-out) after this long.
-const OFFLINE_KICK_MS = 120_000;
-const OFFLINE_SWEEP_MS = 10_000;
 
 const RANK_CH: Record<number, string> = {
   2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9',
@@ -160,11 +123,8 @@ const CHAT_KEEP = 250;
 export class Table {
   id: string;
   name: string;
-  mode: 'cash' | 'tournament';
   tournamentId: string | null;
   maxSeats: number;
-  hostId: string | null;
-  playerHosted: boolean;
   seats: (TableSeatState | null)[];
   hand: HoldemHand | null = null;
   buttonSeat = 0;
@@ -172,30 +132,17 @@ export class Table {
   sb: number;
   bb: number;
   ante: number;
-  cash: { minBuy: number; maxBuy: number } | null;
   paused = false;
   closed = false;
-  // When this table came into being — the archive shows how long a cash
-  // session ran, and a restored table keeps its original time.
-  createdAt = Date.now();
   lastResults: HandResultEntry[] | null = null;
   chatLog: ChatMsg[] = [];
   spectators = new Set<string>();
-  // Cash games: settled results for players who already left.
-  private ledgerHistory: LedgerEntry[] = [];
   cb: TableCallbacks;
 
   actionTimeMs: number;
   timebankMs: number;
   interHandDelayMs: number;
-  // Blind schedule for a cash table. levelIdx walks it; the clock only ever
-  // takes effect between hands, so blinds never change under a live pot.
   displayMode: 'chips' | 'bb' = 'chips';
-  levels: CustomBlindLevel[] | null = null;
-  levelIdx = 0;
-  levelEndsAt: number | null = null;
-  private levelTimer: NodeJS.Timeout | null = null;
-  private levelDue = false;
   // Pause between board cards when everyone is all-in (drama, not mechanics).
   runoutStepMs = 1_100;
   private actionTimer: NodeJS.Timeout | null = null;
@@ -206,11 +153,6 @@ export class Table {
   // What was left on the acting player's clock when the table was paused, so
   // resuming gives them exactly that back rather than a fresh full clock.
   private pausedClockMs: number | null = null;
-  // playerId -> when they were first seen offline (cash auto-kick).
-  private offlineSince = new Map<string, number>();
-  private offlineSweeper: NodeJS.Timeout | null = null;
-  // playerId -> the timer that frees their seat if they do not buy back in.
-  private rebuyTimers = new Map<string, NodeJS.Timeout>();
   // Enough of the table to put a reversed turn back exactly as it was. Only
   // ever holds states from the hand in progress: once a hand ends the pot is
   // paid and the deck is gone, so there is nothing honest to go back to.
@@ -232,7 +174,7 @@ export class Table {
   // felt overlay, and the viewer's live rank in the field.
   tourneyInfo: (() => TableTourneyInfo | null) | null = null;
   // Extra milliseconds on every decision, read live when a clock starts. A
-  // tournament sets it for its late clock; a cash table leaves it unset.
+  // tournament sets it for its late clock; unset means none.
   extraActionMs: (() => number) | null = null;
   rankOf: ((playerId: string) => number | null) | null = null;
   private rabbitCards: CardT[] = [];
@@ -245,65 +187,19 @@ export class Table {
   constructor(opts: TableOpts, cb: TableCallbacks) {
     this.id = opts.id ?? randomUUID().slice(0, 8);
     this.name = opts.name;
-    this.mode = opts.mode;
     this.tournamentId = opts.tournamentId ?? null;
     this.maxSeats = opts.maxSeats ?? 9;
-    this.hostId = opts.hostId ?? null;
-    this.playerHosted = !!opts.playerHosted;
     this.seats = new Array(this.maxSeats).fill(null);
     this.sb = opts.sb;
     this.bb = opts.bb;
     this.ante = opts.ante ?? 0;
-    this.cash = opts.cash ?? null;
     this.cb = cb;
     this.actionTimeMs = opts.actionTimeMs ?? DEFAULT_ACTION_MS;
     this.timebankMs = Math.max(0, opts.timebankMs ?? DEFAULT_TIMEBANK_MS);
     this.interHandDelayMs = opts.interHandDelayMs ?? 2_800;
     this.displayMode = opts.displayMode ?? 'chips';
-    if (opts.levels && opts.levels.length > 0) {
-      this.levels = opts.levels;
-      const first = this.levels[0];
-      this.sb = first.sb;
-      this.bb = first.bb;
-      this.ante = first.ante ?? 0;
-      this.startLevelClock();
-    }
     this.rabbitHunting = opts.rabbitHunting ?? false;
     this.theme = opts.theme ?? null;
-    if (this.mode === 'cash') {
-      this.offlineSweeper = setInterval(() => this.sweepOffline(), OFFLINE_SWEEP_MS);
-      this.offlineSweeper.unref?.();
-    }
-  }
-
-  // Cash tables: track offline time per seated player; auto-stand after the
-  // grace period (between hands — a live hand finishes first).
-  private sweepOffline() {
-    if (this.closed) return;
-    const now = Date.now();
-    let changed = false;
-    for (const s of this.seats) {
-      if (!s) continue;
-      const pid = s.player.id;
-      if (isOnline(pid)) {
-        if (this.offlineSince.delete(pid)) changed = true;
-        continue;
-      }
-      const since = this.offlineSince.get(pid);
-      if (since === undefined) {
-        this.offlineSince.set(pid, now);
-        changed = true;
-      } else if (now - since >= OFFLINE_KICK_MS) {
-        const idx = this.playerSeat(pid);
-        if (idx !== null && !this.handSeatLive(idx)) {
-          this.systemMsg(`${s.player.name} was removed after being offline too long`);
-          this.stand(pid);
-          this.offlineSince.delete(pid);
-          changed = true;
-        }
-      }
-    }
-    if (changed) this.cb.broadcast(this);
   }
 
   // ---------- seating ----------
@@ -318,14 +214,13 @@ export class Table {
     return this.seats.filter(Boolean).length;
   }
 
+  // Every seat with chips is dealt in. Away players still pay their blinds
+  // and auto-fold quickly.
   activeSeatIdxs(): number[] {
     const out: number[] = [];
     for (let i = 0; i < this.seats.length; i++) {
       const s = this.seats[i];
       if (!s || s.stack <= 0) continue;
-      // Cash: sitting out means not dealt in. Tournament: away players are
-      // still dealt (blinds must be paid) and auto-fold quickly.
-      if (this.mode === 'cash' && s.sittingOut) continue;
       out.push(i);
     }
     return out;
@@ -337,122 +232,11 @@ export class Table {
     if (this.seats[seatIdx]) throw new Error('seat taken');
     if (this.playerSeat(player.id) !== null) throw new Error('already seated');
     this.seats[seatIdx] = {
-      player, stack, sittingOut: false, buyInTotal: stack,
+      player, stack, sittingOut: false,
       timebankMs: this.timebankMs, missedTurns: 0, ghostHands: 0,
     };
     this.logEvent(`${player.name} sat down at seat ${seatIdx + 1}`);
     this.scheduleStart();
-    this.cb.broadcast(this);
-  }
-
-  stand(playerId: string): number {
-    const idx = this.playerSeat(playerId);
-    if (idx === null) throw new Error('not seated');
-    const seat = this.seats[idx]!;
-    if (this.hand && this.handSeatLive(idx)) {
-      // Fold them out of the current hand first.
-      const hs = this.hand.seats.find(s => s.seat === idx);
-      if (hs && !hs.folded && this.hand.actionSeat() === idx) {
-        this.applyAction(playerId, 'fold');
-      } else if (hs && !hs.folded && !hs.allIn) {
-        hs.folded = true;
-        hs.lastAction = 'Fold';
-      }
-    }
-    const cashOut = seat.stack;
-    if (this.mode === 'cash') {
-      this.ledgerHistory.push({
-        playerId: seat.player.id, name: seat.player.name, avatar: seat.player.avatar,
-        buyIn: seat.buyInTotal, cashOut, stack: null, net: cashOut - seat.buyInTotal,
-      });
-      if (this.ledgerHistory.length > 200) this.ledgerHistory.shift();
-    }
-    this.seats[idx] = null;
-    this.clearRebuyTimer(playerId);
-    this.logEvent(`${seat.player.name} left the table`);
-    this.cb.broadcast(this);
-    return cashOut;
-  }
-
-  // Buy-ins / cash-outs, live stacks for seated players, sorted by net.
-  ledger(): LedgerEntry[] {
-    if (this.mode !== 'cash') return [];
-    const seated: LedgerEntry[] = [];
-    for (const s of this.seats) {
-      if (!s) continue;
-      const idx = this.playerSeat(s.player.id)!;
-      const hs = this.hand?.seats.find(x => x.seat === idx);
-      const stack = hs ? hs.stack + hs.totalCommitted : s.stack;
-      seated.push({
-        playerId: s.player.id, name: s.player.name, avatar: s.player.avatar,
-        buyIn: s.buyInTotal, cashOut: null, stack, net: stack - s.buyInTotal,
-      });
-    }
-    return [...seated, ...this.ledgerHistory].sort((a, b) => b.net - a.net);
-  }
-
-  // A cash player has run out of chips. In a tournament that is elimination;
-  // here it is a decision, so they are told where their session stands and
-  // given a window to buy back in. Left alone, the seat is released — a table
-  // whose players are all broke can never deal another hand, which is exactly
-  // how a table ends up frozen with everyone sitting on zero.
-  private handleCashBust(seat: TableSeatState) {
-    if (this.mode !== 'cash' || !this.cash) return;
-    const id = seat.player.id;
-    if (this.rebuyTimers.has(id)) return; // already counting down
-    seat.sittingOut = true;
-    const board = this.ledger();
-    const mine = board.findIndex(e => e.playerId === id);
-    this.logEvent(`${seat.player.name} is out of chips`);
-    this.cb.cashBust?.(this, {
-      playerId: id,
-      tableId: this.id,
-      tableName: this.name,
-      name: seat.player.name,
-      avatar: seat.player.avatar,
-      buyIn: seat.buyInTotal,
-      net: seat.stack - seat.buyInTotal,
-      rank: mine >= 0 ? mine + 1 : board.length,
-      of: board.length,
-      minBuy: this.cash.minBuy,
-      maxBuy: this.cash.maxBuy,
-      secondsToRebuy: Math.round(REBUY_GRACE_MS / 1000),
-    });
-    const timer = setTimeout(() => {
-      this.rebuyTimers.delete(id);
-      const idx = this.playerSeat(id);
-      if (idx === null) return;
-      const still = this.seats[idx];
-      // They may have bought back in while the clock ran.
-      if (!still || still.stack > 0) return;
-      try {
-        this.stand(id);
-      } catch { /* already gone */ }
-      this.scheduleStart();
-    }, REBUY_GRACE_MS);
-    this.rebuyTimers.set(id, timer);
-  }
-
-  private clearRebuyTimer(playerId: string) {
-    const t = this.rebuyTimers.get(playerId);
-    if (t) { clearTimeout(t); this.rebuyTimers.delete(playerId); }
-  }
-
-  topUp(playerId: string, amount: number) {
-    if (this.mode !== 'cash' || !this.cash) throw new Error('not a cash table');
-    // Whatever else this does, it means they are staying.
-    this.clearRebuyTimer(playerId);
-    const idx = this.playerSeat(playerId);
-    if (idx === null) throw new Error('not seated');
-    const seat = this.seats[idx]!;
-    const newStack = Math.min(seat.stack + amount, this.cash.maxBuy);
-    const added = newStack - seat.stack;
-    if (added <= 0) throw new Error('already at max buy-in');
-    // Applied immediately when not in a hand; cash top-up mid-hand waits is simplified to immediate-after-hand via pending? Keep simple: only between hands.
-    if (this.hand && this.handSeatLive(idx)) throw new Error('cannot top up during a hand');
-    seat.stack = newStack;
-    seat.buyInTotal += added;
-    this.logEvent(`${seat.player.name} topped up ${added}`);
     this.cb.broadcast(this);
   }
 
@@ -472,60 +256,6 @@ export class Table {
   }
 
   // ---------- hand lifecycle ----------
-  // ---------- blind schedule (cash tables that run one) ----------
-  // The clock only ever marks a level as due. Blinds move between hands, never
-  // under a live pot — the same rule tournaments follow, for the same reason:
-  // a player who committed chips at one price must not be charged another.
-  private startLevelClock() {
-    this.clearLevelTimer();
-    if (!this.levels) return;
-    const row = this.levels[this.levelIdx];
-    const mins = row?.minutes ?? 0;
-    // A final row with no minutes plays forever, which is how a schedule ends
-    // without the game grinding into blinds nobody can cover.
-    if (!mins || mins <= 0) { this.levelEndsAt = null; return; }
-    const ms = mins * 60_000;
-    this.levelEndsAt = Date.now() + ms;
-    this.levelTimer = setTimeout(() => {
-      this.levelDue = true;
-      // Between hands already? Then it takes effect right now.
-      if (!this.hand) this.applyDueLevel();
-    }, ms);
-  }
-
-  private clearLevelTimer() {
-    if (this.levelTimer) { clearTimeout(this.levelTimer); this.levelTimer = null; }
-  }
-
-  private applyDueLevel() {
-    if (!this.levelDue || !this.levels) return;
-    this.levelDue = false;
-    if (this.levelIdx >= this.levels.length - 1) { this.levelEndsAt = null; return; }
-    this.levelIdx += 1;
-    const row = this.levels[this.levelIdx];
-    this.sb = row.sb;
-    this.bb = row.bb;
-    this.ante = row.ante ?? 0;
-    this.logEvent(row.isBreak
-      ? 'Break — blinds hold here until play resumes'
-      : `Blinds are now ${row.sb}/${row.bb}${row.ante ? ` with a ${row.ante} ante` : ''}`);
-    this.startLevelClock();
-    this.cb.broadcast(this);
-  }
-
-  // What the felt shows about the schedule, or null when blinds are fixed.
-  blindLevelInfo(): { level: number; sb: number; bb: number; ante: number; endsAt: number | null; next: { sb: number; bb: number; ante: number } | null } | null {
-    if (!this.levels) return null;
-    const row = this.levels[this.levelIdx];
-    const nxt = this.levels[this.levelIdx + 1] ?? null;
-    return {
-      level: this.levels.slice(0, this.levelIdx + 1).filter(r => !r.isBreak).length || 1,
-      sb: this.sb, bb: this.bb, ante: this.ante,
-      endsAt: this.levelEndsAt,
-      next: nxt ? { sb: nxt.sb, bb: nxt.bb, ante: nxt.ante ?? 0 } : null,
-    };
-  }
-
   // No hand is dealt before this instant. A tournament sets it while players
   // are still arriving: with seats claimed one press at a time, the first two
   // people through the door would otherwise play the opening hand heads-up
@@ -558,8 +288,6 @@ export class Table {
 
   startHand() {
     if (this.hand || this.paused || this.closed) return;
-    // A level that came due mid-hand takes effect here, before any chips move.
-    if (this.levelDue) this.applyDueLevel();
     const active = this.activeSeatIdxs();
     if (active.length < 2) return;
 
@@ -581,8 +309,8 @@ export class Table {
     this.rabbitShown = false;
     // The opening bet cap is read once, here, from the tournament's own clock
     // — so a hand is dealt either under the rule or not, and cannot change
-    // rules between its flop and its river. Cash tables carry no tournament
-    // context and are never capped.
+    // rules between its flop and its river. A table with no tournament
+    // context is never capped.
     const cap = this.tourneyInfo?.()?.betCap ?? null;
     const maxBetFraction = cap && Date.now() < cap.endsAt ? cap.fraction : 1;
     this.hand = new HoldemHand({
@@ -637,7 +365,7 @@ export class Table {
       // ...so take them off the away clock too. In a tournament nobody chooses
       // to sit out — they are dealt in regardless — so the flag can only have
       // come from missing a turn, and acting is proof they are back.
-      if (this.mode !== 'cash') seat.sittingOut = false;
+      seat.sittingOut = false;
       this.autoActedSeats.delete(seatIdx);
       const hs = this.hand.seats.find(s => s.seat === seatIdx);
       if (hs?.lastAction) {
@@ -915,10 +643,8 @@ export class Table {
       if (this.autoActedSeats.has(hs.seat)) seat.ghostHands += 1;
     }
 
-    // Busted players. A tournament eliminates them; a cash table offers them
-    // the chance to buy back in and releases the seat if they do not.
+    // Busted players: the tournament eliminates them (onHandEnd).
     const busted: { id: string; name: string; startStack: number }[] = [];
-    const cashBusted: TableSeatState[] = [];
     for (const hs of hand.seats) {
       if (hs.stack === 0) {
         const seat = this.seats[hs.seat];
@@ -927,7 +653,6 @@ export class Table {
             id: seat.player.id, name: seat.player.name,
             startStack: hand.seats.find(x => x.seat === hs.seat)!.totalCommitted,
           });
-          if (this.mode === 'cash') cashBusted.push(seat);
         }
       }
     }
@@ -947,7 +672,6 @@ export class Table {
       void finishedHand;
       this.cb.onHandEnd?.(this, busted);
       if (this.closed) return;
-      for (const seat of cashBusted) this.handleCashBust(seat);
       this.lastResults = null;
       this.scheduleStart();
       this.cb.broadcast(this);
@@ -975,57 +699,6 @@ export class Table {
     this.cb.broadcast(this);
   }
 
-  // Cash tables: host edits settings after creation. Blind changes take
-  // effect from the next hand — a hand already in progress is never touched.
-  updateCashSettings(p: {
-    name?: string; sb?: number; bb?: number; ante?: number;
-    actionSeconds?: number; timebankSeconds?: number; rabbitHunting?: boolean;
-    theme?: TableTheme | null;
-  }) {
-    if (this.mode !== 'cash') throw new Error('not a cash table');
-    if (this.closed) throw new Error('table closed');
-    const changes: string[] = [];
-    if (p.name !== undefined) {
-      const nm = p.name.trim().slice(0, 48);
-      if (nm && nm !== this.name) { this.name = nm; changes.push(`renamed to "${nm}"`); }
-    }
-    if (p.sb !== undefined || p.bb !== undefined) {
-      const sb = Math.max(1, Math.floor(p.sb ?? this.sb));
-      const bb = Math.max(sb, Math.floor(p.bb ?? this.bb));
-      if (sb !== this.sb || bb !== this.bb) {
-        this.sb = sb; this.bb = bb;
-        changes.push(`blinds ${sb}/${bb} from the next hand`);
-      }
-    }
-    if (p.ante !== undefined) {
-      const a = Math.max(0, Math.floor(p.ante));
-      if (a !== this.ante) { this.ante = a; changes.push(a ? `ante ${a}` : 'ante off'); }
-    }
-    if (p.actionSeconds !== undefined) {
-      const ms = Math.max(5, Math.min(120, Math.floor(p.actionSeconds))) * 1000;
-      if (ms !== this.actionTimeMs) { this.actionTimeMs = ms; changes.push(`action time ${ms / 1000}s`); }
-    }
-    if (p.timebankSeconds !== undefined) {
-      const ms = Math.max(0, Math.min(120, Math.floor(p.timebankSeconds))) * 1000;
-      if (ms !== this.timebankMs) {
-        this.timebankMs = ms;
-        changes.push(ms === 0 ? 'time bank off' : `time bank ${ms / 1000}s`);
-      }
-    }
-    if (p.rabbitHunting !== undefined && p.rabbitHunting !== this.rabbitHunting) {
-      this.rabbitHunting = p.rabbitHunting;
-      changes.push(p.rabbitHunting ? 'rabbit hunting on' : 'rabbit hunting off');
-    }
-    if (p.theme !== undefined) {
-      this.theme = p.theme;
-      changes.push('table look updated');
-    }
-    if (changes.length) {
-      this.systemMsg(`Table settings: ${changes.join(', ')}`);
-      this.cb.broadcast(this);
-    }
-  }
-
   // Session log, replayer hands and chat — carried through restarts so the
   // table's history doesn't vanish when a deploy lands mid-game.
   snapshotHistory() {
@@ -1049,7 +722,7 @@ export class Table {
   snapshotSeats() {
     const out: {
       idx: number; player: { id: string; name: string; avatar: string };
-      stack: number; sittingOut: boolean; timebankMs: number; buyInTotal: number;
+      stack: number; sittingOut: boolean; timebankMs: number;
     }[] = [];
     for (let i = 0; i < this.seats.length; i++) {
       const s = this.seats[i];
@@ -1061,7 +734,6 @@ export class Table {
         stack: hs ? hs.stack + hs.totalCommitted : s.stack,
         sittingOut: s.sittingOut,
         timebankMs: s.timebankMs,
-        buyInTotal: s.buyInTotal,
       });
     }
     return out;
@@ -1220,9 +892,6 @@ export class Table {
     const from = seat.stack;
     if (to === from) return { name: seat.player.name, from, to };
     seat.stack = to;
-    // Keep the cash ledger honest: an adjustment is not a buy-in, so the
-    // difference rides on buyInTotal or the player's net would be a fiction.
-    if (this.mode === 'cash') seat.buyInTotal += to - from;
     const delta = to - from;
     this.logEvent(
       `${by} adjusted ${seat.player.name}'s stack: ${from} → ${to} (${delta > 0 ? '+' : ''}${delta})`,
@@ -1233,29 +902,10 @@ export class Table {
     return { name: seat.player.name, from, to };
   }
 
-  // Host shuts a cash table down for good: any hand in progress is aborted
-  // with every bet returned, everyone is cashed out into the ledger, and the
-  // table closes (it drops off the lobby; the link shows it as closed).
-  closeByHost() {
-    if (this.mode !== 'cash') throw new Error('not a cash table');
-    if (this.closed) throw new Error('table already closed');
-    this.abortHand();
-    for (const s of this.seats) {
-      if (s) this.stand(s.player.id);
-    }
-    this.systemMsg('The host closed this table. Thanks for playing!');
-    this.close();
-    this.cb.broadcast(this);
-  }
-
   close() {
     this.closed = true;
     this.clearActionTimer();
-    this.clearLevelTimer();
-    for (const t of this.rebuyTimers.values()) clearTimeout(t);
-    this.rebuyTimers.clear();
     if (this.pacingTimer) { clearTimeout(this.pacingTimer); this.pacingTimer = null; }
-    if (this.offlineSweeper) { clearInterval(this.offlineSweeper); this.offlineSweeper = null; }
   }
 
   private clearActionTimer() {
@@ -1415,7 +1065,7 @@ export class Table {
       if (!s) {
         return {
           idx: i, player: null, stack: 0, bet: 0, folded: false, allIn: false,
-          sittingOut: false, missedTurns: 0, offline: false, kickAt: null,
+          sittingOut: false, missedTurns: 0, offline: false,
           isDealer: false, isTurn: false, lastAction: null, cards: null,
         };
       }
@@ -1438,7 +1088,6 @@ export class Table {
       }
       const award = awardsBySeat.get(i);
       const offline = !isOnline(s.player.id);
-      const since = offline ? this.offlineSince.get(s.player.id) : undefined;
       return {
         idx: i,
         player: withChog({ id: s.player.id, name: s.player.name, avatar: s.player.avatar }),
@@ -1449,7 +1098,6 @@ export class Table {
         sittingOut: s.sittingOut,
         missedTurns: s.missedTurns,
         offline,
-        kickAt: this.mode === 'cash' && since !== undefined ? since + OFFLINE_KICK_MS : null,
         isDealer: i === this.buttonSeat && !!hand,
         isTurn: hand ? hand.actionSeat() === i : false,
         lastAction: hs?.lastAction ?? null,
@@ -1486,7 +1134,6 @@ export class Table {
     return {
       id: this.id,
       name: this.name,
-      mode: this.mode,
       tournamentId: this.tournamentId,
       maxSeats: this.maxSeats,
       seats,
@@ -1498,7 +1145,6 @@ export class Table {
       street: hand ? hand.street : 'waiting',
       handNumber: this.handNumber,
       blinds: { sb: this.sb, bb: this.bb, ante: this.ante },
-      blindLevel: this.blindLevelInfo(),
       displayMode: this.displayMode,
       actionOn: hand ? hand.actionSeat() : null,
       actionDeadline: this.actionDeadline,
@@ -1512,12 +1158,8 @@ export class Table {
       rabbitAvailable: pauseShow && this.rabbitCards.length > 0 && !this.rabbitShown,
       rabbit: this.rabbitShown ? this.rabbitCards : null,
       lastResults: this.lastResults,
-      cashConfig: this.cash,
       paused: this.paused,
       spectators: this.spectators.size,
-      ledger: this.ledger(),
-      hostId: this.hostId,
-      playerHosted: this.playerHosted,
       actionSeconds: Math.round(this.actionTimeMs / 1000),
       rabbitHuntingOn: this.rabbitHunting,
       timebankSeconds: Math.round(this.timebankMs / 1000),

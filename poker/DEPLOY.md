@@ -63,10 +63,24 @@ Railway is the path below (~$5/month Hobby). Any always-on VPS works too.
 >   the `/chogs/` thumbnails. If poker goes out first, the picker says it cannot
 >   reach Chog Games and no Chogs show; nothing else changes.
 
+> **Tournaments only.** Cash tables are gone: the room runs multi-table
+> tournaments and nothing else. `POST /api/tables` answers **410 Gone**, the
+> lobby, home page and dashboard list tournaments only (live, upcoming,
+> finished), and there are no cash host tools, ledger or buy-in screens left.
+> **On the first boot of this build**, any cash table still open in the last
+> live snapshot (`live.json`) is not brought back: it is closed the way a host
+> closing it always was — everyone cashed out at the chips in front of them,
+> a hand in progress refunded — and filed in `cash-history.json`. The deploy
+> log says `Closed N cash table(s) from the last snapshot`. Past cash sessions,
+> those included, still show under Dashboard → Past games (read-only; delete one
+> to free its name). Nothing to configure. **Poker deploys only when the owner
+> presses Deploy** (Railway → the poker service → Deploy); auto-deploy is off,
+> so merging this changes nothing live until then. Best done between events.
+>
 > **Player hosts (hosting rights).** Besides the operators in
 > `ADMIN_DISCORD_IDS`, Chog Genesis holders (verified wallet on the hub) and
-> players an operator approved in the hub's Dashboard → Hosts may open cash
-> tables and tournaments here. **No new variables.** It needs a poker deploy
+> players an operator approved in the hub's Dashboard → Hosts may open
+> tournaments here. **No new variables.** It needs a poker deploy
 > by hand (auto-deploy is off), after the hub is on a build that has
 > `/api/hosting/can-host`.
 >
@@ -84,16 +98,20 @@ Railway is the path below (~$5/month Hobby). Any always-on VPS works too.
 >   rights…" (or "only operators can host here") and nothing is created.
 >   Operators never depend on the hub. The server log says
 >   `Hub hosting check failed (401)` when the secrets differ.
-> - **Limits for player hosts:** 1 live or upcoming tournament and 2 open cash
->   tables at a time; tournaments are clamped to 100 players, a 50,000 starting
->   stack, 20-minute levels, 60 minutes of late registration, 30 minutes to
->   join, 2 re-entries, a 60-minute bet cap and a start within 7 days, with no
->   custom blind schedule. The numbers are in `shared/hosting.ts`.
+> - **Limits for player hosts:** 1 live or upcoming tournament at a time,
+>   clamped to a 50,000 starting stack, 20-minute levels, 60 minutes of late
+>   registration, 30 minutes to join, 2 re-entries, a 60-minute bet cap and a
+>   start within 7 days, with no custom blind schedule. The numbers are in
+>   `shared/hosting.ts`.
+> - **No player cap unless an operator sets one.** Every tournament is open to
+>   everyone by default (the Max players field is optional; empty means no
+>   limit). Only an operator can set a cap, on the create form or later in the
+>   tournament's settings, and only an operator can lift it again.
 > - **What a player host may do** with their own event: start, pause, resume
->   and cancel it, write the prize line and set the start time; close their
->   own cash table. **Operators only:** kicking, approving registrations,
+>   and cancel it, write the prize line and set the start time. **Operators
+>   only:** kicking, approving registrations,
 >   Discord role / social requirements, ending early, seating or reinstating,
->   reversing turns and moving chips, table settings, bans. A player-hosted
+>   reversing turns and moving chips, the player cap, bans. A player-hosted
 >   event never posts results to Discord (no announce channel, no webhook),
 >   and its page says prizes are the host's responsibility, not Chog Games'.
 > - **Operators** see player-hosted events marked in Dashboard → Manage games

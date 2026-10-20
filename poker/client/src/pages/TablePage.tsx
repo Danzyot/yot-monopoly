@@ -4,11 +4,7 @@ import type { ActionType, ChatMsg, TableReaction, TableView, TournamentView } fr
 import { useAuth } from '../auth';
 import { BRAND } from '../../../shared/brand';
 import ActionBar from '../components/ActionBar';
-import AuthModal from '../components/AuthModal';
-import Avatar from '../components/Avatar';
 import CardView from '../components/CardView';
-import CashBustModal, { type CashBustInfo } from '../components/CashBustModal';
-import CashSettingsModal from '../components/CashSettingsModal';
 import EliminationModal, { type EliminationInfo } from '../components/EliminationModal';
 import ReplayerModal from '../components/ReplayerModal';
 import Seat from '../components/Seat';
@@ -16,7 +12,7 @@ import SessionLogModal from '../components/SessionLogModal';
 import SidePanel from '../components/SidePanel';
 import WinnerModal, { type WinnerInfo } from '../components/WinnerModal';
 import {
-  IconArrowLeft, IconEye, IconGavel, IconGear, IconLink, IconRabbit, IconReplay, IconScroll,
+  IconArrowLeft, IconEye, IconGavel, IconLink, IconRabbit, IconReplay, IconScroll,
   IconSoundOff, IconSoundOn,
 } from '../components/icons';
 import { amount, chips, getDisplayMode, setDisplayMode, type DisplayMode } from '../format';
@@ -119,17 +115,10 @@ export default function TablePage() {
   const wasSeated = useRef(false);
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [log, setLog] = useState<{ text: string; ts: number }[]>([]);
-  const [sitSeat, setSitSeat] = useState<number | null>(null);
-  const [buyIn, setBuyIn] = useState(0);
-  const [showAuth, setShowAuth] = useState(false);
   const [winner, setWinner] = useState<WinnerInfo | null>(null);
   const [elimination, setElimination] = useState<EliminationInfo | null>(null);
-  // Cash: run out of chips and you are told where you finished and offered a
-  // way back in, rather than left sitting on zero.
-  const [cashBust, setCashBust] = useState<CashBustInfo | null>(null);
   const [showLog, setShowLog] = useState(false);
   const [showReplayer, setShowReplayer] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [showHostTools, setShowHostTools] = useState(false);
   const [muted, setMutedState] = useState(isMuted);
   const [reactions, setReactions] = useState<TableReaction[]>([]);
@@ -160,19 +149,14 @@ export default function TablePage() {
       nav(`/table/${p.tableId}`, { replace: true });
     };
     sock.on('tourney:assigned', onAssigned);
-    const onCashBust = (info: CashBustInfo) => {
-      if (info.tableId === id) setCashBust(info);
-    };
-    sock.on('table:cashBust', onCashBust);
     return () => {
       sock.off('tourney:assigned', onAssigned);
-      sock.off('table:cashBust', onCashBust);
     };
   }, [id, nav, toast]);
 
   // Spectators: when this tournament table breaks (players moved elsewhere)
   // or the event ends, hop automatically to a table that is still playing.
-  const tournamentId = view?.mode === 'tournament' ? view.tournamentId : null;
+  const tournamentId = view?.tournamentId ?? null;
   const tableDone = !!view?.closed && view?.mySeat === null;
   useEffect(() => {
     if (!tableDone || !tournamentId) return;
@@ -253,7 +237,7 @@ export default function TablePage() {
         else playPotAway();
       }
     }
-    if (view.mySeat === null && wasSeated.current && view.mode === 'tournament') {
+    if (view.mySeat === null && wasSeated.current) {
       wasSeated.current = false;
       playBust();
     } else if (view.mySeat !== null) {
@@ -490,20 +474,7 @@ export default function TablePage() {
 
   const winnersBySeat = new Set((view.lastResults ?? []).map(r => r.seatIdx));
   const isSeated = view.mySeat !== null;
-  const canPickSeat = !isSeated && view.mode === 'cash' && !view.closed;
   const inHand = view.street !== 'waiting';
-
-  const openSitModal = (seatIdx: number) => {
-    if (!profile) { setShowAuth(true); return; }
-    setSitSeat(seatIdx);
-    setBuyIn(view.cashConfig ? view.cashConfig.minBuy * 2 : 0);
-  };
-
-  const confirmSit = () => {
-    if (sitSeat === null) return;
-    getSocket().emit('table:sit', { tableId: id, seat: sitSeat, buyIn });
-    setSitSeat(null);
-  };
 
   const copyLink = async () => {
     try {
@@ -554,37 +525,12 @@ export default function TablePage() {
             <button className="btn btn-ghost btn-sm" title="Hand replayer" onClick={() => setShowReplayer(true)}><IconReplay /> Replay</button>
           )}
           <button className="btn btn-ghost btn-sm" onClick={() => void copyLink()}><IconLink /> Invite</button>
-          {/* Host tools: reverse a turn, correct a stack. Tournament tables have
-              no hostId of their own, so the operator flag is what opens them. */}
-          {/* A player host's table (a Chog holder's, say) is theirs to close,
-              not to rewrite: turns, stacks and settings stay with operators. */}
-          {profile && (profile.isAdmin || (view.hostId === profile.id && !view.playerHosted)) && (
+          {/* Host tools: reverse a turn, correct a stack. Operators only — a
+              player who hosts the tournament is not one, or they could pay
+              themselves. */}
+          {profile?.isAdmin && (
             <button className="btn btn-ghost btn-sm" onClick={() => setShowHostTools(true)}>
               <IconGavel /> Host tools
-            </button>
-          )}
-          {view.mode === 'cash' && profile && (profile.isAdmin || (view.hostId === profile.id && !view.playerHosted)) && (
-            <button className="btn btn-ghost btn-sm" title="Table settings"
-              onClick={() => setShowSettings(true)}><IconGear /> Settings</button>
-          )}
-          {view.mode === 'cash' && !view.closed && profile && view.hostId === profile.id && view.playerHosted && !profile.isAdmin && (
-            <button
-              className="btn btn-ghost btn-sm" title="Cash everyone out and shut your table down"
-              onClick={() => {
-                if (window.confirm('Close your table? Everyone is cashed out and the table is gone for good.')) {
-                  getSocket().emit('table:close', view.id);
-                }
-              }}
-            >
-              Close table
-            </button>
-          )}
-          {isSeated && view.mode === 'cash' && (
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => getSocket().emit('table:stand', id)}
-            >
-              Leave table
             </button>
           )}
         </div>
@@ -687,11 +633,8 @@ export default function TablePage() {
                   x={pos.x}
                   y={pos.y}
                   isWinner={winnersBySeat.has(seat.idx)}
-                  canSit={canPickSeat}
-                  hideEmpty={isSeated || view.mode === 'tournament'}
                   isSelf={seat.idx === view.mySeat}
                   myHandName={view.myHandName}
-                  onSit={() => openSitModal(seat.idx)}
                   onBack={() => getSocket().emit('table:sitout', { tableId: id, out: false })}
                   actionDeadline={seat.isTurn ? view.actionDeadline : null}
                   actionStarted={seat.isTurn ? view.actionStarted : null}
@@ -814,9 +757,7 @@ export default function TablePage() {
               </div>
             )}
             <span className="action-info">
-              {view.closed && view.mode === 'cash' && 'This table has closed — thanks for playing!'}
-              {!view.closed && !isSeated && view.mode === 'cash' && 'Pick an open seat to join the game.'}
-              {!isSeated && view.mode === 'tournament' && 'Spectating — seats are assigned by the tournament.'}
+              {!isSeated && 'Spectating — seats are assigned by the tournament.'}
               {isSeated && view.street === 'waiting' && !view.paused && 'Waiting for players…'}
               {isSeated && view.paused && 'Table paused.'}
               {isSeated && inHand && !view.myLegal && 'Waiting for your turn…'}
@@ -834,75 +775,12 @@ export default function TablePage() {
         people={view.seats
           .filter(s => s.player)
           .map(s => ({ id: s.player!.id, name: s.player!.name }))}
-        extraTabs={view.mode === 'cash' ? [{
-          key: 'ledger',
-          label: 'Ledger',
-          render: () => (
-            <table className="ledger-table">
-              <thead>
-                <tr><th>Player</th><th>Buy-in</th><th>Stack/Out</th><th>Net</th></tr>
-              </thead>
-              <tbody>
-                {view.ledger.map((e, i) => (
-                  <tr key={`${e.playerId}-${i}`}>
-                    <td>
-                      <span className="name-cell"><Avatar value={e.avatar} size={16} /> {e.name}</span>
-                    </td>
-                    <td>{chips(e.buyIn)}</td>
-                    <td>{e.stack !== null ? chips(e.stack) : e.cashOut !== null ? `${chips(e.cashOut)} ⏏` : '—'}</td>
-                    <td className={e.net >= 0 ? 'pos' : 'neg'}>{e.net >= 0 ? '+' : ''}{chips(e.net)}</td>
-                  </tr>
-                ))}
-                {view.ledger.length === 0 && (
-                  <tr><td colSpan={4} style={{ color: 'var(--text-faint)', textAlign: 'center' }}>No buy-ins yet</td></tr>
-                )}
-              </tbody>
-            </table>
-          ),
-        }] : []}
       />
 
-      {sitSeat !== null && view.cashConfig && (
-        <div className="modal-backdrop" onClick={() => setSitSeat(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3>Take seat {sitSeat + 1}</h3>
-            <div className="field">
-              <label>Buy-in ({chips(view.cashConfig.minBuy)} – {chips(view.cashConfig.maxBuy)})</label>
-              <input
-                type="range"
-                min={view.cashConfig.minBuy}
-                max={view.cashConfig.maxBuy}
-                step={view.blinds.bb}
-                value={buyIn}
-                onChange={e => setBuyIn(Number(e.target.value))}
-                style={{ accentColor: 'var(--gold)' }}
-              />
-              <div className="raise-amount" style={{ alignSelf: 'center' }}>{chips(buyIn)}</div>
-            </div>
-            <div className="modal-actions">
-              <button className="btn btn-ghost" onClick={() => setSitSeat(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={confirmSit}>Sit down</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
-      {showSettings && <CashSettingsModal view={view} onClose={() => setShowSettings(false)} />}
       {showHostTools && <HostTools view={view} onClose={() => setShowHostTools(false)} />}
       {winner && <WinnerModal info={winner} onClose={() => setWinner(null)} />}
       {!winner && elimination && (
         <EliminationModal info={elimination} onClose={() => setElimination(null)} />
-      )}
-      {cashBust && (
-        <CashBustModal
-          info={cashBust}
-          onRebuy={amount => {
-            getSocket().emit('table:topup', { tableId: id, amount });
-            toast('success', `Bought in for ${amount.toLocaleString()} — you are back in the game.`);
-          }}
-          onClose={() => setCashBust(null)}
-        />
       )}
       {showLog && (
         <SessionLogModal

@@ -1,17 +1,41 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import type { LobbyView } from '../../../shared/types';
+import type { LobbyTournament, LobbyView } from '../../../shared/types';
 import { useAuth } from '../auth';
 import AuthModal from '../components/AuthModal';
 import { BRAND } from '../../../shared/brand';
 import ChogLogo from '../components/ChogLogo';
 import Promo from '../components/Promo';
-import { CreateCashModal, CreateTournamentModal } from '../components/CreateModals';
+import { CreateTournamentModal } from '../components/CreateModals';
 import { getSocket, withResub } from '../socket';
+import { fieldLabel, groupTournaments, startLabel } from '../tourneys';
+
+// Finished events stay on the home page long enough to find a result, not forever.
+const RECENT_FINISHED = 5;
+
+function TourneyRow({ t }: { t: LobbyTournament }) {
+  const winner = t.state === 'finished' ? t.topPlayers.find(p => p.place === 1) : null;
+  const meta = t.state === 'registering' ? `${startLabel(t.scheduledStart)} · ${fieldLabel(t)}`
+    : t.state === 'finished' ? (winner ? `Won by ${winner.name}` : fieldLabel(t))
+    : `${fieldLabel(t)} · level ${t.level}`;
+  return (
+    <Link className="live-game-row" to={`/t/${t.id}`}>
+      <span className="lg-name">{t.name}</span>
+      <span className={`state-badge state-${t.state}`}>
+        {t.state === 'registering' ? 'Registering' : t.state}
+      </span>
+      <span className="lg-meta">
+        {meta}
+        {t.playerHosted && <> · Hosted by {t.hostName}</>}
+      </span>
+    </Link>
+  );
+}
 
 // Signed-in players used to hit a dead end here ("open your invite link").
-// Show them what's actually running so they can join without one.
-function LiveGames() {
+// Show them the tournaments — playing now, coming up, just finished — so they
+// can join or look up a result without one.
+function Tournaments() {
   const [lobby, setLobby] = useState<LobbyView | null>(null);
   useEffect(() => {
     const sock = getSocket();
@@ -25,40 +49,25 @@ function LiveGames() {
     };
   }, []);
 
-  const tournaments = (lobby?.tournaments ?? [])
-    .filter(t => t.state !== 'finished' && t.state !== 'cancelled');
-  const cashTables = lobby?.cashTables ?? [];
-  if (tournaments.length === 0 && cashTables.length === 0) {
+  const { live, upcoming, finished } = groupTournaments(lobby?.tournaments ?? []);
+  if (live.length + upcoming.length + finished.length === 0) {
     return (
       <p className="tag" style={{ fontWeight: 600 }}>
-        No games running right now — check back soon, or ask the host for an invite link.
+        No tournaments right now — check back soon, or ask the host for an invite link.
       </p>
     );
   }
+  const group = (title: string, rows: LobbyTournament[]) => rows.length > 0 && (
+    <>
+      <div className="lg-group">{title}</div>
+      {rows.map(t => <TourneyRow key={t.id} t={t} />)}
+    </>
+  );
   return (
     <div className="live-games">
-      {tournaments.map(t => (
-        <Link key={t.id} className="live-game-row" to={`/t/${t.id}`}>
-          <span className="lg-name">{t.name}</span>
-          <span className={`state-badge state-${t.state}`}>
-            {t.state === 'registering' ? 'Registering' : t.state}
-          </span>
-          <span className="lg-meta">
-            {t.players} player{t.players === 1 ? '' : 's'}
-            {t.playerHosted && <> · Hosted by {t.hostName}</>}
-          </span>
-        </Link>
-      ))}
-      {cashTables.map(t => (
-        <Link key={t.id} className="live-game-row" to={`/table/${t.id}`}>
-          <span className="lg-name">{t.name}</span>
-          <span className="state-badge state-running">{t.sb}/{t.bb}</span>
-          <span className="lg-meta">
-            {t.players}/{t.maxSeats} seats
-            {t.playerHosted && <> · Hosted by {t.hostName}</>}
-          </span>
-        </Link>
-      ))}
+      {group('Live now', live)}
+      {group('Upcoming', upcoming)}
+      {group('Recently finished', finished.slice(0, RECENT_FINISHED))}
     </div>
   );
 }
@@ -66,7 +75,7 @@ function LiveGames() {
 export default function Home() {
   const nav = useNavigate();
   const { profile, canHost } = useAuth();
-  const [modal, setModal] = useState<'auth' | 'tournament' | 'cash' | null>(null);
+  const [modal, setModal] = useState<'auth' | 'tournament' | null>(null);
   const isAdmin = !!profile?.isAdmin;
 
   return (
@@ -87,21 +96,18 @@ export default function Home() {
               <button className="btn btn-primary btn-lg" onClick={() => setModal('tournament')}>
                 Host a tournament
               </button>
-              <button className="btn btn-lg" onClick={() => setModal('cash')}>
-                Start a cash game
-              </button>
               {isAdmin && (
                 <button className="btn btn-ghost btn-lg" onClick={() => nav('/lobby')}>
                   Dashboard →
                 </button>
               )}
             </div>
-            {/* A player host still wants to find the games running now,
+            {/* A player host still wants to find the tournaments on now,
                 their own included. Operators have the dashboard for that. */}
-            {!isAdmin && <LiveGames />}
+            {!isAdmin && <Tournaments />}
           </>
         ) : profile ? (
-          <LiveGames />
+          <Tournaments />
         ) : (
           /* The label named Discord unconditionally, on a deployment that may
              not have Discord configured at all — and then the modal it opens
@@ -117,7 +123,6 @@ export default function Home() {
 
       {modal === 'auth' && <AuthModal onClose={() => setModal(null)} />}
       {modal === 'tournament' && <CreateTournamentModal onClose={() => setModal(null)} />}
-      {modal === 'cash' && <CreateCashModal onClose={() => setModal(null)} />}
     </main>
   );
 }

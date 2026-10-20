@@ -8,11 +8,8 @@ interface Props {
   x: number; // percent within felt
   y: number;
   isWinner: boolean;
-  canSit: boolean;
-  hideEmpty: boolean; // viewer is seated — don't render empty seats at all
   isSelf: boolean;
   myHandName: string | null;
-  onSit: () => void;
   onBack: () => void; // "I'm back" from away state
   actionDeadline: number | null;
   actionStarted: number | null;
@@ -21,23 +18,13 @@ interface Props {
 }
 
 export default function Seat({
-  seat, x, y, isWinner, canSit, hideEmpty, isSelf, myHandName,
-  onSit, onBack, actionDeadline, actionStarted, fmt,
+  seat, x, y, isWinner, isSelf, myHandName,
+  onBack, actionDeadline, actionStarted, fmt,
 }: Props) {
   const style = { left: `${x}%`, top: `${y}%` };
 
-  if (!seat.player) {
-    if (hideEmpty) return null;
-    return (
-      <div className="seat" style={style}>
-        {canSit ? (
-          <button className="seat-empty" onClick={onSit}>SIT HERE</button>
-        ) : (
-          <div className="seat-empty" style={{ opacity: 0.4 }}>EMPTY</div>
-        )}
-      </div>
-    );
-  }
+  // The tournament assigns seats, so an empty one is nothing to show.
+  if (!seat.player) return null;
 
   const away = seat.sittingOut || seat.offline;
   const cls = [
@@ -121,7 +108,6 @@ export default function Seat({
         ) : seat.sittingOut ? (
           <span className="seat-sub">away{seat.missedTurns > 0 ? ` (${seat.missedTurns})` : ''}</span>
         ) : null}
-        {seat.kickAt && seat.offline && <KickBar kickAt={seat.kickAt} />}
         {isWinner && seat.won ? (
           <span className="seat-sub" style={{ color: 'var(--green)' }}>+{fmt(seat.won)}</span>
         ) : null}
@@ -136,23 +122,6 @@ export default function Seat({
           I'm back
         </button>
       )}
-    </div>
-  );
-}
-
-// Countdown until an offline player is removed (cash games).
-function KickBar({ kickAt }: { kickAt: number }) {
-  const TOTAL = 120_000;
-  const [frac, setFrac] = useState(1);
-  useEffect(() => {
-    const tick = () => setFrac(Math.max(0, Math.min(1, (kickAt - Date.now()) / TOTAL)));
-    tick();
-    const iv = setInterval(tick, 1000);
-    return () => clearInterval(iv);
-  }, [kickAt]);
-  return (
-    <div className="kick-bar">
-      <div className="kick-bar-fill" style={{ width: `${frac * 100}%` }} />
     </div>
   );
 }

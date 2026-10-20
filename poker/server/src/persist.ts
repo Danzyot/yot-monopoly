@@ -5,7 +5,9 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { join } from 'node:path';
 import { saveAudit } from './audit.ts';
 import { DATA_DIR } from './paths.ts';
-import { registry, type CashTableSnap } from './registry.ts';
+import { settleCashSnapshot } from './legacycash.ts';
+import { registry } from './registry.ts';
+import { addCashRecord } from './store.ts';
 import type { TournamentSnap } from './tournament/tournament.ts';
 
 const LIVE_FILE = join(DATA_DIR, 'live.json');
@@ -17,7 +19,8 @@ interface LiveSnap {
   v: 1;
   savedAt: number;
   tournaments: TournamentSnap[];
-  cashTables: CashTableSnap[];
+  // Only in snapshots written before cash tables were retired (legacycash.ts).
+  cashTables?: unknown;
 }
 
 let lastSnapshotAt = 0;
@@ -31,9 +34,6 @@ export function snapshotLive(): void {
         .filter(t => t.state === 'registering' || t.state === 'running'
           || t.state === 'break' || t.state === 'paused')
         .map(t => t.snapshot()),
-      cashTables: [...registry.cashTables.values()]
-        .filter(t => !t.closed && t.seatedCount() > 0)
-        .map(t => registry.cashSnapshot(t)),
     };
     mkdirSync(DATA_DIR, { recursive: true });
     const tmp = `${LIVE_FILE}.tmp`;
@@ -49,37 +49,51 @@ export function lastSnapshotAge(): number | null {
   return lastSnapshotAt ? Date.now() - lastSnapshotAt : null;
 }
 
-// Call once at boot, after the socket emitter is attached.
-export function restoreLive(): { tournaments: number; cashTables: number } {
-  const out = { tournaments: 0, cashTables: 0 };
+// Call once at boot, after the socket emitter is attached. Tournaments come
+// back; cash tables from an older snapshot are closed and filed instead
+// (`closedCash` lists their ids).
+export function restoreLive(): { tournaments: number; closedCash: string[] } {
+  const out = { tournaments: 0, closedCash: [] as string[] };
   try {
     if (!existsSync(LIVE_FILE)) return out;
     const snap = JSON.parse(readFileSync(LIVE_FILE, 'utf8')) as LiveSnap;
-    if (!snap || snap.v !== 1) return out;
+    if (!snap || typeof snap !== 'object' || snap.v !== 1) return out;
+    // Settled whatever the snapshot's age: nothing else ever will, and the
+    // next snapshot (seconds from now) no longer carries them.
+    out.closedCash = closeLegacyCashTables(snap.cashTables);
     if (Date.now() - snap.savedAt > MAX_AGE_MS) {
       console.log('Live snapshot is stale — skipping restore.');
       return out;
     }
-    for (const ts of snap.tournaments ?? []) {
+    for (const ts of Array.isArray(snap.tournaments) ? snap.tournaments : []) {
       try {
         registry.restoreTournament(ts);
         out.tournaments += 1;
       } catch (e) {
-        console.error(`Could not restore tournament ${ts.id}:`, e);
-      }
-    }
-    for (const cs of snap.cashTables ?? []) {
-      try {
-        registry.restoreCashTable(cs);
-        out.cashTables += 1;
-      } catch (e) {
-        console.error(`Could not restore cash table ${cs.id}:`, e);
+        console.error(`Could not restore tournament ${ts?.id}:`, e);
       }
     }
   } catch (e) {
     console.error('Live restore failed:', e);
   }
   return out;
+}
+
+function closeLegacyCashTables(tables: unknown): string[] {
+  const closed: string[] = [];
+  if (!Array.isArray(tables)) return closed;
+  const now = Date.now();
+  for (const raw of tables) {
+    try {
+      const rec = settleCashSnapshot(raw, now);
+      if (!rec) continue;
+      addCashRecord(rec);
+      closed.push(rec.id);
+    } catch (e) {
+      console.error('Could not close a cash table from the last snapshot:', e);
+    }
+  }
+  return closed;
 }
 
 // Snapshot on an interval; the server's shutdown path calls snapshotLive()

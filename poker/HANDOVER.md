@@ -111,9 +111,16 @@ Unset it before the room runs a real event.
 `ADMIN_DISCORD_IDS` can create and control any game. With that variable unset,
 *every* account is an operator — fine on a laptop, wrong in production. Set it
 before you go live. Chog Genesis holders and players approved in the hub's
-Dashboard → Hosts may also open tables and tournaments, with limits, and run
-only their own (start, pause, cancel, prizes); this room asks the hub, signed
-with the shared secret. See "Player hosts" in `DEPLOY.md`.
+Dashboard → Hosts may also open tournaments, with limits, and run only their
+own (start, pause, cancel, prizes); this room asks the hub, signed with the
+shared secret. See "Player hosts" in `DEPLOY.md`.
+
+**Tournaments only.** There are no cash tables. Tournaments have no player
+cap unless an operator sets one (Max players on the form, empty by default).
+The first boot after the build that removed cash tables closes any cash table
+still in the live snapshot and files it under Past games; see "Tournaments
+only" in `DEPLOY.md`. As with every poker change, nothing reaches the live
+room until the owner presses **Deploy** on the poker service in Railway.
 
 **The audit channel is for operators only.** `DISCORD_AUDIT_CHANNEL_ID`
 receives cheating alerts, including player names and IP-derived countries.
@@ -151,7 +158,8 @@ leaderboard. Past games stay in Dashboard → Past games until you delete them;
 deleting one frees its name for reuse and clears bans scoped to that game.
 
 **Backups.** Everything durable lives on the volume: `results.json`,
-`bans.json`, `audit.json`, `cash-history.json`, `promo.json`, `features.json`,
+`bans.json`, `audit.json`, `cash-history.json` (sessions from before cash
+tables were retired; the room is tournaments only now), `promo.json`, `features.json`,
 `live.json`, `secret.key`, and the `music/` and `graphics/` folders holding
 whatever you uploaded. Railway can snapshot the volume; copying those files
 somewhere else occasionally is a reasonable substitute. **`secret.key` signs

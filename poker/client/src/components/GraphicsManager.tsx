@@ -47,7 +47,7 @@ export default function GraphicsManager() {
       <p className="field-hint">
         Images for custom table looks (png, jpg, webp, gif — up to 8 MB). Pick them as a
         <strong> center logo</strong> or <strong>felt background</strong> in the theme
-        section when creating or editing any table or tournament.
+        section when creating or editing a tournament.
       </p>
       <div>
         <button className="btn btn-primary" disabled={uploading} onClick={() => fileRef.current?.click()}>

@@ -25,7 +25,7 @@ export type BanScope = 'game' | 'lifetime';
 export interface Ban {
   kind: BanKind;
   scope: BanScope;
-  // Which game a 'game' ban belongs to (tournament or cash table id), and
+  // Which game a 'game' ban belongs to (a tournament id), and
   // what it was called — null/'' for lifetime bans.
   gameId: string | null;
   gameName: string;

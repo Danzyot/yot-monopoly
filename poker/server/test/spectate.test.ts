@@ -7,7 +7,7 @@ import { Table } from '../src/engine/table.ts';
 const noopCb = { broadcast: () => {}, chat: () => {}, event: () => {} };
 
 function seated(): Table {
-  const t = new Table({ name: 'T', mode: 'cash', sb: 5, bb: 10, cash: { minBuy: 100, maxBuy: 2000 } }, noopCb);
+  const t = new Table({ name: 'T', sb: 5, bb: 10 }, noopCb);
   t.interHandDelayMs = 1;
   t.runoutStepMs = 1;
   t.sit(0, { id: 'a', name: 'A', avatar: '🙂' }, 1000);

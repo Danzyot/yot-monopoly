@@ -114,14 +114,28 @@ test('the promo endpoints stay operator-only', async () => {
 });
 
 test('a game still cannot be created nameless or with a taken name', async () => {
-  const blank = await admin('/api/tables', { method: 'POST', body: JSON.stringify({ sb: 25, bb: 50 }) });
+  const blank = await admin('/api/tournaments', { method: 'POST', body: JSON.stringify({ startingStack: 10_000 }) });
   assert.equal(blank.status, 400);
 
-  const ok = await admin('/api/tables', { method: 'POST', body: JSON.stringify({ name: 'Round Trip', sb: 25, bb: 50 }) });
+  const ok = await admin('/api/tournaments', { method: 'POST', body: JSON.stringify({ name: 'Round Trip' }) });
   assert.equal(ok.status, 200);
 
-  const dupe = await admin('/api/tables', { method: 'POST', body: JSON.stringify({ name: '  round   trip ' }) });
+  const dupe = await admin('/api/tournaments', { method: 'POST', body: JSON.stringify({ name: '  round   trip ' }) });
   assert.equal(dupe.status, 400, 'case and spacing do not make it a different name');
+});
+
+test('cash tables are gone: creating one is refused and nothing is opened', async () => {
+  const r = await admin('/api/tables', { method: 'POST', body: JSON.stringify({ name: 'Old Habits', sb: 25, bb: 50 }) });
+  assert.equal(r.status, 410);
+  assert.match((await r.json() as { error: string }).error, /tournaments only/);
+  const lobby = await fetch(`${BASE}/api/lobby`).then(x => x.json() as Promise<Record<string, unknown>>);
+  assert.equal('cashTables' in lobby, false, 'the lobby lists tournaments only');
+  // Reading a table is still a thing (the tournament page looks one up), but
+  // there is no table by that name to find.
+  assert.equal((await fetch(`${BASE}/api/tables/deadbeef`)).status, 404);
+  // The name was never taken, so a tournament may still have it.
+  const t = await admin('/api/tournaments', { method: 'POST', body: JSON.stringify({ name: 'Old Habits' }) });
+  assert.equal(t.status, 200);
 });
 
 // "Ban only the alts": the player the ban was started from is unticked on the

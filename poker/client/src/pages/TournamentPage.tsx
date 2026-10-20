@@ -82,17 +82,20 @@ export default function TournamentPage() {
   }, [id]);
 
   // If no live state arrives shortly, the tournament is finished and gone from
-  // memory (a deploy, or simply days later) — fall back to its record.
+  // memory (a deploy, or simply days later) — fall back to its record. Failing
+  // that, the code may be one of a tournament's tables (the Chog Games code
+  // box sends every bare id here), so look for that before giving up.
   useEffect(() => {
     if (view) return;
     const timer = setTimeout(() => {
       api.tournamentResult(id)
-        .then(r => setArchived(r.record))
-        .catch(() => { /* genuinely unknown id */ })
-        .finally(() => setLookedUp(true));
+        .then(r => { setArchived(r.record); setLookedUp(true); })
+        .catch(() => api.tableLookup(id)
+          .then(t => nav(`/table/${t.id}`, { replace: true }))
+          .catch(() => setLookedUp(true))); // genuinely unknown id
     }, 1200);
     return () => clearTimeout(timer);
-  }, [id, view]);
+  }, [id, view, nav]);
 
   // The operator's extra standings columns. Fetched separately and only for
   // them: the standings broadcast reaches every player, and both the ids and

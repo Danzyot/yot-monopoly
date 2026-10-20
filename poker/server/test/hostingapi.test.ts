@@ -1,7 +1,7 @@
 // Player hosts over the wire: the real server, a stand-in hub that checks
 // signatures the way the hub does, and real socket clients. Covers who may
-// create, the limits, the hub going down, and what a host may and may not do
-// to their own event once it exists.
+// create, the limits, the hub going down, what a host may and may not do to
+// their own event once it exists, and the player cap only an operator sets.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -89,8 +89,7 @@ const call = (path: string, token: string, body?: unknown) => fetch(`${BASE}${pa
   body: body === undefined ? undefined : JSON.stringify(body),
 });
 const lobby = async () => (await (await fetch(`${BASE}/api/lobby`)).json()) as {
-  tournaments: { id: string; name: string; state: string; maxPlayers: number; hasSocialReq: boolean; playerHosted: boolean; hostName: string }[];
-  cashTables: { id: string; playerHosted: boolean; hostName: string }[];
+  tournaments: { id: string; name: string; state: string; maxPlayers: number | null; hasSocialReq: boolean; playerHosted: boolean; hostName: string }[];
 };
 
 async function connect(token: string): Promise<Socket> {
@@ -119,18 +118,17 @@ async function attempt(s: Socket, event: string, payload: unknown): Promise<stri
 }
 
 let holderCup = '';
-let holderTable = '';
 
 test('a player the hub does not vouch for cannot create anything', async () => {
   const t = await call('/api/tournaments', RANDO, { name: 'Rando Cup' });
   assert.equal(t.status, 403);
   assert.match((await t.json() as { error: string }).error, /Chog Genesis holders/);
-  assert.equal((await call('/api/tables', RANDO, { name: 'Rando Table' })).status, 403);
+  assert.equal((await call('/api/tables', RANDO, { name: 'Rando Table' })).status, 410, 'and cash tables are gone for everyone');
   const me = await (await call('/api/hosting/me', RANDO)).json() as { canHost: boolean };
   assert.equal(me.canHost, false);
 });
 
-test('a holder can host: clamped, marked as player-hosted, no Discord extras', async () => {
+test('a holder can host: clamped, open to everyone, marked as player-hosted, no Discord extras', async () => {
   const res = await call('/api/tournaments', HOLDER, {
     name: 'Holder Cup', maxPlayers: 1000, levelMinutes: 60, approveRegistrations: true, prizeText: '1st: a Chog',
     customLevels: [{ sb: 25, bb: 50, ante: 0, minutes: 0 }],
@@ -142,24 +140,19 @@ test('a holder can host: clamped, marked as player-hosted, no Discord extras', a
   const row = (await lobby()).tournaments.find(t => t.id === holderCup)!;
   assert.equal(row.playerHosted, true);
   assert.equal(row.hostName, 'Holder');
-  assert.equal(row.maxPlayers, 100);
+  assert.equal(row.maxPlayers, null, 'no player cap: the 1000 they asked for is dropped, not clamped');
   assert.equal(row.hasSocialReq, false, 'no Discord role gating on a player event');
   const me = await (await call('/api/hosting/me', HOLDER)).json() as { canHost: boolean; reason: string };
   assert.deepEqual([me.canHost, me.reason], [true, 'holder']);
 });
 
-test('a player host gets one tournament and two cash tables at a time', async () => {
+test('a player host gets one tournament at a time, and no cash tables', async () => {
   const second = await call('/api/tournaments', HOLDER, { name: 'Holder Cup Two' });
   assert.equal(second.status, 400);
   assert.match((await second.json() as { error: string }).error, /1 tournament at a time/);
-  const a = await call('/api/tables', HOLDER, { name: 'Holder Table A' });
-  assert.equal(a.status, 200);
-  holderTable = (await a.json() as { id: string }).id;
-  assert.equal((await call('/api/tables', HOLDER, { name: 'Holder Table B' })).status, 200);
-  const c = await call('/api/tables', HOLDER, { name: 'Holder Table C' });
-  assert.equal(c.status, 400);
-  assert.match((await c.json() as { error: string }).error, /2 cash tables at a time/);
-  assert.equal((await lobby()).cashTables.find(t => t.id === holderTable)?.playerHosted, true);
+  const table = await call('/api/tables', HOLDER, { name: 'Holder Table A' });
+  assert.equal(table.status, 410);
+  assert.equal('cashTables' in await lobby(), false);
 });
 
 test('operators have no limits and their events are not player-hosted', async () => {
@@ -170,9 +163,9 @@ test('operators have no limits and their events are not player-hosted', async ()
   const ops = (await lobby()).tournaments.filter(t => t.name.startsWith('Operator Night'));
   assert.deepEqual(ops.map(t => t.playerHosted), [false, false]);
   // The dashboard lists player-hosted events with their host, so they can be closed.
-  const games = await (await call('/api/admin/games', OP)).json() as { tournaments: { id: string; playerHosted: boolean; hostName: string }[]; cashTables: { playerHosted: boolean }[] };
+  const games = await (await call('/api/admin/games', OP)).json() as { tournaments: { id: string; playerHosted: boolean; hostName: string }[] };
   assert.deepEqual(games.tournaments.filter(t => t.playerHosted).map(t => [t.id, t.hostName]), [[holderCup, 'Holder']]);
-  assert.equal(games.cashTables.filter(t => t.playerHosted).length, 2);
+  assert.equal('cashTables' in games, false);
   assert.equal((await call('/api/admin/games', HOLDER)).status, 403, 'hosts do not get the dashboard');
 });
 
@@ -182,7 +175,7 @@ test('if the hub cannot be reached, hosting fails closed with a clear message', 
   assert.equal(r.status, 503);
   assert.match((await r.json() as { error: string }).error, /Could not check your hosting rights/);
   // Operators do not depend on the hub.
-  assert.equal((await call('/api/tables', OP, { name: 'Operator Table' })).status, 200);
+  assert.equal((await call('/api/tournaments', OP, { name: 'Operator Night Three' })).status, 200);
   hubDown = false;
   const ok = await call('/api/tournaments', APPROVED, { name: 'Approved Cup' });
   assert.equal(ok.status, 200, 'an approved host, once the hub answers');
@@ -235,14 +228,24 @@ test('a host runs their own event: start, pause, resume, prizes, start time — 
   assert.match(String(await attempt(host, 'tourney:cancel', opCup)), /tournament director/);
 });
 
-test('a host can close their own cash table, nobody else\'s, and cannot change its settings', async () => {
-  const host = await connect(HOLDER);
-  const rando = await connect(RANDO);
-  assert.match(String(await attempt(host, 'table:settings', { tableId: holderTable, actionSeconds: 60 })), /Only an operator/);
-  assert.match(String(await attempt(rando, 'table:close', holderTable)), /Only the table host/);
-  assert.match(String(await attempt(host, 'table:reverseTurn', holderTable)), /Only the host/);
-  assert.equal(await attempt(host, 'table:close', holderTable), null);
-  assert.equal((await lobby()).cashTables.some(t => t.id === holderTable), false);
-  // With one closed, there is room for another.
-  assert.equal((await call('/api/tables', HOLDER, { name: 'Holder Table C' })).status, 200);
+test('a tournament has no player cap unless an operator sets one', async () => {
+  const open = await call('/api/tournaments', OP, { name: 'Open Night' });
+  assert.equal(open.status, 200);
+  const openId = (await open.json() as { id: string }).id;
+  const blank = await call('/api/tournaments', OP, { name: 'Blank Cap Night', maxPlayers: '' });
+  const capped = await call('/api/tournaments', OP, { name: 'Capped Night', maxPlayers: 12 });
+  const rows = (await lobby()).tournaments;
+  const cap = (name: string) => rows.find(t => t.name === name)?.maxPlayers;
+  assert.equal(blank.status, 200);
+  assert.equal(capped.status, 200);
+  assert.equal(cap('Open Night'), null, 'no field means no limit');
+  assert.equal(cap('Blank Cap Night'), null, 'an empty field means no limit');
+  assert.equal(cap('Capped Night'), 12, 'an operator may set one');
+
+  // An operator can add a cap later, and lift it again.
+  const op = await connect(OP);
+  assert.equal(await attempt(op, 'tourney:settings', { id: openId, maxPlayers: 40 }), null);
+  assert.equal((await lobby()).tournaments.find(t => t.id === openId)?.maxPlayers, 40);
+  assert.equal(await attempt(op, 'tourney:settings', { id: openId, maxPlayers: null }), null);
+  assert.equal((await lobby()).tournaments.find(t => t.id === openId)?.maxPlayers, null);
 });

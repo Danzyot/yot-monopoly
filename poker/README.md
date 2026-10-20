@@ -1,24 +1,21 @@
 # ♠ Chog Poker
 
 A professional multi-table tournament poker platform. Host tournaments for hundreds of
-players or spin up a cash table and share the link — no downloads, no friction.
+players and share the link — no downloads, no friction. Tournaments only: there
+are no cash tables.
 
 ![Chog Poker](https://img.shields.io/badge/No--Limit-Hold'em-d53f7c) ![Node](https://img.shields.io/badge/Node-%E2%89%A518-2b1764) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-4c9de8)
 
 ## Features
 
 **Multi-table tournaments (MTT)**
-- Up to 1,000 players, 9-max tables created and balanced automatically
+- No player cap unless an operator sets one; 9-max tables created and balanced automatically
 - Automatic table breaking and seat balancing between hands
 - Blind schedules (turbo / regular / deep) with antes and configurable level length
 - Late registration, scheduled or manual start, breaks every N levels
 - Live standings, average stack, payout table (industry-style top-heavy curve)
 - Tournament director controls: start, pause, resume, cancel
 - Tournament-wide chat + per-table chat
-
-**Cash games**
-- Instant shareable table links (PokerNow-style: create → share → play)
-- Choose blinds, 2/6/9-max, buy-in range 40–200 BB, top-ups, sit-out, leave anytime
 
 **Serious poker engine**
 - Full No-Limit Hold'em rules: side pots, min-raise enforcement, short all-in
@@ -30,8 +27,9 @@ players or spin up a cash table and share the link — no downloads, no friction
 - Server-authoritative state — hole cards are never sent to other clients
 
 **Single-operator platform**
-- The site belongs to one operator: only you can create tournaments and cash
-  tables (matched by your Discord ID, or unlocked with an admin key)
+- The site belongs to one operator: only you (and the player hosts Chog Games
+  vouches for) can create tournaments (matched by your Discord ID, or unlocked
+  with an admin key)
 - Players sign in with **Discord** — the only way in — browse the lobby, and
   register; they can never create games
 
@@ -55,8 +53,7 @@ players or spin up a cash table and share the link — no downloads, no friction
   resync state after any network blip
 - Seats, stacks and hole cards live server-side — a disconnected player's seat
   survives and the action clock/time bank handles them fairly
-- Cash-game ledger (buy-ins / cash-outs / net), PokerNow-style per-action hand
-  log, and post-tournament podium with full results
+- PokerNow-style per-action hand log, and post-tournament podium with full results
 
 ## Deployment
 
@@ -76,7 +73,7 @@ npm install
 npm run dev        # server on :8080, client on :5173 (proxied)
 ```
 
-Open http://localhost:5173, sign in, and create a game.
+Open http://localhost:5173, sign in, and create a tournament.
 
 ### Production
 
@@ -93,7 +90,7 @@ The platform is designed for a single operator, identified by Discord id:
 ADMIN_DISCORD_IDS=123456789012345678   # your Discord user id(s), comma-separated
 ```
 
-With this set, only you can create tournaments/tables and control any
+With this set, only you can create tournaments and control any
 tournament. With it unset (local dev), every profile has operator rights.
 
 ### 500 simultaneous websockets
