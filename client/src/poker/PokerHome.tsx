@@ -3,15 +3,18 @@
 // tournaments on now, coming up and just finished (read from poker's public
 // /api/lobby and /api/leaderboard), join by code, and Host for those who may.
 // Every link across carries the sign-in, the same as the header used to.
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { GAMES } from '../../../shared/brand.ts';
-import { CloseX, Modal } from '../components/Modal.tsx';
 import { goToPoker, openPoker, pokerHref, pokerTarget, POKER_BASE } from '../pokerLink.ts';
 import './poker.css';
+
+// The hub's per-game tutorial (components/HowToPlay.tsx with game="poker"),
+// fetched when the "?" is pressed, as on the Cards home.
+const HowToPlay = lazy(() => import('../components/HowToPlay.tsx'));
 
 // What poker's /api/lobby and /api/leaderboard send (poker/shared/types.ts
 // LobbyTournament and TournamentRecord), just the fields this page reads.
@@ -104,33 +107,6 @@ function Row({ id, signedIn, badge, badgeClass, name, meta, cta }: {
   );
 }
 
-/**
- * Poker's "?" tutorial. A hook for the per-game tutorial modals: when the
- * shared one lands, swap this for it and keep the button.
- */
-function PokerTutorial({ onClose }: { onClose: () => void }) {
-  return (
-    <Modal className="howto" labelledBy="ph-howto-title" onClose={onClose}>
-      <div className="howto-head">
-        <h2 id="ph-howto-title">How to play {GAMES.poker.name}</h2>
-        <CloseX onClick={onClose} />
-      </div>
-      <ol className="howto-steps">
-        {STEPS.map((s, i) => (
-          <li key={s.title}>
-            <span className="howto-icon" aria-hidden>{s.icon}</span>
-            <div>
-              <b><span className="howto-n">{i + 1}</span>{s.title}</b>
-              <p>{s.body}</p>
-            </div>
-          </li>
-        ))}
-      </ol>
-      <p className="muted small ph-howto-foot">The tables run on poker’s own site. One sign-in works on both.</p>
-    </Modal>
-  );
-}
-
 export default function PokerHome() {
   const { profile, canHost, openSignIn } = useAuth();
   const signedIn = !!profile;
@@ -178,7 +154,7 @@ export default function PokerHome() {
         </div>
         <div className="ph-title">
           <h1>{GAMES.poker.name}</h1>
-          <button type="button" className="btn ghost ph-help" onClick={() => setHowTo(true)} aria-label={`How to play ${GAMES.poker.name}`} title="How to play">?</button>
+          <button type="button" className="hub-help ph-help" onClick={() => setHowTo(true)} aria-label={`How to play ${GAMES.poker.name}`} title={`How to play ${GAMES.poker.name}`}>?</button>
         </div>
         <p className="ph-tag">No-Limit Hold’em tournaments for the whole Chog crew. Free to play, one sign-in.</p>
         <div className="ph-actions">
@@ -259,7 +235,7 @@ export default function PokerHome() {
         </section>
         <p className="ph-foot muted small"><Link to="/">← All games</Link> · <Link to="/leaderboard">Leaderboard</Link></p>
       </div>
-      {howTo && createPortal(<PokerTutorial onClose={() => setHowTo(false)} />, document.body)}
+      {howTo && createPortal(<Suspense fallback={null}><HowToPlay game="poker" onClose={() => setHowTo(false)} /></Suspense>, document.body)}
     </div>
   );
 }

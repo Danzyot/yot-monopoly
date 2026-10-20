@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { getToken } from '../api';
 import { BRAND } from '../../../shared/brand';
@@ -54,6 +54,8 @@ export default function Header() {
   const chogs = useMyChogs();
   const ref = useRef<HTMLElement>(null);
   const hub = configLoaded ? hubUrl : DEFAULT_HUB;
+  // Poker is the page you are on, except on the operator's Dashboard, which lights itself.
+  const onDashboard = useLocation().pathname.startsWith('/lobby');
 
   // Your own Chog avatar, for the chip. Asked once per sign-in.
   const profileId = profile?.id ?? null;
@@ -79,7 +81,7 @@ export default function Header() {
 
   const hubLink = (l: HubLink) => {
     const href = `${hub}${l.to === '/' ? '/' : l.to}`;
-    const here = l.to === '/poker';
+    const here = l.to === '/poker' && !onDashboard;
     return (
       <a
         key={l.to}
@@ -115,7 +117,7 @@ export default function Header() {
       {demoMode && <span className="demo-flag">DEMO</span>}
       <nav className="row" aria-label="Site">
         {hub
-          ? HUB_LINKS.filter(l => !l.signedIn || profile).map(hubLink)
+          ? HUB_LINKS.filter(l => !l.signedIn).map(hubLink)
           : (
             <>
               <NavLink className="navlink nav-chars nav-game" to="/" end title="Poker"><span className="nav-ico" aria-hidden="true">♠️</span><span className="nav-label">Poker</span></NavLink>
@@ -130,6 +132,8 @@ export default function Header() {
             <span className="nav-ico" aria-hidden="true">📊</span><span className="nav-label">Dashboard</span>
           </NavLink>
         )}
+        {/* Signed-in pages (Wallet) after Dashboard, the hub's order. */}
+        {hub && profile && HUB_LINKS.filter(l => l.signedIn).map(hubLink)}
         {music && <MusicPlayer />}
         {profile ? (
           <span className="row me">
