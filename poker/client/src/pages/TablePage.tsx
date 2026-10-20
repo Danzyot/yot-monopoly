@@ -556,14 +556,28 @@ export default function TablePage() {
           <button className="btn btn-ghost btn-sm" onClick={() => void copyLink()}><IconLink /> Invite</button>
           {/* Host tools: reverse a turn, correct a stack. Tournament tables have
               no hostId of their own, so the operator flag is what opens them. */}
-          {profile && (view.hostId === profile.id || profile.isAdmin) && (
+          {/* A player host's table (a Chog holder's, say) is theirs to close,
+              not to rewrite: turns, stacks and settings stay with operators. */}
+          {profile && (profile.isAdmin || (view.hostId === profile.id && !view.playerHosted)) && (
             <button className="btn btn-ghost btn-sm" onClick={() => setShowHostTools(true)}>
               <IconGavel /> Host tools
             </button>
           )}
-          {view.mode === 'cash' && profile && view.hostId === profile.id && (
+          {view.mode === 'cash' && profile && (profile.isAdmin || (view.hostId === profile.id && !view.playerHosted)) && (
             <button className="btn btn-ghost btn-sm" title="Table settings"
               onClick={() => setShowSettings(true)}><IconGear /> Settings</button>
+          )}
+          {view.mode === 'cash' && !view.closed && profile && view.hostId === profile.id && view.playerHosted && !profile.isAdmin && (
+            <button
+              className="btn btn-ghost btn-sm" title="Cash everyone out and shut your table down"
+              onClick={() => {
+                if (window.confirm('Close your table? Everyone is cashed out and the table is gone for good.')) {
+                  getSocket().emit('table:close', view.id);
+                }
+              }}
+            >
+              Close table
+            </button>
           )}
           {isSeated && view.mode === 'cash' && (
             <button

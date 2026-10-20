@@ -43,7 +43,7 @@ function Skeleton() {
 
 export default function Profile() {
   const { id = '' } = useParams();
-  const { profile: me } = useAuth();
+  const { profile: me, canHost } = useAuth();
   const [p, setP] = useState<PublicProfile | null>(null);
   const [err, setErr] = useState<{ status?: number; message: string } | null>(null);
 
@@ -87,6 +87,11 @@ export default function Profile() {
             <Link className="btn primary chunky" to="/">Find a game</Link>
             <Link className="btn chunky" to="/leaderboard">Leaderboard</Link>
           </div>
+          {mine && (
+            <p className="muted small">
+              {canHost ? '🏆 You can host tournaments.' : <>Holding a Chog lets you host tournaments — <Link to="/wallet">link your wallet</Link>.</>}
+            </p>
+          )}
         </section>
       </div>
     );
@@ -116,6 +121,9 @@ export default function Profile() {
             <span className="chip">{plural(p.games, 'game')} finished</span>
             {p.wins > 0 && <span className="chip chip-win">{plural(p.wins, 'win')}</span>}
             {favMap && <span className="chip">Favourite map · {favMap.name}</span>}
+            {mine && (canHost
+              ? <span className="chip chip-win" title="Operators, Chog Genesis holders and approved hosts can host tournaments">🏆 You can host tournaments</span>
+              : <Link className="chip" to="/wallet" title="Link the wallet that holds your Chog">Holding a Chog lets you host tournaments →</Link>)}
           </div>
         </div>
       </section>

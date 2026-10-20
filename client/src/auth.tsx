@@ -6,6 +6,10 @@ import { DEFAULT_FEATURES, type PlayerProfile, type SiteConfig } from '../../sha
 
 interface AuthState {
   profile: PlayerProfile | null;
+  /** May host tournaments: operator, Chog Genesis holder or approved host (server/src/hosting.ts). */
+  canHost: boolean;
+  /** Re-asks the server (after linking a wallet, say). */
+  refreshMe(): Promise<void>;
   config: SiteConfig;
   ready: boolean;
   /** Set when the server says this account or address is banned. */
@@ -30,6 +34,7 @@ const Ctx = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
+  const [canHost, setCanHost] = useState(false);
   const [config, setConfig] = useState<SiteConfig>(EMPTY_CONFIG);
   const [ready, setReady] = useState(false);
   const [banned, setBanned] = useState<string | null>(null);
@@ -46,8 +51,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const loadConfig = api<SiteConfig>('/api/config').then(setConfig).catch(() => {});
     const loadMe = getToken()
-      ? api<{ profile: PlayerProfile }>('/api/auth/me')
-        .then(r => { setProfile(r.profile); if (t) toast(`Signed in as ${r.profile.name}`); })
+      ? api<{ profile: PlayerProfile; canHost?: boolean }>('/api/auth/me')
+        .then(r => { setProfile(r.profile); setCanHost(!!r.canHost); if (t) toast(`Signed in as ${r.profile.name}`); })
         .catch((e: Error & { status?: number }) => {
           if (e.status === 403) setBanned(e.message);
           if (e.status === 401 || e.status === 403) setToken(null);
@@ -59,15 +64,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const refreshMe = useCallback(async () => {
+    if (!getToken()) { setCanHost(false); return; }
+    try {
+      const r = await api<{ profile: PlayerProfile; canHost?: boolean }>('/api/auth/me');
+      setProfile(r.profile);
+      setCanHost(!!r.canHost);
+    } catch { /* keep what we have; a refused token is handled on the next load */ }
+  }, []);
+
   const acceptAuth = useCallback((token: string, p: PlayerProfile) => {
     setToken(token);
     setProfile(p);
     setSignInOpen(false);
     resetSocket();
-  }, []);
+    void refreshMe();
+  }, [refreshMe]);
 
   const value: AuthState = {
-    profile, config, ready, banned, setBanned,
+    profile, canHost, refreshMe, config, ready, banned, setBanned,
     signInDiscord() {
       location.href = `/api/auth/discord/start?return=${encodeURIComponent(location.pathname + location.search)}`;
     },
@@ -79,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOut() {
       setToken(null);
       setProfile(null);
+      setCanHost(false);
       resetSocket();
     },
     openSignIn: () => setSignInOpen(true),
