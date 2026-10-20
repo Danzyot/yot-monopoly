@@ -32,6 +32,42 @@ Railway is the path below (~$5/month Hobby). Any always-on VPS works too.
 > | `HUB_URL` | `https://choggames.com` (the default). Puts the "Chog Games" link in the header and "Sign in via Chog Games" in the sign-in box. `off` hides both. |
 > | `HUB_ORIGINS` | Extra origins, comma separated, allowed to read `/api/leaderboard` and `/api/results/:id` from a browser — the hub's `*.up.railway.app` domain during cutover. `HUB_URL` is always allowed. Nothing else on `/api` is reachable cross-origin in production. |
 
+> **Player hosts (hosting rights).** Besides the operators in
+> `ADMIN_DISCORD_IDS`, Chog Genesis holders (verified wallet on the hub) and
+> players an operator approved in the hub's Dashboard → Hosts may open cash
+> tables and tournaments here. **No new variables.** It needs a poker deploy
+> by hand (auto-deploy is off), after the hub is on a build that has
+> `/api/hosting/can-host`.
+>
+> - **How poker asks.** When a non-operator presses Create, this server calls
+>   `GET <HUB_URL>/api/hosting/can-host?id=<player id>` with
+>   `X-Chog-Timestamp` (ms) and `X-Chog-Signature` =
+>   `base64url(HMAC-SHA256(secret, "svc:hosting:can-host:<id>:<timestamp>"))`,
+>   using the same shared secret as sign-in (`CHOG_SECRET` here = `APP_SECRET`
+>   on the hub). The hub refuses unsigned or wrongly signed requests, and any
+>   timestamp more than 60 s off, so the endpoint cannot be used to list
+>   holders. The player id is the same on both sides (`dc_<Discord id>`).
+>   Answers are cached for 60 s.
+> - **Fails closed.** If the hub cannot be reached, answers 401 (the secrets
+>   differ) or `HUB_URL=off`, non-operators get "Could not check your hosting
+>   rights…" (or "only operators can host here") and nothing is created.
+>   Operators never depend on the hub. The server log says
+>   `Hub hosting check failed (401)` when the secrets differ.
+> - **Limits for player hosts:** 1 live or upcoming tournament and 2 open cash
+>   tables at a time; tournaments are clamped to 100 players, a 50,000 starting
+>   stack, 20-minute levels, 60 minutes of late registration, 30 minutes to
+>   join, 2 re-entries, a 60-minute bet cap and a start within 7 days, with no
+>   custom blind schedule. The numbers are in `shared/hosting.ts`.
+> - **What a player host may do** with their own event: start, pause, resume
+>   and cancel it, write the prize line and set the start time; close their
+>   own cash table. **Operators only:** kicking, approving registrations,
+>   Discord role / social requirements, ending early, seating or reinstating,
+>   reversing turns and moving chips, table settings, bans. A player-hosted
+>   event never posts results to Discord (no announce channel, no webhook),
+>   and its page says prizes are the host's responsibility, not Chog Games'.
+> - **Operators** see player-hosted events marked in Dashboard → Manage games
+>   ("Hosted by …") and can pause, end or delete any of them.
+
 > **If a Vercel project has already been created for this site**, it cannot
 > host it. Vercel runs serverless functions with no long-lived process and no
 > persistent disk, so the socket connection every table depends on has nothing
@@ -104,7 +140,7 @@ Discord Developer Portal → **New Application** (name it *Chog Poker*).
 | `DATA_DIR` | `/data` (the volume mount) |
 | `CHOG_SECRET` | any long random string — signs login tokens |
 | `PUBLIC_URL` | `https://poker.chog.co` |
-| `ADMIN_DISCORD_IDS` | comma-separated Discord user ids allowed to run games |
+| `ADMIN_DISCORD_IDS` | comma-separated Discord user ids of the operators (Chog holders and approved hosts can also host — see "Player hosts" above) |
 | `DEMO_MODE` | `1` turns on name-only sign-in for showing the room; leave unset otherwise |
 | `DISCORD_CLIENT_ID` | from OAuth2 |
 | `DISCORD_CLIENT_SECRET` | from OAuth2 |

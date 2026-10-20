@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { ChatMsg, TournamentRecord, TournamentView } from '../../../shared/types';
+import { BRAND } from '../../../shared/brand';
 import { useAuth } from '../auth';
 import ArchivedResults from '../components/ArchivedResults';
 import AuthModal from '../components/AuthModal';
@@ -105,9 +106,10 @@ export default function TournamentPage() {
   // screen on every tournament, which is exactly what happened.
   //
   // It cannot ask `isHost` for the same reason: that is derived from `view`,
-  // which is null on the first render. It compares the ids itself instead.
+  // which is null on the first render. The endpoint is operators-only, so it
+  // asks the operator flag (a player host never sees these columns).
   const [identities, setIdentities] = useState<Map<string, { discordId: string | null; sharesWith: string[]; sharesDeviceWith: string[] }>>(new Map());
-  const viewerHosts = !!profile?.id && !!view?.hostId && profile.id === view.hostId;
+  const viewerHosts = !!profile?.isAdmin;
   useEffect(() => {
     if (!viewerHosts || !id) { setIdentities(new Map()); return; }
     let stale = false;
@@ -173,9 +175,18 @@ export default function TournamentPage() {
   };
 
   const isHost = profile?.id === view.hostId;
+  const isAdmin = !!profile?.isAdmin;
+  // Made by a player host (a Chog holder or approved player), not an operator.
+  const playerHosted = !!view.config.playerHosted;
+  // The full director's kit: an operator, or the host of an operator-made event.
+  const isDirector = isAdmin || (isHost && !playerHosted);
+  // Start, pause, resume, cancel, prizes and start time: also a player host's.
+  const canRun = isDirector || isHost;
+  const live = view.state !== 'finished' && view.state !== 'cancelled';
   const emit = (ev: string) => getSocket().emit(ev, id);
   // Host can click any text (name, prizes) and edit it in place.
-  const editable = isHost && view.state !== 'finished' && view.state !== 'cancelled';
+  const editable = isDirector && live;
+  const prizeEditable = canRun && live;
   const patchSettings = (patch: Record<string, unknown>) =>
     getSocket().emit('tourney:settings', { id, ...patch });
 
@@ -255,22 +266,22 @@ export default function TournamentPage() {
         {view.tables.length > 0 && (
           <Link className="btn btn-ghost btn-sm" to={`/t/${id}/tables`}><IconEye /> Watch all tables</Link>
         )}
-        {isHost && view.state === 'registering' && (
+        {canRun && view.state === 'registering' && (
           <button className="btn btn-primary btn-sm" disabled={view.playersRegistered < view.config.minPlayers}
             onClick={() => emit('tourney:start')}>
             <IconPlay /> Start now ({view.playersRegistered})
           </button>
         )}
-        {isHost && (view.state === 'running' || view.state === 'break') && (
+        {canRun && (view.state === 'running' || view.state === 'break') && (
           <button className="btn btn-sm" onClick={() => emit('tourney:pause')}><IconPause /> Pause</button>
         )}
-        {isHost && view.state === 'paused' && (
+        {canRun && view.state === 'paused' && (
           <button className="btn btn-success btn-sm" onClick={() => emit('tourney:resume')}><IconPlay /> Resume</button>
         )}
-        {isHost && view.state !== 'finished' && view.state !== 'cancelled' && (
+        {isDirector && live && (
           <button className="btn btn-sm" onClick={() => setShowSettings(true)}><IconGear /> Settings</button>
         )}
-        {isHost && (view.state === 'running' || view.state === 'break' || view.state === 'paused') && (
+        {isDirector && (view.state === 'running' || view.state === 'break' || view.state === 'paused') && (
           <button
             className="btn btn-sm"
             title="Finish immediately: current hand rolled back, final ranks by chip count, prizes awarded"
@@ -283,7 +294,7 @@ export default function TournamentPage() {
             <IconTrophy size={13} /> End now
           </button>
         )}
-        {isHost && view.state !== 'finished' && view.state !== 'cancelled' && (
+        {canRun && live && (
           <button
             className="btn btn-danger btn-sm"
             onClick={() => {
@@ -300,7 +311,15 @@ export default function TournamentPage() {
       {/* The start time, in front of everyone who is waiting for it: their
           own clock, the New York clock the announcements use, and how long is
           left. The host sets or moves it from right here. */}
-      {view.state === 'registering' && (view.scheduledStart || isHost) && (
+      {/* Player hosts hand out their own prizes; say so before anyone registers. */}
+      {playerHosted && (
+        <p className="host-disclaimer">
+          Hosted by <strong>{view.hostName}</strong>, a player host — not run by {BRAND.hub}.
+          {' '}Any prizes are the host's responsibility, not {BRAND.hub}'.
+        </p>
+      )}
+
+      {view.state === 'registering' && (view.scheduledStart || canRun) && (
         <div className="start-banner">
           {view.scheduledStart ? (
             <div className="start-banner-times">
@@ -327,7 +346,7 @@ export default function TournamentPage() {
               </span>
             </div>
           )}
-          {isHost && (
+          {canRun && (
             <div className="start-edit">
               <input
                 className="input" type="datetime-local"
@@ -497,11 +516,11 @@ export default function TournamentPage() {
               )}
               <div className="info-cell"><span className="k">Starting stack</span><span className="v">{chips(view.config.startingStack)}</span></div>
               <div className="info-cell"><span className="k">Structure</span><span className="v" style={{ textTransform: 'capitalize' }}>{view.config.structure} · {view.config.levelMinutes}m</span></div>
-              <div className="info-cell"><span className="k">Host</span><span className="v">{view.hostName}</span></div>
+              <div className="info-cell"><span className="k">Host</span><span className="v">{view.hostName}{playerHosted ? ' (player host)' : ''}</span></div>
             </div>
           </div>
 
-          {isHost && view.pending.length > 0 && (
+          {isDirector && view.pending.length > 0 && (
             <div className="panel pending-panel">
               <h3>
                 Waiting for approval ({view.pending.length})
@@ -529,7 +548,7 @@ export default function TournamentPage() {
             </div>
           )}
 
-          {isHost && (view.state === 'running' || view.state === 'break' || view.state === 'paused') && (
+          {isDirector && (view.state === 'running' || view.state === 'break' || view.state === 'paused') && (
             <SeatPlayerPanel tournamentId={id} startingStack={view.config.startingStack} />
           )}
 
@@ -537,14 +556,15 @@ export default function TournamentPage() {
             <h3>{view.state === 'registering' ? `Players (${view.playersRegistered})` : 'Live standings'}</h3>
             <div style={{ maxHeight: 420, overflowY: 'auto' }}>
               {(() => {
-                const canKick = isHost && view.state !== 'finished' && view.state !== 'cancelled';
+                const canKick = isDirector && live;
+                const showIdent = isAdmin;
                 return (
               <table className="standings-table">
                 <thead>
                   <tr>
                     <th>#</th><th>Player</th><th>Stack</th>
-                    {isHost && <th>Id</th>}
-                    {isHost && <th title="Shares an address with another player in this event">Shared</th>}
+                    {showIdent && <th>Id</th>}
+                    {showIdent && <th title="Shares an address with another player in this event">Shared</th>}
                     {canKick && <th />}
                   </tr>
                 </thead>
@@ -565,12 +585,12 @@ export default function TournamentPage() {
                           </span>
                         )}
                       </td>
-                      {isHost && (
+                      {showIdent && (
                         <td className="ident-cell">
                           <CopyId value={s.id} label={(identities.get(s.id)?.discordId) ?? s.id} title="Click to copy" />
                         </td>
                       )}
-                      {isHost && (
+                      {showIdent && (
                         <td className="ident-cell">
                           {/* Same browser first, in red: that is one phone holding two
                               accounts, where a shared address may only be a household. */}
@@ -725,7 +745,7 @@ export default function TournamentPage() {
             </div>
           )}
 
-          {(view.config.prizeText || editable) && (
+          {(view.config.prizeText || prizeEditable) && (
             <div className="panel prize-panel">
               <h3><IconGift size={17} /> Prizes</h3>
               {(() => {
@@ -743,8 +763,14 @@ export default function TournamentPage() {
                     ))}
                   </div>
                 ) : null;
-                if (!editable) return rendered;
+                const note = playerHosted && (
+                  <p className="tag" style={{ marginTop: 8 }}>
+                    Prizes are the host's responsibility, not {BRAND.hub}'. {BRAND.hub} does not hold or pay them.
+                  </p>
+                );
+                if (!prizeEditable) return <>{rendered}{note}</>;
                 return (
+                  <>
                   <InlineEdit
                     block multiline maxLength={500}
                     value={view.config.prizeText ?? ''}
@@ -752,6 +778,8 @@ export default function TournamentPage() {
                     display={rendered ?? undefined}
                     onSave={t => patchSettings({ prizeText: t || null })}
                   />
+                  {note}
+                  </>
                 );
               })()}
             </div>

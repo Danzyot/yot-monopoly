@@ -71,6 +71,12 @@ export function walletsOf(owner: string): WalletLink[] {
   return data.links.filter(l => l.owner === owner);
 }
 
+/** Every link on record (the hosting list shows who holds). */
+export function allLinks(): WalletLink[] {
+  ready();
+  return [...data.links];
+}
+
 /** Links, or returns the existing link when this account already has it. */
 export function linkWallet(address: string, owner: string, now = Date.now()): WalletLink {
   ready();

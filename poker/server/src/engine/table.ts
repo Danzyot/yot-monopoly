@@ -109,6 +109,8 @@ export interface TableOpts {
   ante?: number;
   cash?: { minBuy: number; maxBuy: number };
   hostId?: string;
+  // Opened by a player host rather than an operator (see hosting.ts).
+  playerHosted?: boolean;
   actionTimeMs?: number;
   timebankMs?: number;
   interHandDelayMs?: number;
@@ -161,6 +163,7 @@ export class Table {
   tournamentId: string | null;
   maxSeats: number;
   hostId: string | null;
+  playerHosted: boolean;
   seats: (TableSeatState | null)[];
   hand: HoldemHand | null = null;
   buttonSeat = 0;
@@ -245,6 +248,7 @@ export class Table {
     this.tournamentId = opts.tournamentId ?? null;
     this.maxSeats = opts.maxSeats ?? 9;
     this.hostId = opts.hostId ?? null;
+    this.playerHosted = !!opts.playerHosted;
     this.seats = new Array(this.maxSeats).fill(null);
     this.sb = opts.sb;
     this.bb = opts.bb;
@@ -1512,6 +1516,7 @@ export class Table {
       spectators: this.spectators.size,
       ledger: this.ledger(),
       hostId: this.hostId,
+      playerHosted: this.playerHosted,
       actionSeconds: Math.round(this.actionTimeMs / 1000),
       rabbitHuntingOn: this.rabbitHunting,
       timebankSeconds: Math.round(this.timebankMs / 1000),

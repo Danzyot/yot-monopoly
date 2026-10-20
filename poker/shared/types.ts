@@ -232,6 +232,7 @@ export interface TableView {
   spectators: number;
   ledger: LedgerEntry[]; // cash games: buy-ins / cash-outs / net per player
   hostId: string | null; // cash tables: who created it (may edit settings)
+  playerHosted: boolean; // cash tables opened by a player host, not an operator
   actionSeconds: number; // per-decision clock
   rabbitHuntingOn: boolean;
   timebankSeconds: number;
@@ -385,6 +386,10 @@ export interface TournamentConfig {
   timebankSeconds?: number;
   // Custom look for every table of this tournament.
   theme?: TableTheme | null;
+  // Created by a player host (a Chog holder or approved player), not an
+  // operator: clamped limits, no Discord gating or announcements, and the
+  // prizes are the host's to hand out.
+  playerHosted?: boolean;
 }
 
 // ---- all-tables spectate overview ----
@@ -521,6 +526,7 @@ export interface LobbyTournament {
   startingStack: number;
   structure: string;
   hostName: string;
+  playerHosted: boolean;
   scheduledStart: number | null;
   createdAt: number;
   hasSocialReq: boolean;
@@ -539,6 +545,7 @@ export interface LobbyCashTable {
   maxBuy: number;
   createdAt: number;
   hostName: string;
+  playerHosted: boolean;
 }
 
 export interface LobbyView {

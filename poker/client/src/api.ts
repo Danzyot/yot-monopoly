@@ -77,6 +77,8 @@ export const api = {
   config: () => request<AppConfig>('/api/config'),
   // The profile as the server sees it (operator flag included).
   me: () => request<{ profile: PlayerProfile }>('/api/auth/me'),
+  // Whether this player may host (operator, Chog holder or approved host; the hub decides).
+  hosting: () => request<{ canHost: boolean; reason: 'admin' | 'holder' | 'approved' | null; error?: string | null }>('/api/hosting/me'),
   discordRoles: (guildId?: string) =>
     request<{ roles: { id: string; name: string }[] }>(
       `/api/discord/roles${guildId ? `?guildId=${encodeURIComponent(guildId)}` : ''}`),
@@ -329,10 +331,12 @@ export const api = {
     tournaments: {
       id: string; name: string; state: string; players: number; alive: number;
       level: number; createdAt: number; startedAt: number | null;
+      hostId: string; hostName: string; playerHosted: boolean;
     }[];
     cashTables: {
       id: string; name: string; sb: number; bb: number; players: number;
       maxSeats: number; hands: number; closed: boolean; createdAt: number;
+      hostId: string | null; hostName: string; playerHosted: boolean;
     }[];
   }>('/api/admin/games'),
   stopGame: (kind: 'cash' | 'tournament', id: string) =>

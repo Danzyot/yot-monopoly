@@ -6,6 +6,7 @@ import BansTab from './BansTab.tsx';
 import ContentTab from './ContentTab.tsx';
 import DiscordTab from './DiscordTab.tsx';
 import FeaturesTab from './FeaturesTab.tsx';
+import HostsTab from './HostsTab.tsx';
 import GraphicsManager from './GraphicsManager.tsx';
 import LogsTab from './LogsTab.tsx';
 import OverviewTab from './OverviewTab.tsx';
@@ -24,6 +25,7 @@ export const ADMIN_TABS: AdminTab[] = [
   { id: 'overview', label: 'Overview', icon: '📊', Component: OverviewTab },
   { id: 'rooms', label: 'Rooms', icon: '🎲', Component: RoomsTab },
   { id: 'players', label: 'Players', icon: '👤', Component: PlayersTab },
+  { id: 'hosts', label: 'Hosts', icon: '🏆', Component: HostsTab },
   { id: 'alts', label: 'Alts', icon: '🧬', Component: AltsTab },
   { id: 'bans', label: 'Bans', icon: '⛔', Component: BansTab },
   { id: 'logs', label: 'Logs', icon: '📜', Component: LogsTab },

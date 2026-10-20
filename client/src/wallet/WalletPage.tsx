@@ -23,7 +23,7 @@ const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const when = (t: number) => new Date(t).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
 export default function WalletPage() {
-  const { profile, ready, openSignIn } = useAuth();
+  const { profile, ready, openSignIn, canHost, refreshMe } = useAuth();
   const status = useWalletStatus();
   const [err, setErr] = useState<string | null>(null);
   const [step, setStep] = useState<LinkStep | null>(null);
@@ -43,6 +43,13 @@ export default function WalletPage() {
     fetchWalletStatus().catch(e => { if (live) setErr(e.message); }).finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, [profile, status]);
+
+  // Holding is what makes a host: once the reading changes, ask again so
+  // "Host a tournament" appears (or goes) without a reload.
+  const holder = status?.holder;
+  useEffect(() => {
+    if (profile && holder !== undefined) void refreshMe();
+  }, [profile?.id, holder, refreshMe]);
 
   const link = async () => {
     setErr(null);
@@ -82,7 +89,7 @@ export default function WalletPage() {
     <div className="page wl-page">
       <header className="lb-head">
         <h1 className="lb-title"><span aria-hidden>🔗</span> Link your wallet</h1>
-        <p className="lb-blurb">Prove you hold a Chog Genesis and the game knows it. Signing is free — no transaction, no gas.</p>
+        <p className="lb-blurb">Prove you hold a Chog Genesis and the game knows it. Holding a Chog lets you host tournaments. Signing is free — no transaction, no gas.</p>
       </header>
 
       {!profile && (
@@ -94,7 +101,7 @@ export default function WalletPage() {
         </section>
       )}
 
-      {profile && <HolderBanner status={status} />}
+      {profile && <HolderBanner status={status} canHost={canHost} />}
 
       {profile && (
         <section className="panel wl-connect" aria-labelledby="wl-connect-title">
@@ -152,7 +159,7 @@ export default function WalletPage() {
   );
 }
 
-function HolderBanner({ status }: { status: WalletStatus | null }) {
+function HolderBanner({ status, canHost }: { status: WalletStatus | null; canHost: boolean }) {
   if (!status) return null;
   const n = status.chogs.length;
   if (!status.holder) {
@@ -162,7 +169,7 @@ function HolderBanner({ status }: { status: WalletStatus | null }) {
         <span className="wl-hero-icon" aria-hidden>🔍</span>
         <div className="wl-hero-text">
           <b>No Chog Genesis found yet</b>
-          <span>None of your linked wallets holds a Chog right now. Link the wallet that does, or re-check after a transfer.</span>
+          <span>None of your linked wallets holds a Chog right now. Link the wallet that does, or re-check after a transfer. Holding a Chog lets you host tournaments.</span>
         </div>
       </section>
     );
@@ -173,6 +180,7 @@ function HolderBanner({ status }: { status: WalletStatus | null }) {
       <div className="wl-hero-text">
         <b>Verified Chog holder — {plural(n, 'Chog')}</b>
         <span>{n ? 'Token ids: ' : ''}{status.chogs.map(id => `#${id}`).join(', ') || 'Holding confirmed; token ids could not be listed.'}</span>
+        {canHost && <span className="wl-host-note"><span aria-hidden>🏆</span> Holding a Chog lets you host tournaments.</span>}
       </div>
     </section>
   );

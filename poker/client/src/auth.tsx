@@ -5,6 +5,9 @@ import { resetSocket } from './socket';
 
 interface AuthCtx {
   profile: PlayerProfile | null;
+  // May open tables and tournaments: an operator, or a Chog Genesis holder or
+  // approved host (the Chog Games hub decides; the server asks it).
+  canHost: boolean;
   chatEnabled: boolean;
   discordEnabled: boolean;
   demoMode: boolean;
@@ -55,6 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [discordInviteUrl, setDiscordInviteUrl] = useState<string | null>(null);
   const [hubUrl, setHubUrl] = useState<string | null>(null);
   const [chatEnabled, setChatEnabled] = useState(true);
+  const [hostCheck, setHostCheck] = useState<{ id: string; canHost: boolean } | null>(null);
 
   useEffect(() => {
     api.config().then(c => {
@@ -94,6 +98,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     // #derror is handled by the toast provider.
   }, []);
+
+  // Ask once per signed-in account. Operators never need to ask.
+  const profileId = profile?.id ?? null;
+  const profileAdmin = !!profile?.isAdmin;
+  useEffect(() => {
+    if (!profileId || profileAdmin) return;
+    let live = true;
+    api.hosting()
+      .then(r => { if (live) setHostCheck({ id: profileId, canHost: r.canHost }); })
+      .catch(() => { if (live) setHostCheck({ id: profileId, canHost: false }); });
+    return () => { live = false; };
+  }, [profileId, profileAdmin]);
+  const canHost = !!profile && (profile.isAdmin === true || (hostCheck?.id === profile.id && hostCheck.canHost));
 
   const signInDemo = useCallback(async (name: string) => {
     const { token, profile } = await api.demoLogin(name);
@@ -146,8 +163,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ profile, chatEnabled, discordEnabled, demoMode, signInDemo, codeVerify, codeVerifyChannel, codeVerifyButton, discordInviteUrl, signInDiscord, hubUrl, signInViaHub, linkDiscord, acceptAuth, signOut }),
-    [profile, chatEnabled, discordEnabled, demoMode, signInDemo, codeVerify, codeVerifyChannel, codeVerifyButton, discordInviteUrl, signInDiscord, hubUrl, signInViaHub, linkDiscord, acceptAuth, signOut]);
+    () => ({ profile, canHost, chatEnabled, discordEnabled, demoMode, signInDemo, codeVerify, codeVerifyChannel, codeVerifyButton, discordInviteUrl, signInDiscord, hubUrl, signInViaHub, linkDiscord, acceptAuth, signOut }),
+    [profile, canHost, chatEnabled, discordEnabled, demoMode, signInDemo, codeVerify, codeVerifyChannel, codeVerifyButton, discordInviteUrl, signInDiscord, hubUrl, signInViaHub, linkDiscord, acceptAuth, signOut]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

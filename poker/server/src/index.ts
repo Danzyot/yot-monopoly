@@ -26,6 +26,9 @@ import {
 } from './audit.ts';
 import { BRAND } from '../../shared/brand.ts';
 import { HUB_READABLE, hubUrl, isHubOrigin } from './hub.ts';
+import {
+  assertUnderHostLimit, clampPlayerTournament, hubCanHost, NOT_A_HOST, playerScheduledStart,
+} from './hosting.ts';
 import { registry } from './registry.ts';
 import { DEFAULT_BET_CAP_MINUTES, parseLateClock } from './tournament/tournament.ts';
 import { loadInviteLog } from './invitelog.ts';
@@ -51,7 +54,7 @@ import {
 import { getPromo, loadPromo, type Promo, publicPromo, setPromo } from './promo.ts';
 import { type Features, getFeatures, isOn, loadFeatures, setFeatures } from './features.ts';
 import {
-  addBan, banAt, type BanKind, type BanScope, listBans, loadBans, normaliseIp, removeBan, removeGameBans,
+  addBan, banAt, banMessage, type BanKind, type BanScope, findBan, listBans, loadBans, normaliseIp, removeBan, removeGameBans,
 } from './bans.ts';
 import { chatEnabled, setChatEnabled } from './chatrules.ts';
 import { eventsForGame, loadEvents, loggedGames } from './eventlog.ts';
@@ -666,6 +669,32 @@ function requireAdmin(req: express.Request, res: express.Response) {
   return me;
 }
 
+// Who may open a table or a tournament: an operator, or a player the Chog
+// Games hub says may host (a Chog Genesis holder or an approved host). The
+// hub's answer is cached for a minute (hosting.ts). If the hub cannot be
+// reached the answer is no, with a message saying why — never a silent yes.
+async function requireHost(req: express.Request, res: express.Response) {
+  const me = authed(req);
+  if (!me) { res.status(401).json({ error: 'Sign in first' }); return null; }
+  if (me.isAdmin) return me;
+  const ban = findBan({ id: me.id, discordId: me.discord?.id ?? null, ip: req.ip ?? null });
+  if (ban) { res.status(403).json({ error: banMessage(ban) }); return null; }
+  const check = await hubCanHost(me.id);
+  if (check.canHost) return me;
+  if (check.error) { res.status(503).json({ error: check.error }); return null; }
+  res.status(403).json({ error: NOT_A_HOST });
+  return null;
+}
+
+// Whether the signed-in player may host, for the "Host a tournament" buttons.
+app.get('/api/hosting/me', async (req, res) => {
+  const me = authed(req);
+  if (!me) { res.status(401).json({ error: 'Not signed in' }); return; }
+  if (me.isAdmin) { res.json({ canHost: true, reason: 'admin' }); return; }
+  const check = await hubCanHost(me.id);
+  res.json({ canHost: check.canHost, reason: check.reason, error: check.error ?? null });
+});
+
 // Operator: post the "Verify" button panel into the poker verify channel.
 app.post('/api/discord/verify-message', (req, res) => {
   const me = requireAdmin(req, res);
@@ -1036,10 +1065,12 @@ app.get('/music/lib/:file', (req, res) => {
   res.sendFile(full);
 });
 
-app.post('/api/tables', (req, res) => {
-  const me = requireAdmin(req, res);
+app.post('/api/tables', async (req, res) => {
+  const me = await requireHost(req, res);
   if (!me) return;
   try {
+    // A player host may keep a couple of tables open; operators any number.
+    if (!me.isAdmin) assertUnderHostLimit('cash', me.id, registry);
     const b = req.body ?? {};
     const sb = clampInt(b.sb, 1, 1_000_000, 5);
     const bb = clampInt(b.bb, sb, 2_000_000, sb * 2);
@@ -1061,7 +1092,7 @@ app.post('/api/tables', (req, res) => {
         displayMode: b.displayMode === 'bb' ? 'bb' : 'chips',
         theme: sanitizeTheme(b.theme),
       },
-      { id: me.id, name: me.name },
+      { id: me.id, name: me.name, playerHosted: !me.isAdmin },
     );
     res.json({ id: table.id });
   } catch (e) {
@@ -1491,6 +1522,7 @@ app.get('/api/admin/games', (req, res) => {
   res.json({
     tournaments: [...registry.tournaments.values()].map(t => ({
       id: t.id, name: t.config.name, state: t.state,
+      hostId: t.hostId, hostName: t.hostName, playerHosted: !!t.config.playerHosted,
       players: t.players.size,
       alive: t.standings().filter(s => !s.busted).length,
       level: t.level.level,
@@ -1499,6 +1531,7 @@ app.get('/api/admin/games', (req, res) => {
     })),
     cashTables: [...registry.cashTables.values()].map(t => ({
       id: t.id, name: t.name, sb: t.sb, bb: t.bb,
+      hostId: t.hostId, hostName: registry.hostNameOf(t.id), playerHosted: t.playerHosted,
       players: t.seatedCount(), maxSeats: t.maxSeats,
       hands: t.handNumber, closed: t.closed,
       createdAt: t.createdAt,
@@ -1649,10 +1682,11 @@ app.get('/api/results/:id', (req, res) => {
   res.json({ record: rec });
 });
 
-app.post('/api/tournaments', (req, res) => {
-  const me = requireAdmin(req, res);
+app.post('/api/tournaments', async (req, res) => {
+  const me = await requireHost(req, res);
   if (!me) return;
   try {
+    if (!me.isAdmin) assertUnderHostLimit('tournament', me.id, registry);
     const b = req.body ?? {};
     const config: TournamentConfig = {
       name: requireFreeName(b.name, 'tournament'),
@@ -1692,7 +1726,13 @@ app.post('/api/tournaments', (req, res) => {
       const ts = Number(b.scheduledStart);
       if (Number.isFinite(ts) && ts > Date.now()) scheduledStart = ts;
     }
-    const webhook = sanitizeWebhook(b.discordWebhookUrl);
+    // A player host's event: a smaller field, a bounded length, and none of
+    // the operator-only parts (role gating, approvals, Discord results).
+    if (!me.isAdmin) {
+      clampPlayerTournament(config);
+      scheduledStart = playerScheduledStart(scheduledStart);
+    }
+    const webhook = me.isAdmin ? sanitizeWebhook(b.discordWebhookUrl) : null;
     const t = registry.createTournament(config, { id: me.id, name: me.name }, scheduledStart, webhook);
     res.json({ id: t.id });
   } catch (e) {
