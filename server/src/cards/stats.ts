@@ -19,6 +19,8 @@ export interface CardsRecord {
   rounds: number;
   match: CardsMatchMode;
   targetScore: number;
+  /** A private table's (tournament tables are private): kept off public feeds like the home ticker. */
+  private?: true;
   /** Winner first, then by match score, then by fewest points left in hand; players who left last. */
   places: { id: string; name: string; isBot: boolean; score: number; left?: boolean; character?: string; avatar?: string }[];
 }
@@ -59,7 +61,7 @@ export function recordCardsResult(room: CardsRoom): CardsRecord | null {
   if (!g || g.phase !== 'over') return null;
   const r: CardsRecord = {
     game: CARDS_GAME_ID, code: room.code, startedAt: room.startedAt ?? g.startedAt, endedAt: g.endedAt ?? Date.now(),
-    rounds: g.round, match: g.rules.match, targetScore: g.rules.targetScore,
+    rounds: g.round, match: g.rules.match, targetScore: g.rules.targetScore, ...(room.private && { private: true as const }),
     places: cardsStandings(g).map(p => {
       const seat = room.seat(p.id);
       return {

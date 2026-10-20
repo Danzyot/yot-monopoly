@@ -1,0 +1,135 @@
+/* The hub's live bits (pages/Home.tsx): "Play now" in the hero
+   (components/QuickPlay.tsx), the activity strip under it
+   (components/ActivityTicker.tsx) and the Chog of the Day
+   (components/ChogOfTheDay.tsx). They wear the hero's Geometry Dash look
+   (gd.css: black outlines, a drop edge, Titan One) in the season's colours
+   (season.css). */
+
+/* ---- Play now ---- */
+.qp { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 0 auto 16px; }
+.qp-pick {
+  display: inline-flex; gap: 3px; padding: 3px; max-width: 100%; box-sizing: border-box;
+  border: 3px solid #000; border-radius: 14px; box-shadow: 0 4px 0 #000;
+  background: linear-gradient(180deg, #2a5bd7, #1a3a9c);
+}
+.qp-pick button {
+  cursor: pointer; border: 0; border-radius: 10px; padding: 5px 14px 6px; background: transparent; white-space: nowrap;
+  font: 400 16px/1.1 'Titan One', var(--display); color: #fff; -webkit-text-stroke: 1.5px #000; paint-order: stroke fill;
+  opacity: 0.78; transition: background 0.12s, opacity 0.12s;
+}
+.qp-pick button:hover { opacity: 1; }
+.qp-pick button span { -webkit-text-stroke: 0; font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif; }
+.qp-pick button.on {
+  opacity: 1; color: #5a1a3c; -webkit-text-stroke: 0;
+  background: linear-gradient(180deg, #fff27a 0%, #ffd21f 48%, #ffae00 52%, #f08a00 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.5), 0 2px 0 #000;
+}
+.home-hero.gd .hero-cta.qp-go { min-width: 250px; padding: 12px 40px 14px; font-size: 30px; }
+.qp-go:disabled { cursor: progress; }
+.qp-hint {
+  margin: 0; font: 800 13px var(--font), sans-serif; color: color-mix(in srgb, var(--text) 82%, transparent);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+.season-chog .qp-pick { background: linear-gradient(180deg, #5a32c0, #2b1764); }
+.season-chog .qp-pick button.on { background: linear-gradient(180deg, #fffdf2 0%, #fdf6cd 48%, #f3d9a6 52%, #e2bd77 100%); }
+@media (max-width: 480px) {
+  .qp { gap: 8px; margin-bottom: 12px; }
+  .home-hero.gd .hero-cta.qp-go { min-width: 0; width: min(100%, 300px); font-size: 26px; padding: 10px 24px 12px; }
+  .qp-pick button { font-size: 15px; padding: 5px 12px 6px; }
+  .qp-hint { font-size: 12px; }
+}
+
+/* ---- the activity strip ---- */
+.ticker {
+  position: relative; z-index: 1; display: flex; align-items: center; gap: 10px;
+  width: calc(100% - 32px); max-width: 680px; min-height: 42px; margin: 0 auto 20px; padding: 4px 6px; box-sizing: border-box;
+  border: 3px solid #000; border-radius: 999px; box-shadow: 0 4px 0 #000;
+  background: color-mix(in srgb, var(--panel-solid) 90%, transparent);
+}
+/* Until the first answer: holding the strip's place, unseen, so nothing below jumps when it fills. */
+.ticker-wait { visibility: hidden; }
+.ticker-live {
+  flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 4px; border-radius: 999px;
+  font: 400 13px/1.2 'Titan One', var(--display); letter-spacing: 0.05em; text-transform: uppercase; color: #fff;
+  border: 2px solid #000; background: var(--chog-pink, #e53935);
+}
+.ticker-live i { width: 8px; height: 8px; border-radius: 50%; background: #fff; animation: ticker-pulse 1.8s ease-in-out infinite; }
+.ticker-track { flex: 1; min-width: 0; height: 28px; overflow: hidden; }
+.ticker-item {
+  display: flex; align-items: center; gap: 8px; height: 28px; min-width: 0; white-space: nowrap;
+  color: var(--text); text-decoration: none; font: 800 14px var(--font), sans-serif;
+  animation: ticker-in 0.5s cubic-bezier(.2, .8, .3, 1) both;
+}
+.ticker-icon { flex: none; font-size: 16px; }
+.ticker-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ticker-ago { flex: none; font-weight: 700; font-size: 12px; color: var(--muted); }
+a.ticker-item:hover .ticker-text { text-decoration: underline; }
+.ticker-next {
+  flex: none; width: 28px; height: 28px; padding: 0 0 2px; box-sizing: border-box; border-radius: 50%; cursor: pointer;
+  font: 400 18px/1 'Titan One', var(--display); color: var(--text);
+  border: 2px solid rgba(0, 0, 0, 0.6); background: rgba(255, 255, 255, 0.08);
+}
+.ticker-next:hover { background: rgba(255, 255, 255, 0.18); }
+@keyframes ticker-in { from { opacity: 0; transform: translateY(65%); } }
+@keyframes ticker-pulse { 50% { opacity: 0.35; transform: scale(0.75); } }
+@media (max-width: 480px) {
+  .ticker { gap: 7px; margin-bottom: 14px; min-height: 38px; }
+  .ticker-live { font-size: 11px; padding: 2px 7px 3px; gap: 4px; }
+  .ticker-item { font-size: 13px; gap: 6px; }
+  .ticker-ago { display: none; }
+}
+
+/* ---- Chog of the Day ---- */
+.cotd { position: relative; z-index: 1; max-width: 1000px; margin: 0 auto 22px; padding: 0 16px; box-sizing: border-box; }
+.cotd-card {
+  display: flex; align-items: center; gap: 18px; max-width: 660px; margin: 0 auto; padding: 14px 18px; box-sizing: border-box;
+  border: 4px solid #000; border-radius: 20px; box-shadow: 0 6px 0 #000, 0 16px 30px rgba(0, 0, 0, 0.35);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--panel-solid) 80%, #fff 14%), var(--panel-solid));
+}
+.cotd-art {
+  flex: none; width: 128px; height: 128px; overflow: hidden; display: flex; align-items: center; justify-content: center;
+  border: 3px solid #000; border-radius: 18px; box-shadow: inset 0 0 0 4px rgba(255, 255, 255, 0.3), 0 4px 0 #000;
+  background: var(--cotd-ring, #eaa2f6);
+}
+.cotd-img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.cotd-art .char-preview-canvas { width: 128px !important; height: 128px !important; }
+.cotd-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.cotd-kicker { margin: 0; font: 400 13px 'Titan One', var(--display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--hi); }
+.cotd-kicker span { color: var(--muted); letter-spacing: 0.02em; text-transform: none; font: 800 12px var(--font), sans-serif; }
+.cotd h2 { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font: 400 26px/1.1 var(--display); text-shadow: var(--outline); }
+.cotd-tier {
+  padding: 2px 8px 3px; border-radius: 999px; border: 2px solid #000; text-shadow: none;
+  font: 800 11px var(--font), sans-serif; letter-spacing: 0.08em; text-transform: uppercase;
+  background: #e8e4f4; color: #2b1764;
+}
+.cotd-tier.tier-uncommon { background: #b6f5a0; color: #164a08; }
+.cotd-tier.tier-rare { background: #a8dcff; color: #0b3a66; }
+.cotd-tier.tier-epic { background: #d6b4ff; color: #3d1078; }
+.cotd-tier.tier-legendary { background: linear-gradient(180deg, #fff27a, #ffae00); color: #5a2a00; }
+.cotd-traits { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 5px; }
+.cotd-traits li {
+  padding: 3px 9px; border-radius: 999px; font: 800 12.5px var(--font), sans-serif;
+  background: rgb(var(--well) / 0.45); border: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+.cotd-traits li span { color: var(--muted); font-weight: 700; }
+.cotd-note { margin: 0; font-size: 14px; color: var(--muted); }
+.cotd-links { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 2px; }
+.cotd-links .btn { text-decoration: none; }
+.cotd-wallet { color: var(--hi); font-weight: 800; font-size: 13.5px; }
+@media (max-width: 560px) {
+  /* The art beside the name and traits; the links take the full width under both. */
+  .cotd-card { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 6px 12px; padding: 12px; border-width: 3px; }
+  .cotd-body { display: contents; }
+  .cotd-art { grid-row: 1 / span 3; grid-column: 1; }
+  .cotd-kicker, .cotd h2, .cotd-traits, .cotd-note { grid-column: 2; }
+  .cotd-links { grid-column: 1 / -1; margin-top: 4px; }
+  .cotd-art, .cotd-art .char-preview-canvas { width: 92px !important; height: 92px !important; }
+  .cotd h2 { font-size: 21px; }
+  .cotd-traits li { font-size: 11.5px; padding: 2px 7px; }
+  .cotd-wallet { flex-basis: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker-item, .ticker-live i { animation: none; }
+  .qp-pick button { transition: none; }
+}

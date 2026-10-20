@@ -12,6 +12,7 @@ import { isOn } from '../features.ts';
 import { CardsError } from './game.ts';
 import { CardsRegistry, CardsRoom, CardsRoomError, type CardsMember } from './rooms.ts';
 import { recordCardsResult } from './stats.ts';
+import { QUICK_BOTS, pickQuickTable } from '../quickJoin.ts';
 import { CARDS_GAME_NAME } from '../../../shared/cards/meta.ts';
 import type { CardsAction } from '../../../shared/cards/types.ts';
 import type { CardsChatMsg, CardsConfigure, CardsRoomView } from '../../../shared/cards/room.ts';
@@ -185,16 +186,45 @@ export function attachCardsSockets(io: Server, opts: CardsSocketOptions = {}): C
       return { rooms: registry.list() };
     });
 
-    on<{ chogToken?: unknown }>('cards:create', p => {
-      const m = member();
+    const openTable = (m: CardsMember, chogToken: unknown): CardsRoom => {
       if (!isOn('publicRooms') && !isAdmin()) throw new CardsRoomError('Only operators can open tables right now');
       if (registry.roomsOf(m.id).filter(r => r.hostId === m.id && r.status === 'lobby').length >= OPEN_LOBBIES) {
         throw new CardsRoomError(`You already have ${OPEN_LOBBIES} open tables — start or leave one first`);
       }
       const room = registry.create(m.id, isAdmin(), opts.taken);
-      room.join(m, typeof p.chogToken === 'number' ? p.chogToken : undefined);
+      room.join(m, typeof chogToken === 'number' ? chogToken : undefined);
+      return room;
+    };
+
+    on<{ chogToken?: unknown }>('cards:create', p => {
+      const room = openTable(member(), p.chogToken);
       enter(room, true);
       return { code: room.code };
+    });
+
+    // "Play now" on the home page (../quickJoin.ts): a seat at the public table
+    // nearest to filling up, or a new public table with bots.
+    on<{ chogToken?: unknown }>('cards:quickJoin', p => {
+      const m = member();
+      const prof = data.profile!;
+      const chogToken = typeof p.chogToken === 'number' ? p.chogToken : undefined;
+      const pick = pickQuickTable(
+        [...registry.rooms.values()].map(room => ({
+          room, code: room.code, private: room.private, status: room.status, seats: room.seats,
+          maxPlayers: room.maxPlayers, createdAt: room.createdAt, restricted: !!room.tournament,
+        })),
+        m.id,
+        t => t.room.wasKicked(m.id) || !!findBan({ id: prof.id, discordId: prof.discord?.id, ip: data.ip }, t.code),
+      );
+      if (pick) {
+        pick.room.join(m, chogToken);
+        enter(pick.room, true);
+        return { code: pick.room.code, created: false };
+      }
+      const room = openTable(m, chogToken);
+      if (isOn('bots') || isAdmin()) for (let i = 0; i < QUICK_BOTS.cards; i++) room.addBot(m.id, isAdmin());
+      enter(room, true);
+      return { code: room.code, created: true };
     });
 
     // Seated if there is a seat (or it is yours already), watching otherwise.
