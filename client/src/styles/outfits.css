@@ -35,6 +35,10 @@
   mask-size: 100% 100%; -webkit-mask-size: 100% 100%; mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat;
 }
 
+/* What a seat wears, as a row of small pictures beside its name (card table seats; outfitBits.tsx). */
+.outfit-worn { display: inline-flex; align-items: center; gap: 1px; vertical-align: middle; }
+.cl-outfit-note { margin: 4px 0 0; }
+
 /* Colour is secondary to the outfit now: a slimmer row with a label. */
 .outfit-colors { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .outfit-colors > span { font-size: 12px; color: var(--muted); flex: none; }

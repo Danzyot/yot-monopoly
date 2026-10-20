@@ -1,23 +1,22 @@
-// Every tournament on the server: creating them (who may, within which
-// limits), driving their tables through each game's adapter (adapters.ts)
-// once a second, and keeping them on the data volume so a restart picks up
-// where it left off. The rules of one event are in engine.ts.
+// Every tournament on the server: creating them (operators only, Cards only),
+// driving their tables through the game's adapter (adapters.ts) once a
+// second, and keeping them on the data volume so a restart picks up where it
+// left off. The rules of one event are in engine.ts.
 
 import { randomInt, randomUUID } from 'node:crypto';
 import { mkdir, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { cleanName, stripInvisible } from '../auth.ts';
-import { canHost } from '../hosting.ts';
 import { readJson, writeJson } from '../jsonstore.ts';
 import { DATA_DIR } from '../paths.ts';
-import { MAPS, getMap } from '../../../shared/maps.ts';
+import { GAMES } from '../../../shared/brand.ts';
 import {
-  TOURNEY_CARDS_TARGETS, TOURNEY_GAMES, TOURNEY_LIMITS, TOURNEY_MIN_PLAYERS, TOURNEY_NAME_MAX, TOURNEY_NO_SHOW_MINUTES,
+  TOURNEY_AHEAD_DAYS, TOURNEY_CARDS_TARGETS, TOURNEY_GAMES, TOURNEY_MIN_PLAYERS, TOURNEY_NAME_MAX, TOURNEY_NO_SHOW_MINUTES,
   TOURNEY_PAUSE_MAX_MS, TOURNEY_PRIZE_MAX, TOURNEY_ROUND_MINUTES, TOURNEY_TABLE_RANGE, defaultTournamentSettings,
   type EntrantState, type TableLock, type TournamentGame, type TournamentMe, type TournamentResult,
   type TournamentSettings, type TournamentSummary, type TournamentView,
 } from '../../../shared/tournaments.ts';
-import { Tournament, TournamentError, type Member, type RoundData, type TableData, type TournamentData } from './engine.ts';
+import { MAX_ENTRANTS, Tournament, TournamentError, type Member, type RoundData, type TableData, type TournamentData } from './engine.ts';
 
 export { TournamentError };
 
@@ -35,7 +34,7 @@ export interface GameAdapter {
   begin(code: string, drop: string[], bots: number): boolean;
   /** The finishing order once the game is over (winner first); null while it runs; 'gone' when the room is. */
   result(code: string): { order: string[]; byTime: boolean } | null | 'gone';
-  /** The round is out of time: end the game now on its own tiebreak (net worth, points). */
+  /** The round is out of time: end the game now on its own tiebreak (points). */
   timeUp(code: string): void;
   /** Pause or resume the game (best effort); null when nothing is running there. */
   isPaused(code: string): boolean | null;
@@ -51,8 +50,6 @@ export interface ManagerHooks {
   onChange(t: Tournament): void;
   /** These players were given a table. */
   onSeated?(t: Tournament, table: TableData, round: RoundData): void;
-  onCreated?(t: Tournament): void;
-  onFinished?(t: Tournament): void;
 }
 
 export interface ManagerOptions {
@@ -73,8 +70,6 @@ export interface Requester extends Member {
 export const MAX_LIVE_TOURNAMENTS = 50;
 /** Finished and cancelled events kept for their pages and players' profiles. */
 const KEEP_FINISHED = 500;
-/** Events one (non-operator) host may create per day, cancelled ones included. */
-export const CREATES_PER_DAY = 5;
 const SAVE_EVERY_MS = 3_000;
 
 const clean = (raw: unknown, max: number) =>
@@ -83,7 +78,6 @@ const clean = (raw: unknown, max: number) =>
 export class TournamentManager {
   tournaments = new Map<string, Tournament>();
   private locks = new Map<string, TableLock>();
-  private created = new Map<string, number[]>();
   private dirty = false;
   private writing = false;
   readonly now: () => number;
@@ -121,86 +115,65 @@ export class TournamentManager {
     this.hooks.onChange(t);
   }
 
-  // ---- who may host ------------------------------------------------------------
+  // ---- who may create ------------------------------------------------------------
 
-  hostingOf(id: string): Tournament[] {
-    return [...this.tournaments.values()].filter(t => t.live && t.d.hostId === id);
-  }
-
+  /** What a viewer may do with the list: only operators create (and run) tournaments. */
   me(p: { id: string; isAdmin?: boolean } | null): TournamentMe {
-    const isAdmin = !!p?.isAdmin;
-    return {
-      canHost: !!p && (isAdmin || canHost(p.id)),
-      isAdmin,
-      hosting: p ? this.hostingOf(p.id).map(t => t.id) : [],
-      limits: isAdmin ? TOURNEY_LIMITS.admin : TOURNEY_LIMITS.host,
-    };
+    return { isAdmin: !!p?.isAdmin };
   }
 
-  /** Checked in this order: the right to host, the per-host limits, then every setting. */
+  /** Checked in this order: operators only, the server's limit, the game, then every setting. */
   create(by: Requester, input: unknown): Tournament {
     const fail = (msg: string): never => { throw new TournamentError(msg); };
-    if (!by.isAdmin && !canHost(by.id)) fail('Hosting tournaments is for Chog Genesis holders and approved hosts');
-    const lim = by.isAdmin ? TOURNEY_LIMITS.admin : TOURNEY_LIMITS.host;
-    const mine = this.hostingOf(by.id);
-    if (mine.length >= lim.live) {
-      fail(lim.live === 1 ? 'You already have a tournament on — finish or cancel it first' : `You already have ${mine.length} tournaments on`);
-    }
+    if (!by.isAdmin) fail('Only operators can create tournaments');
     if ([...this.tournaments.values()].filter(t => t.live).length >= MAX_LIVE_TOURNAMENTS) fail('The server is at its tournament limit — try again later');
     const now = this.now();
-    if (!by.isAdmin) {
-      const recent = (this.created.get(by.id) ?? []).filter(at => now - at < 24 * 3_600_000);
-      if (recent.length >= CREATES_PER_DAY) fail(`You can create ${CREATES_PER_DAY} tournaments a day — try again tomorrow`);
-    }
 
     const raw = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
     const game = raw.game as TournamentGame;
-    if (!TOURNEY_GAMES.includes(game)) fail('Pick a game');
+    if (!TOURNEY_GAMES.includes(game)) fail(`Tournaments are for ${GAMES.cards.name} only`);
     const name = cleanName(raw.name, TOURNEY_NAME_MAX) || fail('Give the tournament a name (2 characters or more)');
     const prize = clean(raw.prize, TOURNEY_PRIZE_MAX);
-    const settings = this.settings(game, raw.settings, lim, by.isAdmin);
+    const settings = this.settings(raw.settings);
 
     const d: TournamentData = {
-      id: randomUUID().replace(/-/g, '').slice(0, 10), game, name, prize, hostId: by.id, hostName: by.name, official: by.isAdmin,
+      id: randomUUID().replace(/-/g, '').slice(0, 10), game, name, prize, hostId: by.id, hostName: by.name,
       createdAt: now, status: 'registering', paused: null, settings, entrants: [], rounds: [], places: [],
       startedAt: null, finishedAt: null, nextRoundAt: null, cancelReason: null,
     };
     const t = new Tournament(d, this.now, this.rng);
     this.tournaments.set(d.id, t);
-    if (!by.isAdmin) this.created.set(by.id, [...(this.created.get(by.id) ?? []).filter(at => now - at < 24 * 3_600_000), now]);
-    this.hooks.onCreated?.(t);
     this.changed(t);
     return t;
   }
 
-  /** A host's settings: defaults for anything missing, refused when outside the limits. */
-  private settings(game: TournamentGame, raw: unknown, lim: typeof TOURNEY_LIMITS.host, isAdmin: boolean): TournamentSettings {
+  /** The operator's settings: defaults for anything missing, refused when out of range. */
+  private settings(raw: unknown): TournamentSettings {
     const fail = (msg: string): never => { throw new TournamentError(msg); };
     const s = (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Partial<Record<keyof TournamentSettings, unknown>>;
-    const d = defaultTournamentSettings(game);
+    const d = defaultTournamentSettings();
     const int = (v: unknown, dflt: number) => (v === undefined ? dflt : Number.isFinite(Number(v)) ? Math.round(Number(v)) : fail('Bad number'));
     const out: TournamentSettings = { ...d };
 
-    out.maxPlayers = int(s.maxPlayers, Math.min(d.maxPlayers, lim.maxPlayers[game]));
-    if (out.maxPlayers > lim.maxPlayers[game]) fail(`${isAdmin ? 'Tournaments' : 'Hosts'} can take up to ${lim.maxPlayers[game]} players`);
-    if (out.maxPlayers < TOURNEY_MIN_PLAYERS) fail(`A tournament needs room for at least ${TOURNEY_MIN_PLAYERS} players`);
-    out.minPlayers = int(s.minPlayers, d.minPlayers);
-    if (out.minPlayers < TOURNEY_MIN_PLAYERS || out.minPlayers > out.maxPlayers) fail(`The minimum must be between ${TOURNEY_MIN_PLAYERS} and the maximum`);
-
-    if (game === 'monopoly' && s.mapId !== undefined) {
-      if (!MAPS.some(m => m.id === s.mapId)) fail('Unknown board');
-      out.mapId = String(s.mapId);
+    // No cap unless the operator sets one (empty takes everyone).
+    if (s.maxPlayers !== undefined && s.maxPlayers !== null && s.maxPlayers !== '') {
+      out.maxPlayers = int(s.maxPlayers, 0);
+      if (out.maxPlayers < TOURNEY_MIN_PLAYERS) fail(`A tournament needs room for at least ${TOURNEY_MIN_PLAYERS} players`);
+      if (out.maxPlayers > MAX_ENTRANTS) fail(`A cap can be at most ${MAX_ENTRANTS} players — or leave it empty for no cap`);
     }
-    const [lo, hi] = TOURNEY_TABLE_RANGE[game];
-    const most = game === 'monopoly' ? Math.min(hi, getMap(out.mapId).players[1]) : hi;
-    out.tableSize = int(s.tableSize, Math.min(d.tableSize, most));
-    if (out.tableSize < lo || out.tableSize > most) fail(`Tables seat ${lo} to ${most} players`);
+    out.minPlayers = int(s.minPlayers, d.minPlayers);
+    if (out.minPlayers < TOURNEY_MIN_PLAYERS || out.minPlayers > (out.maxPlayers ?? MAX_ENTRANTS)) {
+      fail(`The minimum must be at least ${TOURNEY_MIN_PLAYERS}${out.maxPlayers ? ' and no more than the cap' : ''}`);
+    }
+
+    const [lo, hi] = TOURNEY_TABLE_RANGE;
+    out.tableSize = int(s.tableSize, d.tableSize);
+    if (out.tableSize < lo || out.tableSize > hi) fail(`Tables seat ${lo} to ${hi} players`);
     out.advance = int(s.advance, d.advance) as 1 | 2;
     if (out.advance !== 1 && out.advance !== 2) fail('One or two players go through from each table');
 
     out.roundMinutes = int(s.roundMinutes, d.roundMinutes);
-    if (!TOURNEY_ROUND_MINUTES[game].includes(out.roundMinutes)) fail('Pick a round length from the list');
-    if (out.roundMinutes > lim.roundMinutesMax[game]) fail(`Rounds can last up to ${lim.roundMinutesMax[game]} minutes`);
+    if (!TOURNEY_ROUND_MINUTES.includes(out.roundMinutes)) fail('Pick a round length from the list');
     out.noShowMinutes = int(s.noShowMinutes, d.noShowMinutes);
     if (!TOURNEY_NO_SHOW_MINUTES.includes(out.noShowMinutes)) fail('Pick a seating time from the list');
     if (s.noShow !== undefined) {
@@ -213,17 +186,15 @@ export class TournamentManager {
       const at = int(s.startAt, 0);
       const now = this.now();
       if (at < now + 60_000) fail('Schedule the start at least a minute from now');
-      if (at > now + lim.aheadDays * 86_400_000) fail(`Starts can be scheduled up to ${lim.aheadDays} days ahead`);
+      if (at > now + TOURNEY_AHEAD_DAYS * 86_400_000) fail(`Starts can be scheduled up to ${TOURNEY_AHEAD_DAYS} days ahead`);
       out.startAt = at;
     }
-    if (game === 'cards') {
-      if (s.cardsMatch !== undefined) {
-        if (s.cardsMatch !== 'single' && s.cardsMatch !== 'points') fail('Unknown match format');
-        out.cardsMatch = s.cardsMatch as TournamentSettings['cardsMatch'];
-      }
-      out.cardsTarget = int(s.cardsTarget, d.cardsTarget);
-      if (!TOURNEY_CARDS_TARGETS.includes(out.cardsTarget)) fail('Pick a points target from the list');
+    if (s.cardsMatch !== undefined) {
+      if (s.cardsMatch !== 'single' && s.cardsMatch !== 'points') fail('Unknown match format');
+      out.cardsMatch = s.cardsMatch as TournamentSettings['cardsMatch'];
     }
+    out.cardsTarget = int(s.cardsTarget, d.cardsTarget);
+    if (!TOURNEY_CARDS_TARGETS.includes(out.cardsTarget)) fail('Pick a points target from the list');
     return out;
   }
 
@@ -352,9 +323,8 @@ export class TournamentManager {
     for (const table of round.tables) this.driveTable(t, round, table);
     if (round.tables.every(x => x.status === 'done') && round.finishedAt === null) {
       for (const table of round.tables) if (table.code) this.locks.delete(table.code);
-      const over = t.completeRound();
+      t.completeRound();
       this.changed(t);
-      if (over) this.hooks.onFinished?.(t);
     }
   }
 
@@ -439,7 +409,7 @@ export class TournamentManager {
     const d = t.d;
     const champ = t.champion();
     return {
-      id: d.id, game: d.game, name: d.name, prize: d.prize, hostName: d.hostName, official: d.official,
+      id: d.id, game: d.game, name: d.name, prize: d.prize, hostName: d.hostName,
       status: d.status, paused: !!d.paused, entrants: d.entrants.length, maxPlayers: d.settings.maxPlayers,
       startAt: d.settings.startAt, startedAt: d.startedAt, finishedAt: d.finishedAt,
       round: d.status === 'running' ? d.rounds.length || null : null,
@@ -476,7 +446,7 @@ export class TournamentManager {
       return t.goingThrough(last, table).includes(id) ? 'through' : 'out';
     };
     return {
-      id: d.id, game: d.game, name: d.name, prize: d.prize, hostId: d.hostId, hostName: d.hostName, official: d.official,
+      id: d.id, game: d.game, name: d.name, prize: d.prize, hostId: d.hostId, hostName: d.hostName,
       status: d.status, paused: d.paused ? { ...d.paused } : null, settings: { ...d.settings },
       createdAt: d.createdAt, startedAt: d.startedAt, finishedAt: d.finishedAt,
       entrants: d.entrants.map(e => ({
@@ -583,7 +553,12 @@ export class TournamentManager {
     let live = 0;
     for (const d of list) {
       try {
-        if (!d || typeof d.id !== 'string' || !TOURNEY_GAMES.includes(d.game)) continue;
+        if (!d || typeof d.id !== 'string') continue;
+        // Monopoly tournaments were retired: an old one is left out (its tables are ordinary rooms the idle sweep clears).
+        if (!TOURNEY_GAMES.includes(d.game)) {
+          console.warn(`Skipping tournament ${d.id}: ${String(d.game)} tournaments are no longer run`);
+          continue;
+        }
         const t = new Tournament(d, this.now, this.rng);
         this.tournaments.set(d.id, t);
         if (!t.live) continue;

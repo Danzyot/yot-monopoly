@@ -10,9 +10,8 @@ import { askConfirm, askText } from '../components/Modal.tsx';
 import { Avatar } from '../components/Avatar.tsx';
 import { ProfileLink } from '../community.tsx';
 import { BRAND } from '../../../shared/brand.ts';
-import { getMap } from '../../../shared/maps.ts';
 import {
-  PRIZE_DISCLAIMER, TOURNEY_PRIZE_MAX, tableUrl,
+  PRIZE_NOTE, TOURNEY_PRIZE_MAX, tableUrl,
   type TournamentRoundView, type TournamentSeated, type TournamentTableView, type TournamentView,
 } from '../../../shared/tournaments.ts';
 import { register, tourneyCall, useTournament } from './net.ts';
@@ -51,7 +50,7 @@ function TableCard({ v, round, table, me, now }: { v: TournamentView; round: Tou
         {table.status === 'done' && (table.walkover ? <span>Decided without a game</span> : table.byTime ? <span>Ended on time</span> : <span>Played out</span>)}
       </div>
       {table.code && (live || table.status === 'done') && (
-        <Link className={`btn small ${mine && live ? 'primary' : ''} tn-table-go`} to={`${tableUrl(v.game, table.code)}${mine && live ? '' : '?watch=1'}`}>
+        <Link className={`btn small ${mine && live ? 'primary' : ''} tn-table-go`} to={`${tableUrl(table.code)}${mine && live ? '' : '?watch=1'}`}>
           {mine && live ? 'Go to your table' : live ? 'Watch' : 'See the table'}
         </Link>
       )}
@@ -128,7 +127,7 @@ export default function TournamentPage() {
     const onSeated = (m: TournamentSeated) => {
       if (m.id !== id) return;
       toast(`Round ${m.round}: your table is ready — taking you there.`);
-      nav(tableUrl(m.game, m.code));
+      nav(tableUrl(m.code));
     };
     s.on('tourney:seated', onSeated);
     return () => { s.off('tourney:seated', onSeated); };
@@ -154,7 +153,7 @@ export default function TournamentPage() {
     void act('tourney:cancel', { reason });
   };
   const editPrize = async () => {
-    const prize = await askText({ title: 'Prize', body: PRIZE_DISCLAIMER, initial: v.prize, placeholder: 'What the champion wins', confirm: 'Save', maxLength: TOURNEY_PRIZE_MAX });
+    const prize = await askText({ title: 'Prize', body: PRIZE_NOTE, initial: v.prize, placeholder: 'What the champion wins', confirm: 'Save', maxLength: TOURNEY_PRIZE_MAX });
     if (prize !== null) void act('tourney:prize', { prize });
   };
   const removePlayer = async (pid: string, name: string) => {
@@ -164,12 +163,13 @@ export default function TournamentPage() {
   };
 
   const s = v.settings;
+  const full = s.maxPlayers !== null && v.entrants.length >= s.maxPlayers;
   const facts = [
-    `${s.maxPlayers} players max`,
+    s.maxPlayers ? `${s.maxPlayers} players max` : 'no player cap',
     `tables of up to ${s.tableSize}`,
     s.advance === 1 ? 'winners go through' : `top ${s.advance} go through`,
     `${s.roundMinutes}-minute rounds`,
-    v.game === 'monopoly' ? getMap(s.mapId).name : s.cardsMatch === 'single' ? 'one round per table' : `first to ${s.cardsTarget}`,
+    s.cardsMatch === 'single' ? 'one round per table' : `first to ${s.cardsTarget}`,
     s.noShow === 'drop' ? `${s.noShowMinutes} min to sit down` : `no-shows auto-played after ${s.noShowMinutes} min`,
     ...(s.botsFill ? ['bots fill empty seats'] : []),
   ];
@@ -183,7 +183,6 @@ export default function TournamentPage() {
           <div className="tn-card-top">
             <h1 className="tn-title">{v.name}</h1>
             <StatusChip status={v.status} paused={!!v.paused} />
-            {v.official && <em className="tag tn-official">Official</em>}
           </div>
           <p className="muted">{gameName(v.game)} · hosted by <ProfileLink id={v.hostId}>{v.hostName}</ProfileLink> · {v.entrants.length} {v.entrants.length === 1 ? 'player' : 'players'}</p>
           <p className="small muted tn-facts">{facts.join(' · ')}</p>
@@ -193,7 +192,7 @@ export default function TournamentPage() {
               <div>
                 <b>{v.prize || 'No prize set'}</b>
                 {canRun && live && <button className="btn tiny ghost" onClick={editPrize}>Edit</button>}
-                {v.prize && !v.official && <p className="small muted">{PRIZE_DISCLAIMER}</p>}
+                {v.prize && <p className="small muted">{PRIZE_NOTE}</p>}
               </div>
             </div>
           )}
@@ -206,12 +205,12 @@ export default function TournamentPage() {
           <>
             <p className="tn-now-line">
               {s.startAt ? <>Starts <b>{fmtWhen(s.startAt)}</b> · in <b>{countdown(s.startAt - now)}</b></> : 'Starts when the host is ready.'}
-              {' '}{v.entrants.length}/{s.maxPlayers} registered, {s.minPlayers} needed.
+              {' '}{v.entrants.length}{s.maxPlayers ? `/${s.maxPlayers}` : ''} registered, {s.minPlayers} needed.
             </p>
             {!profile ? <button className="btn primary" onClick={openSignIn}>Sign in to register</button>
               : entrant ? <button className="btn" onClick={() => act('tourney:unregister')}>Withdraw</button>
-              : <button className="btn primary" disabled={v.entrants.length >= s.maxPlayers} onClick={() => register(id).catch(toastError)}>
-                  {v.entrants.length >= s.maxPlayers ? 'Full' : 'Register'}
+              : <button className="btn primary" disabled={full} onClick={() => register(id).catch(toastError)}>
+                  {full ? 'Full' : 'Register'}
                 </button>}
             {entrant && <p className="small muted">You’re in. Keep this page open: when your table is ready you’ll be taken there.</p>}
           </>
@@ -222,7 +221,7 @@ export default function TournamentPage() {
             {!v.paused && v.nextRoundAt && <p className="tn-now-line">Round {round?.n} is over. Next round seats in <b>{countdown(v.nextRoundAt - now)}</b>.</p>}
             {!v.paused && !v.nextRoundAt && round && <p className="tn-now-line">{round.final ? 'The final is on.' : `Round ${round.n} is on.`}</p>}
             {myTable && (
-              <Link className="btn primary chunky tn-mytable" to={tableUrl(v.game, myTable.code!)}>
+              <Link className="btn primary chunky tn-mytable" to={tableUrl(myTable.code!)}>
                 Go to your table · <span className="mono">{myTable.code}</span>
               </Link>
             )}

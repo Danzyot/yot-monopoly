@@ -1,5 +1,6 @@
 // The players at the table: Monopoly's chibi characters (three/characters),
-// one per seat in the player's colour (a holder's own NFT Chog for theirs), standing at the rim behind their hand.
+// one per seat in the player's colour and outfit (a holder's own NFT Chog for theirs, which wears
+// its own traits), standing at the rim behind their hand.
 // They breathe and glance at whoever is playing, lean in to play a card,
 // cheer when they call "Last card!", sulk when they are caught or hit with a
 // draw, and the match winner hops into the middle of the table for the
@@ -205,7 +206,7 @@ function Seat({ p, seat, state, lite }: { p: CardsPlayerView; seat?: CardsSeatVi
     <group ref={root}>
       <group scale={FIG_SCALE}>
         <group ref={yawRef}>
-          <CharacterFigure id={character} mats={mats} rig={rig} lite={lite} chogToken={chogToken} />
+          <CharacterFigure id={character} mats={mats} rig={rig} lite={lite} outfit={seat?.outfit} chogToken={chogToken} />
         </group>
         {/* Just over the head: the seat's chip sits on it (pinned by CardsScene). */}
         <object3D ref={anchor} position={[0, 0.6, 0]} />

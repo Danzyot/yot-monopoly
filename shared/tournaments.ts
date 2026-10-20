@@ -1,29 +1,34 @@
-// Tournaments for Monopoly and Cards: what the server sends and what a host
-// may ask for. One format for both games: everyone registers, rounds of
-// parallel tables are seated at random, the top players of each table go
-// through, and the last table standing is the final. The engine is
+// Tournaments for Cards: what the server sends and what an operator may ask
+// for. Everyone registers, rounds of parallel tables are seated at random, the
+// top players of each table go through, and the last table standing is the
+// final. Only operators (admins) create them. The engine is
 // server/src/tournament/; the pages are client/src/tournaments/.
+//
+// Every event keeps its `game`, so the engine stays game-agnostic, but Cards
+// is the only game on offer: Monopoly games are too long for brackets.
 
-export type TournamentGame = 'monopoly' | 'cards';
+export type TournamentGame = 'cards';
 export type TournamentStatus = 'registering' | 'running' | 'finished' | 'cancelled';
 /** What happens to a player who has not opened their table when the seating clock runs out. */
 export type NoShowPolicy = 'drop' | 'autoplay';
 
-export const TOURNEY_GAMES: TournamentGame[] = ['monopoly', 'cards'];
+export const TOURNEY_GAMES: TournamentGame[] = ['cards'];
 
-/** Fewest and most players at one table, per game. */
-export const TOURNEY_TABLE_RANGE: Record<TournamentGame, [number, number]> = { monopoly: [3, 6], cards: [3, 8] };
-export const TOURNEY_DEFAULT_TABLE: Record<TournamentGame, number> = { monopoly: 4, cards: 6 };
-/** Round time limits on offer (minutes). Monopoly ends on net worth, Cards on points. */
-export const TOURNEY_ROUND_MINUTES: Record<TournamentGame, number[]> = { monopoly: [20, 30, 45, 60, 90], cards: [10, 15, 20, 30] };
-export const TOURNEY_DEFAULT_ROUND_MINUTES: Record<TournamentGame, number> = { monopoly: 30, cards: 15 };
+/** Fewest and most players at one table. */
+export const TOURNEY_TABLE_RANGE: [number, number] = [3, 8];
+export const TOURNEY_DEFAULT_TABLE = 6;
+/** Round time limits on offer (minutes); then the round is scored and the most points win the table. */
+export const TOURNEY_ROUND_MINUTES = [10, 15, 20, 30];
+export const TOURNEY_DEFAULT_ROUND_MINUTES = 15;
 /** How long a seated player has to open their table. */
 export const TOURNEY_NO_SHOW_MINUTES = [2, 3, 5, 10];
 export const TOURNEY_DEFAULT_NO_SHOW_MINUTES = 3;
-/** Cards: points to win a table's match ("single" plays one round). */
+/** Points to win a table's match ("single" plays one round). */
 export const TOURNEY_CARDS_TARGETS = [100, 200, 300, 500];
 /** A tournament needs at least this many entrants to start. */
 export const TOURNEY_MIN_PLAYERS = 3;
+/** How far ahead a start may be scheduled. */
+export const TOURNEY_AHEAD_DAYS = 30;
 /** The pause between one round's last table and the next round's seating. */
 export const TOURNEY_BREAK_MS = 30_000;
 /** A paused tournament carries on by itself after this long, so no event is frozen for good. */
@@ -31,28 +36,11 @@ export const TOURNEY_PAUSE_MAX_MS = 30 * 60_000;
 export const TOURNEY_NAME_MAX = 48;
 export const TOURNEY_PRIZE_MAX = 140;
 
-/**
- * What a host may set up. Operators (admins) get the big numbers; Chog
- * holders and approved hosts the small ones, and one event at a time.
- */
-export interface TournamentLimits {
-  maxPlayers: Record<TournamentGame, number>;
-  /** Live or upcoming events one host may have at once. */
-  live: number;
-  /** How far ahead a start may be scheduled. */
-  aheadDays: number;
-  roundMinutesMax: Record<TournamentGame, number>;
-}
-
-export const TOURNEY_LIMITS: { host: TournamentLimits; admin: TournamentLimits } = {
-  host: { maxPlayers: { monopoly: 24, cards: 32 }, live: 1, aheadDays: 7, roundMinutesMax: { monopoly: 60, cards: 30 } },
-  admin: { maxPlayers: { monopoly: 128, cards: 128 }, live: 20, aheadDays: 30, roundMinutesMax: { monopoly: 90, cards: 30 } },
-};
-
-export const PRIZE_DISCLAIMER = 'Prizes are the host’s promise, not Chog Games’: the host alone is responsible for handing them out.';
+export const PRIZE_NOTE = 'Prizes, when there are any, are handed out by the organisers after the final.';
 
 export interface TournamentSettings {
-  maxPlayers: number;
+  /** Most entrants, when the operator sets a cap; null (the default) takes everyone. */
+  maxPlayers: number | null;
   /** Entrants needed to start (a scheduled start with fewer is called off). */
   minPlayers: number;
   /** Most players at one table; a round with no more entrants than this is the final. */
@@ -66,9 +54,7 @@ export interface TournamentSettings {
   botsFill: boolean;
   /** Scheduled start (registration closes then); null = when the host starts it. */
   startAt: number | null;
-  /** Monopoly: the board. */
-  mapId: string;
-  /** Cards: one round, or first to `cardsTarget` points. */
+  /** One round, or first to `cardsTarget` points. */
   cardsMatch: 'single' | 'points';
   cardsTarget: number;
 }
@@ -81,24 +67,23 @@ export interface TournamentCreate {
   settings?: Partial<TournamentSettings>;
 }
 
-export function defaultTournamentSettings(game: TournamentGame): TournamentSettings {
+export function defaultTournamentSettings(): TournamentSettings {
   return {
-    maxPlayers: game === 'monopoly' ? 16 : 24,
+    maxPlayers: null,
     minPlayers: TOURNEY_MIN_PLAYERS,
-    tableSize: TOURNEY_DEFAULT_TABLE[game],
+    tableSize: TOURNEY_DEFAULT_TABLE,
     advance: 2,
-    roundMinutes: TOURNEY_DEFAULT_ROUND_MINUTES[game],
+    roundMinutes: TOURNEY_DEFAULT_ROUND_MINUTES,
     noShowMinutes: TOURNEY_DEFAULT_NO_SHOW_MINUTES,
     noShow: 'drop',
     botsFill: false,
     startAt: null,
-    mapId: 'classic',
     cardsMatch: 'single',
     cardsTarget: 200,
   };
 }
 
-/** Sent with a tournament table's room state (RoomView / CardsRoomView), for the "back to the tournament" bar. */
+/** Sent with a tournament table's room state (CardsRoomView), for the "back to the tournament" bar. */
 export interface TournamentTableInfo {
   id: string;
   name: string;
@@ -110,7 +95,7 @@ export interface TournamentTableInfo {
   startsBy: number | null;
 }
 
-/** Set on a room that is a tournament table (server rooms.ts, cards/rooms.ts). */
+/** Set on a room that is a tournament table (server/src/cards/rooms.ts). */
 export interface TableLock {
   /** The tournament's own host id: no player has it, so only operators pass a room's host checks. */
   hostId: string;
@@ -188,8 +173,6 @@ export interface TournamentView {
   prize: string;
   hostId: string;
   hostName: string;
-  /** Run by an operator (else a player host, whose prizes are theirs to give). */
-  official: boolean;
   status: TournamentStatus;
   paused: { by: string; at: number } | null;
   settings: TournamentSettings;
@@ -198,6 +181,7 @@ export interface TournamentView {
   finishedAt: number | null;
   entrants: TournamentEntrantView[];
   rounds: TournamentRoundView[];
+  /** Places 1..N once the event has finished; a cancelled event places nobody. */
   places: TournamentPlace[];
   /** Between rounds: when the next one is seated. */
   nextRoundAt: number | null;
@@ -212,11 +196,11 @@ export interface TournamentSummary {
   name: string;
   prize: string;
   hostName: string;
-  official: boolean;
   status: TournamentStatus;
   paused: boolean;
   entrants: number;
-  maxPlayers: number;
+  /** null: no cap. */
+  maxPlayers: number | null;
   startAt: number | null;
   startedAt: number | null;
   finishedAt: number | null;
@@ -225,13 +209,9 @@ export interface TournamentSummary {
   champion: { id: string; name: string } | null;
 }
 
-/** Who is asking, with the list (tourney:list): may they host, and under which limits. */
+/** Who is asking, with the list (tourney:list): only operators create and run tournaments. */
 export interface TournamentMe {
-  canHost: boolean;
   isAdmin: boolean;
-  /** Their live or upcoming events. */
-  hosting: string[];
-  limits: TournamentLimits;
 }
 
 /** A finished tournament on a player's profile. */
@@ -249,6 +229,7 @@ export interface TournamentClientEvents {
   'tourney:list': { subscribe?: boolean };
   'tourney:sub': { id: string };
   'tourney:unsub': { id: string };
+  /** Operators only. */
   'tourney:create': TournamentCreate;
   'tourney:register': { id: string; chogToken?: number };
   'tourney:unregister': { id: string };
@@ -270,5 +251,5 @@ export interface TournamentSeated {
   round: number;
 }
 
-export const tableUrl = (game: TournamentGame, code: string) => (game === 'cards' ? `/cards/r/${code}` : `/r/${code}`);
+export const tableUrl = (code: string) => `/cards/r/${code}`;
 export const tournamentUrl = (id: string) => `/tournaments/${id}`;

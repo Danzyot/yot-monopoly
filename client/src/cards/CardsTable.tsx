@@ -27,6 +27,7 @@ import { useAuth } from '../auth.tsx';
 import { askConfirm, CloseX, Modal } from '../components/Modal.tsx';
 import Chat from '../components/Chat.tsx';
 import { Avatar } from '../components/Avatar.tsx';
+import { OutfitThumb, WornItems, outfitLabel } from '../components/outfitBits.tsx';
 import MusicPlayer from '../components/MusicPlayer.tsx';
 import { useMusicScene } from '../music.ts';
 import { useAmbience } from '../ambience.ts';
@@ -142,17 +143,23 @@ function TurnRing({ endsAt, total, skew }: { endsAt: number | null; total: numbe
   );
 }
 
-/** A seat's face on its colour: a holder's own Chog Genesis art in a ring of it, anyone else's character emoji. */
+/**
+ * A seat's face on its colour: a holder's own Chog Genesis art in a ring of it,
+ * anyone else's character emoji wearing the seat's hat (an NFT Chog wears its
+ * own traits, not outfit items, as at Monopoly).
+ */
 function SeatAvatar({ seat, size = 46 }: { seat?: CardsSeatView; size?: number }) {
   const ch = getCharacter(seat?.character ?? SEASON_CHARACTERS[0]);
   // Art that will not load (offline, a blocked host) falls back to the emoji.
   const [failed, setFailed] = useState<number | null>(null);
   const token = seat?.chogToken && seat.chogToken !== failed && chogArtUrl(seat.chogToken) ? seat.chogToken : undefined;
+  const hat = !seat?.chogToken ? seat?.outfit?.head : undefined;
   return (
     <span className={`ct-ava-badge ${token ? 'ct-ava-chog' : ''}`} style={{ background: seat?.color ?? '#888', width: size, height: size, fontSize: size * 0.5 }} aria-hidden>
       {token
         ? <img className="chog-art" src={chogArtUrl(token, Math.max(96, size * 2))} alt="" loading="lazy" draggable={false} onError={() => setFailed(token)} />
         : ch.emoji}
+      {hat && <span className="ct-ava-hat"><OutfitThumb id={hat} color={seat!.color} size={Math.round(size * 0.62)} /></span>}
       {seat && !seat.isBot && <span className="ct-ava-me"><Avatar src={seat.avatar} size={Math.round(size * 0.4)} /></span>}
     </span>
   );
@@ -179,7 +186,10 @@ function SeatChip({ p, seat, at, view, frame, skew, now, canCatch, compact, pin 
         <SeatAvatar seat={seat} size={compact ? 38 : 50} />
         {view.dealer === p.id && <span className="ct-dealer" title="Dealer">D</span>}
       </div>
-      <div className="ct-seat-name">{p.name}{p.isBot && <em className="ct-tag">bot</em>}</div>
+      <div className="ct-seat-name" title={seat && !seat.chogToken && outfitLabel(seat.outfit) ? `${p.name} · ${outfitLabel(seat.outfit)}` : undefined}>
+        {p.name}{p.isBot && <em className="ct-tag">bot</em>}
+      </div>
+      {seat && !seat.chogToken && !compact && <WornItems outfit={seat.outfit} color={seat.color} size={16} className="ct-seat-worn" />}
       <div className="ct-seat-hand" aria-label={`${count} card${count === 1 ? '' : 's'}`}>
         <span className="ct-mini-fan" aria-hidden>
           {Array.from({ length: fan }, (_, k) => <i key={k} style={{ transform: `rotate(${(k - (fan - 1) / 2) * 9}deg)` }} />)}

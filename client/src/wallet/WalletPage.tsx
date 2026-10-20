@@ -45,7 +45,7 @@ export default function WalletPage() {
   }, [profile, status]);
 
   // Holding is what makes a host: once the reading changes, ask again so
-  // "Host a tournament" appears (or goes) without a reload.
+  // hosting on Poker is offered (or not) without a reload.
   const holder = status?.holder;
   useEffect(() => {
     if (profile && holder !== undefined) void refreshMe();
@@ -89,7 +89,7 @@ export default function WalletPage() {
     <div className="page wl-page">
       <header className="lb-head">
         <h1 className="lb-title"><span aria-hidden>🔗</span> Link your wallet</h1>
-        <p className="lb-blurb">Prove you hold a Chog Genesis and the game knows it. Holding a Chog lets you host tournaments. Signing is free — no transaction, no gas.</p>
+        <p className="lb-blurb">Prove you hold a Chog Genesis and the game knows it. Holding a Chog lets you host Poker tables and tournaments. Signing is free — no transaction, no gas.</p>
       </header>
 
       {!profile && (
@@ -169,7 +169,7 @@ function HolderBanner({ status, canHost }: { status: WalletStatus | null; canHos
         <span className="wl-hero-icon" aria-hidden>🔍</span>
         <div className="wl-hero-text">
           <b>No Chog Genesis found yet</b>
-          <span>None of your linked wallets holds a Chog right now. Link the wallet that does, or re-check after a transfer. Holding a Chog lets you host tournaments.</span>
+          <span>None of your linked wallets holds a Chog right now. Link the wallet that does, or re-check after a transfer. Holding a Chog lets you host Poker tables and tournaments.</span>
         </div>
       </section>
     );
@@ -180,7 +180,7 @@ function HolderBanner({ status, canHost }: { status: WalletStatus | null; canHos
       <div className="wl-hero-text">
         <b>Verified Chog holder — {plural(n, 'Chog')}</b>
         <span>{n ? 'Token ids: ' : ''}{status.chogs.map(id => `#${id}`).join(', ') || 'Holding confirmed; token ids could not be listed.'}</span>
-        {canHost && <span className="wl-host-note"><span aria-hidden>🏆</span> Holding a Chog lets you host tournaments.</span>}
+        {canHost && <span className="wl-host-note"><span aria-hidden>🏆</span> Holding a Chog lets you host Poker tables and tournaments.</span>}
       </div>
     </section>
   );

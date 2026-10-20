@@ -3,6 +3,7 @@
 // is a CardsView built for that one viewer (no other hand is ever in it).
 
 import type { CharacterId } from '../characters.ts';
+import type { Outfit } from '../outfits.ts';
 import type { CardsRules } from './rules.ts';
 import type { CardsAction, CardsBotLevel, CardsView } from './types.ts';
 import type { TournamentTableInfo } from '../tournaments.ts';
@@ -38,6 +39,8 @@ export interface CardsSeatView {
   /** A verified holder playing as their own Chog Genesis token (character 'chog' only; shared/chogs/traits.ts). */
   chogToken?: number;
   color: string;
+  /** What the seat wears over its character (shared/outfits.ts), as in Monopoly. A token Chog wears its own traits instead. */
+  outfit: Outfit;
   /** The host handed this seat to auto-play. */
   autopilot?: boolean;
   /** Lost connection at this server time (auto-play takes over after the grace). */
@@ -102,7 +105,7 @@ export interface CardsClientEvents {
   'cards:leave': Record<string, never>;
   'cards:away': { code: string };
   'cards:configure': CardsConfigure;
-  'cards:seat': { character?: CharacterId; chogToken?: number; color?: string };
+  'cards:seat': { character?: CharacterId; chogToken?: number; color?: string; outfit?: Outfit };
   'cards:addBot': { level?: CardsBotLevel };
   'cards:botLevel': { id: string; level: CardsBotLevel };
   'cards:kick': { id: string };

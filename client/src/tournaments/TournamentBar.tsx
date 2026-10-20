@@ -1,4 +1,4 @@
-// The strip over a tournament table (Monopoly or Cards): which event and round
+// The strip over a tournament table: which event and round
 // this is, how long until it starts or runs out, and the way back.
 import { Link } from 'react-router-dom';
 import { tournamentUrl, type TournamentTableInfo } from '../../../shared/tournaments.ts';

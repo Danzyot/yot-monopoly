@@ -2293,6 +2293,10 @@ a:focus-visible, .navlink:focus-visible, .brand:focus-visible, .edition:focus-vi
 .pf-games li.pf-game-card.won { border-color: color-mix(in srgb, var(--hi) 75%, var(--line)); }
 .pf-thumb-wrap { position: relative; flex: none; width: 112px; }
 .pf-thumb { display: block; width: 100%; aspect-ratio: 16 / 11; object-fit: cover; border-radius: 10px; border: 2px solid color-mix(in srgb, var(--line) 50%, transparent); background: rgba(0, 0, 0, 0.3); }
+/* A Cards match has no board picture: a card on the felt instead. */
+.pf-thumb.pf-thumb-cards { display: grid; place-items: center; font-size: 34px; background: radial-gradient(circle at 50% 40%, #3a2290, #1c0e46); }
+/* With both games played, each gets its own titled section. */
+.profile-page .pf-game-title { margin: 8px 0 -2px; font: 400 28px var(--display); text-shadow: var(--outline); }
 .pf-place-badge { position: absolute; left: -6px; top: -8px; display: inline-flex; flex-direction: column; align-items: center; line-height: 1; padding: 4px 6px 3px; border-radius: 10px; font-size: 18px; background: linear-gradient(180deg, color-mix(in srgb, var(--panel-solid) 80%, #fff 14%), var(--panel-solid)); border: 2px solid color-mix(in srgb, var(--line) 70%, transparent); box-shadow: 0 2px 0 rgba(0,0,0,0.35); }
 .pf-place-badge small { font: 400 9px var(--display); letter-spacing: 0.04em; color: var(--muted); margin-top: 1px; }
 .pf-place-badge.p1 { border-color: #8a5600; background: linear-gradient(180deg, #ffe16a, #f0a800); }

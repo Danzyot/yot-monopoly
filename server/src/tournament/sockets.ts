@@ -1,21 +1,18 @@
 // Tournaments over the shared socket (../sockets.ts sets socket.data.profile
 // in its io.use): every event is `tourney:*`. A page following one event
-// joins `tourney:<id>`; the list page joins `tourney:lobby`. The tournament
-// (manager.ts) is built here with both games' adapters, restored from the
-// data volume, and driven once a second.
+// joins `tourney:<id>`; the list page joins `tourney:lobby`. The manager
+// (manager.ts) is built here with the Cards adapter, restored from the data
+// volume, and driven once a second. Nothing here is announced on Discord:
+// not the events, not their tables' results.
 
 import type { Server, Socket } from 'socket.io';
 import { banMessage, findBan } from '../bans.ts';
-import { announceChannelId, postToChannel } from '../discord.ts';
-import { isOn } from '../features.ts';
-import { cardsAdapter, monopolyAdapter } from './adapters.ts';
+import { cardsAdapter } from './adapters.ts';
 import { TournamentManager, TournamentError, type Requester } from './manager.ts';
 import type { Tournament } from './engine.ts';
 import type { SocketLayer } from '../sockets.ts';
 import type { CardsSocketLayer } from '../cards/sockets.ts';
-import { RoomError } from '../rooms.ts';
 import { CardsRoomError } from '../cards/rooms.ts';
-import { GAMES } from '../../../shared/brand.ts';
 import { isChogTokenId } from '../../../shared/chogs/traits.ts';
 import type { PlayerProfile } from '../../../shared/types.ts';
 import type { TournamentSeated } from '../../../shared/tournaments.ts';
@@ -37,6 +34,7 @@ export interface TournamentLayer {
   manager: TournamentManager;
 }
 
+/** `games.monopoly` is only asked which room codes are taken, so a Cards table never shares one. */
 export function attachTournaments(io: Server, games: { monopoly: SocketLayer; cards: CardsSocketLayer }, opts: { tickMs?: number } = {}): TournamentLayer {
   // Coalesced like the rooms': everything that changes an event in one tick goes out once.
   const pending = new Set<Tournament>();
@@ -56,13 +54,7 @@ export function attachTournaments(io: Server, games: { monopoly: SocketLayer; ca
     listQueued = true;
   };
 
-  const announce = (title: string, description: string) => {
-    const ch = announceChannelId();
-    if (ch && isOn('announceResults')) void postToChannel(ch, { title, description });
-  };
-
   const manager: TournamentManager = new TournamentManager({
-    monopoly: monopolyAdapter(games.monopoly.registry, r => games.monopoly.broadcast(r)),
     cards: cardsAdapter(games.cards.registry, r => games.cards.broadcast(r), code => !!games.monopoly.registry.get(code)),
   }, {
     onChange: changed,
@@ -72,20 +64,6 @@ export function attachTournaments(io: Server, games: { monopoly: SocketLayer; ca
         const id = (s.data as TourneySocketData).profile?.id;
         if (id && table.players.includes(id)) s.emit('tourney:seated', msg);
       }
-    },
-    // Only operators' events go to the announcement channel; a player's event is theirs to promote.
-    onCreated: t => {
-      if (!t.d.official) return;
-      const when = t.d.settings.startAt ? `<t:${Math.floor(t.d.settings.startAt / 1000)}:F>` : 'when the host starts it';
-      announce(`🏟️ New ${GAMES[t.d.game].name} tournament: ${t.d.name}`,
-        `Registration is open — up to ${t.d.settings.maxPlayers} players, starting ${when}.${t.d.prize ? `\nPrize: ${t.d.prize}` : ''}`);
-    },
-    onFinished: t => {
-      if (!t.d.official) return;
-      const medals = ['🥇', '🥈', '🥉'];
-      const lines = t.d.places.slice(0, 3).map((id, i) => `${medals[i]} ${t.entrant(id)?.name ?? '?'}`);
-      announce(`🏆 ${t.entrant(t.d.places[0])?.name ?? '?'} wins ${t.d.name}!`,
-        `${lines.join('\n')}\n\n${GAMES[t.d.game].name} · ${t.d.entrants.length} players · ${t.d.rounds.length} rounds`);
     },
   }, { tickMs: opts.tickMs ?? 1_000 });
 
@@ -111,7 +89,7 @@ export function attachTournaments(io: Server, games: { monopoly: SocketLayer; ca
           reply({ ok: true, ...extra });
         } catch (e) {
           flush();
-          if (e instanceof TournamentError || e instanceof RoomError || e instanceof CardsRoomError) reply({ ok: false, error: e.message });
+          if (e instanceof TournamentError || e instanceof CardsRoomError) reply({ ok: false, error: e.message });
           else {
             console.error(`[tourney socket] ${event} failed`, e);
             reply({ ok: false, error: 'Server error' });

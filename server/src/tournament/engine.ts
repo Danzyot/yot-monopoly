@@ -3,11 +3,12 @@
 // game's adapter, watches them and reports back here. Time and the shuffle
 // are injected, so tests can replay any event exactly.
 //
-// The format, for both games: registration until the start (or until full);
+// The format: registration until the start (or until full, when capped);
 // then rounds of parallel tables, seated at random and balanced; the top
 // `advance` players of each table go through (byes when the numbers do not
 // fit tables of three or more); a round small enough for one table is the
-// final, and its winner is the champion. Everyone gets a place, 1..N.
+// final, and its winner is the champion. Everyone gets a place, 1..N, when it
+// finishes; a cancelled event places nobody.
 
 import {
   TOURNEY_BREAK_MS, TOURNEY_TABLE_RANGE,
@@ -81,8 +82,6 @@ export interface TournamentData {
   prize: string;
   hostId: string;
   hostName: string;
-  /** Created by an operator. */
-  official: boolean;
   createdAt: number;
   status: TournamentStatus;
   paused: { by: string; at: number } | null;
@@ -97,6 +96,12 @@ export interface TournamentData {
   nextRoundAt: number | null;
   cancelReason: string | null;
 }
+
+/**
+ * A tournament without a cap still stops taking entrants here: a safety bound
+ * for the server, far beyond any real event, and never shown to players.
+ */
+export const MAX_ENTRANTS = 1000;
 
 /** A room that could not be brought back is opened again this often before its seat order stands as the result. */
 const MAX_REOPEN = 2;
@@ -166,7 +171,7 @@ export class Tournament {
   register(m: Member) {
     if (this.d.status !== 'registering') fail('Registration is closed');
     if (this.entrant(m.id)) fail('You are already registered');
-    if (this.d.entrants.length >= this.d.settings.maxPlayers) fail('The tournament is full');
+    if (this.d.entrants.length >= (this.d.settings.maxPlayers ?? MAX_ENTRANTS)) fail('The tournament is full');
     this.d.entrants.push({ id: m.id, name: m.name, avatar: m.avatar, at: this.now(), ...(m.chogToken !== undefined ? { chogToken: m.chogToken } : {}) });
   }
 
@@ -259,6 +264,8 @@ export class Tournament {
 
   private end(status: 'finished' | 'cancelled', reason: string | null) {
     this.d.status = status;
+    // A cancelled event places nobody: no champion, nothing on anyone's profile.
+    if (status === 'cancelled') this.d.places = [];
     this.d.finishedAt = this.now();
     this.d.paused = null;
     this.d.nextRoundAt = null;
@@ -278,7 +285,7 @@ export class Tournament {
   seatRound() {
     const ids = this.contenders();
     const s = this.d.settings;
-    const plan = planRound(ids.length, s.tableSize, TOURNEY_TABLE_RANGE[this.d.game][0]);
+    const plan = planRound(ids.length, s.tableSize, TOURNEY_TABLE_RANGE[0]);
     const order = shuffled(ids, this.rng);
     // Byes go first to players who have not had one.
     const hadBye = new Set(this.d.rounds.flatMap(r => r.byes));

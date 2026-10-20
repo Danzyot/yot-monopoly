@@ -147,7 +147,7 @@ export function authRoutes(): express.Router {
     if (!p) { res.status(401).json({ error: 'Not signed in' }); return; }
     const ban = findBan({ id: p.id, discordId: p.discord?.id, ip: req.ip });
     if (ban) { res.status(403).json({ error: banMessage(ban) }); return; }
-    // Whether this player may host tournaments (operator, Chog holder or approved host).
+    // Whether this player may host on Poker (operator, Chog holder or approved host).
     res.json({ profile: p, canHost: canHost(p.id) });
   });
 

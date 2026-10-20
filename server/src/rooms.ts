@@ -17,7 +17,6 @@ import { CHOG_SEASON, SEASON_BOT_NAMES, SEASON_CHARACTERS, SEASON_THEME_ID, char
 import { defaultOutfit, outfitForCharacter, parseOutfit, randomOutfit, sanitizeOutfit } from '../../shared/outfits.ts';
 import { cutsceneSnap, cutscenesMs, pickCutscenes, type CutsceneSnap } from '../../shared/cutscenes.ts';
 import { sanitizeRequirements } from './requirements.ts';
-import type { TableLock } from '../../shared/tournaments.ts';
 import {
   PLAYER_COLORS, CHARACTERS, type Action, type CharacterId, type JoinRequirements, type RoomSeat, type RoomSummary, type RoomView,
 } from '../../shared/types.ts';
@@ -205,13 +204,6 @@ export class Room {
   private kicked = new Set<string>();
   /** Per player: when their trade offers of the last minute were made (see checkOfferRate). */
   private offerTimes = new Map<string, number[]>();
-  /**
-   * Set on a tournament table (server/src/tournament/): only the assigned
-   * players sit here, and its host is the tournament itself, so nobody at the
-   * table holds host powers (operators still do). Never snapshotted: the
-   * tournament puts it back after a restart.
-   */
-  tournament: TableLock | null = null;
 
   constructor(readonly code: string, public hostId: string, private hooks: RoomHooks) {
     // A new table takes the season's look, with the house rules it brings (restore overwrites this).
@@ -248,7 +240,6 @@ export class Room {
       return existing;
     }
     if (this.status !== 'lobby') fail('This game has already started — you can watch');
-    if (this.tournament && !this.tournament.seats.includes(m.id)) fail('Seats at this tournament table are assigned — you can watch');
     if (this.kicked.has(m.id)) fail('You were removed from this room — you can watch');
     if (this.seats.length >= this.rules.maxPlayers) fail('The room is full — you can watch');
     const character = this.freeCharacter();
@@ -257,7 +248,7 @@ export class Room {
       character, color: this.freeColor(), outfit: defaultOutfit(character),
     };
     this.seats.push(s);
-    if (!this.tournament && !this.seat(this.hostId)) this.hostId = m.id;
+    if (!this.seat(this.hostId)) this.hostId = m.id;
     this.hooks.onEvent(this, `${s.name} joined`);
     return s;
   }
@@ -324,7 +315,6 @@ export class Room {
 
   /** A lobby nobody human sits in is closed at once rather than lingering for the idle sweep. */
   private closeIfEmpty() {
-    if (this.tournament) return; // the tournament closes its own tables
     if (this.status === 'lobby' && !this.seats.some(s => !s.isBot)) this.hooks.onEmpty?.(this);
   }
 
@@ -357,7 +347,6 @@ export class Room {
 
   /** Move the host away from `from`. Returns false (host unchanged) when nobody can take over. */
   private passHost(from: string, why: string): boolean {
-    if (this.tournament) return false; // the tournament stays the host
     const next = this.successor(from);
     if (!next) {
       // Nobody connected. A lobby still needs a host, so it goes to whoever is
@@ -643,10 +632,10 @@ export class Room {
    * worth, like the time limit (so results are recorded as usual), and let
    * the sweep clear the finished room.
    */
-  abandon(reason = 'nobody has been at the table for 30 minutes') {
+  abandon() {
     const g = this.runningGame();
     g.abandon();
-    this.hooks.onEvent(this, `Game ended: ${reason}`);
+    this.hooks.onEvent(this, 'Game ended: nobody has been at the table for 30 minutes');
     this.afterChange();
     this.hooks.onChange(this);
   }
@@ -971,7 +960,6 @@ export class Room {
       style: this.style,
       now: Date.now(),
       requirements: this.requirements,
-      ...(this.tournament ? { tournament: this.tournament.info } : {}),
     };
   }
 
