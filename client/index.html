@@ -40,10 +40,10 @@
     <link rel="preload" href="/src/fonts/lilita-one-400.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/src/fonts/nunito-700.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/src/fonts/nunito-800.woff2" as="font" type="font/woff2" crossorigin />
-    <!-- The home page's backdrop, a still of the board (styles/home.css and, in the Chog season,
-         styles/season.css: same files, same media queries). -->
+    <!-- The backdrop of the hub and of /monopoly, a still of the board (styles/home.css and, in
+         the Chog season, styles/season.css: same files, same media queries). -->
     <script>
-      if (location.pathname === '/') {
+      if (location.pathname === '/' || location.pathname === '/monopoly') {
         var still = document.documentElement.classList.contains('season-chog') ? 'chog-board' : 'board';
         [['/home/' + still + '-960.webp', '(max-aspect-ratio: 4/5)'], ['/home/' + still + '-1920.webp', '(min-aspect-ratio: 4/5)']].forEach(function (p) {
           var l = document.createElement('link');

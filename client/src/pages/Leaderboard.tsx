@@ -110,7 +110,7 @@ export default function Leaderboard() {
               : 'Nobody has finished a game against another person yet. Gather a friend, bankrupt them, and be the first name up here.'}
           </p>
           <div className="row center wrap">
-            <Link className="btn primary chunky" to={tab.id === 'cards' ? GAMES.cards.path : '/'}>Play {tab.label}</Link>
+            <Link className="btn primary chunky" to={GAMES[tab.id].path}>Play {tab.label}</Link>
             <Link className="btn chunky" to="/characters">{CHOG_SEASON ? 'Meet Chog' : 'Meet the characters'}</Link>
           </div>
         </section>

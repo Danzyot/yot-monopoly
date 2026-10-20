@@ -15,6 +15,7 @@ import { outfitForCharacter, type Outfit } from '../../../shared/outfits.ts';
 import { CHARACTER_PREF_KEY } from '../components/Lobby.tsx';
 import OutfitPicker, { loadOutfitPref, saveOutfitPref } from '../components/OutfitPicker.tsx';
 import ChogPicker, { ChogArt, loadChogTokenPref, saveChogTokenPref } from '../components/ChogPicker.tsx';
+import NftChogsInfo from '../components/NftChogsInfo.tsx';
 import { chogLook, chogName, isChogTokenId, traitsOf } from '../../../shared/chogs/traits.ts';
 import { toast } from '../toast.tsx';
 import {
@@ -306,7 +307,11 @@ export default function Gallery() {
           <button className="btn primary chunky" onClick={playAs}>Play as {title}</button>
           {chogToken && <button className="btn" onClick={() => setToken(null)}>Base Chog</button>}
         </div>
-        {def.id === 'chog' && <ChogPicker selected={chogToken ?? null} onPick={id => setToken(t => (t === id ? null : id))} label="Show" />}
+        {def.id === 'chog' && <>
+          <ChogPicker selected={chogToken ?? null} onPick={id => setToken(t => (t === id ? null : id))} label="Show" />
+          {/* What a holder's own Chog is, with real tokens art-beside-3D, and how to link a wallet. */}
+          <NftChogsInfo onShow={setToken} />
+        </>}
         {/* With one character on offer (the Chog season) there is nothing to choose between. */}
         {CHARS.some(c => !FEATURED.includes(c.id)) && <>
           <h2 className="gallery-sub gallery-section-head">Base characters</h2>

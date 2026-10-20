@@ -35,7 +35,7 @@ export default function RoomPage() {
     return (
       <div className="center-msg">
         <p>{error}</p>
-        <Link className="btn primary" to="/">Back</Link>
+        <Link className="btn primary" to={GAMES.monopoly.path}>Back to {GAMES.monopoly.name}</Link>
       </div>
     );
   }

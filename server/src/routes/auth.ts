@@ -104,18 +104,19 @@ export function authRoutes(): express.Router {
   });
 
   r.get('/discord/callback', async (req, res) => {
+    // Back to the page sign-in started on (/monopoly, /cards, a room…), whether it worked or not.
+    const state = verifyState(String(req.query.state ?? ''));
+    const ret = state ? localPath(state.return) : '/';
     try {
-      const state = verifyState(String(req.query.state ?? ''));
       if (!state) throw new Error('That sign-in link expired — press Sign in again');
       if (req.query.error) throw new Error('Discord sign-in was cancelled');
       const d = await completeOAuth(String(req.query.code ?? ''), redirectUriFor(requestBase(req)));
       const profile = makeDiscordProfile(d);
       const ban = findBan({ id: profile.id, discordId: d.id, ip: req.ip });
       if (ban) throw new Error(banMessage(ban));
-      const ret = localPath(state.return);
       res.redirect(`${ret}#dtoken=${encodeURIComponent(signToken(profile))}`);
     } catch (e) {
-      res.redirect(`/#derror=${encodeURIComponent(e instanceof Error ? e.message : 'Discord sign-in failed')}`);
+      res.redirect(`${ret}#derror=${encodeURIComponent(e instanceof Error ? e.message : 'Discord sign-in failed')}`);
     }
   });
 

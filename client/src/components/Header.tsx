@@ -44,7 +44,7 @@ export default function Header() {
       <nav className="row" aria-label="Site" style={pending ? { visibility: 'hidden' } : undefined}>
         {/* NavLink adds aria-current="page" on the active route; .navlink.active styles it. */}
         {/* The games first. Always shown: on phones the label shrinks to its icon (see manage.css) so nothing wraps or overflows. */}
-        <NavLink className="navlink nav-chars nav-game nav-home" to="/" end aria-label={GAMES.monopoly.name} title={GAMES.monopoly.name}><span className="nav-ico" aria-hidden="true">🎩</span><span className="nav-label">{GAMES.monopoly.name}</span></NavLink>
+        <NavLink className="navlink nav-chars nav-game nav-monopoly" to={GAMES.monopoly.path} aria-label={GAMES.monopoly.name} title={GAMES.monopoly.name}><span className="nav-ico" aria-hidden="true">🎩</span><span className="nav-label">{GAMES.monopoly.name}</span></NavLink>
         <NavLink className="navlink nav-chars nav-game nav-cards" to={GAMES.cards.path} aria-label={GAMES.cards.name} title={GAMES.cards.name}><span className="nav-ico" aria-hidden="true">🃏</span><span className="nav-label">{GAMES.cards.name}</span></NavLink>
         {/* Poker's home here (/poker) lists its tournaments; the games themselves are on poker's own site. */}
         <NavLink className="navlink nav-chars nav-game nav-poker" to="/poker" aria-label={GAMES.poker.name} title={GAMES.poker.name}><span className="nav-ico" aria-hidden="true">♠️</span><span className="nav-label">{GAMES.poker.name}</span></NavLink>
