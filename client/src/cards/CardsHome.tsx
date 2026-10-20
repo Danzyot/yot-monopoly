@@ -8,7 +8,7 @@ import { toastError } from '../toast.tsx';
 import { api } from '../api.ts';
 import { CARDS_GAME_NAME, LAST_CARD_CALL } from '../../../shared/cards/meta.ts';
 import type { Card } from '../../../shared/cards/deck.ts';
-import { cardsCall, useCardsRoomList } from './net.ts';
+import { cardsCall, chogPref, useCardsRoomList } from './net.ts';
 import { CardBack, CardFace } from './CardFace.tsx';
 import { CardsBackdrop } from './CardsLobby.tsx';
 import './cards.css';
@@ -50,7 +50,7 @@ export default function CardsHome() {
     if (!profile) return openSignIn();
     setBusy(true);
     try {
-      const r = await cardsCall<{ code: string }>('cards:create');
+      const r = await cardsCall<{ code: string }>('cards:create', chogPref());
       nav(`/cards/r/${r.code}`);
     } catch (e) {
       toastError(e);

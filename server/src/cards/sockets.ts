@@ -42,6 +42,8 @@ export interface CardsSocketLayer {
 export interface CardsSocketOptions {
   /** Codes in use by other games, so a code is never ambiguous. */
   taken?: (code: string) => boolean;
+  /** Whether an account's linked wallets hold a Chog Genesis token (../wallet/holders.ts); without it nobody plays as one. */
+  holdsChog?: (userId: string, tokenId: number) => boolean;
 }
 
 const channel = (code: string) => `cards:${code}`;
@@ -102,6 +104,7 @@ export function attachCardsSockets(io: Server, opts: CardsSocketOptions = {}): C
       try { recordCardsResult(room); } catch (e) { console.error('[cards] could not record result', e); }
       lobbyChanged();
     },
+    holdsChog: opts.holdsChog,
   });
 
   io.on('connection', (socket: Socket) => {
@@ -182,20 +185,20 @@ export function attachCardsSockets(io: Server, opts: CardsSocketOptions = {}): C
       return { rooms: registry.list() };
     });
 
-    on('cards:create', () => {
+    on<{ chogToken?: unknown }>('cards:create', p => {
       const m = member();
       if (!isOn('publicRooms') && !isAdmin()) throw new CardsRoomError('Only operators can open tables right now');
       if (registry.roomsOf(m.id).filter(r => r.hostId === m.id && r.status === 'lobby').length >= OPEN_LOBBIES) {
         throw new CardsRoomError(`You already have ${OPEN_LOBBIES} open tables — start or leave one first`);
       }
       const room = registry.create(m.id, isAdmin(), opts.taken);
-      room.join(m);
+      room.join(m, typeof p.chogToken === 'number' ? p.chogToken : undefined);
       enter(room, true);
       return { code: room.code };
     });
 
     // Seated if there is a seat (or it is yours already), watching otherwise.
-    on<{ code: string; watch?: boolean }>('cards:join', p => {
+    on<{ code: string; watch?: boolean; chogToken?: unknown }>('cards:join', p => {
       const room = registry.get(String(p.code ?? '').slice(0, 8)) ?? (() => { throw new CardsRoomError('No table with that code'); })();
       const prof = data.profile;
       const ban = findBan({ id: prof?.id, discordId: prof?.discord?.id, ip: data.ip }, room.code);
@@ -204,7 +207,7 @@ export function attachCardsSockets(io: Server, opts: CardsSocketOptions = {}): C
       let seated = false;
       if (prof && (p.watch !== true || room.seat(prof.id))) {
         try {
-          room.join({ id: prof.id, name: prof.name, avatar: prof.avatar });
+          room.join({ id: prof.id, name: prof.name, avatar: prof.avatar }, typeof p.chogToken === 'number' ? p.chogToken : undefined);
           seated = true;
         } catch (e) {
           if (!(e instanceof CardsRoomError)) throw e;
@@ -233,9 +236,9 @@ export function attachCardsSockets(io: Server, opts: CardsSocketOptions = {}): C
       lobbyChanged();
     });
 
-    on<{ character?: string; color?: string }>('cards:seat', (p, room) => {
+    on<{ character?: string; chogToken?: unknown; color?: string }>('cards:seat', (p, room) => {
       const r = inRoom(room);
-      if (p.character !== undefined) r.pickCharacter(me(), p.character);
+      if (p.character !== undefined) r.pickCharacter(me(), p.character, p.chogToken ?? undefined);
       if (p.color !== undefined) r.pickColor(me(), p.color);
       broadcast(r);
     });

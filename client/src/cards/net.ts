@@ -4,11 +4,22 @@ import { useCallback, useEffect, useState } from 'react';
 import { call, getSocket, onEveryConnect, type ChatMsg } from '../net.ts';
 import type { CardsAction } from '../../../shared/cards/types.ts';
 import type { CardsChatMsg, CardsConfigure, CardsRoomSummary, CardsRoomView } from '../../../shared/cards/room.ts';
+import { loadChogTokenPref } from '../components/ChogPicker.tsx';
 
 export const cardsCall = call;
 export const cardsAct = (a: CardsAction) => call('cards:act', a);
 export const cardsChat = (text: string) => call('cards:chat', { text });
 export const cardsConfigure = (p: CardsConfigure) => call('cards:configure', p);
+
+/**
+ * Sent with a create or join: a new seat sits down as the player's own Chog when
+ * they picked one before (the server seats it only if their wallet holds it).
+ */
+export function chogPref(): { chogToken?: number } {
+  const chogToken = loadChogTokenPref();
+  return chogToken ? { chogToken } : {};
+}
+const joinPayload = (code: string, watch: boolean) => ({ code, watch, ...chogPref() });
 
 /** Join (or watch) a table and follow it: the latest state, chat, and the server clock skew. */
 export function useCardsRoom(code: string, watch = false) {
@@ -29,7 +40,7 @@ export function useCardsRoom(code: string, watch = false) {
     s.on('cards:state', onState);
     s.on('cards:chat', onChat);
     const off = onEveryConnect(() => {
-      call<{ spectating: boolean }>('cards:join', { code, watch })
+      call<{ spectating: boolean }>('cards:join', joinPayload(code, watch))
         .then(r => { setSpectating(r.spectating); setError(null); })
         .catch(e => setError(e.message));
     });
@@ -43,7 +54,7 @@ export function useCardsRoom(code: string, watch = false) {
   }, [code, watch]);
 
   const rejoin = useCallback(async () => {
-    const r = await call<{ spectating: boolean }>('cards:join', { code, watch });
+    const r = await call<{ spectating: boolean }>('cards:join', joinPayload(code, watch));
     setSpectating(r.spectating);
   }, [code, watch]);
 

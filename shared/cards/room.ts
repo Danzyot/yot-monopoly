@@ -34,6 +34,8 @@ export interface CardsSeatView {
   level?: CardsBotLevel;
   connected: boolean;
   character: CharacterId;
+  /** A verified holder playing as their own Chog Genesis token (character 'chog' only; shared/chogs/traits.ts). */
+  chogToken?: number;
   color: string;
   /** The host handed this seat to auto-play. */
   autopilot?: boolean;
@@ -91,12 +93,13 @@ export interface CardsConfigure {
 /** Socket events, client → server. Every one answers with an ack: { ok: true, ... } or { ok: false, error }. */
 export interface CardsClientEvents {
   'cards:list': { subscribe?: boolean };
-  'cards:create': Record<string, never>;
-  'cards:join': { code: string; watch?: boolean };
+  /** `chogToken` (create and join): sit down as this Chog Genesis token, if the server finds it in a wallet linked to the account. */
+  'cards:create': { chogToken?: number };
+  'cards:join': { code: string; watch?: boolean; chogToken?: number };
   'cards:leave': Record<string, never>;
   'cards:away': { code: string };
   'cards:configure': CardsConfigure;
-  'cards:seat': { character?: CharacterId; color?: string };
+  'cards:seat': { character?: CharacterId; chogToken?: number; color?: string };
   'cards:addBot': { level?: CardsBotLevel };
   'cards:botLevel': { id: string; level: CardsBotLevel };
   'cards:kick': { id: string };

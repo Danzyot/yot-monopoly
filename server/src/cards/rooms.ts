@@ -22,6 +22,7 @@ import {
 } from '../../../shared/cards/room.ts';
 import { isCharacterId, migrateCharacter, type CharacterId } from '../../../shared/characters.ts';
 import { CHOG_SEASON, SEASON_BOT_NAMES, SEASON_CHARACTERS, characterAvailable } from '../../../shared/season.ts';
+import { isChogTokenId } from '../../../shared/chogs/traits.ts';
 
 /** A disconnected player's moves are made for them after this long. */
 export const CARDS_AUTOPILOT_GRACE_MS = CARDS_AUTOPLAY_GRACE_MS;
@@ -76,6 +77,11 @@ export interface CardsRoomHooks {
   onFinished(room: CardsRoom): void;
   /** The last human left the lobby: the registry closes it. */
   onEmpty?(room: CardsRoom): void;
+  /**
+   * Whether this account's linked wallets hold Chog Genesis token `tokenId`
+   * (../wallet/holders.ts). Without it nobody may play as a token.
+   */
+  holdsChog?(userId: string, tokenId: number): boolean;
 }
 
 /** Injected for tests: the clock and the shuffle. */
@@ -149,8 +155,12 @@ export class CardsRoom {
     return this.seat(this.hostId)?.name ?? '—';
   }
 
-  /** Take a seat (lobby) or reclaim one (any time). Throws when neither is possible. */
-  join(m: CardsMember): Seat {
+  /**
+   * Take a seat (lobby) or reclaim one (any time). Throws when neither is possible.
+   * `chogToken`: a new seat sits down as that Chog Genesis token when its wallet
+   * holds it and nobody else plays it (otherwise as the base character, no error).
+   */
+  join(m: CardsMember, chogToken?: number): Seat {
     this.dirty = true;
     this.lastActivity = this.now();
     const existing = this.seat(m.id);
@@ -158,7 +168,10 @@ export class CardsRoom {
       existing.connected = true;
       existing.disconnectedAt = null;
       existing.avatar = m.avatar;
-      if (this.status === 'lobby') existing.name = this.uniqueName(m.name, m.id);
+      if (this.status === 'lobby') {
+        existing.name = this.uniqueName(m.name, m.id);
+        this.recheckChog(existing);
+      }
       this.schedule();
       this.watchHost();
       return existing;
@@ -170,6 +183,10 @@ export class CardsRoom {
       id: m.id, name: this.uniqueName(m.name, m.id), avatar: m.avatar, isBot: false, connected: true, disconnectedAt: null,
       character: this.freeCharacter(), color: this.freeColor(),
     };
+    if (chogToken !== undefined && this.mayPlayChog(s, chogToken)) {
+      s.character = 'chog';
+      s.chogToken = chogToken;
+    }
     this.seats.push(s);
     if (!this.seat(this.hostId)) this.hostId = m.id;
     this.hooks.onEvent(this, `${s.name} joined`);
@@ -178,6 +195,22 @@ export class CardsRoom {
 
   private freeCharacter(): CharacterId {
     return SEASON_CHARACTERS.find(c => !this.seats.some(s => s.character === c)) ?? SEASON_CHARACTERS[0];
+  }
+
+  /** May this seat play as Chog Genesis token `token`: a real id, held by its wallet, played by no one else here, and Chog is allowed. */
+  private mayPlayChog(s: Seat, token: unknown): token is number {
+    return isChogTokenId(token) && !s.isBot && characterAvailable('chog') && !!this.hooks.holdsChog?.(s.id, token)
+      && !this.seats.some(o => o !== s && o.chogToken === token);
+  }
+
+  /**
+   * A person's own Chog is re-checked whenever they come back to a lobby (reconnect,
+   * rematch, restore), like Monopoly's: it goes if their wallet no longer holds it.
+   * A match under way keeps the look it started with.
+   */
+  private recheckChog(s: Seat) {
+    if (s.chogToken === undefined) return;
+    if (s.isBot || s.character !== 'chog' || !this.hooks.holdsChog?.(s.id, s.chogToken)) delete s.chogToken;
   }
 
   private freeColor(): string {
@@ -317,14 +350,28 @@ export class CardsRoom {
     if (typeof p.private === 'boolean') this.private = p.private;
   }
 
-  pickCharacter(id: string, character: unknown) {
+  /**
+   * Pick a character; with `chogToken`, play as that Chog Genesis token, which
+   * only a verified holder of it may (the wallet store is asked, never the
+   * client). Two Chogs may share a table when they are different tokens.
+   */
+  pickCharacter(id: string, character: unknown, chogToken?: unknown) {
     this.dirty = true;
     this.requireLobby();
     if (!isCharacterId(character)) fail('Unknown character');
     if (!characterAvailable(character)) fail('That character is not available right now');
     const s = this.seat(id) ?? fail('You are not seated');
-    if (UNIQUE_CHARACTERS && this.seats.some(o => o !== s && o.character === character)) fail('That character is taken');
+    if (chogToken !== undefined) {
+      if (character !== 'chog') fail('Only Chog can play as a Chog Genesis token');
+      if (!isChogTokenId(chogToken)) fail('Unknown Chog token');
+      if (s.isBot || !this.hooks.holdsChog?.(id, chogToken)) fail('That Chog is not in a wallet linked to your account');
+    }
+    // A token is one seat's; a character is one seat's only when there is a choice of them.
+    const clash = (o: Seat) => o.character === character && (o.chogToken ?? 0) === (chogToken ?? 0);
+    if ((chogToken !== undefined || UNIQUE_CHARACTERS) && this.seats.some(o => o !== s && clash(o))) fail('That character is taken');
     s.character = character;
+    if (chogToken !== undefined) s.chogToken = chogToken as number;
+    else delete s.chogToken;
   }
 
   pickColor(id: string, color: unknown) {
@@ -430,6 +477,8 @@ export class CardsRoom {
     this.seats = this.seats.filter(s => s.isBot || present(s.id));
     if (!this.seat(this.hostId)) this.hostId = this.seats.find(s => !s.isBot)?.id ?? byId;
     for (const s of this.seats) if (!s.isBot) { s.connected = true; s.disconnectedAt = null; }
+    // Back in the lobby: a Chog sold during the match goes back to the base Chog.
+    for (const s of this.seats) this.recheckChog(s);
     this.game = null;
     this.status = 'lobby';
     this.startedAt = null;
@@ -772,9 +821,16 @@ export class CardsRoom {
     const now = r.now();
     // Everyone starts disconnected: they reclaim their seats on reconnect, and
     // autopilot covers anyone who never comes back.
-    r.seats = s.seats.map(x => ({
-      ...x, character: seasonCharacter(migrateCharacter(x)), connected: x.isBot, disconnectedAt: x.isBot ? null : now,
-    }));
+    r.seats = s.seats.map(({ chogToken, ...x }) => {
+      const character = seasonCharacter(migrateCharacter(x));
+      return {
+        ...x, character, connected: x.isBot, disconnectedAt: x.isBot ? null : now,
+        // Only a real token on a Chog survives a (possibly hand-edited) snapshot.
+        ...(character === 'chog' && isChogTokenId(chogToken) && { chogToken }),
+      };
+    });
+    // A lobby re-checks its holders' Chogs; a match under way keeps its look.
+    if (r.status === 'lobby') for (const seat of r.seats) r.recheckChog(seat);
     if (s.game) {
       r.game = CardsGame.restore({ rng: r.rng, now: r.now, onLog: text => hooks.onEvent(r, text) }, s.game);
       // What was on screen before the restart has played already.

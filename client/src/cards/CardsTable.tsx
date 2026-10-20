@@ -17,6 +17,7 @@ import { CARDS_AUTOPLAY_GRACE_MS, matchLabel, type CardsRoomView, type CardsSeat
 import { CARDS_PODIUM_MS } from '../../../shared/cards/pacing.ts';
 import { getCharacter } from '../../../shared/characters.ts';
 import { SEASON_CHARACTERS } from '../../../shared/season.ts';
+import { chogArtUrl } from '../../../shared/chogs/traits.ts';
 import type { ChatMsg } from '../net.ts';
 import { cardsAct, cardsCall, cardsChat } from './net.ts';
 import { CardArt, CardBack, CardFace, CARD_HEX } from './CardFace.tsx';
@@ -141,11 +142,17 @@ function TurnRing({ endsAt, total, skew }: { endsAt: number | null; total: numbe
   );
 }
 
+/** A seat's face on its colour: a holder's own Chog Genesis art in a ring of it, anyone else's character emoji. */
 function SeatAvatar({ seat, size = 46 }: { seat?: CardsSeatView; size?: number }) {
   const ch = getCharacter(seat?.character ?? SEASON_CHARACTERS[0]);
+  // Art that will not load (offline, a blocked host) falls back to the emoji.
+  const [failed, setFailed] = useState<number | null>(null);
+  const token = seat?.chogToken && seat.chogToken !== failed && chogArtUrl(seat.chogToken) ? seat.chogToken : undefined;
   return (
-    <span className="ct-ava-badge" style={{ background: seat?.color ?? '#888', width: size, height: size, fontSize: size * 0.5 }} aria-hidden>
-      {ch.emoji}
+    <span className={`ct-ava-badge ${token ? 'ct-ava-chog' : ''}`} style={{ background: seat?.color ?? '#888', width: size, height: size, fontSize: size * 0.5 }} aria-hidden>
+      {token
+        ? <img className="chog-art" src={chogArtUrl(token, Math.max(96, size * 2))} alt="" loading="lazy" draggable={false} onError={() => setFailed(token)} />
+        : ch.emoji}
       {seat && !seat.isBot && <span className="ct-ava-me"><Avatar src={seat.avatar} size={Math.round(size * 0.4)} /></span>}
     </span>
   );

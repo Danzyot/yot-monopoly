@@ -1,5 +1,5 @@
 // The players at the table: Monopoly's chibi characters (three/characters),
-// one per seat in the player's colour, standing at the rim behind their hand.
+// one per seat in the player's colour (a holder's own NFT Chog for theirs), standing at the rim behind their hand.
 // They breathe and glance at whoever is playing, lean in to play a card,
 // cheer when they call "Last card!", sulk when they are caught or hit with a
 // draw, and the match winner hops into the middle of the table for the
@@ -66,8 +66,10 @@ interface Motion {
 function Seat({ p, seat, state, lite }: { p: CardsPlayerView; seat?: CardsSeatView; state: RefObject<SceneState | null>; lite: boolean }) {
   const character = seat?.character ?? SEASON_CHARACTERS[0];
   const color = seat?.color ?? '#9aa7ff';
+  // A holder's own Chog Genesis token, assembled from its traits (Monopoly's pieces do the same).
+  const chogToken = seat?.chogToken;
   const rig = useMemo(newRig, []);
-  const mats = useCharacterMaterials(character, color);
+  const mats = useCharacterMaterials(character, color, chogToken);
   const tinter = useMemo(() => new Tinter(mats), [mats]);
   const root = useRef<Group>(null);
   const yawRef = useRef<Group>(null);
@@ -203,7 +205,7 @@ function Seat({ p, seat, state, lite }: { p: CardsPlayerView; seat?: CardsSeatVi
     <group ref={root}>
       <group scale={FIG_SCALE}>
         <group ref={yawRef}>
-          <CharacterFigure id={character} mats={mats} rig={rig} lite={lite} />
+          <CharacterFigure id={character} mats={mats} rig={rig} lite={lite} chogToken={chogToken} />
         </group>
         {/* Just over the head: the seat's chip sits on it (pinned by CardsScene). */}
         <object3D ref={anchor} position={[0, 0.6, 0]} />

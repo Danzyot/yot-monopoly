@@ -15,7 +15,8 @@ import {
 import type { CardsBotLevel } from '../../../shared/cards/types.ts';
 import type { Card } from '../../../shared/cards/deck.ts';
 import { getCharacter, type CharacterId } from '../../../shared/characters.ts';
-import { availableCharacters } from '../../../shared/season.ts';
+import { availableCharacters, characterShared } from '../../../shared/season.ts';
+import { chogName, isLegendary } from '../../../shared/chogs/traits.ts';
 import type { ChatMsg } from '../net.ts';
 import { cardsCall, cardsChat, cardsConfigure } from './net.ts';
 import { toast, toastError } from '../toast.tsx';
@@ -24,6 +25,7 @@ import Chat from '../components/Chat.tsx';
 import { Avatar } from '../components/Avatar.tsx';
 import { askConfirm } from '../components/Modal.tsx';
 import { CardBack, CardFace } from './CardFace.tsx';
+import ChogPicker, { ChogArt, saveChogTokenPref } from '../components/ChogPicker.tsx';
 
 // The 3D character preview brings three.js: only when someone opens the picker.
 const CharacterPreview = lazy(() => import('../three/characters/CharacterPreview.tsx'));
@@ -33,7 +35,7 @@ const CharacterPreview = lazy(() => import('../three/characters/CharacterPreview
  * lobby: the Chog room and its reflections, the characters at the table, and
  * the card atlas, so the deal is seen from the first card.
  */
-function preloadTable(characters: string) {
+function preloadTable(characters: string, tokens: boolean) {
   void Promise.all([
     import('../three/environments/index.tsx'),
     import('../three/characters/Figure.tsx'),
@@ -41,6 +43,8 @@ function preloadTable(characters: string) {
   ]).then(([env, fig, atlas]) => {
     env.preloadEnvironment('lounge', 'chog');
     fig.preloadCharacters(characters.split(',') as CharacterId[]);
+    // Holders' own Chogs are built from one shared file of trait parts.
+    if (tokens) fig.preloadChogTraits();
     void atlas.loadCardAtlas();
   }).catch(() => {});
 }
@@ -68,6 +72,26 @@ export function CardsBackdrop() {
   );
 }
 
+/** What a seat plays as: its character, or its own Chog Genesis token. */
+const seatName = (s: CardsSeatView) => (s.chogToken ? chogName(s.chogToken) : getCharacter(s.character).name);
+
+/** A seat's character badge: the emoji on the seat's colour, or the token's art framed in its background colour. */
+function SeatBadge({ seat: s, hidden }: { seat: CardsSeatView; hidden?: boolean }) {
+  const label = hidden ? undefined : `${seatName(s)}, ${s.color}`;
+  if (s.chogToken) {
+    return (
+      <span className="token-badge chog-badge" role={hidden ? undefined : 'img'} aria-label={label} aria-hidden={hidden || undefined}>
+        <ChogArt token={s.chogToken} />
+      </span>
+    );
+  }
+  return (
+    <span className="token-badge" style={{ background: s.color }} role={hidden ? undefined : 'img'} aria-label={label} aria-hidden={hidden || undefined}>
+      {getCharacter(s.character).emoji}
+    </span>
+  );
+}
+
 function SeatList({ room, me, isHost }: { room: CardsRoomView; me: string; isHost: boolean }) {
   const makeHost = async (s: CardsSeatView) => {
     if (room.hostId === me && !(await askConfirm({ title: `Make ${s.name} the host?`, body: 'You will no longer control the table.', confirm: 'Make host' }))) return;
@@ -78,14 +102,14 @@ function SeatList({ room, me, isHost }: { room: CardsRoomView; me: string; isHos
       {room.seats.map(s => (
         <li key={s.id} style={{ borderColor: s.color }}>
           <span className="seat-ids">
-            <span className="token-badge" style={{ background: s.color }} role="img" aria-label={getCharacter(s.character).name}>{getCharacter(s.character).emoji}</span>
+            <SeatBadge seat={s} />
             {!s.isBot && <span className="seat-avatar"><Avatar src={s.avatar} size={16} /></span>}
           </span>
           <span className="grow">
             <span className="seat-name">{s.name} {s.id === me && <em className="tag you">you</em>}{s.id === room.hostId && <em className="tag">host</em>}
               {s.isBot && <em className="tag">bot</em>}{!s.connected && <em className="tag warn">away</em>}</span>
             <span className="seat-char small">
-              <i className="seat-swatch" style={{ background: s.color }} aria-hidden /> {getCharacter(s.character).name}
+              <i className="seat-swatch" style={{ background: s.color }} aria-hidden /> {seatName(s)}
               {s.isBot && !isHost && <> · {CARDS_BOT_LEVELS.find(l => l.id === s.level)?.label ?? 'Normal'}</>}
             </span>
           </span>
@@ -107,30 +131,43 @@ function SeatList({ room, me, isHost }: { room: CardsRoomView; me: string; isHos
   );
 }
 
-/** Our character (the Monopoly cast, as the season allows: shared/season.ts) and seat colour. */
+/** Our character (the Monopoly cast, as the season allows: shared/season.ts), the holder's own Chogs, and seat colour. */
 function CharacterPicker({ room, me, seat }: { room: CardsRoomView; me: string; seat: CardsSeatView }) {
   const picks = availableCharacters();
+  const token = seat.chogToken;
+  // Remembered for the next table too (sent on join; the server checks the wallet each time).
+  const pick = (character: CharacterId, chogToken?: number) =>
+    cardsCall('cards:seat', { character, ...(chogToken ? { chogToken } : {}) })
+      .then(() => saveChogTokenPref(chogToken ?? null))
+      .catch(toastError);
   return (
     <>
       <div className="char-picker">
         <div className="char-preview">
           <Suspense fallback={<span className="char-preview-emoji" style={{ background: seat.color }}>{getCharacter(seat.character).emoji}</span>}>
-            <CharacterPreview character={seat.character} color={seat.color} />
+            <CharacterPreview character={seat.character} color={seat.color} chogToken={token} />
           </Suspense>
           <div className="char-about">
-            <b>{getCharacter(seat.character).name}</b>
-            <span className="small muted">{getCharacter(seat.character).blurb}</span>
+            <b>{seatName(seat)}</b>
+            <span className="small muted">
+              {token
+                ? isLegendary(token) ? `Legendary 1:1 #${token} — one of ten hand-painted Chogs.` : 'Your own Chog Genesis, built from its traits.'
+                : getCharacter(seat.character).blurb}
+            </span>
           </div>
         </div>
-        {/* During the Chog season there is one character (everyone is a Chog, told apart by colour): no grid to pick from. */}
-        {picks.length > 1 && <div className="char-grid">
+        {/* During the Chog season there is one character (everyone is a Chog, told apart by colour): no grid
+            to pick from, except the base Chog to go back to after playing as your own. */}
+        {(picks.length > 1 || !!token) && <div className="char-grid">
           {picks.map(c => {
-            const holder = room.seats.find(s => s.character === c.id && s.id !== me);
+            // A token Chog is its own character: the base Chog stays free for someone else.
+            const holder = characterShared(c.id) ? undefined : room.seats.find(s => s.character === c.id && !s.chogToken && s.id !== me);
+            const on = seat.character === c.id && !token;
             return (
-              <button key={c.id} disabled={!!holder} aria-pressed={seat.character === c.id}
+              <button key={c.id} disabled={!!holder} aria-pressed={on}
                 title={holder ? `${c.name} — taken by ${holder.name}` : c.name}
-                className={`char-pick ${seat.character === c.id ? 'on' : ''}`}
-                onClick={() => cardsCall('cards:seat', { character: c.id }).catch(toastError)}>
+                className={`char-pick ${on ? 'on' : ''}`}
+                onClick={() => pick(c.id)}>
                 <span className="char-emoji">{c.emoji}</span>
                 <span className="char-name">{c.name}</span>
                 {holder && <span className="char-taken" style={{ background: holder.color }} />}
@@ -138,6 +175,9 @@ function CharacterPicker({ room, me, seat }: { room: CardsRoomView; me: string; 
             );
           })}
         </div>}
+        <ChogPicker selected={token ?? null}
+          taken={id => room.seats.find(s => s.chogToken === id && s.id !== me)?.name}
+          onPick={id => pick('chog', id)} />
       </div>
       <div className="outfit-colors">
         <span>Colour</span>
@@ -243,9 +283,9 @@ function MemberLobby({ room, me, spectating, chat, onLeave }: {
           {mySeat && (
             <details className="lm-me">
               <summary>
-                <span className="token-badge" style={{ background: mySeat.color }} aria-hidden>{getCharacter(mySeat.character).emoji}</span>
+                <SeatBadge seat={mySeat} hidden />
                 <span className="grow">
-                  <b>{getCharacter(mySeat.character).name}</b>
+                  <b>{seatName(mySeat)}</b>
                   <span className="small muted">Your character · change it or your colour</span>
                 </span>
                 <span className="lm-me-caret" aria-hidden>▾</span>
@@ -271,7 +311,8 @@ export default function CardsLobby({ room, me, spectating, chat }: {
   const [botLevel, setBotLevel] = useState<CardsBotLevel>('normal');
   const [starting, setStarting] = useState(false);
   const seatChars = room.seats.map(s => s.character).join(',');
-  useEffect(() => { if (seatChars) preloadTable(seatChars); }, [seatChars]);
+  const tokensAtTable = room.seats.some(s => s.chogToken);
+  useEffect(() => { if (seatChars) preloadTable(seatChars, tokensAtTable); }, [seatChars, tokensAtTable]);
   const r = room.rules;
   const rules = (p: Partial<CardsRules>) => cardsConfigure({ rules: p }).catch(toastError);
   const leave = async () => { await cardsCall('cards:leave').catch(() => {}); nav('/cards'); };

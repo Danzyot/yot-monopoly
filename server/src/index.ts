@@ -22,6 +22,7 @@ import { mountGraphics } from './routes/graphics.ts';
 import { mountTextOverrides } from './routes/textOverrides.ts';
 import { mountContent } from './routes/content.ts';
 import { walletRoutes } from './routes/wallet.ts';
+import { holdsChog } from './wallet/holders.ts';
 import { attachSockets } from './sockets.ts';
 import { attachCardsSockets } from './cards/sockets.ts';
 import { armCardsPersistence, restoreCardsLive } from './cards/persist.ts';
@@ -111,7 +112,8 @@ const restored = restoreLive(sockets.registry);
 if (restored) console.log(`Restored ${restored} live room(s) from the last snapshot`);
 armPersistence(sockets.registry);
 // Chog Cards tables: their own registry and events (cards:*), same server and sign-in.
-const cards = attachCardsSockets(io, { taken: code => !!sockets.registry.get(code) });
+// Holders sit at card tables as their own Chogs too, checked against the same wallet store.
+const cards = attachCardsSockets(io, { taken: code => !!sockets.registry.get(code), holdsChog });
 sockets.registry.taken = code => !!cards.registry.get(code);
 const restoredCards = restoreCardsLive(cards.registry);
 if (restoredCards) console.log(`Restored ${restoredCards} live card table(s) from the last snapshot`);
