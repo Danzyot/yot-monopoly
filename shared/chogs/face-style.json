@@ -1,5 +1,5 @@
 {
   "//": "Which version of a token Chog's eyes and Skull face is built and shown. eyes: current | refined | decal | bold; skull: current | sculpted | painted | hybrid (tools/blender/chog_faces.py says what each is). tools/blender/chog_traits.py builds the parts in these styles (rerun it after a change); shared/chogs/traits.ts takes the Skull's bone colours from it.",
-  "eyes": "current",
-  "skull": "current"
+  "eyes": "bold",
+  "skull": "hybrid"
 }
