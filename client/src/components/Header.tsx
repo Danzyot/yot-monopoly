@@ -47,13 +47,13 @@ export default function Header() {
         {/* NavLink adds aria-current="page" on the active route; .navlink.active styles it. */}
         {/* The games first. Always shown: on phones the label shrinks to its icon (see manage.css) so nothing wraps or overflows. */}
         <NavLink className="navlink nav-chars nav-game nav-home" to="/" end aria-label={GAMES.monopoly.name} title={GAMES.monopoly.name}><span className="nav-ico" aria-hidden="true">🎩</span><span className="nav-label">{GAMES.monopoly.name}</span></NavLink>
-        <NavLink className="navlink nav-chars nav-game nav-cards" to={GAMES.cards.path} aria-label={GAMES.cards.name} title={GAMES.cards.name}><span className="nav-ico" aria-hidden="true">🃏</span><span className="nav-label">Cards</span></NavLink>
+        <NavLink className="navlink nav-chars nav-game nav-cards" to={GAMES.cards.path} aria-label={GAMES.cards.name} title={GAMES.cards.name}><span className="nav-ico" aria-hidden="true">🃏</span><span className="nav-label">{GAMES.cards.name}</span></NavLink>
         {/* Poker is its own site; a signed-in player carries their sign-in across (pokerLink.ts). Same tab, like the other games. */}
-        <a className="navlink nav-chars nav-game" href={POKER_URL} onClick={e => openPoker(e, !!profile)} aria-label={GAMES.poker.name} title={GAMES.poker.name}><span className="nav-ico" aria-hidden="true">♠️</span><span className="nav-label">Poker</span></a>
+        <a className="navlink nav-chars nav-game" href={POKER_URL} onClick={e => openPoker(e, !!profile)} aria-label={GAMES.poker.name} title={GAMES.poker.name}><span className="nav-ico" aria-hidden="true">♠️</span><span className="nav-label">{GAMES.poker.name}</span></a>
         <NavLink className="navlink nav-chars" to="/characters" aria-label="Characters" title="Characters"><span className="nav-ico" aria-hidden="true">🎭</span><span className="nav-label">Characters</span></NavLink>
         {config.features.leaderboard && <NavLink className="navlink nav-chars" to="/leaderboard" aria-label="Leaderboard" title="Leaderboard"><span className="nav-ico" aria-hidden="true">🏆</span><span className="nav-label">Leaderboard</span></NavLink>}
         {config.inviteUrl && <a className="navlink" href={config.inviteUrl} target="_blank" rel="noreferrer">Discord</a>}
-        {profile?.isAdmin && <Link className="navlink accent" to="/admin">Dashboard</Link>}
+        {profile?.isAdmin && <Link className="navlink nav-chars accent" to="/admin" aria-label="Dashboard" title="Dashboard"><span className="nav-ico" aria-hidden="true">📊</span><span className="nav-label">Dashboard</span></Link>}
         {profile && config.features.leaderboard && <NavLink className="navlink hide-sm" to={profilePath(profile.id)}>My profile</NavLink>}
         <WalletNavLink />
         <EditTextToggle />

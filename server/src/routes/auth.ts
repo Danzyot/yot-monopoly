@@ -1,4 +1,4 @@
-// Sign-in: "Log in with Discord" (OAuth), "Verify with a code" (the bot's
+// Sign-in: "Sign in with Discord" (OAuth), "Verify with a code" (the bot's
 // Verify button or a verify channel), and demo sign-in when DEMO_MODE=1.
 import express from 'express';
 import {

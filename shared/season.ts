@@ -31,6 +31,14 @@ export function availableCharacters(): CharacterDef[] {
   return CHARACTER_DEFS.filter(c => SEASON_CHARACTERS.includes(c.id));
 }
 
+/**
+ * A board's picture (client/public): in the season, the board in the Chog look
+ * (home/chog-*.webp), so the home page and the lobby show the table players get.
+ */
+export function mapThumbUrl(mapId: string): string {
+  return CHOG_SEASON ? `/home/chog-${mapId}.webp` : `/maps/${mapId}.webp`;
+}
+
 /** Looks (editions) a host may choose right now. */
 export function themeAvailable(themeId: string): boolean {
   return !CHOG_SEASON || themeId === SEASON_THEME_ID;

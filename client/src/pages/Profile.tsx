@@ -85,7 +85,7 @@ export default function Profile() {
           </p>
           <div className="row center wrap">
             <Link className="btn primary chunky" to="/">Find a game</Link>
-            <Link className="btn" to="/leaderboard">Leaderboard</Link>
+            <Link className="btn chunky" to="/leaderboard">Leaderboard</Link>
           </div>
         </section>
       </div>

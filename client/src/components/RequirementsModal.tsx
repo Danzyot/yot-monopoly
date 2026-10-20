@@ -86,7 +86,7 @@ export default function RequirementsModal({ failure, onRecheck, onClose }: {
           {failure.inviteUrl ? (
             <a className="btn discord" href={failure.inviteUrl} target="_blank" rel="noreferrer">Join the Discord server</a>
           ) : m === 'member' && <span className="small muted">Ask the host for an invite to the server.</span>}
-          {offerDiscordLogin && <button className="btn" onClick={signInDiscord}>{m === 'discord' ? 'Log in with Discord' : 'Sign in with Discord again'}</button>}
+          {offerDiscordLogin && <button className="btn" onClick={signInDiscord}>{m === 'discord' ? 'Sign in with Discord' : 'Sign in with Discord again'}</button>}
         </div>
 
         <div className="row end">

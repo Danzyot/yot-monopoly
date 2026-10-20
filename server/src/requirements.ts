@@ -183,7 +183,7 @@ export async function checkRequirements(
     ? 'We could not check your Discord membership right now. Press Check again in a moment, or ask the host.'
     // No bot: only the player's own sign-in can show their servers, and that is
     // forgotten whenever the site restarts.
-    : 'We could not check your Discord membership. Sign out, then sign in again with "Log in with Discord" (not the code) so we can see your servers, and press Check again.');
+    : 'We could not check your Discord membership. Sign out, then sign in again with "Sign in with Discord" (not the code) so we can see your servers, and press Check again.');
 
   if (!info.authoritative && !info.member) return unverifiable();
   if (!info.member) {
