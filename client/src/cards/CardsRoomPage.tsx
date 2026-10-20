@@ -8,6 +8,7 @@ import { CARDS_GAME_NAME } from '../../../shared/cards/meta.ts';
 import { useCardsRoom } from './net.ts';
 import CardsLobby from './CardsLobby.tsx';
 import CardsTable from './CardsTable.tsx';
+import TournamentBar from '../tournaments/TournamentBar.tsx';
 import './cards.css';
 
 export default function CardsRoomPage() {
@@ -41,6 +42,7 @@ export default function CardsRoomPage() {
       {room.status === 'lobby' || !room.game
         ? <CardsLobby room={room} me={me} spectating={spectating} chat={chat} />
         : <CardsTable key={room.startedAt ?? 0} room={room} me={me} chat={chat} skew={skew} fromLobby={sawLobby.current} />}
+      {room.tournament && <TournamentBar info={room.tournament} status={room.status} skew={skew} />}
       {room.status === 'lobby' && !profile && (
         <div className="signin-bar">
           You're watching. <button className="btn small primary" onClick={openSignIn}>Sign in</button> to take a seat.

@@ -1,0 +1,136 @@
+/* Tournaments (client/src/tournaments/): the list, the create form, one event's
+   page, the bar over a tournament table and the profile record. Built from the
+   site's own panels, chips and buttons, so the season's colours carry over. */
+
+.tn-page { display: flex; flex-direction: column; gap: 14px; max-width: 1100px; }
+.tn-page > p.small { margin: 0; }
+.tn-head { display: flex; gap: 16px; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; }
+.tn-head-text p { margin: 4px 0 0; max-width: 620px; }
+.tn-tabs { max-width: 520px; }
+.tn-hostnote, .tn-disclaimer { margin: 0; }
+.tn-section h2 { display: flex; align-items: center; gap: 8px; }
+.tn-empty { text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: center; padding: 32px 18px; }
+.tn-empty .row { justify-content: center; }
+
+/* ---- list cards ---- */
+.tn-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.tn-card {
+  display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 10px; text-decoration: none;
+  background: rgba(0, 0, 0, 0.22); border: 1px solid var(--line); transition: transform 0.12s, border-color 0.12s;
+}
+.tn-card:hover { transform: translateY(-1px); border-color: var(--accent); }
+.tn-card-icon, .tn-hero-icon {
+  font-size: 26px; width: 46px; height: 46px; flex: none; display: grid; place-items: center; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.tn-card-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.tn-card-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tn-card-name { font-size: 15px; overflow-wrap: anywhere; }
+.tn-card-go { font-size: 22px; color: var(--muted); }
+.tn-prize { color: var(--hi, #fdf6cd); overflow-wrap: anywhere; }
+.tn-champ { color: var(--medal-1, #ffd23f); font-weight: 600; }
+.tn-official { background: color-mix(in srgb, var(--accent) 35%, transparent); margin: 0; }
+
+.tn-status {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 99px;
+  background: rgba(255, 255, 255, 0.1); color: var(--muted); white-space: nowrap;
+}
+.tn-status.registering { background: rgba(60, 180, 255, 0.2); color: #9fd8ff; }
+.tn-status.running { background: rgba(61, 220, 132, 0.2); color: var(--good); }
+.tn-status.running::before { content: '● '; }
+.tn-status.paused { background: rgba(255, 176, 32, 0.2); color: var(--warn); }
+.tn-status.finished { background: rgba(255, 210, 63, 0.18); color: var(--medal-1, #ffd23f); }
+
+/* ---- the create form ---- */
+.tn-form { display: flex; flex-direction: column; gap: 14px; }
+.tn-form h1 { margin: 0; }
+.tn-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 14px; }
+.tn-wide { grid-column: 1 / -1; }
+.tn-grid .field small { font-size: 11px; }
+.tn-warn { color: var(--warn); }
+.tn-check { display: flex; flex-direction: row; gap: 8px; align-items: center; cursor: pointer; }
+.tn-check input { width: auto; }
+.tn-check span { font-size: 13px; color: var(--text); }
+.tn-start { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; gap: 6px; }
+.tn-start input[type='datetime-local'] { max-width: 280px; }
+.tn-preview { margin: 0; }
+
+/* ---- one event ---- */
+.tn-hero { display: flex; gap: 16px; align-items: flex-start; }
+.tn-hero-icon { width: 64px; height: 64px; font-size: 36px; }
+.tn-hero-main { min-width: 0; flex: 1; }
+.tn-hero-main p { margin: 4px 0; }
+.tn-title { margin: 0; font-size: clamp(26px, 5vw, 38px); overflow-wrap: anywhere; }
+.tn-facts { line-height: 1.6; }
+.tn-prize-box {
+  display: flex; gap: 10px; align-items: flex-start; margin-top: 8px; padding: 10px 12px; border-radius: 10px;
+  background: rgba(253, 246, 205, 0.08); border: 1px dashed color-mix(in srgb, var(--hi, #fdf6cd) 45%, transparent);
+}
+.tn-prize-box > span { font-size: 22px; }
+.tn-prize-box b { overflow-wrap: anywhere; margin-right: 6px; }
+.tn-prize-box p { margin: 4px 0 0; }
+.tn-now { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.tn-now-line { margin: 0; flex: 1 1 280px; font-size: 15px; }
+.tn-now > p.small { flex-basis: 100%; margin: 0; }
+.tn-mytable { animation: tn-glow 1.6s ease-in-out infinite alternate; }
+@keyframes tn-glow { to { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent); } }
+.tn-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tn-controls > b { margin-right: auto; }
+
+/* The bracket: a column per round, scrolling sideways when there are many. */
+.tn-bracket { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 6px; align-items: flex-start; }
+.tn-round { flex: 0 0 260px; display: flex; flex-direction: column; gap: 10px; }
+.tn-round h3 { margin: 0; }
+.tn-round.final h3 { color: var(--medal-1, #ffd23f); }
+.tn-table { background: rgba(0, 0, 0, 0.25); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.tn-table.playing { border-color: color-mix(in srgb, var(--good) 60%, transparent); }
+.tn-table.mine { box-shadow: 0 0 0 2px var(--accent); }
+.tn-table-head { display: flex; gap: 6px; align-items: center; }
+.tn-table-head b { margin-right: auto; }
+.tn-tstatus { font-size: 11px; color: var(--muted); }
+.tn-tstatus.playing { color: var(--good); }
+.tn-tstatus.waiting { color: var(--warn); }
+.tn-seats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.tn-seats li { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: 6px; font-size: 13px; }
+.tn-seats li.through { background: rgba(61, 220, 132, 0.14); }
+.tn-seats li.noshow { opacity: 0.55; }
+.tn-seats li.me .tn-pname { font-weight: 700; }
+.tn-finish { width: 28px; flex: none; font-size: 12px; color: var(--muted); text-align: center; }
+.tn-pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.tag.tn-through { background: rgba(61, 220, 132, 0.25); color: var(--good); }
+.tn-table-foot { min-height: 16px; }
+.tn-table-go { align-self: flex-start; }
+.tn-byes { padding: 8px 10px; border: 1px dashed var(--line); border-radius: 10px; }
+
+.tn-standings h2 { margin-bottom: 4px; }
+.tn-podium { margin-bottom: 12px; }
+.tn-places, .tn-profile-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.tn-places li, .tn-profile-list li { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 8px; background: rgba(0, 0, 0, 0.2); min-width: 0; }
+.tn-profile-list li { flex-wrap: wrap; }
+.tn-place { width: 30px; text-align: center; flex: none; font-size: 13px; }
+
+.tn-entrant-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.tn-entrant { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 4px; border-radius: 99px; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--line); font-size: 13px; }
+.tn-entrant.out { opacity: 0.6; }
+.tn-entrant.champion { border-color: var(--medal-1, #ffd23f); }
+.tn-entrant.me { border-color: var(--accent); }
+.tn-state { text-transform: capitalize; color: var(--muted); }
+.tn-state.playing { color: var(--good); }
+.tn-state.through { color: #9fd8ff; }
+
+/* ---- the strip over a tournament table ---- */
+.tn-bar {
+  position: fixed; left: 50%; top: 58px; transform: translateX(-50%); z-index: 60; max-width: calc(100vw - 32px);
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border-radius: 99px; font-size: 13px;
+  background: var(--panel-solid); border: 1px solid var(--line); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+.tn-bar-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+.tn-profile { display: flex; flex-direction: column; gap: 8px; }
+
+@media (max-width: 640px) {
+  .tn-hero { flex-direction: column; }
+  .tn-bracket { flex-direction: column; align-items: stretch; }
+  .tn-round { flex-basis: auto; }
+  .tn-bar { top: auto; bottom: 8px; }
+}

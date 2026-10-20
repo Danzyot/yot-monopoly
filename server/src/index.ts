@@ -26,6 +26,7 @@ import { holdsChog } from './wallet/holders.ts';
 import { attachSockets } from './sockets.ts';
 import { attachCardsSockets } from './cards/sockets.ts';
 import { armCardsPersistence, restoreCardsLive } from './cards/persist.ts';
+import { attachTournaments } from './tournament/sockets.ts';
 import { cardsLeaderboard, loadCardsResults, recentCardsResults } from './cards/stats.ts';
 import { staticClient } from './staticFiles.ts';
 import { allResults, leaderboard, loadResults } from './stats.ts';
@@ -118,6 +119,11 @@ sockets.registry.taken = code => !!cards.registry.get(code);
 const restoredCards = restoreCardsLive(cards.registry);
 if (restoredCards) console.log(`Restored ${restoredCards} live card table(s) from the last snapshot`);
 armCardsPersistence(cards.registry);
+// Tournaments (Monopoly and Cards) seat their tables in both registries, so they come back after them.
+const tourneys = attachTournaments(io, { monopoly: sockets, cards });
+const restoredTourneys = tourneys.manager.restore();
+if (restoredTourneys) console.log(`Restored ${restoredTourneys} live tournament(s)`);
+tourneys.manager.armPersistence();
 
 let loopLagMs = 0;
 {
@@ -175,6 +181,12 @@ app.get('/api/players/:id', (req, res) => {
 app.get('/api/community/discord', async (req, res) => {
   if (!authed(req)) { res.status(401).json({ error: 'Sign in first' }); return; }
   res.json(await gateInfo());
+});
+
+// Finished tournaments on a player's profile; public like the profile itself.
+app.get('/api/tournaments/player/:id', (req, res) => {
+  if (!isOn('leaderboard')) { res.status(404).json({ error: 'Player profiles are switched off' }); return; }
+  res.json({ results: tourneys.manager.resultsOf(String(req.params.id)) });
 });
 
 app.get('/api/health', (_req, res) => {

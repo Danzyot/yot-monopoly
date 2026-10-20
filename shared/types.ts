@@ -6,6 +6,7 @@ import type { RuleConfig } from './themes.ts';
 import type { TableStyle } from './tableStyles.ts';
 import type { CharacterId } from './characters.ts';
 import type { Outfit } from './outfits.ts';
+import type { TournamentTableInfo } from './tournaments.ts';
 
 // The character catalogue lives in characters.ts; re-exported so protocol
 // code can keep importing everything from here.
@@ -315,6 +316,8 @@ export interface RoomView {
   requirements: JoinRequirements | null;
   /** Poke bookkeeping for the current turn (added by the socket layer while a game runs). */
   poke?: PokeView | null;
+  /** Set on a tournament table: which event and round it belongs to (shared/tournaments.ts). */
+  tournament?: TournamentTableInfo;
 }
 
 export interface RoomSummary {

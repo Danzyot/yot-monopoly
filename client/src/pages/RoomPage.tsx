@@ -7,6 +7,7 @@ import GameScreen from '../components/GameScreen.tsx';
 import RequirementsModal from '../components/RequirementsModal.tsx';
 import { requirementBadge, useHostNotice } from '../community.tsx';
 import { BRAND, GAMES } from '../../../shared/brand.ts';
+import TournamentBar from '../tournaments/TournamentBar.tsx';
 
 /** The ?tv=1 broadcast view: only TVs and stream overlays need its code. */
 const BroadcastScreen = lazy(() => import('../components/BroadcastScreen.tsx'));
@@ -52,6 +53,7 @@ export default function RoomPage() {
       {room.status === 'lobby' || !room.game
         ? <Lobby room={room} me={me} spectating={spectating} chat={chat} />
         : <GameScreen room={room} game={room.game} me={me} chat={chat} skew={skew} />}
+      {room.tournament && <TournamentBar info={room.tournament} status={room.status} skew={skew} />}
       {room.status === 'lobby' && signInBar}
       {room.status === 'lobby' && blocked && !reqHidden && (
         <RequirementsModal failure={blocked} onRecheck={recheck} onClose={() => setReqHidden(true)} />

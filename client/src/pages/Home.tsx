@@ -146,7 +146,7 @@ export default function Home() {
             <div className="hub-text">
               <h3>{GAMES.monopoly.name}</h3>
               <p>{BLURBS.monopoly}</p>
-              <span className="hub-meta">2–8 players · 45 min</span>
+              <span className="hub-meta">2–8 players · 45 min · <Link to="/tournaments?game=monopoly">Tournaments</Link></span>
               <span className="hub-live" role="status">{liveLine(connected, rooms.length, live)}</span>
             </div>
             <div className="hub-actions">
@@ -171,7 +171,7 @@ export default function Home() {
             <div className="hub-text">
               <h3>{GAMES.cards.name}</h3>
               <p>{BLURBS.cards}</p>
-              <span className="hub-meta">{CARDS_MIN_PLAYERS}–{CARDS_MAX_PLAYERS} players · 15 min</span>
+              <span className="hub-meta">{CARDS_MIN_PLAYERS}–{CARDS_MAX_PLAYERS} players · 15 min · <Link to="/tournaments?game=cards">Tournaments</Link></span>
               <span className="hub-live" role="status">{liveLine(connected, cardTables.length, cardsLive)}</span>
             </div>
             <div className="hub-actions">

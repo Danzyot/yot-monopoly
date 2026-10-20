@@ -12,6 +12,7 @@ import { getTheme } from '../../../shared/themes.ts';
 import { getCharacter } from '../../../shared/characters.ts';
 import type { PublicProfile } from '../../../shared/types.ts';
 import { BRAND } from '../../../shared/brand.ts';
+import ProfileTournaments from '../tournaments/ProfileTournaments.tsx';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
@@ -88,6 +89,8 @@ export default function Profile() {
             <Link className="btn chunky" to="/leaderboard">Leaderboard</Link>
           </div>
         </section>
+        {/* Cards-only players have no Monopoly profile, but may have tournament results. */}
+        {err.status === 404 && <ProfileTournaments id={id} />}
       </div>
     );
   }
@@ -134,6 +137,8 @@ export default function Profile() {
       {p.rankedGames < p.games && (
         <p className="muted small pf-note">Points count only games with at least two people ({p.rankedGames} of {p.games}); games against bots alone still show below.</p>
       )}
+
+      <ProfileTournaments id={p.id} />
 
       <section className="pf-favs" aria-label="Favourites">
         <div className="panel pf-fav">

@@ -50,6 +50,7 @@ export default function Header() {
         <NavLink className="navlink nav-chars nav-game nav-cards" to={GAMES.cards.path} aria-label={GAMES.cards.name} title={GAMES.cards.name}><span className="nav-ico" aria-hidden="true">🃏</span><span className="nav-label">{GAMES.cards.name}</span></NavLink>
         {/* Poker is its own site; a signed-in player carries their sign-in across (pokerLink.ts). Same tab, like the other games. */}
         <a className="navlink nav-chars nav-game" href={POKER_URL} onClick={e => openPoker(e, !!profile)} aria-label={GAMES.poker.name} title={GAMES.poker.name}><span className="nav-ico" aria-hidden="true">♠️</span><span className="nav-label">{GAMES.poker.name}</span></a>
+        <NavLink className="navlink nav-chars" to="/tournaments" aria-label="Tournaments" title="Tournaments"><span className="nav-ico" aria-hidden="true">🏟️</span><span className="nav-label">Tournaments</span></NavLink>
         <NavLink className="navlink nav-chars" to="/characters" aria-label="Characters" title="Characters"><span className="nav-ico" aria-hidden="true">🎭</span><span className="nav-label">Characters</span></NavLink>
         {config.features.leaderboard && <NavLink className="navlink nav-chars" to="/leaderboard" aria-label="Leaderboard" title="Leaderboard"><span className="nav-ico" aria-hidden="true">🏆</span><span className="nav-label">Leaderboard</span></NavLink>}
         {config.inviteUrl && <a className="navlink" href={config.inviteUrl} target="_blank" rel="noreferrer">Discord</a>}

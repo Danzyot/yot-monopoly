@@ -5,6 +5,7 @@
 import type { CharacterId } from '../characters.ts';
 import type { CardsRules } from './rules.ts';
 import type { CardsAction, CardsBotLevel, CardsView } from './types.ts';
+import type { TournamentTableInfo } from '../tournaments.ts';
 
 export type CardsRoomStatus = 'lobby' | 'playing' | 'finished';
 
@@ -61,6 +62,8 @@ export interface CardsRoomView {
   /** Server clock, for turn timers (clients keep the skew). */
   now: number;
   startedAt: number | null;
+  /** Set on a tournament table: which event and round it belongs to (shared/tournaments.ts). */
+  tournament?: TournamentTableInfo;
 }
 
 export interface CardsRoomSummary {

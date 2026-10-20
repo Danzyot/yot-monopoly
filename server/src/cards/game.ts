@@ -413,7 +413,7 @@ export class CardsGame {
   }
 
   /** A round's end: the winner scores everyone else's cards; the match may be over. */
-  private endRound(w: CardsPlayerState, blocked = false) {
+  private endRound(w: CardsPlayerState, blocked: boolean | 'time' = false) {
     const hands: Record<string, number> = {};
     let points = 0;
     for (const q of this.active()) {
@@ -426,7 +426,9 @@ export class CardsGame {
     const matchOver = this.rules.match === 'single' || w.score >= this.rules.targetScore;
     this.step({ type: 'roundEnd', winner: w.id, points, ...(blocked && { blocked: true }), matchOver });
     const total = this.rules.match === 'points' ? ` (${w.score} in all)` : '';
-    this.say(blocked
+    this.say(blocked === 'time'
+      ? `⏰ Time is up in round ${this.round}. ${w.name} holds the fewest points and scores ${points}${total}.`
+      : blocked
       ? `Nobody can play or draw — round ${this.round} is blocked. ${w.name} holds the fewest points and scores ${points}${total}.`
       : `${w.name} is out of cards and wins round ${this.round}, scoring ${points} points${total}.`,
     w.id, { amount: points, reason: 'score' });
@@ -450,6 +452,29 @@ export class CardsGame {
     this.nextRoundAt = null;
     this.turnEndsAt = null;
     this.say(text, w.id);
+  }
+
+  /**
+   * Out of time (a tournament round's limit; ordinary tables never call it).
+   * A round in play is scored as a blocked one is (the lowest hand takes it),
+   * then the match ends with the highest score ahead, ties going to whoever
+   * held fewer points in that last round.
+   */
+  endByTime() {
+    if (this.phase === 'over') return;
+    this.paused = null;
+    this.playOpen = false;
+    if (this.phase !== 'roundOver') {
+      const alive = this.active();
+      const w = alive.reduce((b, q) => (handPoints(q.hand) < handPoints(b.hand) ? q : b), alive[0]);
+      this.endRound(w, 'time');
+    }
+    if ((this.phase as CardsPhase) !== 'over') {
+      const hands = this.history.at(-1)?.hands ?? {};
+      const best = [...this.active()].sort((a, b) => b.score - a.score || (hands[a.id] ?? 0) - (hands[b.id] ?? 0))[0];
+      this.finish(best, `⏰ Time is up — ${best.name} wins the match with ${best.score} points!`);
+    }
+    this.settle();
   }
 
   /** Deal the next round now (rooms normally let clockTimeout() do it when nextRoundAt passes). */

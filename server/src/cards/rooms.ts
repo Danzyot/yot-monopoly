@@ -23,6 +23,7 @@ import {
 import { isCharacterId, migrateCharacter, type CharacterId } from '../../../shared/characters.ts';
 import { CHOG_SEASON, SEASON_BOT_NAMES, SEASON_CHARACTERS, characterAvailable } from '../../../shared/season.ts';
 import { isChogTokenId } from '../../../shared/chogs/traits.ts';
+import type { TableLock } from '../../../shared/tournaments.ts';
 
 /** A disconnected player's moves are made for them after this long. */
 export const CARDS_AUTOPILOT_GRACE_MS = CARDS_AUTOPLAY_GRACE_MS;
@@ -135,6 +136,12 @@ export class CardsRoom {
   private seenPlay: number | null = null;
   private departed = new Set<string>();
   private kicked = new Set<string>();
+  /**
+   * Set on a tournament table (server/src/tournament/): assigned seats only,
+   * and the tournament is the host, so nobody at the table holds host powers
+   * (operators still do). Never snapshotted: the tournament puts it back.
+   */
+  tournament: TableLock | null = null;
   private readonly now: () => number;
   private readonly rng: (n: number) => number;
 
@@ -177,6 +184,7 @@ export class CardsRoom {
       return existing;
     }
     if (this.status !== 'lobby') fail('This game has already started — you can watch');
+    if (this.tournament && !this.tournament.seats.includes(m.id)) fail('Seats at this tournament table are assigned — you can watch');
     if (this.kicked.has(m.id)) fail('You were removed from this table — you can watch');
     if (this.seats.length >= this.maxPlayers) fail('The table is full — you can watch');
     const s: Seat = {
@@ -188,7 +196,7 @@ export class CardsRoom {
       s.chogToken = chogToken;
     }
     this.seats.push(s);
-    if (!this.seat(this.hostId)) this.hostId = m.id;
+    if (!this.tournament && !this.seat(this.hostId)) this.hostId = m.id;
     this.hooks.onEvent(this, `${s.name} joined`);
     return s;
   }
@@ -248,6 +256,7 @@ export class CardsRoom {
   }
 
   private closeIfEmpty() {
+    if (this.tournament) return; // the tournament closes its own tables
     if (this.status === 'lobby' && !this.seats.some(s => !s.isBot)) this.hooks.onEmpty?.(this);
   }
 
@@ -282,6 +291,7 @@ export class CardsRoom {
   }
 
   private passHost(from: string, why: string): boolean {
+    if (this.tournament) return false; // the tournament stays the host
     const next = this.successor(from);
     if (!next) {
       if (this.status === 'lobby') this.hostId = this.seats.find(x => !x.isBot && x.id !== from)?.id ?? '';
@@ -544,6 +554,13 @@ export class CardsRoom {
     this.afterChange();
   }
 
+  /** A tournament round's time limit: the match ends now, on points (CardsGame.endByTime). */
+  timeUp() {
+    this.dirty = true;
+    this.runningGame().endByTime();
+    this.afterChange();
+  }
+
   /** Host (or operator) hands a connected but absent player to autopilot, or takes them off it. */
   setAutopilot(byId: string, target: string, on: boolean, isAdmin: boolean) {
     this.dirty = true;
@@ -787,6 +804,7 @@ export class CardsRoom {
       game: this.game?.view(forId) ?? null,
       now: Date.now(),
       startedAt: this.startedAt,
+      ...(this.tournament && { tournament: this.tournament.info }),
     };
   }
 

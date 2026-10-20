@@ -133,7 +133,8 @@ export function attachSockets(io: Server): SocketLayer {
     });
     lobbyChanged();
     const channel = announceChannelId();
-    if (channel && isOn('announceResults')) {
+    // A tournament table is announced by its tournament (operators' events only), not game by game.
+    if (channel && isOn('announceResults') && !room.tournament) {
       const medals = ['🥇', '🥈', '🥉'];
       const lines = standings.slice(0, 5).map((s, i) => `${medals[i] ?? `**${i + 1}.**`} ${g.player(s.id).name}`);
       void postToChannel(channel, {
