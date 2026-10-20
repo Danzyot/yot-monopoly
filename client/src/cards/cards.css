@@ -498,6 +498,7 @@
   to { opacity: 0; transform: translate(-50%, -50%) scale(1.15) rotate(-4deg); }
 }
 @keyframes ct-rays { to { rotate: 360deg; } }
+.ct-win.low { top: 78%; }
 .ct.compact .ct-win b { font-size: 60px; }
 .ct.compact .ct-win-rays { width: 300px; height: 300px; margin: -150px 0 0 -150px; }
 /* The table shakes for the big moments (never with reduced motion: the class is not set). */

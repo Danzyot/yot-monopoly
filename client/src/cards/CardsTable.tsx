@@ -253,9 +253,9 @@ function fly(from: Pt, to: Pt, dur: number, delay = 0, extra: CSSProperties = {}
 }
 
 /** The round's last card down: "OUT!" stamped over the table in gold, with rays turning behind it. */
-function WinStamp({ mine, name, dur, left }: { mine: boolean; name: string; dur: number; left: number }) {
+function WinStamp({ mine, name, dur, left, low }: { mine: boolean; name: string; dur: number; left: number; low?: boolean }) {
   return (
-    <div className="ct-win" style={{ animationDuration: `${dur}ms`, animationDelay: `${left}ms` }}>
+    <div className={`ct-win ${low ? 'low' : ''}`} style={{ animationDuration: `${dur}ms`, animationDelay: `${left}ms` }}>
       <span className="ct-win-rays" />
       <b>{mine ? 'You\'re out!' : 'Out!'}</b>
       <small>{mine ? 'last card down' : `${name} is out of cards`}</small>
@@ -378,7 +378,10 @@ function Effect({ s, layout, piles, names, me, three, cuts }: {
     case 'roundEnd': {
       // Out of cards: the last card is stamped "OUT!" (the 3D table rings a gold shockwave in the scene; the flat one here).
       // In 3D the camera then cuts to the winner with a title card; the match's last round goes on to the podium.
-      const stamp = !st.blocked && <WinStamp mine={st.winner === me} name={names[st.winner]} dur={Math.min(dur, 1500)} left={left} />;
+      // Under a camera cut it is the beat before the title card: shorter, and low, clear of the winner's face.
+      const stamp = !st.blocked && (
+        <WinStamp mine={st.winner === me} name={names[st.winner]} dur={Math.min(dur, three && cuts ? 1100 : 1500)} left={left} low={three && cuts} />
+      );
       const result = banner(<>{names[st.winner]} {st.blocked ? 'takes' : 'wins'} the round!<small>+{st.points} points</small></>, 'win');
       if (three) return <>{stamp}{!cuts && result}</>;
       return (
