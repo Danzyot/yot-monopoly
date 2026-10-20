@@ -662,6 +662,13 @@ def preview(items, out, chars_glb, looks):
     fit = json.load(open(FIT))
     bpy.ops.import_scene.gltf(filepath=chars_glb)
     ids = list(fit['chars'].keys())
+    if os.environ.get('OUTFIT_ONLY'):
+        # OUTFIT_ONLY=chog,snacky: just these characters (the rest stay out of the shot).
+        only = os.environ['OUTFIT_ONLY'].split(',')
+        for o in bpy.data.objects:
+            if o.name.split('_', 1)[0] in ids and o.name.split('_', 1)[0] not in only:
+                o.hide_render = True
+        ids = [c for c in ids if c in only]
     sc = bpy.context.scene
     placed = []
     by_name = {o.name: o for o in bpy.data.objects}
@@ -682,6 +689,23 @@ def preview(items, out, chars_glb, looks):
                 o.parent = None
                 o.location = blib.V(piv[0] + ox, piv[1], piv[2] + oz)
                 o.rotation_euler = (0, 0, 0) if o.rotation_mode != 'QUATERNION' else o.rotation_euler
+                o.rotation_quaternion = (1, 0, 0, 0)
+                o.scale = (1, 1, 1)
+            # A mane of its own (chog_Hair_<cut>): the cut worn under this look's hat, the rest out of the shot.
+            # OUTFIT_MANE=full shows the whole mane under every hat (how it was before the cuts).
+            hat = next((x for x in look if SLOTS.get(x) == 'head' and x not in fit['hide'].get(cid, [])), None)
+            cut = os.environ.get('OUTFIT_MANE') or fit.get('mane', {}).get(cid, {}).get(hat, 'full')
+            for name, src in by_name.items():
+                if not name.startswith(f'{cid}_Hair_') or src.type != 'MESH':
+                    continue
+                o = src if row == 0 else src.copy()
+                if row:
+                    blib.link(o)
+                o.parent = None
+                o.hide_render = name != f'{cid}_Hair_{cut}'
+                piv = PIVOTS['Head']
+                o.location = blib.V(piv[0] + ox, piv[1], piv[2] + oz)
+                o.rotation_euler = (0, 0, 0)
                 o.rotation_quaternion = (1, 0, 0, 0)
                 o.scale = (1, 1, 1)
             for iid in look:
@@ -707,18 +731,20 @@ def preview(items, out, chars_glb, looks):
         o.hide_render = True
     setup_render(sc, 0)
     sc.render.film_transparent = False
-    sc.render.resolution_x, sc.render.resolution_y = 2200, 420
+    sc.render.resolution_x, sc.render.resolution_y = (2200, 420) if len(ids) > 3 else (420 * len(ids), 420)
     sc.cycles.samples = 16
     cam = bpy.data.objects.new('Cam', bpy.data.cameras.new('Cam'))
     cam.data.type = 'ORTHO'
-    cam.data.ortho_scale = 0.36 * len(ids) + 0.1
+    cam.data.ortho_scale = 0.36 * len(ids) + 0.1 if len(ids) > 3 else 0.7 * len(ids)
+    # A few characters: their heads up close.
+    aim = 0.24 if len(ids) > 3 else 0.4
     blib.link(cam)
     sc.camera = cam
     view = os.environ.get('OUTFIT_VIEW', '0.3,0.45,1').split(',')
     d = C @ Vector(tuple(float(v) for v in view)).normalized()
     # One image per look: the rows sit far apart, so the camera frames one at a time.
     for row in range(len(looks)):
-        cam.location = blib.V(0, 0.24, -row * 5.0) + d * 3
+        cam.location = blib.V(0, aim, -row * 5.0) + d * 3
         cam.rotation_euler = (-d).to_track_quat('-Z', 'Y').to_euler()
         sc.render.filepath = out.replace('.png', f'-{row}.png')
         bpy.ops.render.render(write_still=True)

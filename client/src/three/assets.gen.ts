@@ -10,7 +10,7 @@ export const ASSETS = {
     "astronaut": "/models/characters/astronaut.glb?v=55c1e2c388",
     "cat": "/models/characters/cat.glb?v=fb0d6865dc",
     "chef": "/models/characters/chef.glb?v=5089ad5c68",
-    "chog": "/models/characters/chog.glb?v=5d210baf6b",
+    "chog": "/models/characters/chog.glb?v=102e8ee6dd",
     "knight": "/models/characters/knight.glb?v=e419fc92e0",
     "ninja": "/models/characters/ninja.glb?v=5c47e56591",
     "pirate": "/models/characters/pirate.glb?v=e894c4294c",
@@ -25,7 +25,7 @@ export const ASSETS = {
     "astronaut": "/models/characters/astronaut-low.glb?v=14af4a549b",
     "cat": "/models/characters/cat-low.glb?v=3e63049e8e",
     "chef": "/models/characters/chef-low.glb?v=f2491ecb6d",
-    "chog": "/models/characters/chog-low.glb?v=da88988b94",
+    "chog": "/models/characters/chog-low.glb?v=9686eb4c87",
     "knight": "/models/characters/knight-low.glb?v=a1b163075d",
     "ninja": "/models/characters/ninja-low.glb?v=3ae5166171",
     "pirate": "/models/characters/pirate-low.glb?v=133465aa60",
@@ -45,8 +45,8 @@ export const ASSETS = {
     "url": "/models/chog/room.glb?v=32ae4809a8"
   },
   "chogTraits": {
-    "low": "/models/characters/chog-traits-low.glb?v=d3989a4140",
-    "url": "/models/characters/chog-traits.glb?v=590eb66a17"
+    "low": "/models/characters/chog-traits-low.glb?v=8c87cc7bf9",
+    "url": "/models/characters/chog-traits.glb?v=baf8fcf9af"
   },
   "classicEnv": {
     "url": "/models/classic/room-env.webp?v=7283a87788"
