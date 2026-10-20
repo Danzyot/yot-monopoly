@@ -669,7 +669,8 @@ export function attachSockets(io: IO) {
           return !!action && mayDirect(event, me, action);
         });
         if (!allowed) requireHost(t, 'settings'); // throws, with the reason
-        if (typeof p.scheduledStart === 'number') playerScheduledStart(p.scheduledStart);
+        // As updateSettings will read it: a number sent as text is still a start time.
+        if (p.scheduledStart !== undefined && p.scheduledStart !== null) playerScheduledStart(Math.floor(Number(p.scheduledStart)));
       }
       // A tournament is open to everyone unless an operator caps it — not
       // even the director of an operator-made event may.
