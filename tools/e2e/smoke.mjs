@@ -47,7 +47,7 @@ for (const map of MAPS) {
     page.on('console', m => { if (m.type() === 'error' && !/ERR_CERT|fonts\.g/.test(m.text())) errors.push(`console: ${m.text().slice(0, 200)}`); });
     try {
       await page.goto(`${BASE}/`);
-      await page.click('.hub-monopoly >> text=Sign in to play');
+      await page.click('.hub-monopoly .hub-play');
       await page.fill('input[placeholder="Your name"]', 'Smoke');
       await page.click('.modal button:has-text("Play")');
       await page.waitForSelector('text=Sign out');

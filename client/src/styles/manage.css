@@ -14,6 +14,20 @@
 /* The hotel/house steppers dim the same way when they cannot be used. */
 .bp-build .btn:disabled { opacity: 0.5; }
 
+/* The bar never wraps a label onto two lines: names and links stay on one line,
+   and the signed-in name gives way first on laptop widths. */
+.site-header .brand, .site-header .navlink, .site-header .me { white-space: nowrap; }
+@media (max-width: 1360px) { .site-header .me .hide-sm { display: none; } }
+@media (max-width: 1180px) {
+  .site-header .nav-chars .nav-ico { display: inline; }
+  .site-header .nav-chars:not(.nav-game):not(.active) .nav-label { display: none; }
+}
+@media (max-width: 960px) {
+  .site-header .nav-chars:not(.active) .nav-label { display: none; }
+}
+/* Phones: the text editor is a desk job; it keeps the bar to two lines. */
+@media (max-width: 480px) { .site-header .te-toggle { display: none; } }
+
 /* Characters link: icon + label; icon-only on narrow phones. */
 .nav-chars { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .nav-chars .nav-ico { display: none; font-size: 16px; line-height: 1; }

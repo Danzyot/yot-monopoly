@@ -55,12 +55,11 @@ export default function Header() {
         {config.features.leaderboard && <NavLink className="navlink nav-chars" to="/leaderboard" aria-label="Leaderboard" title="Leaderboard"><span className="nav-ico" aria-hidden="true">🏆</span><span className="nav-label">Leaderboard</span></NavLink>}
         {config.inviteUrl && <a className="navlink" href={config.inviteUrl} target="_blank" rel="noreferrer">Discord</a>}
         {profile?.isAdmin && <Link className="navlink nav-chars accent" to="/admin" aria-label="Dashboard" title="Dashboard"><span className="nav-ico" aria-hidden="true">📊</span><span className="nav-label">Dashboard</span></Link>}
-        {profile && config.features.leaderboard && <NavLink className="navlink hide-sm" to={profilePath(profile.id)}>My profile</NavLink>}
         <WalletNavLink />
         <EditTextToggle />
         {profile ? (
           <span className="row me">
-            {/* The avatar doubles as the profile link where "My profile" is hidden (phones). */}
+            {/* The avatar is the profile link. */}
             {config.features.leaderboard
               ? <Link className="me-link" to={profilePath(profile.id)} title="My profile" aria-label="My profile"><Avatar src={profile.avatar} size={28} /></Link>
               : <Avatar src={profile.avatar} size={28} />}
