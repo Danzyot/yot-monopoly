@@ -25,6 +25,8 @@ const Sso = lazy(() => import('./pages/Sso.tsx'));
 // Chog Cards: its own pages (and styles), loaded only when opened.
 const CardsHome = lazy(() => import('./cards/CardsHome.tsx'));
 const CardsRoomPage = lazy(() => import('./cards/CardsRoomPage.tsx'));
+// Chog Poker's home here: its tournaments, Play and Host (the tables are on poker's own site).
+const PokerHome = lazy(() => import('./poker/PokerHome.tsx'));
 // Tournaments for both games: the list, the create form, one event.
 const TournamentsPage = lazy(() => import('./tournaments/TournamentsPage.tsx'));
 const CreateTournament = lazy(() => import('./tournaments/CreateTournament.tsx'));
@@ -67,6 +69,7 @@ function Shell() {
         <Route path="/sso" element={<Sso />} />
         <Route path="/cards" element={<CardsHome />} />
         <Route path="/cards/r/:code" element={<CardsRoomPage />} />
+        <Route path="/poker" element={<PokerHome />} />
         <Route path="/tournaments" element={<TournamentsPage />} />
         <Route path="/tournaments/new" element={<CreateTournament />} />
         <Route path="/tournaments/:id" element={<TournamentPage />} />

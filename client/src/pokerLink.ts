@@ -8,8 +8,20 @@
 // The hand-off also runs the other way: poker's "Sign in via Chog Games" button
 // sends the browser to /sso?return=<poker URL> (pages/Sso.tsx), which signs the
 // player in here if need be and sends them back with the token.
+/// <reference types="vite/client" />
 import { POKER_URL } from '../../shared/brand.ts';
 import { getToken } from './api.ts';
+
+/**
+ * Where poker is: POKER_URL, unless the build was given VITE_POKER_URL (a
+ * local poker on another port, for trying the two together).
+ */
+export const POKER_BASE: string = (import.meta.env.VITE_POKER_URL as string | undefined)?.trim().replace(/\/+$/, '') || POKER_URL;
+
+/** A page on poker, e.g. `/t/3f2a9b1c`; `/` is its home. */
+export function pokerHref(path = '/'): string {
+  return new URL(path, POKER_BASE).href;
+}
 
 /** `url` with the sign-in on its hash (any hash it had is replaced; a bare origin gets its slash). */
 export function withToken(url: string, token: string): string {
@@ -19,16 +31,16 @@ export function withToken(url: string, token: string): string {
 }
 
 /**
- * Click handler for links to poker (their href is the bare POKER_URL). On a plain click by a
- * signed-in player it goes there carrying the sign-in. The token never sits in the page's links,
+ * Click handler for links to poker (their href is the plain pokerHref(path)). On a plain click by a
+ * signed-in player it goes to that page carrying the sign-in. The token never sits in the page's links,
  * so copying, dragging or sharing the link can't hand someone the account; middle-click or
  * modifier-click opens the plain link and poker asks them to sign in.
  */
-export function openPoker(e: { button: number; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; preventDefault(): void }, signedIn: boolean): void {
+export function openPoker(e: { button: number; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; preventDefault(): void }, signedIn: boolean, path = '/'): void {
   const token = signedIn ? getToken() : null;
   if (!token || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
   e.preventDefault();
-  location.assign(withToken(POKER_URL, token));
+  location.assign(withToken(pokerHref(path), token));
 }
 
 /** Where a poker code leads: a tournament (`/t/<id>`) or one of its tables (`/table/<id>`). */
@@ -50,7 +62,7 @@ export function pokerTarget(raw: string): PokerTarget | null {
 
 /** Go to a poker tournament or table, carrying the sign-in when there is one. */
 export function goToPoker(target: PokerTarget, signedIn: boolean): void {
-  const url = `${POKER_URL}/${target.kind === 'tournament' ? 't' : 'table'}/${target.id}`;
+  const url = pokerHref(`/${target.kind === 'tournament' ? 't' : 'table'}/${target.id}`);
   const token = signedIn ? getToken() : null;
   location.assign(token ? withToken(url, token) : url);
 }

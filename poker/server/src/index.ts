@@ -298,7 +298,8 @@ app.use('/api/tournaments', rateLimit(20, 60_000));
 
 // CORS. The built client is served by this same process, so in production no
 // browser needs to call /api cross-origin — except the Chog Games hub, which
-// shows this room's leaderboard and results on player profiles. Only the hub's
+// shows this room's leaderboard and results on player profiles and its
+// tournament list on the hub's /poker page. Only the hub's
 // origins (HUB_URL + HUB_ORIGINS) are allowed, only on those read-only GETs,
 // and never with credentials. Outside production the old reflect-everything
 // behaviour stays, because Vite serves the client from another port.

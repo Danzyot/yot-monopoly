@@ -97,10 +97,11 @@ test('the hub is the default allowed origin; HUB_ORIGINS adds the Railway one', 
   delete process.env.HUB_ORIGINS;
 });
 
-test('only the leaderboard and finished results are readable cross-origin', () => {
+test('only the leaderboard, the tournament list and finished results are readable cross-origin', () => {
   assert.equal(HUB_READABLE.test('/api/leaderboard'), true);
+  assert.equal(HUB_READABLE.test('/api/lobby'), true);
   assert.equal(HUB_READABLE.test('/api/results/abc123'), true);
-  for (const p of ['/api/config', '/api/lobby', '/api/health', '/api/auth/me', '/api/admin/health', '/api/results/', '/api/results/a/b']) {
+  for (const p of ['/api/config', '/api/lobby/x', '/api/health', '/api/auth/me', '/api/admin/health', '/api/results/', '/api/results/a/b']) {
     assert.equal(HUB_READABLE.test(p), false, p);
   }
 });
@@ -139,13 +140,16 @@ after(() => {
 
 const acao = (r: Response) => r.headers.get('access-control-allow-origin');
 
-test('production CORS: the hub may read the leaderboard, nobody else may', async () => {
+test('production CORS: the hub may read the leaderboard and the tournament list, nobody else may', async () => {
   assert.equal(acao(await fetch(`${BASE}/api/leaderboard`, { headers: { origin: 'https://choggames.com' } })), 'https://choggames.com');
   assert.equal(acao(await fetch(`${BASE}/api/leaderboard`, { headers: { origin: 'https://hub-staging.up.railway.app' } })), 'https://hub-staging.up.railway.app');
   assert.equal(acao(await fetch(`${BASE}/api/leaderboard`, { headers: { origin: 'https://evil.example' } })), null);
   // Not even the hub gets anything that is not on the list.
   assert.equal(acao(await fetch(`${BASE}/api/config`, { headers: { origin: 'https://choggames.com' } })), null);
-  assert.equal(acao(await fetch(`${BASE}/api/lobby`, { headers: { origin: 'https://choggames.com' } })), null);
+  assert.equal(acao(await fetch(`${BASE}/api/health`, { headers: { origin: 'https://choggames.com' } })), null);
+  // The hub's /poker page lists the tournaments.
+  assert.equal(acao(await fetch(`${BASE}/api/lobby`, { headers: { origin: 'https://choggames.com' } })), 'https://choggames.com');
+  assert.equal(acao(await fetch(`${BASE}/api/lobby`, { headers: { origin: 'https://evil.example' } })), null);
   // A preflight for a read is answered; nothing else is promised.
   const pre = await fetch(`${BASE}/api/leaderboard`, { method: 'OPTIONS', headers: { origin: 'https://choggames.com' } });
   assert.equal(pre.status, 204);
