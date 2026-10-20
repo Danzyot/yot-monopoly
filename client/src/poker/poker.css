@@ -1,0 +1,99 @@
+/* ==========================================================================
+   /poker: Chog Poker's home on the hub (PokerHome.tsx), in the GO skin and
+   the Chog season like /cards. The Play button and the code box are the
+   home page's game-card pieces (.hub-play, .hub-join in styles/hub.css).
+   ========================================================================== */
+
+.poker-home { position: relative; min-height: 100%; padding: 24px 16px 40px; }
+.poker-home > * { position: relative; z-index: 1; }
+
+/* ---- the backdrop: a felt glow with a few suits drifting ---- */
+.poker-home > .ph-bg {
+  position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none;
+  background: radial-gradient(110% 75% at 50% 0%, #6a3fd0 0%, #3b1f8c 45%, #1b0d45 100%);
+}
+.ph-suit {
+  position: absolute; font: 400 120px/1 var(--display); color: #fff; opacity: 0.07;
+  animation: ph-drift 20s ease-in-out infinite alternate;
+}
+.ph-suit.s0 { left: 5%; top: 14%; --r: -16deg; }
+.ph-suit.s1 { left: 84%; top: 10%; --r: 12deg; animation-delay: -5s; color: var(--chog-pink-hi, #ff8ec2); opacity: 0.12; }
+.ph-suit.s2 { left: 10%; top: 64%; --r: 8deg; animation-delay: -9s; color: var(--chog-pink-hi, #ff8ec2); opacity: 0.1; }
+.ph-suit.s3 { left: 74%; top: 60%; --r: -12deg; animation-delay: -3s; }
+.ph-suit.s4 { left: 44%; top: 84%; --r: 20deg; animation-delay: -7s; }
+.ph-suit.s5 { left: 92%; top: 38%; --r: -24deg; animation-delay: -11s; }
+@keyframes ph-drift { from { transform: rotate(var(--r)) translateY(0); } to { transform: rotate(calc(var(--r) * -0.6)) translateY(-24px); } }
+@media (prefers-reduced-motion: reduce) { .ph-suit { animation: none; transform: rotate(var(--r)); } }
+
+/* ---- hero ---- */
+.ph-hero { text-align: center; max-width: 760px; margin: 0 auto 24px; }
+.ph-fan { position: relative; height: 150px; display: flex; justify-content: center; align-items: flex-end; margin-top: 6px; }
+.ph-card {
+  width: 84px; height: 118px; margin: 0 -14px; transform-origin: 50% 120%;
+  display: flex; flex-direction: column; justify-content: space-between; padding: 8px 10px;
+  background: linear-gradient(180deg, #fff, #f3eefc); color: #1b0d45; border: 3px solid #000; border-radius: 12px;
+  box-shadow: 0 4px 0 #000, 0 14px 22px rgba(0, 0, 0, 0.4);
+}
+.ph-card.red { color: #d53f7c; }
+.ph-card b { font: 400 28px/1 var(--display); text-align: left; }
+.ph-card i { font-style: normal; font-size: 40px; line-height: 1; text-align: right; }
+.ph-title { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 12px 0 4px; }
+.ph-title h1 { font-size: clamp(48px, 10vw, 80px); margin: 0; color: #fff; text-shadow: 0 4px 0 #2a136b, 0 8px 22px rgba(0, 0, 0, 0.45); }
+.ph-help.btn { width: 40px; height: 40px; padding: 0; border-radius: 50%; font-size: 22px; flex: none; }
+.ph-tag { font-size: 18px; margin: 0 0 18px; color: #f1e8ff; text-shadow: var(--outline); }
+.ph-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; align-items: stretch; margin-bottom: 12px; }
+.ph-play { font-size: 24px; padding: 12px 28px 13px; min-width: 220px; }
+.ph-join { width: 230px; }
+.ph-sub { margin: 4px 0 0; font-size: 14px; }
+.ph-host {
+  display: inline-flex; align-items: center; gap: 6px; text-decoration: none; padding: 6px 14px; border-radius: 99px;
+  font: 400 16px var(--display); color: var(--hi); text-shadow: var(--outline);
+  background: rgb(var(--well) / 0.45); border: 2px solid color-mix(in srgb, var(--hi) 55%, transparent);
+}
+.ph-host:hover { background: rgb(var(--well) / 0.7); }
+.ph-link { background: none; border: 0; padding: 0; font: inherit; color: var(--hi); text-decoration: underline; cursor: pointer; }
+.ph-sub a { color: var(--hi); }
+
+/* ---- the lists ---- */
+.ph-body { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.ph-note { text-align: center; margin: 0; }
+.ph-list h2 { display: flex; align-items: center; gap: 8px; }
+.ph-list ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ph-row {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; text-decoration: none; color: var(--text);
+  background: rgb(var(--well) / 0.42); border: 2px solid transparent; transition: border-color 0.15s, background 0.15s;
+}
+.ph-row:hover { background: rgb(var(--well) / 0.6); border-color: color-mix(in srgb, var(--line) 80%, transparent); }
+.ph-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ph-row-name { font: 400 18px/1.15 var(--display); text-shadow: var(--outline); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ph-row-meta { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ph-badge {
+  flex: none; font: 800 12px var(--font), sans-serif; padding: 3px 10px; border-radius: 99px; white-space: nowrap;
+  background: rgb(var(--well) / 0.6); border: 2px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+.ph-badge.live { color: #fff; background: var(--chog-pink, #d53f7c); border-color: #000; }
+.ph-badge.soon { color: var(--hi); }
+.ph-badge.done { color: var(--hi); max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.ph-row-cta { flex: none; pointer-events: none; }
+.ph-dot { width: 10px; height: 10px; border-radius: 50%; background: #ff5f8f; box-shadow: 0 0 0 3px rgba(255, 95, 143, 0.3); animation: ph-pulse 1.4s ease-in-out infinite; }
+@keyframes ph-pulse { 50% { box-shadow: 0 0 0 7px rgba(255, 95, 143, 0); } }
+@media (prefers-reduced-motion: reduce) { .ph-dot { animation: none; } }
+.ph-howto-foot { margin: 12px 0 0; text-align: center; }
+.ph-foot { text-align: center; }
+
+@media (max-width: 760px) {
+  .poker-home { padding-top: 14px; }
+  .ph-fan { height: 112px; }
+  .ph-card { width: 62px; height: 88px; margin: 0 -11px; padding: 5px 7px; border-radius: 10px; }
+  .ph-card b { font-size: 21px; }
+  .ph-card i { font-size: 28px; }
+  .ph-tag { font-size: 15px; margin-bottom: 14px; }
+  .ph-actions { flex-direction: column; align-items: stretch; max-width: 360px; margin-left: auto; margin-right: auto; }
+  .ph-play { min-width: 0; font-size: 22px; }
+  .ph-join { width: auto; flex: none; }
+  .ph-play { flex: none; }
+  /* The badge says what the meta line would, so the row keeps to the name, its badge and the button. */
+  .ph-row { flex-wrap: wrap; gap: 6px 10px; padding: 9px 10px; }
+  .ph-row-main { flex: 1 1 100%; }
+  .ph-badge { margin-right: auto; }
+}

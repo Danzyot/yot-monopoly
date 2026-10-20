@@ -13,8 +13,7 @@ import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { requirementBadge, requirementSentence } from '../community.tsx';
 import { useCardsRoomList } from '../cards/net.ts';
-import { goToPoker, openPoker, pokerTarget } from '../pokerLink.ts';
-import { POKER_URL } from '../../../shared/brand.ts';
+import { goToPoker, pokerTarget } from '../pokerLink.ts';
 
 // The home page has no WebGL at all: the board behind the hero is a still
 // (client/public/home/, drifted by styles/home.css), so the page is up at once
@@ -137,7 +136,7 @@ export default function Home() {
 
       {/* The hub: one card per game, with what is on right now. Monopoly's "Play"
           is the old hero button (create a table, or sign in first); Cards has its
-          own home at /cards; Poker is its own site, reached with the sign-in in hand. */}
+          own home at /cards, Poker at /poker (its games run on poker's own site; a code goes straight there). */}
       <section className="hub" aria-labelledby="hub-title">
         <h2 id="hub-title" className="sr-only">Pick a game</h2>
         <ul className="hub-games">
@@ -201,7 +200,7 @@ export default function Home() {
                   onChange={e => setPokerCode(e.target.value)} />
                 <button className="btn gold small" type="submit">Join</button>
               </form>
-              <a className="btn primary hub-play" href={POKER_URL} onClick={e => openPoker(e, !!profile)}>Play {GAMES.poker.name}</a>
+              <Link className="btn primary hub-play" to="/poker">Play {GAMES.poker.name}</Link>
             </div>
           </li>
         </ul>
