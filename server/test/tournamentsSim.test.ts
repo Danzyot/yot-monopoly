@@ -175,6 +175,37 @@ test('a tournament table is a locked Cards room: assigned seats, no player host,
   }
 });
 
+test('the operator picks the mode: Chog Chaos tables deal the 135 with its house rules; Classic stays the default', () => {
+  const w = world();
+  try {
+    const classic = w.m.create(ADMIN, { game: 'cards', name: 'Plain', settings: { tableSize: 3, advance: 1 } });
+    const chaos = w.m.create(ADMIN, { game: 'cards', name: 'Wild', settings: { tableSize: 3, advance: 1, cardsMode: 'chaos' } });
+    assert.equal(classic.d.settings.cardsMode, 'classic');
+    assert.equal(chaos.d.settings.cardsMode, 'chaos');
+    for (const t of [classic, chaos]) {
+      for (let i = 0; i < 3; i++) w.m.register(t.id, p(i + (t === chaos ? 10 : 0)));
+      w.m.start(t.id, ADMIN);
+      arriveAll(w.cards.rooms, codesOf(t));
+    }
+    w.m.tick();
+    const roomOf = (t: typeof classic) => w.cards.get(t.currentRound()!.tables[0].code!)!;
+    const a = roomOf(classic), b = roomOf(chaos);
+    assert.equal(a.rules.mode, 'classic');
+    assert.equal(a.rules.mercy, false);
+    assert.equal(b.rules.mode, 'chaos');
+    assert.ok(b.rules.mercy && b.rules.stackMixed && b.rules.drawUntilPlayable, 'the mode brings its house rules');
+    assert.equal(b.rules.match, chaos.d.settings.cardsMatch, 'the match format still comes from the tournament');
+    assert.equal(b.summary().match, 'Chog Chaos · Single round');
+    assert.equal(b.game!.deckSize, 135);
+    assert.equal(a.game!.deckSize, 108);
+    playCards(b);
+    w.m.tick();
+    assert.equal(chaos.d.status, 'finished');
+  } finally {
+    w.done();
+  }
+});
+
 test('no Discord posts: not on creation, start, a table result or the finish', async () => {
   const { Server } = await import('socket.io');
   const { attachSockets } = await import('../src/sockets.ts');

@@ -27,7 +27,8 @@ export function cardsAdapter(reg: CardsRegistry, broadcast: (r: CardsRoom) => vo
         r.tournament = lock;
         r.configure(lock.hostId, true, {
           maxPlayers: Math.max(players.length, t.settings.botsFill ? t.settings.tableSize : 0), private: true,
-          rules: { match: t.settings.cardsMatch, targetScore: t.settings.cardsTarget },
+          // The mode first: a new mode brings its own house rules (CardsRoom.configure).
+          rules: { mode: t.settings.cardsMode ?? 'classic', match: t.settings.cardsMatch, targetScore: t.settings.cardsTarget },
         });
         // Everyone is seated but away until they open the table. join() seats
         // their own Chog only when the wallet check (holdsChog) passes.

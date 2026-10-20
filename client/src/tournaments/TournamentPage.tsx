@@ -10,6 +10,7 @@ import { askConfirm, askText } from '../components/Modal.tsx';
 import { Avatar } from '../components/Avatar.tsx';
 import { ProfileLink } from '../community.tsx';
 import { BRAND } from '../../../shared/brand.ts';
+import { modeLabel } from '../../../shared/cards/rules.ts';
 import {
   PRIZE_NOTE, TOURNEY_PRIZE_MAX, tableUrl,
   type TournamentRoundView, type TournamentSeated, type TournamentTableView, type TournamentView,
@@ -169,6 +170,7 @@ export default function TournamentPage() {
     `tables of up to ${s.tableSize}`,
     s.advance === 1 ? 'winners go through' : `top ${s.advance} go through`,
     `${s.roundMinutes}-minute rounds`,
+    ...((s.cardsMode ?? 'classic') !== 'classic' ? [modeLabel(s.cardsMode)] : []),
     s.cardsMatch === 'single' ? 'one round per table' : `first to ${s.cardsTarget}`,
     s.noShow === 'drop' ? `${s.noShowMinutes} min to sit down` : `no-shows auto-played after ${s.noShowMinutes} min`,
     ...(s.botsFill ? ['bots fill empty seats'] : []),
