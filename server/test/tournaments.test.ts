@@ -587,6 +587,41 @@ test('a playing table whose room is lost is replayed, and after a few tries its 
   assert.equal(t.d.status, 'finished');
 });
 
+test('restoring a file with malformed events skips them; the list, pages and profiles keep working', () => {
+  const h = harness();
+  const live = running(h, 3);
+  const done = running(h, 3);
+  playRound(h, done);
+  const odd = (id: string, patch: Record<string, unknown>) => ({ ...structuredClone(done.d), id, ...patch });
+  const file = `odd-${Math.random().toString(36).slice(2)}.json`;
+  writeJson(file, {
+    savedAt: h.now(),
+    tournaments: [
+      live.d, done.d,
+      odd('no-entrants', { entrants: null }),
+      odd('no-rounds', { status: 'running', rounds: 'x' }),
+      odd('no-places', { places: {} }),
+      odd('no-settings', { status: 'registering', settings: null }),
+      odd('odd-status', { status: 'exploded' }),
+      odd('odd-round', { status: 'running', rounds: [{ n: 1, tables: null, byes: [] }] }),
+      odd('odd-entrant', { entrants: [null] }),
+      odd('odd-pause', { status: 'running', paused: true }),
+      null, 7, 'junk',
+    ],
+  });
+  const games = { cards: new FakeGame() };
+  for (const table of live.currentRound()!.tables) games.cards.rooms.set(table.code!, { ...h.games.cards.rooms.get(table.code!)! });
+  const m2 = new TournamentManager(games, { onChange() {} }, { now: h.now, file });
+  let n = -1;
+  assert.doesNotThrow(() => { n = m2.restore(); });
+  assert.equal(n, 1);
+  assert.deepEqual([...m2.tournaments.keys()].sort(), [live.id, done.id].sort(), 'only the well-formed events are back');
+  assert.doesNotThrow(() => m2.list());
+  assert.doesNotThrow(() => m2.resultsOf(done.d.places[0]));
+  for (const t of m2.tournaments.values()) assert.doesNotThrow(() => m2.view(t));
+  assert.doesNotThrow(() => m2.tick());
+});
+
 test('restoring an old file with a Monopoly tournament in it skips that one and keeps the rest', () => {
   const h = harness();
   const cards = running(h, 3);
