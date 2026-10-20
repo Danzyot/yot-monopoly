@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   ACCESSORY_MAP, AURA_MAP, BACKGROUND_COLORS, BODY_MAP, CHOG_EYES_VARIANTS, CHOG_MOUTH_VARIANTS, CHOG_SUPPLY, CHOG_TOKEN_IDS, EYES_MAP, HEAD_MAP,
-  MOUTH_MAP, SKIN_COLORS, chogArtUrl, chogLook, chogParts, isChogTokenId, traitsOf,
+  MOUTH_MAP, SKIN_COLORS, CHOG_FACE_STYLE, SKULL_BONE, chogArtUrl, chogLook, chogParts, isChogTokenId, traitsOf,
 } from '../../shared/chogs/traits.ts';
 import { Registry, Room, type RoomHooks } from '../src/rooms.ts';
 import { CHOG_SEASON, SEASON_BOT_NAMES, SEASON_THEME_ID, characterShared } from '../../shared/season.ts';
@@ -36,6 +36,24 @@ test('chogs: every token is in the table, with a picture and a resolvable look',
   assert.equal(chogLook(5000), null);
   assert.ok(isChogTokenId(1969));
   assert.ok(!isChogTokenId(0) && !isChogTokenId(1.5) && !isChogTokenId('1') && !isChogTokenId(1970));
+});
+
+test('chogs: the face versions', () => {
+  // What ships: today's eyes and Skull (tools/blender/chog_faces.py has the others, face-style.json picks).
+  assert.deepEqual({ eyes: CHOG_FACE_STYLE.eyes, skull: CHOG_FACE_STYLE.skull }, { eyes: 'current', skull: 'current' });
+  const today = { eyes: 'current', skull: 'current' } as const;
+  const drawn = { eyes: 'decal', skull: 'sculpted' } as const;
+  // Retard's big mismatched eyes are drawn in the drawn versions; today's build shows 3D glasses.
+  assert.equal(chogLook(540, today)!.eyes, 'glasses3d');
+  assert.equal(chogLook(540, drawn)!.eyes, 'derp');
+  assert.ok(CHOG_EYES_VARIANTS.includes('derp'));
+  // The newer Skulls take their bone from the art (a Black Skull is near black, not brown); today's keeps its own.
+  assert.equal(chogLook(428, drawn)!.colors.skin, SKULL_BONE.Black);
+  assert.notEqual(chogLook(428, today)!.colors.skin, SKULL_BONE.Black);
+  assert.equal(chogLook(428)!.colors.skin, chogLook(428, today)!.colors.skin);
+  // A smirk's iris is its lens colour.
+  assert.notEqual(chogLook(1789)!.colors.glass, chogLook(981)!.colors.glass);
+  for (const id of CHOG_TOKEN_IDS) assert.ok(CHOG_EYES_VARIANTS.includes(chogLook(id, drawn)!.eyes));
 });
 
 test('chogs: real tokens resolve to the right parts', () => {

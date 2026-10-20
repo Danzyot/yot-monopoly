@@ -45,8 +45,8 @@ export const ASSETS = {
     "url": "/models/chog/room.glb?v=32ae4809a8"
   },
   "chogTraits": {
-    "low": "/models/characters/chog-traits-low.glb?v=cdb15e13bb",
-    "url": "/models/characters/chog-traits.glb?v=96869dca32"
+    "low": "/models/characters/chog-traits-low.glb?v=db1dd0ff8b",
+    "url": "/models/characters/chog-traits.glb?v=1c0bbe0454"
   },
   "classicEnv": {
     "url": "/models/classic/room-env.webp?v=7283a87788"

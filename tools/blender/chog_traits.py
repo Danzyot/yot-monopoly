@@ -24,6 +24,10 @@ material names are `chog:<key>` like every character's); aura and the
 Radioactive glow are runtime effects, not geometry.
 
     tools/blender/run.sh chog_traits.py [--preview out.png --tokens 1,186,1517 [--head] [--no-export]]
+                                        [--eyes-style refined|decal|bold|current] [--skull-style sculpted|painted|hybrid|current]
+
+The eyes and the Skull face come in versions (chog_faces.py); shared/chogs/face-style.json
+picks the ones built, the style flags override it for a run.
 
 `--preview` renders whole figures for real tokens (their look resolved by
 shared/chogs/traits.ts through chog_look.ts), one frame each, to compare with
@@ -44,6 +48,7 @@ from mathutils import Matrix, Vector  # noqa: E402
 import blib  # noqa: E402
 import characters  # noqa: E402
 import chog_draw as draw  # noqa: E402
+import chog_faces  # noqa: E402
 import chog_wear  # noqa: E402
 import detailed  # noqa: E402
 from detailed import CHOG_EYE_AT, ChogFace, M, cyl, ell, loop, rbox, sheet, strand, torus  # noqa: E402
@@ -80,13 +85,17 @@ def materials():
 
 
 # ---- styles ------------------------------------------------------------------------
-# The eyes and the Skull face come in versions; the build exports one of each,
-# picked here (or per run with --eyes-style / --skull-style). The node names stay
-# the same whichever is built, so switching is: set these, rerun this script.
+# The eyes and the Skull face come in versions (chog_faces.py); the build exports
+# one of each, the ones shared/chogs/face-style.json names (which the game also
+# reads, for the Skulls' bone colours), or per run --eyes-style / --skull-style
+# (previews). The node names are the same whichever is built, so switching is:
+# edit face-style.json, rerun this script.
 EYES_STYLES = ('current', 'refined', 'decal', 'bold')
 SKULL_STYLES = ('current', 'sculpted', 'painted', 'hybrid')
-EYES_STYLE = 'current'
-SKULL_STYLE = 'current'
+with open(os.path.join(blib.REPO, 'shared', 'chogs', 'face-style.json')) as _f:
+    _style = json.load(_f)
+EYES_STYLE = _style['eyes']
+SKULL_STYLE = _style['skull']
 
 
 def configure(argv):
@@ -497,6 +506,17 @@ def eyes_up(m):
     return out
 
 
+def eyes_derp(m):
+    """Retard (in the drawn eye versions; today's build maps it to 3D glasses): big round eyes, a small pupil in
+    each looking off to its own side."""
+    out = []
+    for s in (-1, 1):
+        parts, B = ball(f'{CID}_DerpWhite', m, s, 0.031, 0.033)
+        out += parts
+        out.append(dot(f'{CID}_DerpPupil{s}', B, m['ink'], s * 0.012, 0.001, 0.0078, 0.0095))
+    return out
+
+
 def face_rim(border, lift, kx=1.0, ky=1.0):
     """A visor's border points pulled in toward its middle (kx, ky) and laid back on the face at `lift`."""
     c = sum(border, Vector()) / len(border)
@@ -566,7 +586,7 @@ EYES = {
     'vertical': eyes_vertical, 'base': eyes_base, 'xd': eyes_xd, 'animeGlass': eyes_anime_glass, 'retroGlass': eyes_retro_glass,
     'btcGlass': eyes_btc_glass, 'glasses3d': eyes_glasses_3d, 'shades': eyes_shades, 'visor': eyes_visor, 'goggles': eyes_goggles,
     'smirk': eyes_smirk, 'frog': eyes_frog, 'clown': eyes_clown, 'clownMix': eyes_clown_mix, 'worried': eyes_worried, 'up': eyes_up,
-    'vrModern': eyes_vr_modern, 'vrClassic': eyes_vr_classic, 'viper': eyes_viper,
+    'vrModern': eyes_vr_modern, 'vrClassic': eyes_vr_classic, 'viper': eyes_viper, 'derp': eyes_derp,
 }
 
 
@@ -698,7 +718,12 @@ def head_skull(m):
     head = [F.build(f'{CID}_SkullBone', m['skin'])]
     head.append(ell(f'{CID}_SkullCranium', (0, 0.02, -0.045), (0.114, 0.12, 0.11), m['skin'], seg=(36, 24), fuse=True))
     for s in (-1, 1):
-        head.append(ell(f'{CID}_Socket{s}', (0, 0, 0), (0.035, 0.036, 0.014), m['ink'], parent=at(s, lift=-0.009), seg=(24, 16)))
+        if EYES_STYLE == 'current':
+            head.append(ell(f'{CID}_Socket{s}', (0, 0, 0), (0.035, 0.036, 0.014), m['ink'], parent=at(s, lift=-0.009), seg=(24, 16)))
+        else:
+            # The drawn eyes lie close on the face: the sockets are drawn under them instead of standing out over them.
+            head.append(draw.oval(f'{CID}_Socket{s}', FACE, s * EYE_X, EYE_Y, 0.033, 0.034, 0.0002, m['ink'], n=48))
+            head.append(draw.oval(f'{CID}_SocketFloor{s}', FACE, s * EYE_X, EYE_Y - 0.0075, 0.031, 0.029, 0.00045, m['skin'], n=48))
     head.append(ell(f'{CID}_Nasal', (0, 0, 0), (0.011, 0.014, 0.006), m['ink'], parent=on(0, -0.0605, -0.003), seg=(14, 10)))
     G = on(0, -0.0855, 0.002)
     head.append(rbox(f'{CID}_Teeth', (0, 0, 0), (0.06, 0.017, 0.008), m['white'], parent=G, bevel=0.0035, segs=3))
@@ -732,8 +757,10 @@ def assemble(name, objs):
 
 def part_builders():
     """Every node of the traits file: its key (the node name less `chog_`) -> a function building it from the materials."""
-    fns = {'HeadBare': lambda m: assemble(f'{CID}_HeadBare', head_bare(m)), 'HeadSkull': lambda m: assemble(f'{CID}_HeadSkull', head_skull(m))}
+    skull = head_skull if SKULL_STYLE == 'current' else lambda m: chog_faces.skull(SKULL_STYLE, m)
+    fns = {'HeadBare': lambda m: assemble(f'{CID}_HeadBare', head_bare(m)), 'HeadSkull': lambda m: assemble(f'{CID}_HeadSkull', skull(m))}
     for vid, fn in EYES.items():
+        fn = (EYES_STYLE != 'current' and chog_faces.eyes(EYES_STYLE, vid)) or fn
         fns[f'Eyes_{vid}'] = lambda m, vid=vid, fn=fn: assemble(f'{CID}_Eyes_{vid}', fn(m))
     fns['LaserBeams'] = lambda m: assemble(f'{CID}_LaserBeams', laser_beams(m))
     for vid, fn in MOUTHS.items():
@@ -758,7 +785,8 @@ def build(m):
 
 def looks_for(ids):
     out = os.path.join(tempfile.gettempdir(), 'yot-chog-looks.json')
-    subprocess.run(['node', '--import', 'tsx', os.path.join(blib.HERE, 'chog_look.ts'), out, *map(str, ids)], cwd=blib.REPO, check=True)
+    subprocess.run(['node', '--import', 'tsx', os.path.join(blib.HERE, 'chog_look.ts'), out, *map(str, ids)], cwd=blib.REPO, check=True,
+                   env={**os.environ, 'CHOG_EYES_STYLE': EYES_STYLE, 'CHOG_SKULL_STYLE': SKULL_STYLE})
     with open(out) as f:
         return json.load(f)
 

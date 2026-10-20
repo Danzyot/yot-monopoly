@@ -94,6 +94,25 @@ class BallSurf(Surf):
         return self.G @ Vector((u, v, self.d * math.sqrt(q)))
 
 
+class MeshSurf(Surf):
+    """The front of a built mesh (a Blender object, transforms applied), found by casting rays at it from the
+    front: (x, y) -> the surface point in front. Off the mesh: `fallback` (a Surf)."""
+
+    def __init__(self, obj, fallback):
+        from mathutils.bvhtree import BVHTree
+        me = obj.data
+        self.tree = BVHTree.FromPolygons([v.co.copy() for v in me.vertices], [tuple(p.vertices) for p in me.polygons])
+        self.fallback = fallback
+
+    def p(self, x, y):
+        # Three (x, y, z) is Blender (x, -z, y): cast from in front (three +z) back along three -z.
+        hit = self.tree.ray_cast(Vector((x, -1.0, y)), Vector((0, 1, 0)))
+        if hit[0] is None:
+            return self.fallback.p(x, y)
+        b = hit[0]
+        return Vector((b.x, b.z, -b.y))
+
+
 # ---- outlines -------------------------------------------------------------------------
 
 def ellipse(cx, cy, rx, ry, rot=0.0):
