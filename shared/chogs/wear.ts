@@ -24,8 +24,14 @@ export type ChogWearShape =
 
 export type ChogPropId = 'greenCandle' | 'redCandle' | 'coin' | 'cigar' | 'heart' | 'knife' | 'cup' | 'fwog' | 'pepe';
 
-/** How much of the mane shows: all of it, all but the top spike, the side and back spikes, none of the spikes, or no hair at all. */
-export type ChogMane = 'full' | 'crown' | 'cap' | 'hood' | 'none';
+/**
+ * How much of the mane (the spikes) shows round what it wears on its head, so a Chog in any hat still reads
+ * as a Chog: all of it; all but the top spike (round a crown); the side and back spikes (out from under a
+ * cap); a fringe of short spikes poking out below the edge at the sides and back (under a hat that comes
+ * down all round); a jagged fringe across the forehead inside the opening (a hood or a helmet); or no hair
+ * at all (only the Skull form: the skulls in the art are bald).
+ */
+export type ChogMane = 'full' | 'crown' | 'cap' | 'fringe' | 'hood' | 'none';
 
 /** A repeating pattern over the ground colour, between heights `from` and `to` (y, units) when given. */
 export type ChogPattern = { from?: number; to?: number } & (
@@ -67,7 +73,7 @@ export interface ChogHatSpec {
   shape: ChogHatShape;
   paint: ChogPaint;
   /** Over the shape's own (HAT_MANE). */
-  mane?: ChogMane;
+  mane?: Exclude<ChogMane, 'none'>;
   /** Covers the mouth (a ski mask, a bandana). */
   hidesMouth?: boolean;
 }
@@ -81,11 +87,11 @@ export interface ChogWearSpec {
   hood?: ChogHatSpec;
 }
 
-/** The mane under each hat. */
-export const HAT_MANE: Record<ChogHatShape, ChogMane> = {
-  cap: 'cap', bucket: 'cap', beanie: 'cap', headband: 'full', durag: 'cap', dome: 'cap', ushanka: 'cap', crown: 'crown',
-  spartan: 'none', clownNose: 'full', plunger: 'cap', balaclava: 'cap', rainbowWig: 'none', bob: 'none', horns: 'full',
-  ramHorns: 'full', thorns: 'full', fedora: 'cap', gem: 'full', thirdEye: 'full', wreath: 'full', banana: 'full',
+/** The mane under each hat: never none (a Chog keeps its spikes whatever it wears; only skulls are bald). */
+export const HAT_MANE: Record<ChogHatShape, Exclude<ChogMane, 'none'>> = {
+  cap: 'cap', bucket: 'fringe', beanie: 'fringe', headband: 'full', durag: 'fringe', dome: 'fringe', ushanka: 'fringe', crown: 'crown',
+  spartan: 'fringe', clownNose: 'full', plunger: 'cap', balaclava: 'cap', rainbowWig: 'fringe', bob: 'fringe', horns: 'full',
+  ramHorns: 'full', thorns: 'full', fedora: 'fringe', gem: 'full', thirdEye: 'full', wreath: 'full', banana: 'full',
   seal: 'full', shrooms: 'full', laserEye: 'full',
   hood: 'hood', sharkHood: 'hood', bananaHood: 'hood', dragonHood: 'hood', toadHood: 'hood', gangsterHood: 'hood', astroHelmet: 'hood',
 };

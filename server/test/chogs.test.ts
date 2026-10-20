@@ -2,10 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  ACCESSORY_MAP, AURA_MAP, BACKGROUND_COLORS, BODY_MAP, CHOG_EYES_VARIANTS, CHOG_MOUTH_VARIANTS, CHOG_SUPPLY, CHOG_TOKEN_IDS, EYES_MAP, HEAD_MAP,
+  ACCESSORY_MAP, AURA_MAP, BACKGROUND_COLORS, BODY_MAP, CHOG_EYES_VARIANTS, CHOG_MOUTH_VARIANTS, CHOG_SUPPLY, CHOG_TOKEN_IDS, EYES_MAP, HAT_MANE, HEAD_MAP,
   MOUTH_MAP, SKIN_COLORS, CHOG_FACE_STYLE, SKULL_BONE, chogArtUrl, chogLook, chogParts, isChogTokenId, traitsOf,
 } from '../../shared/chogs/traits.ts';
 import { Registry, Room, type RoomHooks } from '../src/rooms.ts';
+import { OUTFIT_ITEMS } from '../../shared/outfits.ts';
 import { CHOG_SEASON, SEASON_BOT_NAMES, SEASON_THEME_ID, characterShared } from '../../shared/season.ts';
 
 const hooks = (holds: (user: string, token: number) => boolean): RoomHooks => ({
@@ -175,6 +176,57 @@ test('chogs: heads, outfits and props are modelled, and every part a token needs
     for (const id of CHOG_TOKEN_IDS) {
       const p = chogParts(chogLook(id)!, true);
       for (const part of [...p.Head, ...p.Body, ...p.HandR]) assert.ok(names.has(part), `${file} has ${part} (#${id})`);
+    }
+  }
+});
+
+test('chogs: the spikes show under every hat and hood; only skulls are bald', () => {
+  // The mane cuts that leave spikes in sight, and the ones a token can ask for.
+  const SPIKY = new Set<string>(['full', 'crown', 'cap', 'fringe', 'hood']);
+  const maneOf = (spec: (typeof HEAD_MAP)[string]) => spec.mane ?? HAT_MANE[spec.shape];
+  for (const [value, spec] of Object.entries(HEAD_MAP)) assert.ok(SPIKY.has(maneOf(spec)), `Head ${value}: ${maneOf(spec)} shows spikes`);
+  for (const [value, spec] of Object.entries(BODY_MAP)) {
+    if (spec.hood) assert.equal(maneOf(spec.hood), 'hood', `Body ${value}: spike tips round the face inside the hood`);
+  }
+  // A cap shows its side and back spikes, a hat that comes down all round a fringe below its edge.
+  assert.equal(HAT_MANE.cap, 'cap');
+  for (const shape of ['bucket', 'beanie', 'dome', 'ushanka', 'durag', 'spartan', 'bob', 'rainbowWig', 'fedora'] as const) {
+    assert.equal(HAT_MANE[shape], 'fringe', shape);
+  }
+  // Every Chog-form token wearing anything on its head keeps a mane part with spikes; skulls have none.
+  const traitsFile = glbJson(new URL('../../client/public/models/characters/chog-traits.glb', import.meta.url));
+  const nodes = new Set((traitsFile.nodes ?? []).map(n => n.name ?? ''));
+  let hatted = 0;
+  for (const id of CHOG_TOKEN_IDS) {
+    const look = chogLook(id)!;
+    const hair = chogParts(look, true).Head.filter(p => p.startsWith('chog_Hair_'));
+    if (look.form === 'skull') {
+      assert.deepEqual(hair, [], `#${id}: skulls are bald`);
+      continue;
+    }
+    if (!look.head) continue;
+    hatted++;
+    assert.ok(SPIKY.has(look.mane), `#${id} (${look.head.value}): its spikes show (${look.mane})`);
+    assert.deepEqual(hair, [`chog_Hair_${look.mane}`]);
+    assert.ok(nodes.has(hair[0]), `the traits file has ${hair[0]}`);
+  }
+  assert.ok(hatted > 1000, `${hatted} Chogs wear something on their head`);
+  assert.equal(chogLook(3)!.mane, 'fringe', '#3: a fringe of spikes under the bucket hat');
+  assert.equal(chogLook(75)!.mane, 'fringe', '#75: spikes out from under the Spartan helmet');
+  assert.equal(chogLook(90)!.mane, 'hood', '#90: spike tips inside the Yellow Hoodie\'s hood');
+});
+
+test('chogs: the base Chog keeps its spikes under every outfit hat', () => {
+  const fit = JSON.parse(readFileSync(new URL('../../client/src/three/characters/outfitFit.json', import.meta.url), 'utf8')) as {
+    mane: Record<string, Record<string, string>>;
+  };
+  for (const file of ['chog.glb', 'chog-low.glb']) {
+    const names = new Set((glbJson(new URL(`../../client/public/models/characters/${file}`, import.meta.url)).nodes ?? []).map(n => n.name ?? ''));
+    assert.ok(names.has('chog_Hair_full'), `${file}: the whole mane is a node of its own`);
+    for (const item of OUTFIT_ITEMS.filter(i => i.slot === 'head')) {
+      const cut = fit.mane.chog?.[item.id] ?? 'full';
+      assert.ok(['full', 'crown', 'cap', 'fringe'].includes(cut), `${item.id}: spikes show (${cut})`);
+      assert.ok(names.has(`chog_Hair_${cut}`), `${file} has chog_Hair_${cut} (under the ${item.id})`);
     }
   }
 });

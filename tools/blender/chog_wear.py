@@ -2,7 +2,7 @@
 
 chog_traits.py exports these next to the face parts, one node per shape:
 
-  chog_Hair_<trim>     the mane cut back to fit under a hat: full, crown, cap, hood
+  chog_Hair_<trim>     the mane cut back to fit under a hat: full, crown, cap, fringe, hood (some spikes always show)
   chog_Hat_<shape>     head space (the head pivot), hung on the head bone
   chog_Wear_<shape>    body space (the feet), on the body bone
   chog_Prop_<id>       hand space (the right hand's pivot), on the right hand bone
@@ -242,34 +242,100 @@ def puffs(name, mat, pts, r, seg=(14, 10)):
 
 # Spike angles of detailed.chog_hair's two rings (front, back), in creation order.
 SPIKES = ([-0.15, 0.6, -0.88, 1.25, -1.55, 1.9, -2.2], [0.25, -0.9, 1.15, -2.0, 2.3])
+# Every trim keeps some spikes in sight (only the Skull form, bald in the art, has no mane at all).
+# The mane's own spikes kept (|angle| from straight up at least this, front ring / back ring), or None for
+# the trims that grow spikes of their own instead (fringe, hood).
 TRIMS = {
     'full': (0.0, 0.0),
     # Clear of a crown, a plunger or horns: only the top spike goes.
     'crown': (0.5, 0.8),
-    # Out from under a cap or a beanie: the side and back spikes only.
+    # Out from under a baseball cap, a balaclava or a plunger: the side and back spikes.
     'cap': (1.5, 1.9),
-    # Inside a hood: the hood round the face, no spikes.
-    'hood': (9.0, 9.0),
+    # Under a hat that comes down all round (a bucket hat, a beanie, a helmet, a wig): a fringe of short
+    # spikes pokes out below its edge at the sides and the back, and the forehead tufts below the brim.
+    'fringe': None,
+    # Inside a hood or a helmet: a jagged fringe of spike tips across the forehead and down the sides of the
+    # face, inside the opening (the art's hooded Chogs).
+    'hood': None,
 }
+# Parts of detailed.chog_hair each self-spiked trim keeps (the rest would poke through the hat or hood).
+# (The rim's ends come out over a bucket hat's brim, and the temples through any hat's sides.)
+KEEP = {'fringe': ('HairMass', 'HairSide', 'HairFringe'), 'hood': ('HairMass', 'HairSide', 'HairRim')}
+
+# The fringe's spikes, in detailed.chog_hair's terms: angle from straight up (+ to his left), how far back
+# they lean, length past the head, root radius, and the height of the point they radiate from (the mane's
+# own spikes start at y 0.03). Out from low on the head so they clear the lowest brim (a bucket hat's, at the
+# sides) nearly level, leaning back and down behind (under a beanie's cuff); none in front.
+FRINGE = [(s * a, back, length, r0, oy) for s in (-1, 1) for a, back, length, r0, oy in (
+    (1.85, 0.35, 0.12, 0.072, -0.028),   # the sides, out from under the hat's edge
+    (2.0, 1.05, 0.12, 0.08, 0.0),        # behind the ears
+    (2.5, 1.05, 0.105, 0.072, 0.0),      # the back
+)] + [(2.95, 1.25, 0.085, 0.066, 0.0)]   # the nape, a touch off centre
+
+
+def spike(name, a, back, length, r0, m, z0, oy=0.03):
+    """One of the mane's spikes, as detailed.chog_hair draws them (out from the head's centre, flame-like)."""
+    d = Vector((math.sin(a), math.cos(a), -back)).normalized()
+    o = Vector((0, oy, z0))
+    sweep = Vector((0, 1, 0)) * 0.025 * abs(math.sin(a))
+    root, tip, mid = o + d * 0.045, o + d * (0.128 + length) + sweep, o + d * (0.128 + length * 0.45) + sweep * 0.3
+    return strand(name, [root, mid, tip], r0, 0.0012, m['hair'], ring=12, round_tip=False, up=(0, 0, 1), flat=0.45, taper=1.35)
+
+
+def bangs(m, f):
+    """The hooded fringe: pointed tufts side by side along the top of the face, tips down onto the forehead
+    (alternately long and short, a zigzag), and one down each side of the face."""
+    out = []
+    xs = (-0.085, -0.051, -0.017, 0.017, 0.051, 0.085)
+    for k, x in enumerate(xs):
+        top = f.outline(math.atan2(x, 0.09), 1.0).y
+        drop = 0.058 if k % 2 == 0 else 0.04
+        root = Vector((x, top + 0.004, f.face_z(x, top - 0.006) - 0.004))
+        tx = x * 0.92
+        tip = Vector((tx, top - drop, f.face_z(tx, top - drop) + 0.0015))
+        mid = root.lerp(tip, 0.5)
+        mid.z = f.face_z(mid.x, mid.y) + 0.004
+        out.append(strand(f'{CID}_HairBang{k}', [root, mid, tip], 0.026, 0.001, m['hair'], ring=10, round_tip=False,
+                          up=(0, 0, 1), flat=0.4, taper=1.5))
+    for s in (-1, 1):
+        q0, q1 = f.outline(s * 1.15, 1.0), f.outline(s * 1.55, 0.97)
+        pts = [Vector((q0.x + s * 0.004, q0.y + 0.012, f.face_z(q0.x * 0.94, q0.y) - 0.006)),
+               Vector(((q0.x + q1.x) / 2, (q0.y + q1.y) / 2, f.face_z(q1.x * 0.95, (q0.y + q1.y) / 2) - 0.001)),
+               Vector((q1.x * 0.97, q1.y - 0.012, f.face_z(q1.x * 0.95, q1.y - 0.012) + 0.0015))]
+        out.append(strand(f'{CID}_HairCheek{s}', pts, 0.019, 0.001, m['hair'], ring=10, round_tip=False,
+                          up=(0, 0, 1), flat=0.45, taper=1.5))
+    return out
 
 
 def hair(m, trim):
     head = []
-    detailed.chog_hair(CID, head, m, detailed.ChogFace())
-    front, back = TRIMS[trim]
+    f = detailed.ChogFace()
+    detailed.chog_hair(CID, head, m, f)
+    keep = TRIMS[trim]
     out = []
     for o in head:
-        # Under a hat or a hood most of it is hidden: a lighter surface will do.
-        if trim in ('cap', 'hood'):
-            o['budget'] = 5000
-        hit = re.search(r'_HairSpike(\d)(\d)', o.name)
-        if hit:
-            ring, k = int(hit.group(1)), int(hit.group(2))
-            a = SPIKES[ring][k]
-            if abs(a) < (front if ring == 0 else back):
+        if keep is None:
+            if not any(f'_{p}' in o.name for p in KEEP[trim]):
                 bpy.data.objects.remove(o)
                 continue
+        else:
+            hit = re.search(r'_HairSpike(\d)(\d)', o.name)
+            if hit:
+                ring, k = int(hit.group(1)), int(hit.group(2))
+                if abs(SPIKES[ring][k]) < keep[ring]:
+                    bpy.data.objects.remove(o)
+                    continue
         out.append(o)
+    if trim == 'fringe':
+        out += [spike(f'{CID}_HairTip{k}', a, back, length, r0, m, -0.02 if back < 0.5 else -0.055, oy)
+                for k, (a, back, length, r0, oy) in enumerate(FRINGE)]
+    elif trim == 'hood':
+        out += bangs(m, f)
+    for o in out:
+        o['fuse'] = 1
+        # Under a hat or a hood most of it is hidden: a lighter surface will do.
+        if trim in ('cap', 'fringe', 'hood'):
+            o['budget'] = 5000
     return out
 
 
