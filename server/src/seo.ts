@@ -57,7 +57,7 @@ export function headTags(meta: RouteMeta, origin = siteOrigin()): string {
     `<meta property="og:image" content="${esc(image)}" />`,
     `<meta property="og:image:width" content="${SHARE_IMAGE_SIZE.width}" />`,
     `<meta property="og:image:height" content="${SHARE_IMAGE_SIZE.height}" />`,
-    `<meta property="og:image:alt" content="${esc(`${SITE_NAME}: Monopoly, Chog Cards and Chog Poker`)}" />`,
+    `<meta property="og:image:alt" content="${esc(`${SITE_NAME}: Monopoly, Cards and Poker`)}" />`,
     '<meta name="twitter:card" content="summary_large_image" />',
     `<meta name="twitter:title" content="${esc(meta.title)}" />`,
     `<meta name="twitter:description" content="${esc(meta.description)}" />`,
