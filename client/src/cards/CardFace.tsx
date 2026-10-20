@@ -4,7 +4,11 @@
 // (cardSvgMarkup). Original design: a dark rim, a rich two-tone colour panel
 // with a fine stripe, the value in a big rounded cream badge, and its own icons
 // for Skip (a hop over a player), Reverse (two chasing arrows), Draw Two (a
-// pair of cards), and a four-petal pinwheel for the Wilds.
+// pair of cards), and a four-petal pinwheel for the Wilds. The Chog Chaos
+// cards keep the style: a whirlpool for Purge, a lightning bolt for Blitz, and
+// Wilds on panels of their own (a gas-price chart spiking off the top for Gas
+// Spike, a rug yanked away for Rug Pull, the Chog wheel for Chog Roulette),
+// each with a gold dashed inner rim so a Chaos card reads at a glance.
 
 import { memo } from 'react';
 import type { Card, CardColor } from '../../../shared/cards/deck.ts';
@@ -18,6 +22,13 @@ export const CARD_HEX: Record<CardColor, { base: string; deep: string; light: st
   blue: { base: '#2a78f0', deep: '#123f9e', light: '#79b0ff', ink: '#1450b8' },
 };
 const WILD = { base: '#2b1f4d', deep: '#120b26', light: '#4c3a85' };
+/** The Chog Chaos Wilds' panels: Monad purple for Gas Spike, a hot magenta for Rug Pull, the midnight Wild for the wheel. */
+const CHAOS_WILD: Partial<Record<Card['kind'], { base: string; deep: string; light: string }>> = {
+  wild6: { base: '#6a3df0', deep: '#1d0b5c', light: '#a58bff' },
+  wild10: { base: '#c0185c', deep: '#3a0420', light: '#ff6f9c' },
+  roulette: WILD,
+};
+const GOLD = '#ffd23f';
 const RIM = '#141a2e';
 const CREAM = '#fff8ea';
 const FONT = "'Lilita One', 'Titan One', 'Nunito', system-ui, sans-serif";
@@ -110,6 +121,90 @@ const PairIcon = ({ ink }: { ink: string }) => (
     <rect x="-6" y="-30" width="34" height="50" rx="8" transform="rotate(10)" fill={ink} />
   </g>
 );
+/** Purge: a whirlpool, everything of one colour going down it. */
+const PurgeIcon = ({ c }: { c: string }) => (
+  <g fill="none" stroke={c} strokeLinecap="round">
+    <path strokeWidth="10" d="M 0 0 C 10 -2 12 -14 2 -18 C -12 -24 -26 -10 -24 6 C -22 24 0 34 18 26 C 38 18 44 -8 34 -26" />
+    <path strokeWidth="10" d="M 26 -34 L 36 -28 L 42 -40" strokeLinejoin="round" />
+    <circle cx="0" cy="0" r="6" fill={c} stroke="none" />
+  </g>
+);
+/** Blitz: a lightning bolt with a spark either side. */
+const BlitzIcon = ({ c }: { c: string }) => (
+  <g fill={c} stroke="none">
+    <path d="M 10 -46 L -26 6 L -4 6 L -14 46 L 26 -8 L 4 -8 Z" />
+    <path d="M -40 -26 l 8 4 l -8 4 z M 40 18 l -8 -4 l 8 -4 z" />
+  </g>
+);
+/** Gas Spike: a gas-price chart shooting off the top, in the four colours, a flame at the peak. */
+function SpikeIcon() {
+  const cols: CardColor[] = ['green', 'blue', 'yellow', 'red'];
+  const pts = [[-36, 22], [-20, 12], [-8, 18], [6, -2], [18, 6], [34, -36]];
+  return (
+    <g fill="none" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M -40 30 L 40 30 M -40 30 L -40 -40" stroke={CREAM} strokeOpacity="0.45" strokeWidth="3" />
+      {pts.slice(1).map((p, i) => (
+        <path key={i} d={`M ${pts[i][0]} ${pts[i][1]} L ${p[0]} ${p[1]}`} stroke={CARD_HEX[cols[Math.min(3, Math.floor(i * 0.8))]].base} strokeWidth="8" />
+      ))}
+      <path d="M 34 -36 C 24 -44 30 -54 36 -60 C 36 -52 46 -50 42 -40 C 41 -37 38 -35 34 -36 Z" fill={GOLD} stroke="none" />
+    </g>
+  );
+}
+/** Rug Pull: a striped rug yanked out from under you, the arrow showing which way it went. */
+function RugIcon() {
+  const cols: CardColor[] = ['red', 'yellow', 'green', 'blue'];
+  return (
+    <g transform="rotate(-14)">
+      <g transform="skewX(-12)">
+        <rect x="-34" y="-20" width="62" height="40" rx="5" fill={CREAM} />
+        {cols.map((c, i) => <rect key={c} x={-28 + i * 14} y="-20" width="8" height="40" fill={CARD_HEX[c].base} />)}
+        {Array.from({ length: 6 }, (_, i) => <path key={i} d={`M -34 ${-16 + i * 6.6} l -7 0`} stroke={CREAM} strokeWidth="2.5" strokeLinecap="round" />)}
+      </g>
+      <path d="M 30 0 C 44 -2 50 -14 46 -28" fill="none" stroke={GOLD} strokeWidth="6" strokeLinecap="round" />
+      <path d="M 36 -26 L 46 -36 L 54 -24" fill="none" stroke={GOLD} strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+    </g>
+  );
+}
+/** Chog Roulette: the wheel, eight slices in the four colours, a gold pointer on top. */
+function Wheel({ r = 34 }: { r?: number }) {
+  const cols: CardColor[] = ['red', 'yellow', 'green', 'blue'];
+  const slice = (i: number) => {
+    const a0 = (i / 8) * Math.PI * 2 - Math.PI / 2, a1 = ((i + 1) / 8) * Math.PI * 2 - Math.PI / 2;
+    return `M 0 0 L ${r * Math.cos(a0)} ${r * Math.sin(a0)} A ${r} ${r} 0 0 1 ${r * Math.cos(a1)} ${r * Math.sin(a1)} Z`;
+  };
+  return (
+    <g>
+      <circle r={r + 5} fill={RIM} stroke={GOLD} strokeWidth="3" />
+      <g transform="rotate(12)">{Array.from({ length: 8 }, (_, i) => <path key={i} d={slice(i)} fill={CARD_HEX[cols[i % 4]].base} />)}</g>
+      {Array.from({ length: 8 }, (_, i) => {
+        const a = (i / 8) * Math.PI * 2;
+        return <circle key={i} cx={(r + 1) * Math.cos(a)} cy={(r + 1) * Math.sin(a)} r="1.8" fill={CREAM} />;
+      })}
+      <circle r={r * 0.28} fill={CREAM} stroke={RIM} strokeWidth="2" />
+      <path d={`M -7 ${-r - 10} L 7 ${-r - 10} L 0 ${-r + 4} Z`} fill={GOLD} stroke={RIM} strokeWidth="1.5" strokeLinejoin="round" />
+    </g>
+  );
+}
+
+/** The gold dashed inner rim every Chog Chaos card wears. */
+const ChaosRim = () => (
+  <rect x="12" y="12" width={CARD_W - 24} height={CARD_H - 24} rx="8" fill="none" stroke={GOLD} strokeOpacity="0.7" strokeWidth="2" strokeDasharray="6 4" />
+);
+
+/** A Wild's centre: a soft disc behind the art, and the penalty in a cream pill below it. */
+function WildCentre({ children, pill }: { children: React.ReactNode; pill?: string }) {
+  return (
+    <g transform={`translate(${CARD_W / 2} ${CARD_H / 2})`}>
+      <circle r="46" fill={CREAM} opacity="0.1" />
+      <g transform={pill ? 'translate(0 -10)' : undefined}>{children}</g>
+      {pill && <>
+        <rect x={-30} y="22" width="60" height="30" rx="12" fill={CREAM} stroke={GOLD} strokeWidth="2" />
+        <text x="0" y="46" textAnchor="middle" fontFamily={FONT} fontSize="26" fill={RIM}>{pill}</text>
+      </>}
+    </g>
+  );
+}
+
 function Pinwheel({ r = 30 }: { r?: number }) {
   const cols: CardColor[] = ['red', 'yellow', 'green', 'blue'];
   return (
@@ -125,7 +220,7 @@ function Pinwheel({ r = 30 }: { r?: number }) {
 }
 
 function faceId(c: Card): string {
-  return `cc-${c.color ?? 'wild'}`;
+  return CHAOS_WILD[c.kind] && c.kind !== 'roulette' ? `cc-${c.kind}` : `cc-${c.color ?? 'wild'}`;
 }
 
 /** One card face. Width comes from CSS (the SVG keeps its 2:3 shape). */
@@ -133,7 +228,8 @@ export const CardFace = memo(function CardFace({ card, className = '', title }: 
   const id = faceId(card);
   const hex = card.color ? CARD_HEX[card.color] : null;
   const ink = hex?.ink ?? RIM;
-  const tones = hex ?? WILD;
+  const tones = hex ?? CHAOS_WILD[card.kind] ?? WILD;
+  let chaos = false;
   let center: React.ReactNode;
   let corner: { label?: string; icon?: React.ReactNode };
   switch (card.kind) {
@@ -185,11 +281,37 @@ export const CardFace = memo(function CardFace({ card, className = '', title }: 
       );
       corner = { label: '+4' };
       break;
+    case 'purge':
+      chaos = true;
+      center = <Badge ink={ink}><g transform="scale(0.78)"><PurgeIcon c={ink} /></g></Badge>;
+      corner = { icon: <PurgeIcon c={CREAM} /> };
+      break;
+    case 'blitz':
+      chaos = true;
+      center = <Badge ink={ink}><g transform="scale(0.72)"><BlitzIcon c={ink} /></g></Badge>;
+      corner = { icon: <BlitzIcon c={CREAM} /> };
+      break;
+    case 'wild6':
+      chaos = true;
+      center = <WildCentre pill="+6"><g transform="scale(0.78)"><SpikeIcon /></g></WildCentre>;
+      corner = { label: '+6' };
+      break;
+    case 'wild10':
+      chaos = true;
+      center = <WildCentre pill="+10"><g transform="scale(0.72)"><RugIcon /></g></WildCentre>;
+      corner = { label: '10' };
+      break;
+    case 'roulette':
+      chaos = true;
+      center = <WildCentre><Wheel r={34} /></WildCentre>;
+      corner = { icon: <g transform="scale(1.35)"><Wheel r={26} /></g> };
+      break;
   }
   return (
     <svg className={`card-svg ${className}`} viewBox={`0 0 ${CARD_W} ${CARD_H}`} role="img" aria-label={title ?? cardName(card)}>
       <Defs id={id} {...tones} />
       <Body id={id} />
+      {chaos && <ChaosRim />}
       {center}
       <Corners {...corner} />
     </svg>

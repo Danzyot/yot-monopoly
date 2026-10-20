@@ -11,8 +11,9 @@ import { CARDS_DRAW_GAP_MS, CARDS_DRAW_MS } from '../../../shared/cards/pacing.t
 import { playYourTurn } from '../sound.ts';
 import type { CardsFrame } from './sequence.ts';
 import {
-  playCardFlip, playCardSlap, playCardWhoosh, playCatch, playChallenge, playDeal, playLastCard, playMatchWin, playPenalty,
-  playReverse, playRiffle, playRoundWin, playSkip, playSoft, playSwap, playWild,
+  playBlitz, playCardFlip, playCardSlap, playCardWhoosh, playCatch, playChallenge, playCombo, playDeal, playIgnite, playKnockout,
+  playLastCard, playMatchWin, playMercy, playPenalty, playPurge, playReverse, playRiffle, playRoulette, playRoundWin, playSkip,
+  playSoft, playSwap, playWild,
 } from './sounds.ts';
 
 export function useCardsSounds(frame: CardsFrame | null, me: string | null, myTurn: boolean): void {
@@ -67,11 +68,23 @@ export function useCardsSounds(frame: CardsFrame | null, me: string | null, myTu
         case 'swap':
         case 'rotate': sched(s.at, () => playSwap(0, 1)); break;
         case 'challenge': sched(s.at, () => playChallenge(0, 1)); break;
-        case 'call': sched(s.at, () => playLastCard(0, v)); break;
+        case 'call':
+          sched(s.at, () => playLastCard(0, v));
+          sched(s.at + 120, () => playIgnite(0, v));
+          break;
+        case 'purge': sched(s.at, () => playPurge(0, v, st.cards.length)); break;
+        case 'blitz': sched(s.at, () => playBlitz(0, v)); break;
+        case 'stack': sched(s.at, () => playCombo(0, 1, st.chain)); break;
+        case 'roulette': sched(s.at, () => playRoulette(0, 1, dur / 1000)); break;
+        case 'mercy': sched(s.at, () => playMercy(0, 1)); break;
         case 'catch': sched(s.at, () => playCatch(0, 1)); break;
         case 'pass':
         case 'timeout': sched(s.at, () => playSoft(0, v)); break;
-        case 'roundEnd': sched(s.at, () => (st.matchOver ? playMatchWin(0, 1) : playRoundWin(0, 1))); break;
+        case 'roundEnd':
+          // Out of cards: the last one lands hard first.
+          if (!st.blocked) sched(s.at, () => playKnockout(0, 1));
+          sched(s.at + 150, () => (st.matchOver ? playMatchWin(0, 1) : playRoundWin(0, 1)));
+          break;
         default: break;
       }
     }

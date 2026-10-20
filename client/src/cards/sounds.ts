@@ -196,3 +196,60 @@ export function playSwap(at = 0, v = 1) {
 export function playSoft(at = 0, v = 1) {
   tone(660, at, 0.08, 0.05 * v, 'sine', 520);
 }
+
+// ---- Chog Chaos and the table's big moments --------------------------------------
+
+/** Purge: a whirlpool, a falling swirl of card edges going down the drain. `n` cards cleared. */
+export function playPurge(at = 0, v = 1, n = 3) {
+  swoosh(at, 0.55, 0.13 * v, 2400, 260);
+  tone(620, at, 0.5, 0.05 * v, 'triangle', 150);
+  for (let i = 0; i < Math.min(n, 8); i++) burst(at + 0.06 + i * 0.05, 0.02, 0.06 * v, 'bandpass', jit(2600 - i * 180, 0.1), 2);
+}
+
+/** Blitz: an electric zap and a quick double rise ("go again"). */
+export function playBlitz(at = 0, v = 1) {
+  burst(at, 0.12, 0.12 * v, 'highpass', 4200, 0.8, 9000);
+  tone(180, at, 0.16, 0.08 * v, 'sawtooth', 1400);
+  tone(660, at + 0.16, 0.1, 0.08 * v, 'square');
+  tone(990, at + 0.27, 0.18, 0.08 * v, 'square');
+}
+
+/** A stack grows: a stinger that climbs with the chain (2, 3, 4… cards deep), with a thump under it. */
+export function playCombo(at = 0, v = 1, chain = 2) {
+  const k = Math.min(chain, 7);
+  const root = 330 * 2 ** ((k - 2) / 4);
+  [1, 1.26, 1.5].forEach((m, i) => tone(root * m, at + i * 0.05, 0.22, 0.08 * v, 'sawtooth'));
+  tone(root * 2, at + 0.15, 0.35, 0.07 * v, 'triangle');
+  tone(90, at, 0.3, 0.16 * v, 'sine', 45);
+  burst(at, 0.1, 0.12 * v, 'lowpass', 500, 1);
+}
+
+/** Chog Roulette: the wheel's clicks, quick and then slowing, and a ding where it stops. */
+export function playRoulette(at = 0, v = 1, over = 1) {
+  let t = at;
+  for (let i = 0; i < 16 && t < at + over - 0.1; i++) {
+    burst(t, 0.015, 0.07 * v, 'bandpass', 3400, 4);
+    t += 0.035 + i * i * 0.0016;
+  }
+  tone(1318, t + 0.02, 0.4, 0.08 * v, 'triangle');
+}
+
+/** No mercy: a big low boom and a falling whistle. */
+export function playMercy(at = 0, v = 1) {
+  burst(at, 0.6, 0.22 * v, 'lowpass', 900, 0.8, 80);
+  tone(70, at, 0.7, 0.2 * v, 'sine', 30);
+  tone(1200, at, 0.5, 0.04 * v, 'sine', 300);
+}
+
+/** Someone catches fire on their last card: a soft whoomph of flame. */
+export function playIgnite(at = 0, v = 1) {
+  swoosh(at, 0.45, 0.12 * v, 300, 1800);
+  burst(at + 0.05, 0.35, 0.05 * v, 'bandpass', 1200, 0.7);
+}
+
+/** Going out: the last card hits the table hard, with a gold shimmer. */
+export function playKnockout(at = 0, v = 1) {
+  tone(110, at, 0.35, 0.18 * v, 'sine', 50);
+  burst(at, 0.08, 0.2 * v, 'lowpass', 1100, 1);
+  for (let i = 0; i < 5; i++) tone(1800 + i * 300, at + 0.08 + i * 0.04, 0.2, 0.03 * v, 'sine');
+}

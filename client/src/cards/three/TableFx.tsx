@@ -2,7 +2,8 @@
 // and padded rim, the direction-of-play ring turning slowly round the middle
 // (and whipping round the other way on a Reverse), the colour in play
 // glowing under the discard pile (a burst that settles on the colour a Wild
-// names), and the confetti for the round and match wins. Each is one draw.
+// names; a gold shockwave for a stack, a Blitz and the round's last card),
+// and the confetti for the round and match wins. Each is one draw.
 
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, type RefObject } from 'react';
@@ -15,6 +16,7 @@ import { CENTRE, DISCARD, FELT_R, FELT_Y, TABLE_TOP } from './layout.ts';
 import { seg, type SceneState } from './state.ts';
 
 const NONE = '#6f7fd8';
+const GOLD = '#ffd23f';
 
 /** The felt: a purple pool with a fine nap, a gold double ring near the edge and a dashed ring inside it. */
 export function Felt() {
@@ -133,16 +135,27 @@ export function ColourGlow({ state }: { state: RefObject<SceneState | null> }) {
     let flash = 0;
     let ring = -1;
     let ringColor = want;
+    let wide = 1;
     const play = st.frame.play;
     if (play) {
       const now = performance.now();
       for (const s of play.steps) {
-        if (s.step.type !== 'color' || s.at > now || now >= s.end) continue;
+        const t = s.step;
+        if (s.at > now || now >= s.end) continue;
         const k = (now - s.at) / Math.max(1, s.end - s.at);
-        // White flash that settles on the colour; the ring rushes out.
-        flash = Math.max(flash, 1 - seg(k, 0.1, 0.7));
-        ring = k;
-        ringColor = CARD_HEX[s.step.color].base;
+        if (t.type === 'color') {
+          // White flash that settles on the colour; the ring rushes out.
+          flash = Math.max(flash, 1 - seg(k, 0.1, 0.7));
+          ring = k;
+          ringColor = CARD_HEX[t.color].base;
+        } else if (t.type === 'stack' || t.type === 'blitz' || (t.type === 'roundEnd' && !t.blocked)) {
+          // A gold shockwave, wider the deeper the stack (and for the last card of the round).
+          const kk = Math.min(1, k * 1.6);
+          flash = Math.max(flash, 1 - seg(kk, 0.05, 0.6));
+          ring = kk;
+          ringColor = GOLD;
+          wide = t.type === 'stack' ? 1 + Math.min(t.chain, 5) * 0.18 : t.type === 'roundEnd' ? 1.8 : 1.2;
+        }
       }
     }
     cur.current.lerp(new Color(want), 1 - Math.exp(-5 * dt));
@@ -151,7 +164,7 @@ export function ColourGlow({ state }: { state: RefObject<SceneState | null> }) {
     const b = burst.current;
     if (ring >= 0 && !st.reduced) {
       b.visible = true;
-      const sc = 0.35 + 2.3 * (1 - (1 - ring) ** 3);
+      const sc = (0.35 + 2.3 * (1 - (1 - ring) ** 3)) * wide;
       b.scale.set(sc, sc, 1);
       burstMat.color.set(ringColor);
       burstMat.opacity = 1 - ring;

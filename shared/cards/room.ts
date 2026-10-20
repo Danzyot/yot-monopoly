@@ -3,7 +3,7 @@
 // is a CardsView built for that one viewer (no other hand is ever in it).
 
 import type { CharacterId } from '../characters.ts';
-import type { CardsRules } from './rules.ts';
+import { modeLabel, type CardsRules } from './rules.ts';
 import type { CardsAction, CardsBotLevel, CardsView } from './types.ts';
 
 export type CardsRoomStatus = 'lobby' | 'playing' | 'finished';
@@ -67,7 +67,7 @@ export interface CardsRoomSummary {
   players: number;
   maxPlayers: number;
   hostName: string;
-  /** "Single round" or "First to 500". */
+  /** "Single round" or "First to 500" (with the mode in front when it is not Classic: "Chog Chaos · Single round"). */
   match: string;
 }
 
@@ -111,4 +111,9 @@ export interface CardsClientEvents {
 
 export function matchLabel(r: Pick<CardsRules, 'match' | 'targetScore'>): string {
   return r.match === 'single' ? 'Single round' : `First to ${r.targetScore}`;
+}
+
+/** The match, with the mode in front unless it is Classic: "Chog Chaos · First to 500". */
+export function tableLabel(r: Pick<CardsRules, 'mode' | 'match' | 'targetScore'>): string {
+  return r.mode === 'classic' ? matchLabel(r) : `${modeLabel(r.mode)} · ${matchLabel(r)}`;
 }

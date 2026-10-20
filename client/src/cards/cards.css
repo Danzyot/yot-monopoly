@@ -34,8 +34,9 @@
 .ch-fan-card:hover { z-index: 2; }
 .ch-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; align-items: center; margin-bottom: 10px; }
 .ch-actions .btn.big { width: auto; margin: 0; }
-.ch-join { display: flex; gap: 8px; }
-.ch-join input { width: 130px; font-size: 20px; }
+/* The join box wears the hub's look (styles/hub.css .hub-join); a little wider here, where it stands alone. */
+.ch-join { flex: 0 1 200px; }
+.ch-join .code-input { width: 110px; font-size: 18px; }
 .ch-body { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
 .ch-tables { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .ch-tables li { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 14px; background: rgba(0, 20, 70, 0.4); }
@@ -72,6 +73,18 @@
 .cl-fan > .card-svg:nth-child(3) { transform: rotate(12deg) translateY(6px); }
 .cl-help { margin: 10px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
 .cl-help b { color: var(--text); }
+
+/* The mode picker: a big button per mode with its signature cards. */
+.cl-modes button { align-items: center; text-align: center; padding: 8px 10px 12px; }
+.cl-modes button .cl-fan { margin: 2px 0 6px; }
+.cl-modes button .cl-fan > .card-svg { width: 50px; margin: 0 -8px; }
+.cl-modes button > small:last-child { line-height: 1.3; }
+.cl-modes .cl-mode-tag { color: var(--gold); font-weight: 800; letter-spacing: 0.02em; }
+.cl-modes button.mode-chaos.on { border-color: #ff6f9c; box-shadow: 0 0 0 2px rgba(255, 111, 156, 0.4), 0 0 22px rgba(131, 110, 249, 0.35); background: linear-gradient(160deg, rgba(131, 110, 249, 0.28), rgba(192, 24, 92, 0.22)); }
+.cl-chaos { list-style: none; margin: 4px 0 12px; padding: 0; display: grid; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.cl-chaos li { display: flex; align-items: center; gap: 10px; }
+.cl-chaos b { color: var(--text); }
+.cl-chaos .card-svg { width: 32px; height: auto; flex: none; filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.35)); }
 
 /* ==========================================================================
    The table
@@ -110,7 +123,7 @@
 }
 .ct-turn-tag { position: absolute; bottom: -11px; left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 1px 8px; border-radius: 99px; background: var(--gold); color: #4a2c00; font: 400 11px var(--display); }
 .ct-seat.left { opacity: 0.45; }
-.ct-ava { position: relative; display: inline-flex; }
+.ct-ava { position: relative; display: inline-flex; isolation: isolate; }
 .ct-ava-badge { position: relative; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; box-shadow: inset 0 0 0 3px rgba(0, 0, 0, 0.25), 0 3px 0 rgba(0, 0, 0, 0.35); }
 .ct-ava-me { position: absolute; right: -4px; bottom: -4px; display: inline-flex; border-radius: 50%; box-shadow: 0 0 0 2px #1a0d44; }
 .ct-ava-me .avatar { border-radius: 50%; }
@@ -394,4 +407,78 @@
 @media (max-height: 700px) and (min-width: 761px) {
   .ct-hand { min-height: 130px; padding-top: 16px; }
   .ct-card { width: 82px; }
+}
+
+/* ---- last card, on fire: the seat chip and our own bar burn while they hold one card ---- */
+.ct-flames { position: absolute; left: 50%; bottom: 30%; width: 150%; height: 150%; transform: translateX(-50%); pointer-events: none; z-index: -1; }
+.ct-flames i {
+  position: absolute; bottom: 0; left: 50%; width: 56%; height: 100%; margin-left: -28%; border-radius: 50% 50% 45% 45% / 70% 70% 30% 30%;
+  background: radial-gradient(ellipse at 50% 85%, #fff6c2 0%, #ffd23f 22%, #ff8c1a 48%, rgba(229, 56, 59, 0.85) 68%, rgba(229, 56, 59, 0) 78%);
+  filter: blur(1.5px); transform-origin: 50% 100%; animation: ct-flame 0.9s ease-in-out infinite alternate; mix-blend-mode: screen;
+}
+.ct-flames i:nth-child(2) { left: 28%; height: 72%; animation-duration: 0.7s; animation-delay: -0.3s; }
+.ct-flames i:nth-child(3) { left: 72%; height: 80%; animation-duration: 0.8s; animation-delay: -0.55s; }
+@keyframes ct-flame { from { transform: scale(0.9, 0.82) skewX(-4deg); opacity: 0.85; } to { transform: scale(1.08, 1.12) skewX(5deg); opacity: 1; } }
+/* Called "Last card!": hotter, with a Monad-purple heart. */
+.fire.called .ct-flames i { background: radial-gradient(ellipse at 50% 85%, #ffffff 0%, #c9b8ff 14%, #ffd23f 30%, #ff8c1a 52%, rgba(229, 56, 59, 0.9) 70%, rgba(229, 56, 59, 0) 80%); }
+.ct-seat.fire { border-color: #ff8c1a; box-shadow: 0 0 0 2px rgba(255, 140, 26, 0.55), 0 0 22px rgba(255, 110, 20, 0.55), 0 8px 18px rgba(0, 0, 0, 0.35); }
+.ct-seat.fire.called { box-shadow: 0 0 0 3px #ffd23f, 0 0 30px rgba(255, 140, 26, 0.75), 0 0 54px rgba(131, 110, 249, 0.45); }
+.ct-me.fire .ct-me-bar { border-color: #ff8c1a; box-shadow: 0 0 0 2px rgba(255, 140, 26, 0.55), 0 0 26px rgba(255, 110, 20, 0.5); }
+.ct-me.fire.called .ct-me-bar { box-shadow: 0 0 0 3px #ffd23f, 0 0 32px rgba(255, 140, 26, 0.7), 0 0 56px rgba(131, 110, 249, 0.4); }
+.ct-me.fire.turn .ct-me-bar { box-shadow: 0 0 0 3px var(--gold), 0 0 30px rgba(255, 110, 20, 0.7); }
+.ct-seat.out { opacity: 0.55; filter: grayscale(0.7); }
+.ct-badge-note.out { background: rgba(229, 56, 59, 0.3); color: #ffc2bd; }
+.ct-out-tag { font-size: 0.9em; }
+
+/* ---- Chog Chaos effects ---- */
+.ct-fly.purge { width: 70px; }
+.ct-flash.purge { font-size: 24px; background: #2a136b; border-color: #c9b8ff; }
+.ct-flash.purge.red { background: #c0262d; }
+.ct-flash.purge.yellow { background: #b97700; }
+.ct-flash.purge.green { background: #0d6b3f; }
+.ct-flash.purge.blue { background: #123f9e; }
+.ct-flash.draw.big { font-size: 34px; background: linear-gradient(#c0185c, #6a0a34); border-color: #ff9cbc; }
+.ct-banner.blitz { border-color: #ffe066; background: linear-gradient(rgba(42, 19, 107, 0.9), rgba(16, 8, 46, 0.9)); box-shadow: 0 0 40px rgba(255, 224, 102, 0.45); }
+.ct-banner.roulette { border-color: #c9b8ff; }
+.ct-banner.roulette.red { border-color: #ff7a6e; }
+.ct-banner.roulette.yellow { border-color: #ffe066; }
+.ct-banner.roulette.green { border-color: #6ee7a8; }
+.ct-banner.roulette.blue { border-color: #79b0ff; }
+.ct-banner.mercy { font-size: 40px; background: linear-gradient(rgba(120, 10, 30, 0.9), rgba(30, 4, 14, 0.92)); box-shadow: 0 0 50px rgba(229, 56, 59, 0.5); }
+
+/* The combo counter: "+12!" slammed over the middle of the table, bigger and hotter the deeper the stack. */
+.ct-combo {
+  position: absolute; left: 50%; top: 40%; z-index: 9; text-align: center; pointer-events: none; white-space: nowrap;
+  font: 400 64px/0.95 var(--display); color: #fff6c2; letter-spacing: 1px;
+  text-shadow: 0 4px 0 #b3141f, 0 8px 0 rgba(0, 0, 0, 0.35), 0 0 28px rgba(255, 140, 26, 0.9);
+  animation-name: ct-combo; animation-fill-mode: both; animation-timing-function: ease-out;
+}
+.ct-combo small { display: block; font: 900 15px var(--font); letter-spacing: 4px; text-transform: uppercase; color: #ffd23f; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5); }
+.ct-combo.lv3 { font-size: 78px; }
+.ct-combo.lv4 { font-size: 92px; text-shadow: 0 4px 0 #b3141f, 0 9px 0 rgba(0, 0, 0, 0.35), 0 0 36px rgba(255, 90, 20, 1), 0 0 70px rgba(131, 110, 249, 0.6); }
+.ct-combo.lv5 { font-size: 106px; color: #fff; text-shadow: 0 5px 0 #8a0f3a, 0 10px 0 rgba(0, 0, 0, 0.35), 0 0 44px rgba(255, 60, 20, 1), 0 0 90px rgba(131, 110, 249, 0.8); }
+@keyframes ct-combo {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(2.6) rotate(-8deg); }
+  18% { opacity: 1; transform: translate(-50%, -50%) scale(0.92) rotate(-3deg); }
+  28% { transform: translate(-50%, -50%) scale(1.06) rotate(-4deg); }
+  80% { opacity: 1; transform: translate(-50%, -58%) scale(1) rotate(-4deg); }
+  to { opacity: 0; transform: translate(-50%, -70%) scale(0.9) rotate(-4deg); }
+}
+/* A gold shockwave where the round's last card lands. */
+.ct-shock { position: absolute; width: 260px; height: 260px; transform: translate(-50%, -50%); border-radius: 50%; border: 8px solid #ffd23f; box-shadow: 0 0 30px #ffd23f, inset 0 0 30px rgba(255, 210, 63, 0.6); animation-name: ct-shock; animation-fill-mode: both; animation-timing-function: ease-out; z-index: 6; pointer-events: none; }
+@keyframes ct-shock { from { transform: translate(-50%, -50%) scale(0.15); opacity: 1; } to { transform: translate(-50%, -50%) scale(1.9); opacity: 0; } }
+/* The table shakes for the big moments (never with reduced motion: the class is not set). */
+.ct-stage.shake { animation: ct-shake 0.42s cubic-bezier(.36, .07, .19, .97) both; }
+@keyframes ct-shake {
+  10%, 90% { translate: -2px 1px; } 20%, 80% { translate: 4px -2px; } 30%, 50%, 70% { translate: -6px 2px; } 40%, 60% { translate: 6px -1px; }
+}
+.ct.compact .ct-combo { font-size: 48px; top: 36%; }
+.ct.compact .ct-combo.lv4, .ct.compact .ct-combo.lv5 { font-size: 64px; }
+.ct-chaos-cards { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ct-chaos-cards li { display: flex; align-items: center; gap: 12px; }
+.ct-chaos-cards .card-svg { width: 44px; height: auto; flex: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ct-flames i { animation: none; }
+  .ct-combo, .ct-shock { animation-duration: 1ms !important; }
+  .ct-combo { animation-name: none; transform: translate(-50%, -50%) rotate(-4deg); }
 }

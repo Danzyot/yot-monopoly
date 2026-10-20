@@ -5,6 +5,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useMyId } from '../net.ts';
 import { useAuth } from '../auth.tsx';
 import { CARDS_GAME_NAME } from '../../../shared/cards/meta.ts';
+import { BRAND } from '../../../shared/brand.ts';
 import { useCardsRoom } from './net.ts';
 import CardsLobby from './CardsLobby.tsx';
 import CardsTable from './CardsTable.tsx';
@@ -22,7 +23,7 @@ export default function CardsRoomPage() {
   if (room?.status === 'lobby') sawLobby.current = true;
 
   useEffect(() => {
-    document.title = room ? `${room.code} · ${CARDS_GAME_NAME}` : CARDS_GAME_NAME;
+    document.title = room ? `${room.code} · ${CARDS_GAME_NAME} · ${BRAND.name}` : `${CARDS_GAME_NAME} · ${BRAND.name}`;
   }, [room?.code]);
 
   if (!ready) return <div className="center-msg"><p className="muted">Loading…</p></div>;

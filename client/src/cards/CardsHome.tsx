@@ -7,6 +7,7 @@ import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { api } from '../api.ts';
 import { CARDS_GAME_NAME, LAST_CARD_CALL } from '../../../shared/cards/meta.ts';
+import { BRAND } from '../../../shared/brand.ts';
 import type { Card } from '../../../shared/cards/deck.ts';
 import { cardsCall, useCardsRoomList } from './net.ts';
 import { CardBack, CardFace } from './CardFace.tsx';
@@ -20,10 +21,14 @@ const SHOWCASE: Card[] = [
   { id: 3, kind: 'reverse', color: 'green' },
   { id: 4, kind: 'draw2', color: 'blue' },
   { id: 5, kind: 'wild4', color: null },
+  { id: 6, kind: 'wild10', color: null },
 ];
 
+/** The middle of the fan. */
+const MID = (SHOWCASE.length - 1) / 2;
+
 const STEPS = [
-  { icon: '🃏', title: 'Open a table', body: 'Pick the house rules, one round or first to a score, and the turn timer. Bots fill empty seats.' },
+  { icon: '🃏', title: 'Open a table', body: 'Classic, or Chog Chaos: Purge, Blitz, Gas Spike +6, Rug Pull +10, the Chog Roulette and no mercy at 25 cards. Pick the house rules and the timer; bots fill empty seats.' },
   { icon: '🔗', title: 'Share the code', body: 'Friends join with the five-letter code or the invite link, on a phone or a laptop.' },
   { icon: '🏁', title: 'Shed your hand', body: `Match colour, number or symbol. Down to one card? Hit "${LAST_CARD_CALL}" before someone catches you.` },
 ];
@@ -40,7 +45,7 @@ export default function CardsHome() {
   const [leaders, setLeaders] = useState<Leader[]>([]);
   const canCreate = !!profile && (config.features.publicRooms || profile.isAdmin);
 
-  useEffect(() => { document.title = CARDS_GAME_NAME; }, []);
+  useEffect(() => { document.title = `${CARDS_GAME_NAME} · ${BRAND.name}`; }, []);
   useEffect(() => {
     if (!config.features.leaderboard) return;
     api<{ leaders: Leader[] }>('/api/cards/leaderboard').then(r => setLeaders(r.leaders.slice(0, 5))).catch(() => {});
@@ -70,7 +75,7 @@ export default function CardsHome() {
       <section className="ch-hero">
         <div className="ch-fan" aria-hidden>
           {SHOWCASE.map((c, i) => (
-            <div key={c.id} className="ch-fan-card" style={{ transform: `rotate(${(i - 2.5) * 11}deg) translateY(${Math.abs(i - 2.5) * 9}px)` }}>
+            <div key={c.id} className="ch-fan-card" style={{ transform: `rotate(${(i - MID) * 11}deg) translateY(${Math.abs(i - MID) * 9}px)` }}>
               <CardFace card={c} />
             </div>
           ))}
@@ -80,16 +85,16 @@ export default function CardsHome() {
         <div className="ch-actions">
           {profile ? (
             <button className="btn primary big" disabled={busy || !connected || !canCreate} onClick={create}>
-              {canCreate ? 'Open a table' : 'Opening tables is operators-only right now'}
+              {canCreate ? `Play ${CARDS_GAME_NAME}` : 'Opening tables is operators-only right now'}
             </button>
           ) : (
             <button className="btn primary big" onClick={openSignIn}>Sign in to play</button>
           )}
-          <form className="ch-join" onSubmit={e => { e.preventDefault(); join(code); }}>
+          <form className="ch-join hub-join" onSubmit={e => { e.preventDefault(); join(code); }}>
             <input className="code-input" value={code} maxLength={5} placeholder="CODE" aria-label="Table code"
               autoCapitalize="characters" autoComplete="off" spellCheck={false}
               onChange={e => setCode(e.target.value.toUpperCase())} />
-            <button className="btn gold" type="submit">Join!</button>
+            <button className="btn gold small" type="submit">Join</button>
           </form>
         </div>
         <p className="muted small" role="status">
@@ -112,7 +117,7 @@ export default function CardsHome() {
                       <span className="muted small ch-table-meta">host {r.hostName} · {r.match} · <b>{r.players}/{r.maxPlayers}</b></span>
                     </span>
                     <button className={`btn small ${open ? 'primary' : ''}`} onClick={() => join(r.code)} aria-label={`${open ? 'Join' : 'Watch'} table ${r.code}`}>
-                      {open ? 'Join!' : 'Watch'}
+                      {open ? 'Join' : 'Watch'}
                     </button>
                   </li>
                 );
@@ -142,7 +147,7 @@ export default function CardsHome() {
             </ol>
           </section>
         )}
-        <p className="ch-foot muted small"><Link to="/">← Back to Monopoly</Link></p>
+        <p className="ch-foot muted small"><Link to="/">← Back to {BRAND.name}</Link></p>
       </div>
     </div>
   );

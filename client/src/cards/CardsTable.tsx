@@ -9,11 +9,13 @@
 
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { COLOR_LABEL, cardName, isWild, type Card, type CardColor, CARD_COLORS } from '../../../shared/cards/deck.ts';
-import { CARDS_HOUSE_RULES } from '../../../shared/cards/rules.ts';
+import {
+  CHAOS_CARD_HELP, COLOR_LABEL, DRAW_VALUE, KIND_LABEL, cardName, isWild, type Card, type CardColor, CARD_COLORS,
+} from '../../../shared/cards/deck.ts';
+import { CARDS_HOUSE_RULES, CARDS_MODES } from '../../../shared/cards/rules.ts';
 import { LAST_CARD_CALL, CARDS_GAME_NAME } from '../../../shared/cards/meta.ts';
 import type { CardsAction, CardsLogEntry, CardsPlayerView, CardsStep, CardsView } from '../../../shared/cards/types.ts';
-import { CARDS_AUTOPLAY_GRACE_MS, matchLabel, type CardsRoomView, type CardsSeatView } from '../../../shared/cards/room.ts';
+import { CARDS_AUTOPLAY_GRACE_MS, tableLabel, type CardsRoomView, type CardsSeatView } from '../../../shared/cards/room.ts';
 import { CARDS_PODIUM_MS } from '../../../shared/cards/pacing.ts';
 import { getCharacter } from '../../../shared/characters.ts';
 import { SEASON_CHARACTERS } from '../../../shared/season.ts';
@@ -127,6 +129,14 @@ const PILE: Record<'compact' | 'wide', { pile: Pt; discard: Pt }> = {
 
 const pos = (p: Pt): CSSProperties => ({ left: `${p.x}%`, top: `${p.y}%` });
 
+/** On one card: on fire (brighter once they have called "Last card!"). The 3D table burns the figure too (three/LastCardFire.tsx). */
+function fireClass(count: number, live: boolean, called: boolean): string {
+  return live && count === 1 ? `fire ${called ? 'called' : ''}` : '';
+}
+
+/** The flames round an avatar: a few CSS tongues, still under reduced motion. */
+const Flames = () => <span className="ct-flames" aria-hidden><i /><i /><i /></span>;
+
 /** The turn ring: drains over the turn timer (starts full while the clock is held). */
 function TurnRing({ endsAt, total, skew }: { endsAt: number | null; total: number; skew: number }) {
   if (!endsAt || !total) return <svg className="ct-ring" viewBox="0 0 100 100" aria-hidden><circle cx="50" cy="50" r="46" className="ct-ring-on" /></svg>;
@@ -158,16 +168,19 @@ function SeatChip({ p, seat, at, view, frame, skew, now, canCatch, compact, pin 
   /** Pinned over the player's 3D figure (the scene places it); otherwise at `at`. */
   pin?: (el: HTMLElement | null) => void;
 }) {
-  const turn = frame.current === p.id && (view.phase !== 'roundOver' && view.phase !== 'over');
+  const live = view.phase !== 'roundOver' && view.phase !== 'over';
+  const turn = frame.current === p.id && live;
   const count = frame.counts[p.id] ?? p.cards;
   const oc = view.oneCard.find(o => o.player === p.id);
   const called = !!oc && oc.calledAt !== null && count === 1;
+  const fire = p.left || p.out ? '' : fireClass(count, live, called);
   const away = seat?.awayAt && !seat.isBot ? Math.max(0, Math.ceil((seat.awayAt + CARDS_AUTOPLAY_GRACE_MS - now) / 1000)) : null;
   const fan = Math.min(count, compact ? 4 : 7);
   return (
-    <div className={`ct-seat ${turn ? 'turn' : ''} ${p.left ? 'left' : ''} ${compact ? 'compact' : ''} ${pin ? 'pinned' : ''}`}
+    <div className={`ct-seat ${turn ? 'turn' : ''} ${p.left ? 'left' : ''} ${p.out ? 'out' : ''} ${fire} ${compact ? 'compact' : ''} ${pin ? 'pinned' : ''}`}
       style={{ ...(pin ? {} : pos(at)), '--seat': seat?.color ?? '#888' } as CSSProperties} data-player={p.id} ref={pin}>
       <div className="ct-ava">
+        {fire && <Flames />}
         {turn && <TurnRing endsAt={frame.busy ? null : view.turnEndsAt} total={view.rules.turnSeconds * 1000} skew={skew} />}
         <SeatAvatar seat={seat} size={compact ? 38 : 50} />
         {view.dealer === p.id && <span className="ct-dealer" title="Dealer">D</span>}
@@ -183,6 +196,7 @@ function SeatChip({ p, seat, at, view, frame, skew, now, canCatch, compact, pin 
       {turn && !compact && <div className="ct-turn-tag">{frame.busy ? 'playing…' : 'their turn'}</div>}
       {called && <div className="ct-badge-last">{LAST_CARD_CALL}</div>}
       {p.left && <div className="ct-badge-note">left</div>}
+      {!p.left && p.out && <div className="ct-badge-note out" title="Knocked out of this round by the Mercy rule">💥 out this round</div>}
       {!p.left && p.afk && <div className="ct-badge-note">auto-play</div>}
       {!p.left && !p.afk && away !== null && (
         <div className="ct-badge-note warn" title={`${p.name} lost connection — auto-play takes over in ${away} s if not back`}>
@@ -260,10 +274,36 @@ function Effect({ s, layout, piles, names, me, three }: {
               <CardArt card={mine ? st.cards![k] ?? null : null} />
             </div>
           ))}
-          {st.count > 1 && flash(st.player, `+${st.count}`, 'draw')}
+          {st.count > 1 && flash(st.player, `+${st.count}`, `draw ${st.count >= 6 ? 'big' : ''}`)}
         </>
       );
     }
+    case 'purge':
+      return (
+        <>
+          {!three && st.cards.slice(0, 8).map((c, k) => (
+            <div key={c.id} className="ct-fly purge" style={fly(seatAt(st.player), piles.discard, Math.max(300, dur - 300), left + k * 60)}>
+              <CardFace card={c} />
+            </div>
+          ))}
+          {flash(st.player, <>🌀 Purge ×{st.cards.length}!</>, `purge ${st.cards[0]?.color ?? ''}`)}
+        </>
+      );
+    case 'blitz': return banner(<>⚡ Blitz!<small>everyone skipped — {names[st.player]} goes again</small></>, 'blitz');
+    case 'stack':
+      // The combo counter: bigger and hotter the deeper the stack.
+      return (
+        <div className={`ct-combo lv${Math.min(st.chain, 5)}`} style={{ animationDuration: `${dur}ms`, animationDelay: `${left}ms` }}>
+          +{st.amount}!<small>combo ×{st.chain}</small>
+        </div>
+      );
+    case 'roulette':
+      return banner(<><span className="ct-ico spin">🎰</span> Chog Roulette<small>{names[st.player]} turns up cards until {COLOR_LABEL[st.color]} shows…</small></>,
+        `roulette ${st.color}`);
+    case 'mercy':
+      // The 3D table cuts to them with its own title card (with the cinematic camera); the flash is for when it does not.
+      if (three) return flash(st.player, <>💥 No mercy!<small>{st.count} cards</small></>, 'catch');
+      return banner(<>💥 No mercy!<small>{names[st.player]} hit {st.count} cards — out of the round</small></>, 'bad mercy');
     case 'deal': {
       const per = Math.min(st.count, 3);
       const n = st.order.length * per;
@@ -307,8 +347,13 @@ function Effect({ s, layout, piles, names, me, three }: {
     case 'reshuffle': return flash('pile', 'Reshuffle', 'soft');
     case 'roundEnd':
       // In 3D the camera cuts to the winner with a title card; the match's last round goes on to the podium.
-      if (three) return null;
-      return banner(<>{names[st.winner]} {st.blocked ? 'takes' : 'wins'} the round!<small>+{st.points} points</small></>, 'win');
+      if (three) return st.blocked ? null : <div className="ct-shock" style={{ ...pos(piles.discard), animationDuration: `${Math.min(dur, 900)}ms`, animationDelay: `${left}ms` }} />;
+      return (
+        <>
+          {!st.blocked && <div className="ct-shock" style={{ ...pos(piles.discard), animationDuration: `${Math.min(dur, 900)}ms`, animationDelay: `${left}ms` }} />}
+          {banner(<>{names[st.winner]} {st.blocked ? 'takes' : 'wins'} the round!<small>+{st.points} points</small></>, 'win')}
+        </>
+      );
   }
 }
 
@@ -440,7 +485,8 @@ function RoundOver({ view, skew }: { view: CardsView; skew: number }) {
         <tbody>
           {[...view.players].sort((a, b) => b.score - a.score).map(p => (
             <tr key={p.id} className={p.id === r.winner ? 'win' : ''}>
-              <td>{p.name}</td><td>{p.id === r.winner ? '—' : r.hands[p.id] ?? 0}</td><td><b>{p.score}</b> / {view.rules.targetScore}</td>
+              <td>{p.name}{r.out?.includes(p.id) && <span className="ct-out-tag" title="Knocked out by the Mercy rule"> 💥</span>}</td>
+              <td>{p.id === r.winner ? '—' : r.hands[p.id] ?? 0}</td><td><b>{p.score}</b> / {view.rules.targetScore}</td>
             </tr>
           ))}
         </tbody>
@@ -481,7 +527,7 @@ function MatchOver({ room, view, me, isHost }: { room: CardsRoomView; view: Card
             {order.slice(3).map(p => <li key={p.id}>{p.name} <span className="muted">{view!.rules.match === 'points' ? `${p.score} pts` : `${last?.hands[p.id] ?? 0} in hand`}</span></li>)}
           </ol>
         )}
-        <p className="muted small">{view ? `${view.round} round${view.round === 1 ? '' : 's'} · ${matchLabel(view.rules)}` : ''}</p>
+        <p className="muted small">{view ? `${view.round} round${view.round === 1 ? '' : 's'} · ${tableLabel(view.rules)}` : ''}</p>
         <div className="row wrap ct-over-actions">
           {isHost && <button className="btn primary" onClick={() => cardsCall('cards:rematch').catch(toastError)}>Rematch</button>}
           {!isHost && <span className="muted small">Waiting for the host to start a rematch…</span>}
@@ -494,6 +540,7 @@ function MatchOver({ room, view, me, isHost }: { room: CardsRoomView; view: Card
 
 function RulesModal({ view, onClose }: { view: CardsView; onClose: () => void }) {
   const r = view.rules;
+  const mode = CARDS_MODES.find(m => m.id === r.mode) ?? CARDS_MODES[0];
   return (
     <Modal onClose={onClose} label="Table rules" className="ct-rules-modal">
       <CloseX onClick={onClose} />
@@ -506,8 +553,20 @@ function RulesModal({ view, onClose }: { view: CardsView; onClose: () => void })
         {!r.noBluff && <li>A Wild Draw Four is only legal without the colour in play. Think it was a bluff? <b>Challenge</b> it.</li>}
         <li>First out of cards wins the round and scores everyone else's cards (numbers face value, action cards 20, Wilds 50).</li>
       </ul>
+      {r.mode === 'chaos' && <>
+        <h3>Chog Chaos cards</h3>
+        <ul className="ct-chaos-cards">
+          {CHAOS_CARD_HELP.map(h => (
+            <li key={h.kind}>
+              <CardFace card={{ id: -1, kind: h.kind, color: h.kind === 'purge' ? 'green' : h.kind === 'blitz' ? 'blue' : null }} />
+              <span><b>{KIND_LABEL[h.kind]}</b> {h.help}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="small muted">A Draw card stacks on any of equal or lower value when mixed stacking is on. Purge and Blitz score 30, the Chaos Wilds 60.</p>
+      </>}
       <h3>This table</h3>
-      <p>{matchLabel(r)} · {r.turnSeconds ? `${r.turnSeconds} s turns` : 'no turn timer'}</p>
+      <p>{mode.label} · {tableLabel({ ...r, mode: 'classic' })} · {r.turnSeconds ? `${r.turnSeconds} s turns` : 'no turn timer'}</p>
       <ul className="ct-howto">
         {CARDS_HOUSE_RULES.filter(h => r[h.key]).map(h => <li key={h.key}><b>{h.label}:</b> {h.help}</li>)}
         {!CARDS_HOUSE_RULES.some(h => r[h.key]) && <li className="muted">No house rules: the standard game.</li>}
@@ -594,8 +653,9 @@ export default function CardsTable({ room, me, chat, skew, fromLobby }: {
   const meP = view.players.find(p => p.id === myId);
   const myOne = view.oneCard.find(o => o.player === myId);
   const catchable = new Set(you && live ? view.oneCard.filter(o => o.player !== you.id && o.catchable && now >= o.catchFrom).map(o => o.player) : []);
+  // (Two cards, or a Purge that would leave one: canCallLastCard says when a call ahead counts.)
   const showLast = !!you && live && !held && you.canCallLastCard
-    && (you.hand.length === 1 || (you.hand.length === 2 && you.playable.length > 0 && (myTurn || view.rules.jumpIn)));
+    && (you.hand.length === 1 || (you.playable.length > 0 && (myTurn || view.rules.jumpIn)));
   const away = !!you && !!meP && !meP.left && (meP.afk || !!meSeat?.autopilot);
 
   const act = async (a: CardsAction) => {
@@ -627,7 +687,7 @@ export default function CardsTable({ room, me, chat, skew, fromLobby }: {
     } else if (myTurn && view.phase === 'play' && pd) {
       prompt = (
         <div className="ct-prompt ct-penalty" role="dialog" aria-label="Draw penalty">
-          <h3>{names[pd.from]} hit you with {pd.kind === 'wild4' ? 'a Wild Draw Four' : 'a Draw Two'}{pd.amount > (pd.kind === 'wild4' ? 4 : 2) ? ` — stacked to ${pd.amount}` : ''}!</h3>
+          <h3>{names[pd.from]} hit you with a {KIND_LABEL[pd.kind]}{pd.amount > (DRAW_VALUE[pd.kind] ?? 0) ? ` — stacked to ${pd.amount}` : ''}!</h3>
           {pd.challengeable && <p className="small">Think they held {pd.prevColor ? COLOR_LABEL[pd.prevColor] : 'the colour in play'}? Challenge: if it was a bluff they draw 4; if not, you draw 6.</p>}
           {view.rules.stacking && you.playable.length > 0 && <p className="small">…or stack a Draw card on it to pass it on.</p>}
           <div className="row wrap">
@@ -652,6 +712,10 @@ export default function CardsTable({ room, me, chat, skew, fromLobby }: {
   }
 
   const discardTop = frame.top;
+  // The big moments shake the table: a stack, a knockout, the last card of a round.
+  const shake = !reduced && frame.active.some(s => s.step.type === 'stack' || s.step.type === 'mercy' || (s.step.type === 'roundEnd' && !s.step.blocked));
+  const myCount = meP && !meP.left && !meP.out ? hand.length : 0;
+  const myFire = fireClass(myCount, live, !!myOne && myOne.calledAt !== null);
   const color = frame.color;
   const turnName = names[view.current];
   const status = !live ? '' : held ? '' : myTurn
@@ -679,7 +743,7 @@ export default function CardsTable({ room, me, chat, skew, fromLobby }: {
         <div className="ct-top-l">
           <span className="ct-logo">{CARDS_GAME_NAME}</span>
           <span className="ct-code mono" title="Table code">{room.code}</span>
-          <span className="ct-meta">Round {view.round} · {matchLabel(view.rules)}{room.spectators ? ` · ${room.spectators} watching` : ''}</span>
+          <span className="ct-meta">Round {view.round} · {tableLabel(view.rules)}{room.spectators ? ` · ${room.spectators} watching` : ''}</span>
         </div>
         <div className="ct-top-r">
           <MusicPlayer />
@@ -705,7 +769,7 @@ export default function CardsTable({ room, me, chat, skew, fromLobby }: {
       </header>
 
       <div className="ct-main">
-        <div className="ct-stage">
+        <div className={`ct-stage ${shake ? 'shake' : ''}`}>
           {three ? (
             <Suspense fallback={<div className="ct-felt" aria-hidden />}>
               <CardsScene view={view} frame={frame} seats={seats} me={myId} myTurn={myTurn && !held} compact={compact} quality={quality}
@@ -774,17 +838,18 @@ export default function CardsTable({ room, me, chat, skew, fromLobby }: {
       </div>
 
       {you && meP && (
-        <footer className={`ct-me ${myTurn && !held ? 'turn' : ''}`} style={{ '--seat': meSeat?.color ?? '#888' } as CSSProperties}>
+        <footer className={`ct-me ${myTurn && !held ? 'turn' : ''} ${myFire}`} style={{ '--seat': meSeat?.color ?? '#888' } as CSSProperties}>
           <div className="ct-me-bar">
             <div className="ct-me-who">
               <div className="ct-ava">
+                {myFire && <Flames />}
                 {frame.current === myId && live && <TurnRing endsAt={held ? null : view.turnEndsAt} total={view.rules.turnSeconds * 1000} skew={skew} />}
                 <SeatAvatar seat={meSeat} size={compact ? 36 : 44} />
               </div>
               <div className="ct-me-text">
                 <b>{meP.name}{view.rules.match === 'points' && <span className="muted small"> · {meP.score} pts</span>}</b>
                 <span className={`ct-status ${myTurn && !held ? 'mine' : ''}`} role="status">
-                  {meP.left ? 'You left this match' : status}{myTimer !== null && !held ? ` · ${myTimer}s` : ''}
+                  {meP.left ? 'You left this match' : meP.out && live ? 'Knocked out — back next round' : status}{myTimer !== null && !held ? ` · ${myTimer}s` : ''}
                 </span>
               </div>
             </div>

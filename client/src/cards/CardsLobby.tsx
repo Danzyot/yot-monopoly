@@ -1,19 +1,19 @@
 // The card table's lobby, in the Monopoly lobby's design language
 // (components/Lobby.tsx, styles/lobby.css): the host gets the set-up panels
-// (players and bots, match, timer, house rules with their help text); everyone
-// else gets the clean member view: a live summary, a big chat and the
-// players, with their own character folded underneath.
+// (players and bots, the mode, match, timer, house rules with their help
+// text); everyone else gets the clean member view: a live summary, a big chat
+// and the players, with their own character folded underneath.
 
 import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CARDS_HOUSE_RULES, TARGET_SCORE_MAX, TARGET_SCORE_MIN, type CardsRules } from '../../../shared/cards/rules.ts';
+import { CARDS_HOUSE_RULES, CARDS_MODES, TARGET_SCORE_MAX, TARGET_SCORE_MIN, type CardsGameMode, type CardsRules } from '../../../shared/cards/rules.ts';
 import { CARDS_GAME_NAME, CARDS_MAX_PLAYERS, CARDS_MIN_PLAYERS } from '../../../shared/cards/meta.ts';
 import {
   CARDS_BOT_LEVELS, CARDS_SEAT_COLORS, CARDS_TARGET_CHOICES, CARDS_TURN_CHOICES, matchLabel,
   type CardsRoomView, type CardsSeatView,
 } from '../../../shared/cards/room.ts';
 import type { CardsBotLevel } from '../../../shared/cards/types.ts';
-import type { Card } from '../../../shared/cards/deck.ts';
+import { CHAOS_CARD_HELP, KIND_LABEL, type Card } from '../../../shared/cards/deck.ts';
 import { getCharacter, type CharacterId } from '../../../shared/characters.ts';
 import { availableCharacters } from '../../../shared/season.ts';
 import type { ChatMsg } from '../net.ts';
@@ -57,6 +57,38 @@ const DECOR: Card[] = [
   { id: 6, kind: 'wild4', color: null },
   { id: 7, kind: 'reverse', color: 'red' },
 ];
+
+/** Each mode's three signature cards, for its picker button and the summary. */
+const MODE_FAN: Record<CardsGameMode, Card[]> = {
+  classic: [
+    { id: 0, kind: 'number', color: 'red', value: 7 },
+    { id: 1, kind: 'wild', color: null },
+    { id: 2, kind: 'skip', color: 'blue' },
+  ],
+  chaos: [
+    { id: 0, kind: 'purge', color: 'green' },
+    { id: 1, kind: 'wild10', color: null },
+    { id: 2, kind: 'roulette', color: null },
+  ],
+};
+
+function ModeFan({ mode }: { mode: CardsGameMode }) {
+  return <div className="cl-fan" aria-hidden>{MODE_FAN[mode].map(c => <CardFace key={c.id} card={c} />)}</div>;
+}
+
+/** What the Chog Chaos cards do, under the picker and in the summary. */
+function ChaosCards() {
+  return (
+    <ul className="cl-chaos">
+      {CHAOS_CARD_HELP.map(h => (
+        <li key={h.kind}>
+          <CardFace card={{ id: -1, kind: h.kind, color: h.kind === 'purge' ? 'red' : h.kind === 'blitz' ? 'yellow' : null }} />
+          <span><b>{KIND_LABEL[h.kind]}</b> {h.help}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export function CardsBackdrop() {
   return (
@@ -211,12 +243,9 @@ function MemberLobby({ room, me, spectating, chat, onLeave }: {
 
         <aside className="panel lm-summary" aria-label="Table settings">
           <h3>{CARDS_GAME_NAME}</h3>
-          <div className="cl-fan" aria-hidden>
-            <CardFace card={{ id: 0, kind: 'number', color: 'red', value: 7 }} />
-            <CardFace card={{ id: 1, kind: 'wild', color: null }} />
-            <CardFace card={{ id: 2, kind: 'skip', color: 'blue' }} />
-          </div>
+          <ModeFan mode={r.mode} />
           <dl className="ls-facts">
+            <div><dt>Mode</dt><dd><Live value={r.mode}>{CARDS_MODES.find(m => m.id === r.mode)?.label}</Live></dd></div>
             <div><dt>Match</dt><dd><Live value={`${r.match}${r.targetScore}`}>{matchLabel(r)}</Live></dd></div>
             <div><dt>Turn timer</dt><dd><Live value={r.turnSeconds}>{r.turnSeconds ? `${r.turnSeconds} s` : 'Off'}</Live></dd></div>
             <div><dt>Seats</dt><dd><Live value={room.maxPlayers}>up to {room.maxPlayers}</Live></dd></div>
@@ -228,6 +257,7 @@ function MemberLobby({ room, me, spectating, chat, onLeave }: {
             {room.private && <span className="ls-chip ls-private" title="Join by invite link only">🔒 Private</span>}
           </div>
           {on.length > 0 && <ul className="cl-help">{on.map(h => <li key={h.key}><b>{h.label}:</b> {h.help}</li>)}</ul>}
+          {r.mode === 'chaos' && <><h4 className="ls-rules-head">Chog Chaos cards</h4><ChaosCards /></>}
         </aside>
 
         {config.features.chat && (
@@ -341,6 +371,19 @@ export default function CardsLobby({ room, me, spectating, chat }: {
         </section>
 
         <section className="panel cl-settings">
+          <h3 className="cl-head">Mode</h3>
+          <div className="cl-seg cl-modes" role="radiogroup" aria-label="Game mode">
+            {CARDS_MODES.map(mo => (
+              <button key={mo.id} role="radio" aria-checked={r.mode === mo.id} className={`${r.mode === mo.id ? 'on' : ''} mode-${mo.id}`} data-mode={mo.id}
+                onClick={() => r.mode !== mo.id && rules({ mode: mo.id })}>
+                <ModeFan mode={mo.id} />
+                <b>{mo.label}</b><small className="cl-mode-tag">{mo.tag}</small>
+                <small>{mo.help}</small>
+              </button>
+            ))}
+          </div>
+          {r.mode === 'chaos' && <ChaosCards />}
+
           <h3 className="cl-head">Match</h3>
           <div className="cl-seg" role="radiogroup" aria-label="Match length">
             <button role="radio" aria-checked={r.match === 'single'} className={r.match === 'single' ? 'on' : ''} onClick={() => rules({ match: 'single' })}>
@@ -373,7 +416,7 @@ export default function CardsLobby({ room, me, spectating, chat }: {
             </label>
           </div>
 
-          <h3 className="cl-head">House rules <small className="muted">all off is the standard game</small></h3>
+          <h3 className="cl-head">House rules <small className="muted">{r.mode === 'chaos' ? 'Chog Chaos turned these on: change any' : 'stacking on, the rest off: how most people play'}</small></h3>
           <div className="rules">
             {CARDS_HOUSE_RULES.map(h => {
               const off = h.key === 'stackMixed' && !r.stacking;

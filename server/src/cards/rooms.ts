@@ -13,11 +13,11 @@ import { CardsError, CardsGame, type CardsSnapshot } from './game.ts';
 import { cardsAutopilotAction, cardsBotAction, cardsBotThinkMs } from './bot.ts';
 import { CARDS_MAX_PLAYERS, CARDS_MIN_PLAYERS } from '../../../shared/cards/meta.ts';
 import { bestColor } from '../../../shared/cards/deck.ts';
-import { DEFAULT_CARDS_RULES, normalizeCardsRules, type CardsRules } from '../../../shared/cards/rules.ts';
+import { CARDS_MODES, DEFAULT_CARDS_RULES, normalizeCardsRules, type CardsRules } from '../../../shared/cards/rules.ts';
 import type { CardsAction, CardsBotLevel } from '../../../shared/cards/types.ts';
 import { cardsPlayMs, CARDS_MAX_QUEUE_MS } from '../../../shared/cards/pacing.ts';
 import {
-  CARDS_AUTOPLAY_GRACE_MS, CARDS_DEFAULT_MAX_PLAYERS, CARDS_SEAT_COLORS, matchLabel,
+  CARDS_AUTOPLAY_GRACE_MS, CARDS_DEFAULT_MAX_PLAYERS, CARDS_SEAT_COLORS, tableLabel,
   type CardsConfigure, type CardsRoomStatus, type CardsRoomSummary, type CardsRoomView, type CardsSeatView,
 } from '../../../shared/cards/room.ts';
 import { isCharacterId, migrateCharacter, type CharacterId } from '../../../shared/characters.ts';
@@ -297,7 +297,9 @@ export class CardsRoom {
     this.requireHost(id, isAdmin);
     this.requireLobby();
     if (p.rules && typeof p.rules === 'object') {
-      const next = normalizeCardsRules({ ...this.rules, ...p.rules });
+      // A new mode brings its own house rules; anything else in the same request goes on top.
+      const mode = CARDS_MODES.find(m => m.id === p.rules!.mode && m.id !== this.rules.mode);
+      const next = normalizeCardsRules({ ...this.rules, ...mode?.preset, ...p.rules });
       // Mixed stacking only means something with stacking on.
       if (!next.stacking) next.stackMixed = false;
       this.rules = next;
@@ -416,7 +418,7 @@ export class CardsRoom {
     // Clients coming from the lobby stage the first deal: so do the timers.
     this.seenPlay = 0;
     this.sceneUntil = 0;
-    this.hooks.onEvent(this, `Match started: ${this.seats.length} players, ${matchLabel(this.rules).toLowerCase()}`);
+    this.hooks.onEvent(this, `Match started: ${this.seats.length} players, ${tableLabel(this.rules).toLowerCase()}`);
     this.afterChange();
   }
 
@@ -744,7 +746,7 @@ export class CardsRoom {
   summary(): CardsRoomSummary {
     return {
       code: this.code, status: this.status, players: this.seats.length, maxPlayers: this.maxPlayers,
-      hostName: this.hostName(), match: matchLabel(this.rules),
+      hostName: this.hostName(), match: tableLabel(this.rules),
     };
   }
 

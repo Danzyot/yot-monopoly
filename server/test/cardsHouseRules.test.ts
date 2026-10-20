@@ -24,7 +24,7 @@ test('stacking: Draw Two on Draw Two passes the growing penalty on', () => {
   assert.equal(g.current.id, 'p1', 'the target decides');
   assert.equal(g.player('p1').hand.length, 3, 'nothing drawn yet');
   const v = g.view('p1');
-  assert.deepEqual(v.pendingDraw, { amount: 2, kind: 'draw2', from: 'p0', challengeable: false });
+  assert.deepEqual(v.pendingDraw, { amount: 2, kind: 'draw2', from: 'p0', chain: 1, challengeable: false });
   assert.deepEqual(v.you!.playable.length, 1, 'only the Draw Two stacks (a Draw Four needs mixed stacking)');
   assertRefused(g, () => play('p1', 'g3'), /Stack a Draw card or draw 2/);
   assertRefused(g, () => play('p1', 'W4', { color: 'red' }), /Stack a Draw card/);
@@ -46,7 +46,7 @@ test('stacking: Draw Four on Draw Four; a stacked one cannot be challenged', () 
   play('p0', 'W4', { color: 'blue' });
   assert.equal(g.view('p1').pendingDraw!.challengeable, true);
   play('p1', 'W4', { color: 'red' });
-  assert.deepEqual(g.view('p2').pendingDraw, { amount: 8, kind: 'wild4', from: 'p1', challengeable: false });
+  assert.deepEqual(g.view('p2').pendingDraw, { amount: 8, kind: 'wild4', from: 'p1', chain: 2, challengeable: false });
   assertRefused(g, () => act('p2', { type: 'challenge' }), /nothing to challenge/);
   act('p2', { type: 'draw' });
   assert.equal(g.player('p2').hand.length, 15);
@@ -72,7 +72,7 @@ test('mixed stacking: Draw Four on Draw Two, and a Draw Two in the named colour 
   setHand(g, 'p2', ['b+2', 'r+2', 'r3']);
   play('p0', 'g+2');
   play('p1', 'W4', { color: 'red' });
-  assert.deepEqual(g.view('p2').pendingDraw, { amount: 6, kind: 'wild4', from: 'p1', challengeable: false });
+  assert.deepEqual(g.view('p2').pendingDraw, { amount: 6, kind: 'wild4', from: 'p1', chain: 2, challengeable: false });
   assertRefused(g, () => play('p2', 'b+2'), /Stack a Draw card/);
   play('p2', 'r+2');
   assert.equal(g.pending!.amount, 8);

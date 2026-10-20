@@ -216,6 +216,23 @@ function replay(play: StagedPlay, v: CardsView, now: number): TablePose {
           hand = handFrom(s.index);
         }
         break;
+      case 'purge':
+        // The cleared colour leaves the hand as it starts to fly (the Purge itself is the play step after).
+        if (started) {
+          counts[st.player] = Math.max(0, (counts[st.player] ?? 0) - st.cards.length);
+          if (st.player === me && hand) {
+            const gone = new Set(st.cards.map(c => c.id));
+            hand = hand.filter(c => !gone.has(c.id));
+          }
+        }
+        break;
+      case 'mercy':
+        // Knocked out: the hand goes back under the pile.
+        if (landed) {
+          counts[st.player] = 0;
+          if (st.player === me && hand) hand = [];
+        }
+        break;
       case 'leave':
         if (landed) counts[st.player] = 0;
         break;

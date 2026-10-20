@@ -2,7 +2,8 @@
 // reflections, as the Monopoly board uses them), the modelled table with a
 // purple felt, the players' characters at the rim, every card in one
 // instanced draw (Cards3D), the direction ring and colour glow (TableFx), the
-// camera and its cuts (CardsCamera). The React side (CardsTable) hands over
+// fire round anyone on their last card (LastCardFire), the camera and its
+// cuts (CardsCamera). The React side (CardsTable) hands over
 // the view and staged frame through one mutable state object; the HUD stays
 // in the DOM and is pinned over the figures from here.
 //
@@ -29,6 +30,7 @@ import { loadCardAtlas, type CardAtlas } from './cardAtlas.ts';
 import { CardsLayer } from './Cards3D.tsx';
 import { Seats } from './Seats3D.tsx';
 import { ColourGlow, DirectionRing, Felt, TableConfetti } from './TableFx.tsx';
+import { LastCardFire } from './LastCardFire.tsx';
 import { CardsCamera } from './CardsCamera.tsx';
 import { DISCARD, FAN_R, FELT_Y, PILE, TABLE_TOP, seatAngles, seatPos } from './layout.ts';
 import type { SceneState } from './state.ts';
@@ -199,6 +201,7 @@ function CardsScene(props: CardsSceneProps) {
         <ColourGlow state={state} />
         {atlas && <CardsLayer atlas={atlas} state={state} castShadow={castShadow && !lowPower} />}
         <Seats players={view.players} seats={seats} state={state} lite={lite} />
+        <LastCardFire state={state} lite={lite} />
         <TableConfetti />
         <CardsCamera state={state} compact={compact} />
         <Pinner state={state} />

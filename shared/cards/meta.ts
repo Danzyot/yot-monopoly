@@ -14,3 +14,7 @@ export const CARDS_MAX_PLAYERS = 10;
 export const CARDS_HAND_SIZE = 7;
 /** Every card in the game: 4 colours × 25, plus 4 Wild and 4 Wild Draw Four. */
 export const CARDS_DECK_SIZE = 108;
+/** Chog Chaos: the 108, plus 2 Purge and 2 Blitz per colour, 4 Gas Spike, 3 Rug Pull and 4 Chog Roulette. */
+export const CARDS_CHAOS_DECK_SIZE = 135;
+/** The Mercy rule: a hand this big is knocked out of the round. */
+export const CARDS_MERCY_LIMIT = 25;

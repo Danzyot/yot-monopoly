@@ -1,15 +1,16 @@
-// 500 seeded games with 2–10 players and random house rules. Bots race each
-// other the way a room would run them (each acts after its think time, the
-// soonest goes first, so catches, late calls and jump-ins really happen).
-// Some seats are "humans" who sometimes idle (timeouts, autopilot), a few
-// leave mid-game, and garbage actions are thrown in. After every step: all
-// 108 cards are present exactly once, hands are sane, no view leaks a hidden
-// card, and every game ends.
+// 500 seeded games with 2–10 players and random house rules, in Classic and
+// (every other game) Chog Chaos. Bots race each other the way a room would
+// run them (each acts after its think time, the soonest goes first, so
+// catches, late calls and jump-ins really happen). Some seats are "humans"
+// who sometimes idle (timeouts, autopilot), a few leave mid-game, and garbage
+// actions are thrown in. After every step: every card of the deck is present
+// exactly once, hands are sane, no view leaks a hidden card, and every game
+// ends.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { CardsError, CardsGame } from '../src/cards/game.ts';
 import { cardsAutopilotAction, cardsBotAction, cardsBotThinkMs } from '../src/cards/bot.ts';
-import { CARDS_DECK_SIZE } from '../../shared/cards/meta.ts';
+import { CARDS_CHAOS_DECK_SIZE, CARDS_DECK_SIZE, CARDS_MERCY_LIMIT } from '../../shared/cards/meta.ts';
 import type { CardsRules } from '../../shared/cards/rules.ts';
 import type { CardsAction, CardsBotLevel, CardsPhase, CardsView } from '../../shared/cards/types.ts';
 import { assertConserved, assertRefused, seeded } from './cardsHelpers.ts';
@@ -32,6 +33,8 @@ function checkInvariants(g: CardsGame, where: string) {
   for (const p of g.players) {
     assert.ok(p.hand.length >= 0, `negative hand (${where})`);
     if (p.left) assert.equal(p.hand.length, 0, `a player who left holds cards (${where})`);
+    if (p.out) assert.equal(p.hand.length, 0, `a knocked-out player holds cards (${where})`);
+    if (p.out) assert.ok(g.rules.mercy, `knocked out without the Mercy rule (${where})`);
     assert.ok(Number.isSafeInteger(p.score) && p.score >= 0, `bad score (${where})`);
   }
   if (g.phase === 'over') {
@@ -39,12 +42,14 @@ function checkInvariants(g: CardsGame, where: string) {
     return;
   }
   if (g.phase === 'roundOver') return;
-  assert.ok(!g.current.left, `current player has left (${where})`);
+  assert.ok(!g.current.left && !g.current.out, `current player is not in the round (${where})`);
+  assert.ok(g.inRound().length >= 2, `a round with one player left running (${where})`);
+  if (g.rules.mercy) for (const p of g.inRound()) assert.ok(p.hand.length < CARDS_MERCY_LIMIT, `a hand over the Mercy limit (${where})`);
   if (g.phase !== 'color') assert.ok(g.color, `no colour in play (${where})`);
   if (g.phase === 'drawn') assert.ok(g.current.hand.some(c => c.id === g.drawnCard), `drawn card not in hand (${where})`);
   if (g.pending) assert.ok(g.pending.amount >= 2, `empty penalty (${where})`);
   // Round still running: nobody has gone out yet.
-  for (const p of g.active()) assert.ok(p.hand.length > 0, `empty hand mid-round (${where})`);
+  for (const p of g.inRound()) assert.ok(p.hand.length > 0, `empty hand mid-round (${where})`);
 }
 
 /**
@@ -78,8 +83,11 @@ function checkNoLeak(g: CardsGame, v: CardsView, viewer: string | undefined, whe
   assert.ok(!json.includes('"legal"') && !json.includes('"check"') && !json.includes('"pile"'), `secret state in a view (${where})`);
 }
 
-function randomRules(r: (n: number) => number): Partial<CardsRules> {
+function randomRules(r: (n: number) => number, chaos: boolean): Partial<CardsRules> {
   return {
+    mode: chaos ? 'chaos' : 'classic',
+    // Chog Chaos plays with Mercy most of the time (its preset), Classic now and then.
+    mercy: chaos ? r(4) > 0 : r(6) === 0,
     match: r(3) === 0 ? 'points' : 'single',
     targetScore: 50 + r(250),
     turnSeconds: r(2) ? 0 : 20,
@@ -100,7 +108,7 @@ function runGame(seed: number, tally: Tally) {
     if (human) humans.add(`p${i}`);
     return { id: `p${i}`, name: `P${i}`, isBot: !human, level: LEVELS[r(3)] };
   });
-  const g = new CardsGame({ players, rules: randomRules(r), rng: seeded(seed * 7919 + 1), now: () => clock });
+  const g = new CardsGame({ players, rules: randomRules(r, seed % 2 === 0), rng: seeded(seed * 7919 + 1), now: () => clock });
   let steps = 0;
   let lastSeq = -1;
   const where = () => `seed ${seed} step ${steps}`;
@@ -174,15 +182,19 @@ function runGame(seed: number, tally: Tally) {
   tally.steps += steps;
 }
 
-test(`fuzz: ${GAMES} all-bot games, 2–10 players, random house rules`, () => {
+test(`fuzz: ${GAMES} all-bot games, 2–10 players, random house rules, Classic and Chog Chaos`, () => {
   const tally: Tally = { games: 0, steps: 0, rounds: 0, timeouts: 0, refused: 0, leaves: 0, byStep: {} };
   for (let seed = 1; seed <= GAMES; seed++) runGame(seed, tally);
   assert.equal(tally.games, GAMES);
   // The run really exercised the rules, not just plain number cards.
-  for (const k of ['deal', 'flip', 'play', 'draw', 'skip', 'reverse', 'color', 'swap', 'rotate', 'challenge', 'call', 'catch', 'pass', 'timeout', 'reshuffle', 'roundEnd', 'leave']) {
+  for (const k of [
+    'deal', 'flip', 'play', 'draw', 'skip', 'reverse', 'color', 'swap', 'rotate', 'challenge', 'call', 'catch', 'pass', 'timeout',
+    'reshuffle', 'roundEnd', 'leave', 'purge', 'blitz', 'stack', 'roulette', 'mercy',
+  ]) {
     assert.ok((tally.byStep[k] ?? 0) > 0, `no ${k} step in ${GAMES} games`);
   }
   assert.ok(tally.timeouts > 0 && tally.refused > 0 && tally.rounds > 0);
   assert.equal(CARDS_DECK_SIZE, 108);
+  assert.equal(CARDS_CHAOS_DECK_SIZE, 135);
   void CardsError;
 });
