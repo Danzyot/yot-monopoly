@@ -176,9 +176,16 @@ Custom Domain (Railway shows them after you add the domain in section 1).
 | `CNAME` | `poker` | the value Railway shows for `poker.choggames.com` on the **poker** service | **Proxied** |
 
 Railway may also show a `TXT` record (`_railway-verify…`) per domain: add it
-exactly as shown, **DNS only**. Then:
+exactly as shown, **DNS only**.
 
-- **SSL/TLS → Overview**: **Full (strict)**.
+**Add the three `CNAME`s as DNS only (grey cloud) first.** Railway issues
+each domain's certificate only once it can see its own records; when a
+domain shows as ready (green) in Railway, switch that `CNAME` to **Proxied**.
+Then:
+
+- **SSL/TLS → Overview**: **Full** (not Full (strict) — Railway's community
+  answers report strict blocking certificate issuance; not Flexible either,
+  which loops redirects).
 - **Network**: **WebSockets** on (it is by default — both games run on them).
 - **Security**: Bot Fight Mode on, Security Level Medium (as poker's DEPLOY.md recommends).
 
