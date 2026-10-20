@@ -4,7 +4,7 @@
 /** Internal id (rooms, routes, stats keys). Never shown to players. */
 export const CARDS_GAME_ID = 'cards' as const;
 /** What players read. */
-export const CARDS_GAME_NAME = 'Chog Cards';
+export const CARDS_GAME_NAME = 'Cards';
 /** The call-out a player makes when they are down to one card. */
 export const LAST_CARD_CALL = 'Last card!';
 

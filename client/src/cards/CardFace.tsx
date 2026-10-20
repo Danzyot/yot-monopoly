@@ -200,7 +200,7 @@ export const CardFace = memo(function CardFace({ card, className = '', title }: 
 export const CardBack = memo(function CardBack({ className = '' }: { className?: string }) {
   const id = 'cc-back';
   return (
-    <svg className={`card-svg ${className}`} viewBox={`0 0 ${CARD_W} ${CARD_H}`} role="img" aria-label="Chog Cards card back">
+    <svg className={`card-svg ${className}`} viewBox={`0 0 ${CARD_W} ${CARD_H}`} role="img" aria-label="Card back">
       <defs>
         <linearGradient id={`${id}-g`} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="#5b3fb0" />

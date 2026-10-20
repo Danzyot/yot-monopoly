@@ -64,10 +64,6 @@
 .season-chog .hub-play, .season-chog .hub-play:hover:not(:disabled) {
   background: linear-gradient(180deg, #ff8ec2 0%, #e9508f 48%, #c42a6a 52%, #9e1d55 100%);
 }
-/* Poker's button stands apart in the season: the Chog purple. */
-.season-chog .hub-poker .hub-play, .season-chog .hub-poker .hub-play:hover:not(:disabled) {
-  background: linear-gradient(180deg, #b38cff 0%, #7a4fe0 48%, #5a32c0 52%, #3f1f96 100%);
-}
 .season-chog .home-hero.gd .hero-join .btn,
 .season-chog .hub-join .btn, .season-chog .hub-join .btn:hover:not(:disabled) {
   background: linear-gradient(180deg, #fffdf2 0%, #fdf6cd 48%, #f3d9a6 52%, #e2bd77 100%); color: #5a1a3c;

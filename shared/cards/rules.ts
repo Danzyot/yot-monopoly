@@ -29,7 +29,7 @@ export const DEFAULT_CARDS_RULES: CardsRules = {
   match: 'points',
   targetScore: 500,
   turnSeconds: 30,
-  stacking: false,
+  stacking: true,
   stackMixed: false,
   sevenZero: false,
   jumpIn: false,

@@ -73,6 +73,7 @@ export default function Home() {
   const nav = useNavigate();
   const { profile, config, ready, openSignIn } = useAuth();
   const [code, setCode] = useState('');
+  const [cardsCode, setCardsCode] = useState('');
   const [busy, setBusy] = useState(false);
   const rooms = useRoomList();
   const cardTables = useCardsRoomList();
@@ -99,6 +100,11 @@ export default function Home() {
     const clean = c.trim().toUpperCase();
     if (clean.length < 4) return toastError(new Error('Enter a room code'));
     nav(`/r/${clean}`);
+  };
+  const joinCards = (c: string) => {
+    const clean = c.trim().toUpperCase();
+    if (clean.length < 4) return toastError(new Error('Enter a table code'));
+    nav(`/cards/r/${clean}`);
   };
 
   const live = rooms.filter(r => r.status !== 'lobby').length;
@@ -140,19 +146,19 @@ export default function Home() {
               <span className="hub-live" role="status">{liveLine(connected, rooms.length, live)}</span>
             </div>
             <div className="hub-actions">
-              {profile || checking ? (
-                <button className="btn primary hub-play" disabled={busy || !connected || !canCreate} onClick={create}>
-                  {canCreate || checking ? `Play ${GAMES.monopoly.name}` : 'Tables are operators-only right now'}
-                </button>
-              ) : (
-                <button className="btn primary hub-play" onClick={openSignIn}>Sign in to play</button>
-              )}
               <form className="hub-join" onSubmit={e => { e.preventDefault(); join(code); }}>
                 <input className="code-input" value={code} maxLength={5} placeholder="CODE" aria-label="Room code"
                   autoCapitalize="characters" autoComplete="off" spellCheck={false}
                   onChange={e => setCode(e.target.value.toUpperCase())} />
                 <button className="btn gold small" type="submit">Join</button>
               </form>
+              {profile || checking ? (
+                <button className="btn primary hub-play" disabled={busy || !connected || !canCreate} onClick={create}>
+                  {canCreate || checking ? `Play ${GAMES.monopoly.name}` : 'Tables are operators-only right now'}
+                </button>
+              ) : (
+                <button className="btn primary hub-play" onClick={openSignIn}>Play {GAMES.monopoly.name}</button>
+              )}
             </div>
           </li>
 
@@ -165,7 +171,13 @@ export default function Home() {
               <span className="hub-live" role="status">{liveLine(connected, cardTables.length, cardsLive)}</span>
             </div>
             <div className="hub-actions">
-              <Link className="btn primary hub-play" to={GAMES.cards.path}>Play Cards</Link>
+              <form className="hub-join" onSubmit={e => { e.preventDefault(); joinCards(cardsCode); }}>
+                <input className="code-input" value={cardsCode} maxLength={5} placeholder="CODE" aria-label="Cards table code"
+                  autoCapitalize="characters" autoComplete="off" spellCheck={false}
+                  onChange={e => setCardsCode(e.target.value.toUpperCase())} />
+                <button className="btn gold small" type="submit">Join</button>
+              </form>
+              <Link className="btn primary hub-play" to={GAMES.cards.path}>Play {GAMES.cards.name}</Link>
             </div>
           </li>
 
@@ -179,7 +191,7 @@ export default function Home() {
               <span className="hub-live">{profile || checking ? 'You stay signed in there' : 'On its own site'}</span>
             </div>
             <div className="hub-actions">
-              <a className="btn primary hub-play" href={POKER_URL} onClick={e => openPoker(e, !!profile)}>Play Poker</a>
+              <a className="btn primary hub-play" href={POKER_URL} onClick={e => openPoker(e, !!profile)}>Play {GAMES.poker.name}</a>
             </div>
           </li>
         </ul>

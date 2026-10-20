@@ -70,7 +70,8 @@ export interface TableOpts {
 }
 
 /**
- * A game with a stacked deck. Seat i is player `p${i}`; the dealer is the last
+ * A game with a stacked deck, on the official rules (stacking off) unless
+ * `rules` says otherwise. Seat i is player `p${i}`; the dealer is the last
  * seat, so p0 plays first unless the start card says otherwise.
  */
 export function table(n = 3, o: TableOpts = {}) {
@@ -104,7 +105,7 @@ export function table(n = 3, o: TableOpts = {}) {
     const bot = o.bots?.[i];
     return { id: `p${i}`, name: `P${i}`, isBot: !!bot, ...(typeof bot === 'string' && { level: bot }) };
   });
-  const g = new CardsGame({ players, rules: o.rules, rng: rngFor(order), now: () => clock });
+  const g = new CardsGame({ players, rules: { stacking: false, ...o.rules }, rng: rngFor(order), now: () => clock });
   return {
     g,
     now: () => clock,

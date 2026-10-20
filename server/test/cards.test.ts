@@ -60,21 +60,22 @@ test('deck: names, matching and identical faces', () => {
 
 test('naming: the game id and display name live in one place; no trademark in sight', () => {
   assert.equal(CARDS_GAME_ID, 'cards');
-  assert.equal(CARDS_GAME_NAME, 'Chog Cards');
+  assert.equal(CARDS_GAME_NAME, 'Cards');
   assert.equal(LAST_CARD_CALL, 'Last card!');
 });
 
-test('rules: official defaults, house rules off, client input normalised', () => {
+test('rules: defaults (stacking on, other house rules off), client input normalised', () => {
   assert.equal(DEFAULT_CARDS_RULES.match, 'points');
   assert.equal(DEFAULT_CARDS_RULES.targetScore, 500);
-  for (const k of ['stacking', 'stackMixed', 'sevenZero', 'jumpIn', 'drawUntilPlayable', 'forcedPlay', 'noBluff'] as const) {
+  assert.equal(DEFAULT_CARDS_RULES.stacking, true, 'stacking is how most people play');
+  for (const k of ['stackMixed', 'sevenZero', 'jumpIn', 'drawUntilPlayable', 'forcedPlay', 'noBluff'] as const) {
     assert.equal(DEFAULT_CARDS_RULES[k], false, k);
   }
   const r = normalizeCardsRules({ match: 'single', targetScore: 1e9, turnSeconds: 3, stacking: 'yes', jumpIn: true, evil: 1 });
   assert.equal(r.match, 'single');
   assert.equal(r.targetScore, 5000);
   assert.equal(r.turnSeconds, 10);
-  assert.equal(r.stacking, false, 'not a boolean: default');
+  assert.equal(r.stacking, true, 'not a boolean: default');
   assert.equal(r.jumpIn, true);
   assert.ok(!('evil' in r));
   assert.deepEqual(normalizeCardsRules(null), DEFAULT_CARDS_RULES);

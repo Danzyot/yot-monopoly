@@ -16,7 +16,7 @@ export const BRAND = {
 export const GAMES = {
   monopoly: { name: 'Monopoly', path: '/' },
   cards: { name: CARDS_GAME_NAME, path: '/cards' },
-  poker: { name: 'Chog Poker' },
+  poker: { name: 'Poker' },
 } as const;
 
 /** Where Chog Poker lives. Its client takes a sign-in as `#dtoken=<token>` (poker/client/src/auth.tsx). */
