@@ -1,4 +1,4 @@
-import type { PlayerProfile } from '../../shared/types';
+import type { ChogBadge, PlayerProfile } from '../../shared/types';
 
 const TOKEN_KEY = 'chog.token';
 const PROFILE_KEY = 'chog.profile';
@@ -73,8 +73,23 @@ export interface AppConfig {
   };
 }
 
+// "Your Chog" picker (server/src/chogroutes.ts). `chogs` is what the hub says
+// this player holds; `reachable` false means the hub could not be asked.
+export interface MyChogs {
+  enabled: boolean;
+  artBase: string | null;
+  pick: number | null;
+  chogs: ChogBadge[];
+  reachable: boolean;
+}
+
 export const api = {
   config: () => request<AppConfig>('/api/config'),
+  myChogs: (refresh = false) => request<MyChogs>(`/api/chogs${refresh ? '?refresh=1' : ''}`),
+  pickChog: (chogToken: number | null) =>
+    request<{ pick: number | null; chog: ChogBadge | null }>('/api/chogs/pick', {
+      method: 'POST', body: JSON.stringify({ chogToken }),
+    }),
   // The profile as the server sees it (operator flag included).
   me: () => request<{ profile: PlayerProfile }>('/api/auth/me'),
   // Whether this player may host (operator, Chog holder or approved host; the hub decides).

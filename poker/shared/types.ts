@@ -78,9 +78,18 @@ export interface SocialProgress {
   discordRoleOk: boolean; // holds the required role (bot-verified)
 }
 
+// A Chog Genesis NFT the player holds and picked as their avatar. Present only
+// while the hub has confirmed they still hold it (server/src/chogs.ts); the
+// art is the hub's /chogs/<chogToken>.webp.
+export interface ChogBadge {
+  chogToken: number;
+  aura: string | null; // the Aura trait's colour ('#rrggbb'), null without one
+  legendary: boolean; // Tier Legendary — the ten 1:1s
+}
+
 export interface SeatView {
   idx: number;
-  player: { id: string; name: string; avatar: string } | null;
+  player: { id: string; name: string; avatar: string; chog?: ChogBadge } | null;
   stack: number;
   bet: number; // chips committed this street (in front of player)
   folded: boolean;
@@ -120,7 +129,7 @@ export interface LegalActions {
 
 export interface ChatMsg {
   id: string;
-  from: { id: string; name: string; avatar: string } | 'system';
+  from: { id: string; name: string; avatar: string; chog?: ChogBadge } | 'system';
   text: string;
   ts: number;
   // Player ids named with @mentions. The client highlights the message for
@@ -263,6 +272,7 @@ export interface StandingEntry {
   id: string;
   name: string;
   avatar: string;
+  chog?: ChogBadge;
   stack: number; // 0 if busted
   tableId: string | null;
   busted: boolean;
@@ -505,6 +515,7 @@ export interface LeaderboardEntry {
   playerId: string;
   name: string;
   avatar: string;
+  chog?: ChogBadge;
   discordTag: string | null;
   points: number;
   wins: number;
@@ -531,7 +542,7 @@ export interface LobbyTournament {
   createdAt: number;
   hasSocialReq: boolean;
   // Live chip leaders while running; final podium once finished.
-  topPlayers: { name: string; avatar: string; stack: number; place: number | null; prize: number | null }[];
+  topPlayers: { name: string; avatar: string; chog?: ChogBadge; stack: number; place: number | null; prize: number | null }[];
 }
 
 export interface LobbyCashTable {
@@ -580,7 +591,7 @@ export interface ServerToClientEvents {
     name: string;
     entrants: number;
     prizeText: string | null;
-    places: { playerId: string; place: number; name: string; avatar: string }[];
+    places: { playerId: string; place: number; name: string; avatar: string; chog?: ChogBadge }[];
   }) => void;
   'toast': (t: { kind: 'info' | 'error' | 'success'; text: string }) => void;
 }

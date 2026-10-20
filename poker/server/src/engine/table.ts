@@ -7,6 +7,7 @@ import type {
 import { HoldemHand, type HandResult } from './hand.ts';
 import { bestFiveOf, describeCards } from './evaluator.ts';
 import { isOnline } from '../presence.ts';
+import { withChog } from '../chogs.ts';
 import { CHAT_COOLDOWN_MS, isBlocked, MAX_MENTIONS, resolveMentions, resolveReply } from '../chatrules.ts';
 
 export interface TableSeatState {
@@ -1440,7 +1441,7 @@ export class Table {
       const since = offline ? this.offlineSince.get(s.player.id) : undefined;
       return {
         idx: i,
-        player: { id: s.player.id, name: s.player.name, avatar: s.player.avatar },
+        player: withChog({ id: s.player.id, name: s.player.name, avatar: s.player.avatar }),
         stack: hs ? hs.stack : s.stack,
         bet: hs ? hs.committed : 0,
         folded: hs ? hs.folded : false,

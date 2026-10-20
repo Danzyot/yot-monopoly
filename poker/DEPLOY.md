@@ -31,6 +31,37 @@ Railway is the path below (~$5/month Hobby). Any always-on VPS works too.
 > |---|---|
 > | `HUB_URL` | `https://choggames.com` (the default). Puts the "Chog Games" link in the header and "Sign in via Chog Games" in the sign-in box. `off` hides both. |
 > | `HUB_ORIGINS` | Extra origins, comma separated, allowed to read `/api/leaderboard` and `/api/results/:id` from a browser — the hub's `*.up.railway.app` domain during cutover. `HUB_URL` is always allowed. Nothing else on `/api` is reachable cross-origin in production. |
+>
+> **Chog seat avatars ("Your Chog").** A player who holds Chog Genesis NFTs
+> (wallets linked on the hub's `/wallet` page) clicks their avatar in the
+> header, picks one of their Chogs, and its art becomes their avatar at the
+> seat, in chat, in the lobby, on the leaderboard and in results, ringed in
+> the Chog's Aura colour, with a gold star on the ten Legendary 1:1s. Players
+> without a Chog see nothing different.
+>
+> - **Nothing new to set.** It uses the two things the room already has:
+>   `HUB_URL` (the hub's address) and the shared secret (`CHOG_SECRET` here =
+>   the hub's `APP_SECRET`). The secret must be set **in the environment on
+>   both services**; a secret generated onto the data volume is not shared, and
+>   with it the feature simply stays off. `HUB_URL=off` also turns it off.
+> - **How the check works.** This room asks the hub
+>   `GET <HUB_URL>/api/hosting/chogs?id=<player>&ts=<ms>&sig=<hmac>`, signed
+>   with the shared secret (`server/src/hubLink.ts`, and the hub's own
+>   `server/src/hubLink.ts`); the hub refuses a bad signature or a timestamp
+>   more than a minute off. The answer lists the player's Chogs with each one's
+>   aura colour and legendary flag, so this room keeps no copy of the trait data.
+> - **Caching.** An answer is kept for 10 minutes, then re-checked in the
+>   background. A Chog that has left the player's wallets is dropped on the next
+>   check. If the hub cannot be reached, nobody shows a Chog until it answers
+>   again (re-tried every minute). Picks are kept, and play is never held up.
+>   Picks are stored in `chogpicks.json` on the data volume.
+> - **The art** is the hub's own static `/chogs/<id>.webp` (128×128, about 3.5 KB
+>   each, cached for a week), loaded straight from `HUB_URL` by the browser.
+> - **Deploying it.** This room is a separate Railway service and **does not
+>   redeploy when the hub does. Redeploy poker by hand** (Railway → the poker
+>   service → Deploy) after the hub deploy that adds `/api/hosting/chogs` and
+>   the `/chogs/` thumbnails. If poker goes out first, the picker says it cannot
+>   reach Chog Games and no Chogs show; nothing else changes.
 
 > **Player hosts (hosting rights).** Besides the operators in
 > `ADMIN_DISCORD_IDS`, Chog Genesis holders (verified wallet on the hub) and

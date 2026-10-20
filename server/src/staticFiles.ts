@@ -73,6 +73,9 @@ export function staticClient(dist: string): RequestHandler[] {
       // Hashed bundles, and models and lightmaps asked for with their content hash (?v=…), never change.
       const hashed = typeof res.req?.query?.v === 'string' && res.req.query.v.length > 0;
       if (hashed || path.startsWith(join(root, 'assets') + sep)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      // Chog thumbnails (/chogs/<id>.webp): a token's art never changes. Chog Poker shows them too,
+      // from its own origin, so a week in the browser saves every table re-asking.
+      else if (path.startsWith(join(root, 'chogs') + sep)) res.setHeader('Cache-Control', 'public, max-age=604800');
     },
   });
   return [precompressed, serve];

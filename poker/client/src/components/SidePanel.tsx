@@ -199,7 +199,7 @@ export default function SidePanel({
         <div className="chat-toasts" aria-live="polite">
           {toasts.map(m => (
             <div key={m.id} className="chat-toast">
-              <Avatar value={(m.from as { avatar: string }).avatar} size={16} />
+              <Avatar value={(m.from as { avatar: string }).avatar} size={16} chog={m.from === 'system' ? null : m.from.chog} />
               <span className="who">{(m.from as { name: string }).name}</span>
               <span className="chat-toast-text">{m.text}</span>
             </div>
@@ -268,7 +268,7 @@ export default function SidePanel({
                 </button>
               )}
               <span className="chat-head" id={`msg-${m.id}`}>
-                <Avatar value={(m.from as { avatar: string }).avatar} size={16} />
+                <Avatar value={(m.from as { avatar: string }).avatar} size={16} chog={m.from === 'system' ? null : m.from.chog} />
                 <span className="who">{(m.from as { name: string }).name}</span>
                 <span className="chat-time">{hhmm(m.ts)}</span>
                 {chatEnabled && (

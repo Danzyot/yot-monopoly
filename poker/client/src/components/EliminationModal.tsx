@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import Avatar from './Avatar';
+import type { ChogBadge } from '../../../shared/types';
 import Promo from './Promo';
 import { PropStrip } from './PropRail';
 import { ordinal } from '../format';
@@ -10,6 +11,7 @@ export interface EliminationInfo {
   tournamentName: string;
   name: string;
   avatar: string;
+  chog?: ChogBadge;
   place: number;
   prize: number | null;
   entrants: number;
@@ -28,7 +30,7 @@ export default function EliminationModal({ info, onClose }: {
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal winner-modal" onClick={e => e.stopPropagation()}>
-        <div className="elim-avatar"><Avatar value={info.avatar} size={54} /></div>
+        <div className="elim-avatar"><Avatar value={info.avatar} size={54} chog={info.chog} /></div>
         <h2 className="winner-title">{cashed ? 'In the money!' : 'Eliminated'}</h2>
         <div className="winner-champ">
           <div className="winner-champ-name">{info.name}</div>

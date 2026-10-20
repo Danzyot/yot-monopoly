@@ -485,7 +485,7 @@ export default function TournamentPage() {
             <div className="podium">
               {order.map(p => (
                 <div key={p.id} className={`podium-col ${clsFor(p)}`}>
-                  <span className="p-avatar"><Avatar value={p.avatar} size={36} /></span>
+                  <span className="p-avatar"><Avatar value={p.avatar} size={36} chog={p.chog} /></span>
                   <span className="p-name">{p.name}</span>
                   {p.discordTag && (
                     <span className={`discord-badge${p.discordVerified ? ' verified' : ''}`}>
@@ -573,7 +573,7 @@ export default function TournamentPage() {
                     <tr key={s.id} className={`${s.id === profile?.id ? 'me' : ''} ${s.busted ? 'busted' : ''}`}>
                       <td className="rank">{s.busted && s.place ? ordinal(s.place) : s.rank}</td>
                       <td>
-                        <Avatar value={s.avatar} size={16} /> {s.name}
+                        <Avatar value={s.avatar} size={16} chog={s.chog} /> {s.name}
                         {s.discordTag && (
                           <span
                             className={`discord-badge${s.discordVerified ? ' verified' : ''}`}
