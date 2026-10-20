@@ -235,12 +235,7 @@ export default function Home() {
             <Link to="/characters">+ {others.length} more to play as</Link>
           </p>
         )}
-        {/* Holders play as their own NFT Chog, built from its traits, once their wallet is linked. */}
-        {CHOG_SEASON && (
-          <p className="cast-more cast-wallet">
-            <Link to="/wallet">Hold a Chog Genesis? Link your wallet to play as yours →</Link>
-          </p>
-        )}
+        {/* The wallet nudge lives on the Chog of the Day card just below. */}
       </section>
 
       {/* One Chog Genesis in the spotlight, a new one every UTC day. */}
