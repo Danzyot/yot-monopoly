@@ -6,7 +6,7 @@ import { DEFAULT_FEATURES, type PlayerProfile, type SiteConfig } from '../../sha
 
 interface AuthState {
   profile: PlayerProfile | null;
-  /** May host tournaments: operator, Chog Genesis holder or approved host (server/src/hosting.ts). */
+  /** May host on Poker: operator, Chog Genesis holder or approved host (server/src/hosting.ts). */
   canHost: boolean;
   /** Re-asks the server (after linking a wallet, say). */
   refreshMe(): Promise<void>;

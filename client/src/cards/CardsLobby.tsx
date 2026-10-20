@@ -2,7 +2,9 @@
 // (components/Lobby.tsx, styles/lobby.css): the host gets the set-up panels
 // (players and bots, match, timer, house rules with their help text); everyone
 // else gets the clean member view: a live summary, a big chat and the
-// players, with their own character folded underneath.
+// players, with their own character folded underneath. Everyone picks the
+// same base looks as at Monopoly: character (as the season allows), outfit
+// and colour, or their own NFT Chog.
 
 import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -15,6 +17,7 @@ import {
 import type { CardsBotLevel } from '../../../shared/cards/types.ts';
 import type { Card } from '../../../shared/cards/deck.ts';
 import { getCharacter, type CharacterId } from '../../../shared/characters.ts';
+import type { Outfit } from '../../../shared/outfits.ts';
 import { availableCharacters, characterShared } from '../../../shared/season.ts';
 import { chogName, isLegendary } from '../../../shared/chogs/traits.ts';
 import type { ChatMsg } from '../net.ts';
@@ -26,9 +29,11 @@ import { Avatar } from '../components/Avatar.tsx';
 import { askConfirm } from '../components/Modal.tsx';
 import { CardBack, CardFace } from './CardFace.tsx';
 import ChogPicker, { ChogArt, saveChogTokenPref } from '../components/ChogPicker.tsx';
+import { WornItems, loadOutfitPref, sameOutfit, saveOutfitPref } from '../components/outfitBits.tsx';
 
-// The 3D character preview brings three.js: only when someone opens the picker.
+// The 3D character preview and the outfit picker's fit check bring three.js: only when someone opens the picker.
 const CharacterPreview = lazy(() => import('../three/characters/CharacterPreview.tsx'));
+const OutfitPicker = lazy(() => import('../components/OutfitPicker.tsx'));
 
 /**
  * Start downloading what the 3D table needs while people are still in the
@@ -110,6 +115,8 @@ function SeatList({ room, me, isHost }: { room: CardsRoomView; me: string; isHos
               {s.isBot && <em className="tag">bot</em>}{!s.connected && <em className="tag warn">away</em>}</span>
             <span className="seat-char small">
               <i className="seat-swatch" style={{ background: s.color }} aria-hidden /> {seatName(s)}
+              {/* An NFT Chog wears its own traits, not outfit items. */}
+              {!s.chogToken && <WornItems outfit={s.outfit} color={s.color} className="seat-worn" />}
               {s.isBot && !isHost && <> · {CARDS_BOT_LEVELS.find(l => l.id === s.level)?.label ?? 'Normal'}</>}
             </span>
           </span>
@@ -131,8 +138,8 @@ function SeatList({ room, me, isHost }: { room: CardsRoomView; me: string; isHos
   );
 }
 
-/** Our character (the Monopoly cast, as the season allows: shared/season.ts), the holder's own Chogs, and seat colour. */
-function CharacterPicker({ room, me, seat }: { room: CardsRoomView; me: string; seat: CardsSeatView }) {
+/** Our character (the Monopoly cast, as the season allows: shared/season.ts), the holder's own Chogs, outfit and seat colour. */
+function CharacterPicker({ room, me, seat, onWear }: { room: CardsRoomView; me: string; seat: CardsSeatView; onWear: (o: Outfit) => void }) {
   const picks = availableCharacters();
   const token = seat.chogToken;
   // Remembered for the next table too (sent on join; the server checks the wallet each time).
@@ -145,7 +152,7 @@ function CharacterPicker({ room, me, seat }: { room: CardsRoomView; me: string; 
       <div className="char-picker">
         <div className="char-preview">
           <Suspense fallback={<span className="char-preview-emoji" style={{ background: seat.color }}>{getCharacter(seat.character).emoji}</span>}>
-            <CharacterPreview character={seat.character} color={seat.color} chogToken={token} />
+            <CharacterPreview character={seat.character} color={seat.color} outfit={seat.outfit} chogToken={token} />
           </Suspense>
           <div className="char-about">
             <b>{seatName(seat)}</b>
@@ -179,6 +186,11 @@ function CharacterPicker({ room, me, seat }: { room: CardsRoomView; me: string; 
           taken={id => room.seats.find(s => s.chogToken === id && s.id !== me)?.name}
           onPick={id => pick('chog', id)} />
       </div>
+      <h4 className="lobby-outfit-head">Outfit</h4>
+      {token && <p className="small muted cl-outfit-note">Your own Chog wears its own traits. Your outfit shows when you play the base Chog.</p>}
+      <Suspense fallback={<p className="small muted">Loading outfits…</p>}>
+        <OutfitPicker outfit={seat.outfit ?? {}} color={seat.color} character={seat.character} onChange={onWear} disabled={!!token} />
+      </Suspense>
       <div className="outfit-colors">
         <span>Colour</span>
         <div className="color-grid" role="group" aria-label="Your colour">
@@ -218,8 +230,8 @@ function copyLink(code: string) {
 }
 
 /** Everyone but the host: what the host picked, live, beside a big chat. */
-function MemberLobby({ room, me, spectating, chat, onLeave }: {
-  room: CardsRoomView; me: string; spectating: boolean; chat: ChatMsg[]; onLeave: () => void;
+function MemberLobby({ room, me, spectating, chat, onLeave, onWear }: {
+  room: CardsRoomView; me: string; spectating: boolean; chat: ChatMsg[]; onLeave: () => void; onWear: (o: Outfit) => void;
 }) {
   const { profile, config } = useAuth();
   const mySeat = room.seats.find(s => s.id === me);
@@ -286,11 +298,11 @@ function MemberLobby({ room, me, spectating, chat, onLeave }: {
                 <SeatBadge seat={mySeat} hidden />
                 <span className="grow">
                   <b>{seatName(mySeat)}</b>
-                  <span className="small muted">Your character · change it or your colour</span>
+                  <span className="small muted">Your character · change it, your outfit or your colour</span>
                 </span>
                 <span className="lm-me-caret" aria-hidden>▾</span>
               </summary>
-              <div className="lm-me-body"><CharacterPicker room={room} me={me} seat={mySeat} /></div>
+              <div className="lm-me-body"><CharacterPicker room={room} me={me} seat={mySeat} onWear={onWear} /></div>
             </details>
           )}
         </section>
@@ -317,6 +329,20 @@ export default function CardsLobby({ room, me, spectating, chat }: {
   const rules = (p: Partial<CardsRules>) => cardsConfigure({ rules: p }).catch(toastError);
   const leave = async () => { await cardsCall('cards:leave').catch(() => {}); nav('/cards'); };
 
+  // The outfit last worn at either game (or dressed up on /characters): put on
+  // once per table, as worn by the character this seat plays, like Monopoly's lobby.
+  const dressed = useRef<string | null>(null);
+  useEffect(() => {
+    if (!mySeat || dressed.current === room.code) return;
+    dressed.current = room.code;
+    const pref = loadOutfitPref(mySeat.character);
+    if (!sameOutfit(pref, mySeat.outfit)) cardsCall('cards:seat', { outfit: pref }).catch(() => {});
+  }, [mySeat, room.code]);
+  const wear = (o: Outfit) => {
+    if (mySeat) saveOutfitPref(o, mySeat.character);
+    cardsCall('cards:seat', { outfit: o }).catch(toastError);
+  };
+
   const quickStart = async () => {
     const want = Math.min(4, room.maxPlayers);
     const bots = Math.max(0, want - room.seats.length);
@@ -331,7 +357,7 @@ export default function CardsLobby({ room, me, spectating, chat }: {
     }
   };
 
-  if (!isHost) return <MemberLobby room={room} me={me} spectating={spectating} chat={chat} onLeave={leave} />;
+  if (!isHost) return <MemberLobby room={room} me={me} spectating={spectating} chat={chat} onLeave={leave} onWear={wear} />;
 
   return (
     <div className="lobby cards-lobby">
@@ -364,7 +390,7 @@ export default function CardsLobby({ room, me, spectating, chat }: {
           {mySeat && (
             <>
               <h3>Your character</h3>
-              <CharacterPicker room={room} me={me} seat={mySeat} />
+              <CharacterPicker room={room} me={me} seat={mySeat} onWear={wear} />
             </>
           )}
 

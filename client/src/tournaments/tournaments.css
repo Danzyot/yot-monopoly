@@ -6,8 +6,7 @@
 .tn-page > p.small { margin: 0; }
 .tn-head { display: flex; gap: 16px; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; }
 .tn-head-text p { margin: 4px 0 0; max-width: 620px; }
-.tn-tabs { max-width: 520px; }
-.tn-hostnote, .tn-disclaimer { margin: 0; }
+.tn-disclaimer { margin: 0; }
 .tn-section h2 { display: flex; align-items: center; gap: 8px; }
 .tn-empty { text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: center; padding: 32px 18px; }
 .tn-empty .row { justify-content: center; }
@@ -29,7 +28,6 @@
 .tn-card-go { font-size: 22px; color: var(--muted); }
 .tn-prize { color: var(--hi, #fdf6cd); overflow-wrap: anywhere; }
 .tn-champ { color: var(--medal-1, #ffd23f); font-weight: 600; }
-.tn-official { background: color-mix(in srgb, var(--accent) 35%, transparent); margin: 0; }
 
 .tn-status {
   font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 99px;
@@ -47,7 +45,6 @@
 .tn-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 14px; }
 .tn-wide { grid-column: 1 / -1; }
 .tn-grid .field small { font-size: 11px; }
-.tn-warn { color: var(--warn); }
 .tn-check { display: flex; flex-direction: row; gap: 8px; align-items: center; cursor: pointer; }
 .tn-check input { width: auto; }
 .tn-check span { font-size: 13px; color: var(--text); }

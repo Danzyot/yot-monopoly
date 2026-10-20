@@ -154,7 +154,7 @@ export function adminRoutes(sockets: SocketLayer, loopLag: () => number): expres
 
   // ---- hosting rights ----
   // Approved hosts (added here) and Chog holders (who host by holding); both
-  // may create tournaments. Operators always may and are not listed.
+  // may host on Poker. Operators always may and are not listed.
   const nameOf = (id: string) => getAccount(id)?.name ?? '';
   r.get('/hosts', (_req, res) => {
     const holders = holderHosts().map(h => ({ ...h, name: nameOf(h.id) }));

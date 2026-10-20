@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { GAMES } from '../../../shared/brand.ts';
 import type { TournamentGame, TournamentStatus } from '../../../shared/tournaments.ts';
 
-export const GAME_ICON: Record<TournamentGame, string> = { monopoly: '🎩', cards: '🃏' };
+export const GAME_ICON: Record<TournamentGame, string> = { cards: '🃏' };
 export const gameName = (g: TournamentGame) => GAMES[g].name;
 
 export const STATUS_LABEL: Record<TournamentStatus, string> = {

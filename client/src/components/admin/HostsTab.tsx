@@ -1,4 +1,4 @@
-// Hosting rights: who may host tournaments besides the operators. Chog
+// Hosting rights: who may host on Poker besides the operators. Chog
 // Genesis holders host by holding (listed here, nothing to do); anyone else
 // is added by hand, by Discord id or by picking a player who has signed in.
 import { useState } from 'react';
@@ -37,8 +37,8 @@ export default function HostsTab() {
         <span className="muted small">Operators can always host and are not listed.</span>
       </div>
       <p className="muted small">
-        A host can create tournaments (and poker tables), start, pause and cancel their own events and write the prize line.
-        Kicking players, Discord role requirements and results posted to Discord stay with operators.
+        A host can open Poker tables and run Poker tournaments. Cards tournaments on the hub are run by operators only.
+        Kicking players and Discord role requirements stay with operators.
       </p>
 
       <section className="adm-card" aria-labelledby="adm-hosts-add-h">

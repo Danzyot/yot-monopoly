@@ -6,7 +6,6 @@ import type { RuleConfig } from './themes.ts';
 import type { TableStyle } from './tableStyles.ts';
 import type { CharacterId } from './characters.ts';
 import type { Outfit } from './outfits.ts';
-import type { TournamentTableInfo } from './tournaments.ts';
 
 // The character catalogue lives in characters.ts; re-exported so protocol
 // code can keep importing everything from here.
@@ -316,8 +315,6 @@ export interface RoomView {
   requirements: JoinRequirements | null;
   /** Poke bookkeeping for the current turn (added by the socket layer while a game runs). */
   poke?: PokeView | null;
-  /** Set on a tournament table: which event and round it belongs to (shared/tournaments.ts). */
-  tournament?: TournamentTableInfo;
 }
 
 export interface RoomSummary {
@@ -479,6 +476,43 @@ export interface PublicProfile {
   favouriteMap: { id: string; games: number } | null;
   favouriteCharacter: { id: string; games: number } | null;
   recent: ProfileGame[];
+}
+
+/** One finished Cards match on a profile. */
+export interface CardsProfileGame {
+  code: string;
+  endedAt: number;
+  /** 1-based finishing place. */
+  place: number;
+  of: number;
+  rounds: number;
+  match: 'single' | 'points';
+  targetScore: number;
+  /** Their match score (points won from the others' hands). */
+  score: number;
+  /** Left before the end. */
+  left?: boolean;
+  character: string | null;
+  opponents: { id: string; name: string; isBot: boolean; place: number }[];
+}
+
+/** The Cards half of a public profile (GET /api/players/:id/cards), from the Cards results store. */
+export interface CardsProfile {
+  id: string;
+  name: string;
+  avatar: string;
+  games: number;
+  wins: number;
+  /** 0..1 over all matches. */
+  winRate: number;
+  /** Cards leaderboard points: a point per opponent beaten, matches with 2+ people only. */
+  points: number;
+  rankedGames: number;
+  /** Match score over every match. */
+  score: number;
+  firstGameAt: number;
+  lastGameAt: number;
+  recent: CardsProfileGame[];
 }
 // ---- table social: reactions and pokes -------------------------------------
 

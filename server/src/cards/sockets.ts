@@ -236,10 +236,11 @@ export function attachCardsSockets(io: Server, opts: CardsSocketOptions = {}): C
       lobbyChanged();
     });
 
-    on<{ character?: string; chogToken?: unknown; color?: string }>('cards:seat', (p, room) => {
+    on<{ character?: string; chogToken?: unknown; color?: string; outfit?: unknown }>('cards:seat', (p, room) => {
       const r = inRoom(room);
       if (p.character !== undefined) r.pickCharacter(me(), p.character, p.chogToken ?? undefined);
       if (p.color !== undefined) r.pickColor(me(), p.color);
+      if (p.outfit !== undefined) r.pickOutfit(me(), p.outfit);
       broadcast(r);
     });
 

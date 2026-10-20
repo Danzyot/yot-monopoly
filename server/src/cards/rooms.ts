@@ -23,6 +23,7 @@ import {
 import { isCharacterId, migrateCharacter, type CharacterId } from '../../../shared/characters.ts';
 import { CHOG_SEASON, SEASON_BOT_NAMES, SEASON_CHARACTERS, characterAvailable } from '../../../shared/season.ts';
 import { isChogTokenId } from '../../../shared/chogs/traits.ts';
+import { defaultOutfit, outfitForCharacter, parseOutfit, randomOutfit, sanitizeOutfit } from '../../../shared/outfits.ts';
 import type { TableLock } from '../../../shared/tournaments.ts';
 
 /** A disconnected player's moves are made for them after this long. */
@@ -187,9 +188,10 @@ export class CardsRoom {
     if (this.tournament && !this.tournament.seats.includes(m.id)) fail('Seats at this tournament table are assigned — you can watch');
     if (this.kicked.has(m.id)) fail('You were removed from this table — you can watch');
     if (this.seats.length >= this.maxPlayers) fail('The table is full — you can watch');
+    const character = this.freeCharacter();
     const s: Seat = {
       id: m.id, name: this.uniqueName(m.name, m.id), avatar: m.avatar, isBot: false, connected: true, disconnectedAt: null,
-      character: this.freeCharacter(), color: this.freeColor(),
+      character, color: this.freeColor(), outfit: defaultOutfit(character),
     };
     if (chogToken !== undefined && this.mayPlayChog(s, chogToken)) {
       s.character = 'chog';
@@ -379,6 +381,8 @@ export class CardsRoom {
     // A token is one seat's; a character is one seat's only when there is a choice of them.
     const clash = (o: Seat) => o.character === character && (o.chogToken ?? 0) === (chogToken ?? 0);
     if ((chogToken !== undefined || UNIQUE_CHARACTERS) && this.seats.some(o => o !== s && clash(o))) fail('That character is taken');
+    // The outfit comes along, minus the old character's own clothes, plus the new one's (as in Monopoly).
+    if (character !== s.character) s.outfit = outfitForCharacter(s.outfit ?? {}, character);
     s.character = character;
     if (chogToken !== undefined) s.chogToken = chogToken as number;
     else delete s.chogToken;
@@ -393,6 +397,20 @@ export class CardsRoom {
     s.color = color;
   }
 
+  /**
+   * What the seat wears over its character; any number of players may wear the
+   * same thing, but a character's signature items only that character. A token
+   * Chog keeps the pick for when it plays the base Chog again (it wears its own traits).
+   */
+  pickOutfit(id: string, raw: unknown) {
+    this.dirty = true;
+    this.requireLobby();
+    const s = this.seat(id) ?? fail('You are not seated');
+    const r = parseOutfit(raw, s.character);
+    if (!r.ok) fail(r.error);
+    s.outfit = r.outfit;
+  }
+
   addBot(id: string, isAdmin: boolean, level: unknown = 'normal') {
     this.dirty = true;
     this.requireHost(id, isAdmin);
@@ -401,9 +419,10 @@ export class CardsRoom {
     const lvl = BOT_LEVELS.includes(level as CardsBotLevel) ? level as CardsBotLevel : 'normal';
     const used = new Set(this.seats.map(s => s.name.toLowerCase()));
     const name = this.uniqueName(BOT_NAMES.find(n => !used.has(n.toLowerCase())) ?? 'Bot', '');
+    const character = this.freeCharacter();
     this.seats.push({
       id: `bot-${this.code}-${randomInt(1e9)}`, name, avatar: '🤖', isBot: true, level: lvl, connected: true, disconnectedAt: null,
-      character: this.freeCharacter(), color: this.freeColor(),
+      character, color: this.freeColor(), outfit: randomOutfit(this.rng, character),
     });
   }
 
@@ -843,9 +862,16 @@ export class CardsRoom {
       const character = seasonCharacter(migrateCharacter(x));
       return {
         ...x, character, connected: x.isBot, disconnectedAt: x.isBot ? null : now,
+        // Snapshots from before outfits carry none; anything unknown or not this character's comes off.
+        outfit: sanitizeOutfit((x as { outfit?: unknown }).outfit, character),
         // Only a real token on a Chog survives a (possibly hand-edited) snapshot.
         ...(character === 'chog' && isChogTokenId(chogToken) && { chogToken }),
       };
+    });
+    // A colour that is not a seat colour, or one taken twice, is swapped for a free one.
+    r.seats.forEach((seat, i) => {
+      if (CARDS_SEAT_COLORS.includes(seat.color) && !r.seats.slice(0, i).some(o => o.color === seat.color)) return;
+      seat.color = CARDS_SEAT_COLORS.find(c => !r.seats.some(o => o.color === c)) ?? '#ffffff';
     });
     // A lobby re-checks its holders' Chogs; a match under way keeps its look.
     if (r.status === 'lobby') for (const seat of r.seats) r.recheckChog(seat);

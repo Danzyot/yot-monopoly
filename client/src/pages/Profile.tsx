@@ -1,6 +1,7 @@
-// Public player profile (/u/:id): a hero card, headline stats, favourites and
-// recent games as cards, all from finished-game results. Unknown players get a
-// friendly page, not an error.
+// Public player profile (/u/:id): a hero card, then one section per game the
+// player has finished: Monopoly (headline stats, favourites, recent games) and
+// Cards (headline stats, tournament record, recent matches), all from
+// finished-game results. Unknown players get a friendly page, not an error.
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api.ts';
@@ -9,9 +10,9 @@ import { Avatar } from '../components/Avatar.tsx';
 import { ProfileLink } from '../community.tsx';
 import { getMap } from '../../../shared/maps.ts';
 import { getTheme } from '../../../shared/themes.ts';
-import { getCharacter } from '../../../shared/characters.ts';
-import type { PublicProfile } from '../../../shared/types.ts';
-import { BRAND } from '../../../shared/brand.ts';
+import { getCharacter, isCharacterId } from '../../../shared/characters.ts';
+import type { CardsProfile, CardsProfileGame, PublicProfile } from '../../../shared/types.ts';
+import { BRAND, GAMES } from '../../../shared/brand.ts';
 import ProfileTournaments from '../tournaments/ProfileTournaments.tsx';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
@@ -28,7 +29,7 @@ function when(t: number): string {
 }
 
 const monthYear = (t: number) => new Date(t).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+const plural = (n: number, w: string) => `${n} ${n === 1 ? w : /(ch|sh|s|x)$/.test(w) ? `${w}es` : `${w}s`}`;
 
 function Skeleton() {
   return (
@@ -42,111 +43,61 @@ function Skeleton() {
   );
 }
 
-export default function Profile() {
-  const { id = '' } = useParams();
-  const { profile: me, canHost } = useAuth();
-  const [p, setP] = useState<PublicProfile | null>(null);
-  const [err, setErr] = useState<{ status?: number; message: string } | null>(null);
-
-  useEffect(() => {
-    let live = true;
-    setP(null);
-    setErr(null);
-    api<{ profile: PublicProfile | null }>(`/api/players/${encodeURIComponent(id)}`)
-      .then(r => {
-        if (!live) return;
-        if (r.profile) setP(r.profile);
-        else setErr({ status: 404, message: 'unknown' });
-      })
-      .catch((e: Error & { status?: number }) => { if (live) setErr({ status: e.status, message: e.message }); });
-    return () => { live = false; };
-  }, [id]);
-
-  useEffect(() => {
-    document.title = p ? `${p.name} · ${BRAND.name}` : `Player · ${BRAND.name}`;
-    return () => { document.title = BRAND.name; };
-  }, [p]);
-
-  const mine = me?.id === id;
-
-  if (err) {
-    return (
-      <div className="page profile-page">
-        <section className="panel pf-empty">
-          <div className="pf-empty-icon" aria-hidden>🎩</div>
-          <h1>{mine ? 'No games yet' : 'Nobody here yet'}</h1>
-          <p className="muted">
-            {err.status === 404
-              ? err.message.includes('switched off')
-                ? 'Player profiles are switched off on this site right now.'
-                : mine
-                  ? 'Your profile appears after your first finished game. Go and bankrupt somebody!'
-                  : 'We have no finished games for this player — the link may be wrong, or they have not finished a game yet.'
-              : err.message}
-          </p>
-          <div className="row center wrap">
-            <Link className="btn primary chunky" to="/">Find a game</Link>
-            <Link className="btn chunky" to="/leaderboard">Leaderboard</Link>
-          </div>
-          {mine && (
-            <p className="muted small">
-              {canHost ? '🏆 You can host tournaments.' : <>Holding a Chog lets you host tournaments — <Link to="/wallet">link your wallet</Link>.</>}
-            </p>
-          )}
-        </section>
-        {/* Cards-only players have no Monopoly profile, but may have tournament results. */}
-        {err.status === 404 && <ProfileTournaments id={id} />}
+/** One game's four headline tiles. */
+function StatTiles({ games, wins, winRate, points, gamesLabel, pointsHelp }: {
+  games: number; wins: number; winRate: number; points: number; gamesLabel: string; pointsHelp: string;
+}) {
+  const rate = Math.round(winRate * 100);
+  return (
+    <section className="pf-stats" aria-label={`${gamesLabel} stats`}>
+      <div className="pf-stat"><span className="pf-stat-icon" aria-hidden>🎲</span><b>{games}</b><span>{gamesLabel}</span></div>
+      <div className="pf-stat win"><span className="pf-stat-icon" aria-hidden>🏆</span><b>{wins}</b><span>Wins</span></div>
+      <div className="pf-stat">
+        <span className="pf-stat-icon" aria-hidden>📈</span><b>{rate}%</b><span>Win rate</span>
+        <span className="pf-stat-bar" aria-hidden><i style={{ ['--w' as string]: `${rate}%` }} /></span>
       </div>
-    );
-  }
-  if (!p) return <Skeleton />;
+      <div className="pf-stat gold" title={pointsHelp}>
+        <span className="pf-stat-icon" aria-hidden>⭐</span><b>{points}</b><span>Points</span>
+      </div>
+    </section>
+  );
+}
 
+function Opponents({ list }: { list: { id: string; name: string; isBot: boolean }[] }) {
+  return (
+    <div className="pf-opps small">
+      <span className="muted">vs </span>
+      {list.map((o, i) => (
+        <span key={`${o.id}-${i}`}>
+          {i > 0 && <span className="muted">, </span>}
+          <ProfileLink id={o.id} isBot={o.isBot}>{o.name}</ProfileLink>
+          {o.isBot && <span className="muted"> (bot)</span>}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function PlaceBadge({ place, of }: { place: number; of: number }) {
+  return (
+    <span className={`pf-place-badge p${Math.min(place, 4)}`} aria-label={`Finished ${ordinal(place)} of ${of}`}>
+      <span aria-hidden>{MEDALS[place - 1] ?? ordinal(place)}</span>
+      <small>of {of}</small>
+    </span>
+  );
+}
+
+function MonopolySection({ p, titled }: { p: PublicProfile; titled: boolean }) {
   const favChar = p.favouriteCharacter ? getCharacter(p.favouriteCharacter.id) : null;
   const favMap = p.favouriteMap ? getMap(p.favouriteMap.id) : null;
-  const winRate = Math.round(p.winRate * 100);
-
   return (
-    <div className="page profile-page">
-      <section className="panel pf-hero" aria-labelledby="pf-name">
-        <div className="pf-hero-avatar">
-          <Avatar src={p.avatar} size={96} />
-          {favChar && <span className="pf-hero-char" role="img" aria-label={`Plays as ${favChar.name}`}>{favChar.emoji}</span>}
-        </div>
-        <div className="pf-who">
-          <h1 id="pf-name">{p.name}{mine && <em className="tag">you</em>}</h1>
-          <p className="pf-sub">
-            {favChar
-              ? <span className="pf-sub-item"><span aria-hidden>{favChar.emoji}</span> Plays as <b>{favChar.name}</b></span>
-              : <span className="pf-sub-item muted">No favourite character yet</span>}
-            {p.firstGameAt && <span className="pf-sub-item"><span aria-hidden>📅</span> Playing since <b>{monthYear(p.firstGameAt)}</b></span>}
-          </p>
-          <div className="pf-chips">
-            <span className="chip">{plural(p.games, 'game')} finished</span>
-            {p.wins > 0 && <span className="chip chip-win">{plural(p.wins, 'win')}</span>}
-            {favMap && <span className="chip">Favourite map · {favMap.name}</span>}
-            {mine && (canHost
-              ? <span className="chip chip-win" title="Operators, Chog Genesis holders and approved hosts can host tournaments">🏆 You can host tournaments</span>
-              : <Link className="chip" to="/wallet" title="Link the wallet that holds your Chog">Holding a Chog lets you host tournaments →</Link>)}
-          </div>
-        </div>
-      </section>
-
-      <section className="pf-stats" aria-label="Headline stats">
-        <div className="pf-stat"><span className="pf-stat-icon" aria-hidden>🎲</span><b>{p.games}</b><span>Games</span></div>
-        <div className="pf-stat win"><span className="pf-stat-icon" aria-hidden>🏆</span><b>{p.wins}</b><span>Wins</span></div>
-        <div className="pf-stat">
-          <span className="pf-stat-icon" aria-hidden>📈</span><b>{winRate}%</b><span>Win rate</span>
-          <span className="pf-stat-bar" aria-hidden><i style={{ ['--w' as string]: `${winRate}%` }} /></span>
-        </div>
-        <div className="pf-stat gold" title="Leaderboard points: one for every opponent you outlast, in games with 2+ people">
-          <span className="pf-stat-icon" aria-hidden>⭐</span><b>{p.points}</b><span>Points</span>
-        </div>
-      </section>
+    <>
+      {titled && <h2 className="lb-h2 pf-game-title"><span aria-hidden>🎩</span> {GAMES.monopoly.name}</h2>}
+      <StatTiles games={p.games} wins={p.wins} winRate={p.winRate} points={p.points} gamesLabel="Games"
+        pointsHelp="Leaderboard points: one for every opponent you outlast, in games with 2+ people" />
       {p.rankedGames < p.games && (
         <p className="muted small pf-note">Points count only games with at least two people ({p.rankedGames} of {p.games}); games against bots alone still show below.</p>
       )}
-
-      <ProfileTournaments id={p.id} />
 
       <section className="pf-favs" aria-label="Favourites">
         <div className="panel pf-fav">
@@ -178,10 +129,7 @@ export default function Profile() {
               <li key={`${g.code}-${g.endedAt}`} className={`pf-game-card ${g.place === 1 ? 'won' : ''}`}>
                 <div className="pf-thumb-wrap">
                   <img className="pf-thumb" src={`/maps/${g.mapId}.webp`} alt="" loading="lazy" />
-                  <span className={`pf-place-badge p${Math.min(g.place, 4)}`} aria-label={`Finished ${ordinal(g.place)} of ${g.of}`}>
-                    <span aria-hidden>{MEDALS[g.place - 1] ?? ordinal(g.place)}</span>
-                    <small>of {g.of}</small>
-                  </span>
+                  <PlaceBadge place={g.place} of={g.of} />
                 </div>
                 <div className="pf-game">
                   <div className="pf-game-top">
@@ -190,22 +138,161 @@ export default function Profile() {
                     {ch && <span className="chip pf-char-chip" title={`Played as ${ch.name}`}><span aria-hidden>{ch.emoji}</span> {ch.name}</span>}
                   </div>
                   <div className="muted small pf-game-meta">{plural(g.turns, 'turn')} · {when(g.endedAt)}</div>
-                  <div className="pf-opps small">
-                    <span className="muted">vs </span>
-                    {g.opponents.map((o, i) => (
-                      <span key={`${o.id}-${i}`}>
-                        {i > 0 && <span className="muted">, </span>}
-                        <ProfileLink id={o.id} isBot={o.isBot}>{o.name}</ProfileLink>
-                        {o.isBot && <span className="muted"> (bot)</span>}
-                      </span>
-                    ))}
-                  </div>
+                  <Opponents list={g.opponents} />
                 </div>
               </li>
             );
           })}
         </ul>
       </section>
+    </>
+  );
+}
+
+const matchName = (g: CardsProfileGame) => (g.match === 'single' ? 'Single round' : `First to ${g.targetScore}`);
+
+function CardsSection({ c, id, titled }: { c: CardsProfile | null; id: string; titled: boolean }) {
+  return (
+    <>
+      {titled && <h2 className="lb-h2 pf-game-title"><span aria-hidden>🃏</span> {GAMES.cards.name}</h2>}
+      {c && (
+        <StatTiles games={c.games} wins={c.wins} winRate={c.winRate} points={c.points} gamesLabel="Matches"
+          pointsHelp="Cards leaderboard points: one for every opponent you beat, in matches with 2+ people" />
+      )}
+      {c && c.rankedGames < c.games && (
+        <p className="muted small pf-note">Points count only matches with at least two people ({c.rankedGames} of {c.games}); matches against bots alone still show below.</p>
+      )}
+      {/* Tournaments are played at Cards tables. */}
+      <ProfileTournaments id={id} />
+      {c && (
+        <section className="panel pf-recent" aria-labelledby="pf-cards-recent-title">
+          <h2 id="pf-cards-recent-title" className="lb-h2">Recent matches <span className="lb-count">{c.recent.length}</span></h2>
+          <ul className="pf-games">
+            {c.recent.map(g => {
+              const ch = g.character && isCharacterId(g.character) ? getCharacter(g.character) : null;
+              return (
+                <li key={`${g.code}-${g.endedAt}`} className={`pf-game-card ${g.place === 1 ? 'won' : ''}`}>
+                  <div className="pf-thumb-wrap">
+                    <span className="pf-thumb pf-thumb-cards" aria-hidden>🃏</span>
+                    <PlaceBadge place={g.place} of={g.of} />
+                  </div>
+                  <div className="pf-game">
+                    <div className="pf-game-top">
+                      <b className="pf-game-map">{matchName(g)}</b>
+                      <span className="chip">{g.score} pts</span>
+                      {ch && <span className="chip pf-char-chip" title={`Played as ${ch.name}`}><span aria-hidden>{ch.emoji}</span> {ch.name}</span>}
+                      {g.left && <span className="chip">left early</span>}
+                    </div>
+                    <div className="muted small pf-game-meta">{plural(g.rounds, 'round')} · {when(g.endedAt)}</div>
+                    <Opponents list={g.opponents} />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+    </>
+  );
+}
+
+type Loaded<T> = { status: 'ok'; value: T | null } | { status: 'error'; code?: number; message: string };
+
+function load<T>(url: string, key: 'profile'): Promise<Loaded<T>> {
+  return api<Record<typeof key, T | null>>(url)
+    .then(r => ({ status: 'ok' as const, value: r[key] }))
+    .catch((e: Error & { status?: number }) => ({ status: 'error' as const, code: e.status, message: e.message }));
+}
+
+export default function Profile() {
+  const { id = '' } = useParams();
+  const { profile: me } = useAuth();
+  const [mono, setMono] = useState<Loaded<PublicProfile> | null>(null);
+  const [cards, setCards] = useState<Loaded<CardsProfile> | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    setMono(null);
+    setCards(null);
+    const enc = encodeURIComponent(id);
+    void load<PublicProfile>(`/api/players/${enc}`, 'profile').then(r => { if (live) setMono(r); });
+    void load<CardsProfile>(`/api/players/${enc}/cards`, 'profile').then(r => { if (live) setCards(r); });
+    return () => { live = false; };
+  }, [id]);
+
+  const p = mono?.status === 'ok' ? mono.value : null;
+  const c = cards?.status === 'ok' ? cards.value : null;
+  // The hero shows whichever game they played last: its name and avatar are the newest.
+  const latestMono = p?.recent[0]?.endedAt ?? 0;
+  const hero = p && (!c || latestMono >= c.lastGameAt) ? p : c;
+
+  useEffect(() => {
+    document.title = hero ? `${hero.name} · ${BRAND.name}` : `Player · ${BRAND.name}`;
+    return () => { document.title = BRAND.name; };
+  }, [hero?.name]);
+
+  const mine = me?.id === id;
+
+  if (!mono || !cards) return <Skeleton />;
+
+  if (!p && !c) {
+    const err = mono.status === 'error' ? mono : cards.status === 'error' ? cards : null;
+    const off = !!err?.message.includes('switched off');
+    return (
+      <div className="page profile-page">
+        <section className="panel pf-empty">
+          <div className="pf-empty-icon" aria-hidden>🎩</div>
+          <h1>{mine ? 'No games yet' : 'Nobody here yet'}</h1>
+          <p className="muted">
+            {err && err.code !== 404
+              ? err.message
+              : off
+                ? 'Player profiles are switched off on this site right now.'
+                : mine
+                  ? 'Your profile appears after your first finished game. Go and bankrupt somebody, or empty your hand first!'
+                  : 'We have no finished games for this player — the link may be wrong, or they have not finished a game yet.'}
+          </p>
+          <div className="row center wrap">
+            <Link className="btn primary chunky" to="/">Find a game</Link>
+            <Link className="btn chunky" to="/leaderboard">Leaderboard</Link>
+          </div>
+        </section>
+        {!off && <ProfileTournaments id={id} />}
+      </div>
+    );
+  }
+
+  const favChar = p?.favouriteCharacter ? getCharacter(p.favouriteCharacter.id) : null;
+  const since = Math.min(...[p?.firstGameAt, c?.firstGameAt].filter((t): t is number => !!t));
+  const both = !!p && !!c;
+  const totalWins = (p?.wins ?? 0) + (c?.wins ?? 0);
+
+  return (
+    <div className="page profile-page">
+      <section className="panel pf-hero" aria-labelledby="pf-name">
+        <div className="pf-hero-avatar">
+          <Avatar src={hero!.avatar} size={96} />
+          {favChar && <span className="pf-hero-char" role="img" aria-label={`Plays as ${favChar.name}`}>{favChar.emoji}</span>}
+        </div>
+        <div className="pf-who">
+          <h1 id="pf-name">{hero!.name}{mine && <em className="tag">you</em>}</h1>
+          <p className="pf-sub">
+            {favChar
+              ? <span className="pf-sub-item"><span aria-hidden>{favChar.emoji}</span> Plays as <b>{favChar.name}</b></span>
+              : <span className="pf-sub-item"><span aria-hidden>{p ? '🎩' : '🃏'}</span> Plays <b>{[p && GAMES.monopoly.name, c && GAMES.cards.name].filter(Boolean).join(' and ')}</b></span>}
+            {Number.isFinite(since) && <span className="pf-sub-item"><span aria-hidden>📅</span> Playing since <b>{monthYear(since)}</b></span>}
+          </p>
+          <div className="pf-chips">
+            {p && <span className="chip">{GAMES.monopoly.name} · {plural(p.games, 'game')} finished</span>}
+            {c && <span className="chip">{GAMES.cards.name} · {plural(c.games, 'match')} finished</span>}
+            {totalWins > 0 && <span className="chip chip-win">{plural(totalWins, 'win')}</span>}
+            {p?.favouriteMap && <span className="chip">Favourite map · {getMap(p.favouriteMap.id).name}</span>}
+          </div>
+        </div>
+      </section>
+
+      {p && <MonopolySection p={p} titled={both} />}
+      <CardsSection c={c} id={id} titled={both || !p} />
     </div>
   );
 }

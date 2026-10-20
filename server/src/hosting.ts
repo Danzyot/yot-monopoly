@@ -1,4 +1,5 @@
-// Hosting rights: who may host tournaments (and, on poker, open tables).
+// Hosting rights: who may host on Poker (its tables and its tournaments).
+// Hub tournaments (Cards) are for operators only and do not ask here.
 // The single source of truth for the whole site: hub code imports canHost
 // from here, and poker asks the hub over a signed request (routes/hosting.ts).
 //
@@ -108,7 +109,7 @@ export function hostingReason(playerId: string): HostReason | null {
   return null;
 }
 
-/** May this player host tournaments? Operators, Chog Genesis holders and approved hosts may. */
+/** May this player host on Poker? Operators, Chog Genesis holders and approved hosts may. */
 export function canHost(playerId: string): boolean {
   return hostingReason(playerId) !== null;
 }

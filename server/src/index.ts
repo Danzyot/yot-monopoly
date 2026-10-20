@@ -21,6 +21,7 @@ import { mountMusic } from './routes/music.ts';
 import { mountGraphics } from './routes/graphics.ts';
 import { mountTextOverrides } from './routes/textOverrides.ts';
 import { mountContent } from './routes/content.ts';
+import { mountCardsProfile } from './routes/cardsProfile.ts';
 import { walletRoutes } from './routes/wallet.ts';
 import { holdsChog } from './wallet/holders.ts';
 import { hostingRoutes } from './routes/hosting.ts';
@@ -121,7 +122,7 @@ sockets.registry.taken = code => !!cards.registry.get(code);
 const restoredCards = restoreCardsLive(cards.registry);
 if (restoredCards) console.log(`Restored ${restoredCards} live card table(s) from the last snapshot`);
 armCardsPersistence(cards.registry);
-// Tournaments (Monopoly and Cards) seat their tables in both registries, so they come back after them.
+// Tournaments (Cards only) seat their tables in the Cards registry, so they come back after it.
 const tourneys = attachTournaments(io, { monopoly: sockets, cards });
 const restoredTourneys = tourneys.manager.restore();
 if (restoredTourneys) console.log(`Restored ${restoredTourneys} live tournament(s)`);
@@ -181,6 +182,8 @@ app.get('/api/players/:id', (req, res) => {
   // explains it rather than the console logging a failed request.
   res.json({ profile: buildProfile(String(req.params.id), allResults()) });
 });
+// ...and the Cards half (/api/players/:id/cards).
+mountCardsProfile(app);
 
 // What the lobby's Discord requirement picker can offer. Any signed-in player
 // may host, so any signed-in player may ask; roles are cached (requirements.ts).
