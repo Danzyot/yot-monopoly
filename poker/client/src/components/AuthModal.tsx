@@ -158,7 +158,7 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
               confirm winners.
             </p>
             <button className="btn btn-discord btn-lg" onClick={() => signInDiscord()}>
-              <DiscordMark /> Log in with Discord
+              <DiscordMark /> Sign in with Discord
             </button>
             {/* One sign-in for every Chog game: the hub shares this room's
                 Discord app and token secret, so a session started there is

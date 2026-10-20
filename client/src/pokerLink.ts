@@ -36,7 +36,7 @@ export function openPoker(e: { button: number; metaKey: boolean; ctrlKey: boolea
  * site itself. Anything else — another host, a non-web scheme, an unparsable
  * string — is null, so a crafted link cannot carry a token away.
  */
-export function safeReturnUrl(raw: string | null, origin = location.origin): string | null {
+export function safeReturnUrl(raw: string | null, origin = location.origin, extra: string[] = []): string | null {
   if (!raw) return null;
   let u: URL;
   try { u = new URL(raw, origin); } catch { return null; }
@@ -44,6 +44,6 @@ export function safeReturnUrl(raw: string | null, origin = location.origin): str
   if (u.username || u.password) return null;
   const poker = new URL(POKER_URL);
   const ok = u.origin === origin
-    || (u.protocol === 'https:' && (u.host === poker.host || u.host === 'poker.choggames.com'));
+    || (u.protocol === 'https:' && (u.host === poker.host || u.host === 'poker.choggames.com' || extra.includes(u.origin)));
   return ok ? u.href : null;
 }

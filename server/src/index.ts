@@ -16,7 +16,7 @@ import { authed, rateLimit } from './http.ts';
 import { trustedProxyHops } from './ip.ts';
 import { armPersistence, restoreLive } from './persist.ts';
 import { adminRoutes } from './routes/admin.ts';
-import { authRoutes, mountInteractions } from './routes/auth.ts';
+import { authRoutes, mountInteractions, pokerOrigins } from './routes/auth.ts';
 import { mountMusic } from './routes/music.ts';
 import { mountGraphics } from './routes/graphics.ts';
 import { mountTextOverrides } from './routes/textOverrides.ts';
@@ -137,6 +137,7 @@ app.get('/api/config', (_req, res) => {
     codeVerifyButton: buttonFlowAvailable(),
     inviteUrl: defaultInviteUrl(),
     features: getFeatures(),
+    pokerOrigins: pokerOrigins(),
   };
   res.json(cfg);
 });

@@ -4,7 +4,8 @@
 // route); anyone else gets the sign-in dialog first, and goes back the same way
 // once it is done. Discord sign-in leaves and returns to this very URL, so the
 // return address survives the round trip. Only poker and this site are valid
-// return addresses (pokerLink.ts safeReturnUrl).
+// return addresses (pokerLink.ts safeReturnUrl), plus any the server lists in
+// POKER_ORIGINS (poker's Railway domain while DNS moves).
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth.tsx';
@@ -13,11 +14,11 @@ import { BRAND, GAMES, POKER_URL } from '../../../shared/brand.ts';
 import { safeReturnUrl, withToken } from '../pokerLink.ts';
 
 export default function Sso() {
-  const { profile, ready, openSignIn, signInOpen } = useAuth();
+  const { profile, config, ready, openSignIn, signInOpen } = useAuth();
   const [params] = useSearchParams();
   const raw = params.get('return');
-  const target = safeReturnUrl(raw);
-  const toPoker = !!target && new URL(target).host === new URL(POKER_URL).host;
+  const target = safeReturnUrl(raw, location.origin, config.pokerOrigins);
+  const toPoker = !!target && (new URL(target).host === new URL(POKER_URL).host || config.pokerOrigins.includes(new URL(target).origin));
   const [asked, setAsked] = useState(false);
   const [leaving, setLeaving] = useState(false);
 
@@ -35,6 +36,9 @@ export default function Sso() {
       openSignIn();
     }
   }, [ready, profile, target, asked, openSignIn]);
+
+  // The extra poker addresses arrive with the site config: judge the link once it is in.
+  if (!ready) return <div className="page center-msg sso-page" />;
 
   if (!target) {
     return (

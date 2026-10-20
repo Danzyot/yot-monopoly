@@ -50,6 +50,21 @@ export function mountInteractions(app: express.Express) {
  * `/\\host` and `//host` as another site, so the check is "resolves to our own origin", not a prefix
  * test; backslashes and control characters are refused outright.
  */
+/**
+ * POKER_ORIGINS: comma-separated https origins of poker besides POKER_URL
+ * (its Railway domain, an old domain) that /sso may send a sign-in back to.
+ */
+export function pokerOrigins(raw = process.env.POKER_ORIGINS ?? ''): string[] {
+  const out: string[] = [];
+  for (const part of raw.split(',')) {
+    try {
+      const u = new URL(part.trim());
+      if (u.protocol === 'https:' && !u.username && !u.password) out.push(u.origin);
+    } catch { /* not an address: skip */ }
+  }
+  return out;
+}
+
 export function localPath(raw: unknown): string {
   const ret = typeof raw === 'string' ? raw : '';
   if (!ret.startsWith('/') || /[\\\u0000-\u001f\u007f]/.test(ret)) return '/';

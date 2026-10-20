@@ -402,6 +402,11 @@ export interface SiteConfig {
   codeVerifyButton: boolean;
   inviteUrl: string | null;
   features: Features;
+  /**
+   * Extra poker addresses /sso may hand a sign-in to (POKER_ORIGINS), e.g.
+   * poker's Railway domain before poker.choggames.com is live.
+   */
+  pokerOrigins: string[];
 }
 
 // ---- community: join requirements, profiles ---------------------------------

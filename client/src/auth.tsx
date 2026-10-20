@@ -23,7 +23,7 @@ interface AuthState {
 
 const EMPTY_CONFIG: SiteConfig = {
   discordEnabled: false, demoMode: false, adminMode: false, codeVerify: false,
-  codeVerifyChannel: null, codeVerifyButton: false, inviteUrl: null, features: DEFAULT_FEATURES,
+  codeVerifyChannel: null, codeVerifyButton: false, inviteUrl: null, features: DEFAULT_FEATURES, pokerOrigins: [],
 };
 
 const Ctx = createContext<AuthState | null>(null);

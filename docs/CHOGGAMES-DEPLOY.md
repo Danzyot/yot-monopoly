@@ -116,6 +116,7 @@ Per-service, **different**:
 |---|---|---|
 | `PUBLIC_URL` | `https://choggames.com` | `https://poker.choggames.com` |
 | `HUB_URL` | — | `https://choggames.com` (this is the default; set it anyway so it is visible) |
+| `POKER_ORIGINS` | poker's current address(es), comma-separated, e.g. `https://chog-poker-production.up.railway.app` — lets poker's *Sign in via Chog Games* come back to poker before `poker.choggames.com` is live; remove after cutover | — |
 | `HUB_ORIGINS` | — | the hub's Railway domain, e.g. `https://yot-monopoly-production.up.railway.app` — lets the hub show poker's leaderboard on profiles before DNS moves; remove after cutover |
 | `DISCORD_PUBLIC_KEY` | the app's **Public Key** (General Information) | **unset** — see section 4 |
 | `DISCORD_VERIFY_CHANNEL_ID` | the verify channel (hub's Verify button panel) | the same channel, or a poker one — section 4 |

@@ -368,3 +368,12 @@ test('holders: a reading older than ten minutes is no proof (the Chog may have b
     now = was;
   }
 });
+
+test('POKER_ORIGINS: only https origins, path and junk dropped', async () => {
+  const { pokerOrigins } = await import('../src/routes/auth.ts');
+  assert.deepEqual(pokerOrigins(''), []);
+  assert.deepEqual(
+    pokerOrigins(' https://chog-poker.up.railway.app/x?y=1 , http://evil.test, nonsense, https://u:p@a.test, https://chog.chekrpoker.com'),
+    ['https://chog-poker.up.railway.app', 'https://chog.chekrpoker.com'],
+  );
+});
