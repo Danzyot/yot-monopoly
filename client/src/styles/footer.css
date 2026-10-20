@@ -1,0 +1,59 @@
+/* The site footer (components/Footer.tsx). The header's colours turned upside
+   down: a pink rule on top, the panel colour below, the season's cream for the
+   headings. Works in either season through the shared variables. */
+
+.site-footer {
+  margin-top: 48px;
+  padding: 32px 16px calc(20px + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, var(--panel-solid), color-mix(in srgb, var(--panel-solid) 70%, #000));
+  border-top: 3px solid var(--accent);
+  color: var(--text);
+  font-size: 15px;
+  position: relative;
+  z-index: 1;
+}
+.ft-inner {
+  max-width: 1100px; margin: 0 auto;
+  display: grid; grid-template-columns: minmax(220px, 1fr) 2fr; gap: 32px;
+}
+.ft-logo {
+  display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text);
+  font: 400 24px/1 var(--display); letter-spacing: 0.02em; border-radius: 10px;
+}
+.ft-logo img { width: 40px; height: 40px; border-radius: 10px; }
+.ft-tag { margin: 10px 0 0; color: var(--muted); max-width: 34ch; line-height: 1.45; }
+
+.ft-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.ft-h {
+  margin: 0 0 10px; font: 400 15px/1.2 var(--display); letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--hi, #fdf6cd);
+}
+.ft-col ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ft-col a, .ft-link {
+  display: inline-block; padding: 4px 0; color: var(--text); text-decoration: none; font: inherit; font-weight: 700;
+  background: none; border: 0; cursor: pointer; text-align: left; border-radius: 6px;
+}
+.ft-col a:hover, .ft-link:hover { color: var(--hi, #fdf6cd); text-decoration: underline; text-underline-offset: 3px; }
+.ft-col a:focus-visible, .ft-link:focus-visible, .ft-logo:focus-visible {
+  outline: 3px solid var(--hi, #fdf6cd); outline-offset: 3px;
+}
+.ft-legal {
+  max-width: 1100px; margin: 28px auto 0; padding-top: 16px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  color: var(--muted); font-size: 13px; line-height: 1.5;
+}
+
+.season-chog .site-footer {
+  background: linear-gradient(180deg, #2b1764, #1a0d3d);
+  border-top-color: var(--chog-pink);
+}
+
+/* Phones: brand on top, the three columns side by side, then two plus one. */
+@media (max-width: 760px) {
+  .ft-inner { grid-template-columns: 1fr; gap: 22px; }
+  .site-footer { margin-top: 32px; padding-top: 24px; }
+}
+@media (max-width: 480px) {
+  .ft-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 18px; }
+  .ft-col a, .ft-link { padding: 7px 0; }
+}

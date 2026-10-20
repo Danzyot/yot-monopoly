@@ -32,6 +32,8 @@ import { armCardsPersistence, restoreCardsLive } from './cards/persist.ts';
 import { attachTournaments } from './tournament/sockets.ts';
 import { cardsLeaderboard, loadCardsResults, recentCardsResults } from './cards/stats.ts';
 import { staticClient } from './staticFiles.ts';
+import { mountCrawlerFiles, spaHandler } from './seo.ts';
+import { mountSite } from './routes/site.ts';
 import { allResults, leaderboard, loadResults } from './stats.ts';
 import { buildProfile } from './profiles.ts';
 import { devFakeDiscord, gateInfo } from './requirements.ts';
@@ -163,6 +165,8 @@ app.use('/api/hosting', hostingRoutes());
 mountMusic(app);
 mountGraphics(app, sockets);
 mountTextOverrides(app);
+// The info pages (/terms, /privacy, /fair-play) and the app's crash reports.
+mountSite(app);
 
 app.get('/api/leaderboard', (_req, res) => {
   if (!isOn('leaderboard')) { res.status(404).json({ error: 'The leaderboard is switched off' }); return; }
@@ -213,10 +217,14 @@ app.get('/api/health', (_req, res) => {
 app.use('/api', (_req, res) => { res.status(404).json({ error: 'Not found' }); });
 
 // In production the server also serves the built client.
+// robots.txt and sitemap.xml, from shared/seo.ts's list of public pages.
+mountCrawlerFiles(app);
 const dist = join(__dir, '../../client/dist');
 if (existsSync(dist)) {
   app.use(staticClient(dist));
-  app.get(/^\/(?!api|socket\.io).*/, (_req, res) => res.sendFile(join(dist, 'index.html')));
+  // Every page is index.html, with that page's title, description and share
+  // tags written in (seo.ts), and status 404 where no page answers.
+  app.get(/^\/(?!api|socket\.io).*/, spaHandler(join(dist, 'index.html')));
 }
 
 // Failing to listen (port taken) is fatal: without this it would only be logged above.

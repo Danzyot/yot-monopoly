@@ -1,0 +1,39 @@
+/* Site-wide bits that must be there before any page loads (App.tsx): the crash
+   screen (components/ErrorBoundary.tsx), the page-loading skeleton, the skip
+   link and a visible focus ring for anything that has no ring of its own. */
+
+/* ---- focus: a ring on every control that lacks one (keyboard only) ---- */
+:is(button, [role="button"], [role="tab"], summary, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 3px solid var(--hi, #fdf6cd); outline-offset: 2px;
+}
+
+/* ---- skip to content (shown only when tabbed to) ---- */
+.skip-link {
+  position: absolute; left: 12px; top: -60px; z-index: 1000;
+  padding: 10px 16px; border-radius: 10px; background: var(--hi, #fdf6cd); color: #3a0f2a;
+  font-weight: 800; text-decoration: none; transition: top 0.12s;
+}
+.skip-link:focus { top: 10px; outline: 3px solid #3a0f2a; outline-offset: 2px; }
+
+/* ---- a page whose code is still on its way ---- */
+.page-loading { max-width: 1100px; min-height: 70vh; margin: 0 auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 12px; }
+.page-loading .sk-title { height: 44px; width: min(320px, 70%); margin: 0 auto 6px; border-radius: 12px; }
+
+/* ---- the crash screen ---- */
+.crash { min-height: 60vh; display: flex; align-items: center; justify-content: center; padding: 32px 16px; }
+.crash-full { min-height: 100vh; min-height: 100dvh; }
+.crash-card {
+  max-width: 520px; width: 100%; text-align: center; padding: clamp(22px, 5vw, 36px);
+  background: var(--panel); border: 3px solid color-mix(in srgb, var(--line) 70%, transparent); border-radius: 22px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.crash-chog { width: 96px; height: 96px; filter: grayscale(0.35) drop-shadow(0 5px 0 rgba(0, 0, 0, 0.3)); transform: rotate(-8deg); }
+.crash-card h1 { font-size: clamp(28px, 6vw, 38px); margin: 10px 0 8px; }
+.crash-card p { margin: 0 0 18px; font-size: 16px; line-height: 1.5; color: color-mix(in srgb, var(--text) 85%, transparent); }
+.crash-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.crash-actions .btn { min-width: 130px; text-decoration: none; }
+.crash-dev {
+  margin: 18px 0 0; text-align: left; max-height: 40vh; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  font: 12px/1.45 ui-monospace, Menlo, monospace; background: rgba(0, 0, 0, 0.45); color: #ffd7d7;
+  padding: 12px; border-radius: 10px;
+}

@@ -4,23 +4,34 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0b2a72" />
-    <title>Chog Games</title>
-    <meta name="description" content="Chog Games: Monopoly, cards and poker with the Chog crew. Open a table, share the code, play with friends in the browser." />
+    <!-- Search and link previews. The server swaps this block for each page's own tags
+         (server/src/seo.ts, from shared/seo.ts), so keep the markers. These are the home page's. -->
+    <!--seo-->
+    <title>Chog Games: Monopoly, cards and poker with the Chog crew</title>
+    <meta name="description" content="Play Monopoly, Chog Cards and poker with the Chog crew. Open a table, share the code and play with friends in your browser. Free, nothing to download." />
+    <link rel="canonical" href="https://choggames.com/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Chog Games" />
-    <meta property="og:title" content="Chog Games" />
-    <meta property="og:description" content="Monopoly, cards and poker with the Chog crew. Open a table, share the code, play in the browser." />
-    <meta property="og:image" content="https://choggames.com/brand/og.webp" />
+    <meta property="og:title" content="Chog Games: Monopoly, cards and poker with the Chog crew" />
+    <meta property="og:description" content="Play Monopoly, Chog Cards and poker with the Chog crew. Open a table, share the code and play with friends in your browser. Free, nothing to download." />
+    <meta property="og:url" content="https://choggames.com/" />
+    <meta property="og:image" content="https://choggames.com/brand/og.jpg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Chog Games" />
-    <meta name="twitter:description" content="Monopoly, cards and poker with the Chog crew." />
-    <meta name="twitter:image" content="https://choggames.com/brand/og.webp" />
-    <!-- The Chog mark (client/public/brand/, drawn from editions/chog/logo.png). -->
-    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <meta name="twitter:title" content="Chog Games: Monopoly, cards and poker with the Chog crew" />
+    <meta name="twitter:description" content="Play Monopoly, Chog Cards and poker with the Chog crew. Open a table, share the code and play with friends in your browser. Free, nothing to download." />
+    <meta name="twitter:image" content="https://choggames.com/brand/og.jpg" />
+    <!--/seo-->
+    <!-- The Chog mark (client/public/brand/, drawn from editions/chog/logo.png): favicons, the
+         home-screen icon and the install manifest (display: standalone, no service worker). -->
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
     <link rel="icon" type="image/png" href="/brand/icon-32.png" sizes="32x32" />
-    <link rel="apple-touch-icon" href="/brand/icon-180.png" />
+    <link rel="icon" type="image/png" href="/brand/icon-16.png" sizes="16x16" />
+    <link rel="icon" type="image/png" href="/brand/icon-192.png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <meta name="apple-mobile-web-app-title" content="Chog Games" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <link rel="manifest" href="/site.webmanifest" />
     <!-- The faces the first screen is set in (the hero's Titan One, the headings' and
          header's Lilita One, the body's and status line's Nunito), fetched with the page rather than
