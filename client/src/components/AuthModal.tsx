@@ -13,7 +13,7 @@ export const DiscordMark = () => (
   </svg>
 );
 
-/** Sign-in dialog: Log in with Discord, or Verify with a code (plus demo mode). */
+/** Sign-in dialog: Sign in with Discord, or Verify with a code (plus demo mode). */
 export function AuthModalHost() {
   const auth = useAuth();
   if (!auth.signInOpen) return null;
@@ -85,7 +85,7 @@ function AuthModal({ onClose }: { onClose: () => void }) {
       <h3>Sign in to {BRAND.name}</h3>
       {config.discordEnabled && (
         <>
-          <button className="btn discord big" onClick={signInDiscord}><DiscordMark /> Log in with Discord</button>
+          <button className="btn discord big" onClick={signInDiscord}><DiscordMark /> Sign in with Discord</button>
           {config.codeVerify && (
             <>
               <button className="btn big" onClick={() => void beginCode()}>Verify with a code</button>

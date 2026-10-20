@@ -129,6 +129,10 @@ body.te-on .te-hover { outline: 2px dashed var(--hi, #ffd23f); outline-offset: 2
   .audio-ctl > .audio-btn:has(.audio-label) { width: auto; padding: 0 9px; gap: 6px; }
   .audio-label { display: inline; font: 700 12px/1 var(--font), sans-serif; letter-spacing: 0.02em; white-space: nowrap; }
   .audio-btn.music-toggle:not(.on) .audio-label { color: var(--muted); }
+  /* The host lobby's first panel is narrow: there the controls stay icons (their
+     titles still say what they do), so Leave fits beside them inside the panel. */
+  .lobby-audio .audio-ctl > .audio-btn:has(.audio-label) { width: 28px; padding: 0; }
+  .lobby-audio .audio-label { display: none; }
 }
 .music-ask {
   position: absolute; top: calc(100% + 10px); right: 0; z-index: 31; width: min(260px, calc(100vw - 24px));
@@ -195,7 +199,7 @@ body.te-on .te-hover { outline: 2px dashed var(--hi, #ffd23f); outline-offset: 2
   }
   .social-dock .dock-ico { font-size: 17px; line-height: 1; }
   .social-dock .dock-text, .social-dock .poke-label {
-    display: block; max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    display: block; max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     font: 800 12px/1 var(--font), sans-serif; letter-spacing: 0.01em;
     color: var(--text); text-shadow: var(--outline, none);
   }

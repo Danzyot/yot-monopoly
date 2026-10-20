@@ -8,7 +8,7 @@ import { MAPS, getMap } from '../../../shared/maps.ts';
 import { BRAND, GAMES } from '../../../shared/brand.ts';
 import { CARDS_MAX_PLAYERS, CARDS_MIN_PLAYERS } from '../../../shared/cards/meta.ts';
 import type { CharacterDef, CharacterId } from '../../../shared/characters.ts';
-import { CHOG_SEASON, SEASON_THEME_ID, availableCharacters, themeAvailable } from '../../../shared/season.ts';
+import { CHOG_SEASON, SEASON_THEME_ID, availableCharacters, mapThumbUrl, themeAvailable } from '../../../shared/season.ts';
 import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { requirementBadge, requirementSentence } from '../community.tsx';
@@ -32,8 +32,6 @@ const STEPS: { icon: string; title: string; body: string }[] = [
     : 'Roll, shed your hand or shove all-in. Wins against real people count on the leaderboard.' },
 ];
 
-/** A board's picture: in the Chog season, the board in the Chog look (client/public/home/chog-*.webp). */
-const mapThumb = (mapId: string) => (CHOG_SEASON ? `/home/chog-${mapId}.webp` : `/maps/${mapId}.webp`);
 
 /** The game cards' one-liners: Chog-flavoured for the season (shared/season.ts). */
 const BLURBS = CHOG_SEASON ? {
@@ -249,7 +247,7 @@ export default function Home() {
                 const open = r.status === 'lobby';
                 return (
                   <li key={r.code} className={`room-card ${r.status}`}>
-                    <img className="room-thumb" src={mapThumb(map.id)} alt="" width={84} height={58} loading="lazy" decoding="async" />
+                    <img className="room-thumb" src={mapThumbUrl(map.id)} alt="" width={84} height={58} loading="lazy" decoding="async" />
                     <div className="room-main">
                       <div className="room-top">
                         <b className="mono room-code">{r.code}</b>
@@ -266,7 +264,7 @@ export default function Home() {
                     </div>
                     <button className={`btn small ${open ? 'primary' : ''}`} onClick={() => join(r.code)}
                       aria-label={`${open ? 'Join' : 'Watch'} table ${r.code}`}>
-                      {open ? 'Join!' : 'Watch'}
+                      {open ? 'Join' : 'Watch'}
                     </button>
                   </li>
                 );
@@ -280,7 +278,7 @@ export default function Home() {
           <div className="card-grid">
             {MAPS.map(m => (
               <div key={m.id} className="info-card">
-                <img className="map-thumb" src={mapThumb(m.id)} alt="" width={320} height={200} loading="lazy" decoding="async" />
+                <img className="map-thumb" src={mapThumbUrl(m.id)} alt="" width={320} height={200} loading="lazy" decoding="async" />
                 <b>{m.name}</b>
                 <span className="small muted">{m.description}</span>
                 <span className="info-meta">{m.spaces.length} spaces · {m.players[0]}–{m.players[1]} players · {CHOG_SEASON ? `${getTheme(SEASON_THEME_ID).name} look` : `${m.look.name} look`}</span>

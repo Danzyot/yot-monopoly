@@ -10,6 +10,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Group } from 'three';
 import { type CharacterId } from '../../../shared/characters.ts';
 import { availableCharacters } from '../../../shared/season.ts';
+import { BRAND } from '../../../shared/brand.ts';
 import { outfitForCharacter, type Outfit } from '../../../shared/outfits.ts';
 import { CHARACTER_PREF_KEY } from '../components/Lobby.tsx';
 import OutfitPicker, { loadOutfitPref, saveOutfitPref } from '../components/OutfitPicker.tsx';
@@ -234,13 +235,13 @@ export default function Gallery() {
   const pick = (m: Move) => { setMove(m); setStartedAt(performance.now()); };
   const go = (d: number) => setI(x => (x + d + CHARS.length) % CHARS.length);
   useEffect(() => {
-    document.title = `${title} · Characters`;
+    document.title = `${title} · Characters · ${BRAND.name}`;
     const slug = slugOf(def.name);
     const t = chogToken ? String(chogToken) : null;
     if (params.get('c') !== slug || params.get('t') !== t) {
       setParams(p => { p.set('c', slug); if (t) p.set('t', t); else p.delete('t'); return p; }, { replace: true });
     }
-    return () => { document.title = 'Yot Monopoly'; };
+    return () => { document.title = BRAND.name; };
   }, [def, title, chogToken, params, setParams]);
   const playAs = () => {
     try { localStorage.setItem(CHARACTER_PREF_KEY, def.id); } catch { /* private mode */ }

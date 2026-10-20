@@ -12,7 +12,7 @@
 // tableLabel() in shared/themes.ts has the words players see.)
 
 import { THEMES, resolveTheme, tableLabel, type RuleConfig } from '../../../shared/themes.ts';
-import { themeAvailable } from '../../../shared/season.ts';
+import { mapThumbUrl, themeAvailable } from '../../../shared/season.ts';
 import { MAPS, getMap } from '../../../shared/maps.ts';
 import type { RoomView } from '../../../shared/types.ts';
 import BoardPreview from '../three/BoardPreview.tsx';
@@ -57,7 +57,7 @@ export default function BoardPicker({ room, isHost, configure }: {
             <button key={m.id} disabled={!isHost} className={`edition small map-card ${on ? 'on' : ''}`}
               aria-pressed={on} onClick={() => configure({ mapId: m.id })}>
               {on && <span className="pick-selected">✓ Selected</span>}
-              <img className="map-thumb" src={`/maps/${m.id}.webp`} alt="" loading="lazy" />
+              <img className="map-thumb" src={mapThumbUrl(m.id)} alt="" loading="lazy" />
               <b>{m.name}</b>
               <span className="bp-facts small">{m.spaces.length} spaces · {m.players[0]}–{m.players[1]} players</span>
               <span className="small muted">{m.description}</span>

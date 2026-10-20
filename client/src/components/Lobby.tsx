@@ -14,7 +14,7 @@ import { Avatar } from './Avatar.tsx';
 import BoardScene from '../three/BoardScene.tsx';
 import TableStylePicker from './TableStylePicker.tsx';
 import BoardPicker, { LOOK_STEP } from './BoardPicker.tsx';
-import { availableCharacters, characterAvailable, characterShared } from '../../../shared/season.ts';
+import { availableCharacters, characterAvailable, characterShared, mapThumbUrl } from '../../../shared/season.ts';
 import CharacterPreview from '../three/characters/CharacterPreview.tsx';
 import { preloadCharacters, preloadChogTraits } from '../three/characters/Figure.tsx';
 import { themeStyle } from '../themeStyle.ts';
@@ -250,7 +250,7 @@ function MemberLobby({ room, me, spectating, chat, onLeave, onWear }: {
         <aside className="panel lm-summary" aria-label="Game settings">
           <h3>The table</h3>
           <div className="ls-board">
-            <img className="ls-thumb" src={`/maps/${map.id}.webp`} alt="" />
+            <img className="ls-thumb" src={mapThumbUrl(map.id)} alt="" />
             <span className="ls-board-text">
               <Live value={map.id}><b>{map.name}</b></Live>
               <span className="small muted">{map.spaces.length} spaces</span>
@@ -412,7 +412,7 @@ export default function Lobby({ room, me, spectating, chat }: {
           </div>
           <div className="row">
             <input readOnly value={link} onFocus={e => e.target.select()} />
-            <button className="btn small" onClick={() => { void navigator.clipboard?.writeText(link); toast('Invite link copied!'); }}>Copy link</button>
+            <button className="btn small ghost" onClick={() => { void navigator.clipboard?.writeText(link); toast('Invite link copied!'); }}>Copy link</button>
           </div>
           {spectating && profile && <p className="muted small">{room.seats.length >= room.rules.maxPlayers ? 'The room is full — you are watching.' : 'You are watching.'}</p>}
 

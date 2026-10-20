@@ -253,7 +253,7 @@ export const TPTV: Edition = edition(CLASSIC, {
 export const CHOG: Edition = edition(CLASSIC, {
   id: 'chog',
   name: 'Chog',
-  tagline: 'Chog Poker’s purple room, on any board. Jackpot on, double on START.',
+  tagline: 'Chog’s purple poker lounge, on any board. Jackpot on, double on START.',
   centerTitle: 'CHOG',
   currency: '$',
   logoUrl: '/editions/chog/logo.png',

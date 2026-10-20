@@ -1,7 +1,7 @@
 // All-time leaderboards, one tab per game: a podium for the top three, then
 // every ranked player. Points come from finished games with two or more
 // people (server/src/stats.ts for Monopoly, server/src/cards/stats.ts for
-// Chog Cards). Poker keeps its own on its own site.
+// Cards). Poker keeps its own on its own site.
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, getToken } from '../api.ts';
@@ -11,6 +11,7 @@ import { profilePath } from '../community.tsx';
 import { getCharacter } from '../../../shared/characters.ts';
 import { BRAND, GAMES, POKER_URL } from '../../../shared/brand.ts';
 import { openPoker } from '../pokerLink.ts';
+import { CHOG_SEASON } from '../../../shared/season.ts';
 
 interface Row {
   id: string; name: string; games: number; wins: number; points: number;
@@ -106,8 +107,8 @@ export default function Leaderboard() {
               : 'Nobody has finished a game against another person yet. Gather a friend, bankrupt them, and be the first name up here.'}
           </p>
           <div className="row center wrap">
-            <Link className="btn primary chunky" to={tab.id === 'cards' ? GAMES.cards.path : '/'}>{tab.id === 'cards' ? 'Open a table' : 'Create a game'}</Link>
-            <Link className="btn" to="/characters">Meet the characters</Link>
+            <Link className="btn primary chunky" to={tab.id === 'cards' ? GAMES.cards.path : '/'}>Play {tab.label}</Link>
+            <Link className="btn chunky" to="/characters">{CHOG_SEASON ? 'Meet Chog' : 'Meet the characters'}</Link>
           </div>
         </section>
       )}
