@@ -118,6 +118,17 @@ export function CardsCamera({ state, compact }: { state: RefObject<SceneState | 
             target: (_k, o) => o.copy(at).setY(FELT_Y + 1.1),
           };
           card('bankrupt', 'Challenge!', t.bluff ? `A bluff — ${name(t.player)} draws 4` : `It was legal — ${name(t.target)} draws 6`, colour(t.target), dur);
+        } else if (t.type === 'mercy' && t.player !== me) {
+          // No mercy: a quick push in on the knocked-out player as they grey.
+          const at = seatPos(angle(t.player), undefined, new Vector3());
+          const dir = at.clone().sub(CENTRE).setY(0).normalize();
+          const far = narrow ? 1.75 : 1;
+          cut.current = {
+            start: now, dur, fresh: true, me: false,
+            pos: (k, o) => o.copy(at).addScaledVector(dir, -(4.6 - 1.4 * smooth(k)) * far).setY(FELT_Y + 2.2 * Math.sqrt(far) + 0.3 * k),
+            target: (_k, o) => o.copy(at).setY(FELT_Y + 1.0),
+          };
+          card('bankrupt', 'No mercy!', `${name(t.player)} hit ${t.count} cards — out of the round`, colour(t.player), dur);
         } else if (t.type === 'roundEnd') {
           // From the middle of the table, up at the winner, dollying in; a narrow
           // (portrait) frame stands further back so the whole figure stays in shot.

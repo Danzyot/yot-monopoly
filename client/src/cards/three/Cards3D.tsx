@@ -101,6 +101,7 @@ export function CardsLayer({ atlas, state, castShadow }: { atlas: CardAtlas; sta
         if (t.type === 'deal') stk.length = 0;
         else if (t.type === 'flip') { if (!t.back) push(t.card, play.seq); }
         else if (t.type === 'play') push(t.card, play.seq);
+        else if (t.type === 'purge') for (const c of t.cards) push(c, play.seq);
         else if (t.type === 'reshuffle') stk.splice(0, Math.max(0, stk.length - 1));
       }
     } else {
@@ -331,6 +332,58 @@ function flyStep(
         arc(easeOut(tt), mine ? 0.6 : FLIGHT_ARC * 0.55);
         q.slerpQuaternions(qDown, qTo, smooth(tt));
         if (!mine) { const g = 1 + (FAN_SCALE - 1) * tt; scl.set(g, g, 1); }
+        put(atlas.back);
+        scl.set(1, 1, 1);
+      }
+      return;
+    }
+    case 'purge': {
+      // The cleared colour pours out of the hand onto the discard, one after another, face up.
+      const mine = step.player === me;
+      const n = Math.min(step.cards.length, 8);
+      const fly = Math.min(520, dur);
+      const gap = n > 1 ? (dur - fly) / (n - 1) : 0;
+      const fan = fans.find(f => f.id === step.player);
+      for (let k = 0; k < n; k++) {
+        const card = step.cards[k];
+        const tk = (now - (s.at + k * gap)) / fly;
+        if (tk < 0 || tk >= 1) continue;
+        if (mine) {
+          const r = st.handRects.get(card.id);
+          const h = ourHand(st, canvas);
+          screenToTable(r ? r.left + r.width / 2 : h.x, r ? r.top + r.height / 2 : h.y, canvas, camera, FELT_Y + 1.3, from);
+          qFrom.copy(camera.quaternion);
+        } else {
+          const shown = Math.min((fan?.count ?? 0) + n, MAX_FAN);
+          fanCard(angleOf(step.player), Math.min(k, shown - 1), shown, from, qFrom, 0.1);
+        }
+        discardTop(stackSize + k, to);
+        to.x += landDx(card, play.seq);
+        to.z += landDz(card, play.seq);
+        flatQuat(landYaw(card, play.seq) + (k - n / 2) * 0.35, true, qTo);
+        arc(easeOut(tk), mine ? 0.8 : FLIGHT_ARC * 0.7);
+        q.slerpQuaternions(qFrom, qTo, smooth(tk * 1.15));
+        slap(tk);
+        if (!mine) { const g = FAN_SCALE + (1 - FAN_SCALE) * Math.min(1, tk * 2); scl.x *= g; scl.y *= g; }
+        put(atlas.rect(card));
+        scl.set(1, 1, 1);
+      }
+      return;
+    }
+    case 'mercy': {
+      // Knocked out: the hand goes back, face down, under the draw pile.
+      const n = Math.min(step.count, 10);
+      const mine = step.player === me;
+      for (let k = 0; k < n; k++) {
+        const tk = seg(t, k * 0.05, k * 0.05 + 0.45);
+        if (tk <= 0 || tk >= 1) continue;
+        if (mine) { const h = ourHand(st, canvas); screenToTable(h.x + (k - n / 2) * 24, h.y, canvas, camera, FELT_Y + 1.4, from); qFrom.copy(camera.quaternion); }
+        else fanSlot(angleOf(step.player), k, n, from, qFrom);
+        to.copy(PILE).setY(FELT_Y + 0.02);
+        arc(easeOut(tk), FLIGHT_ARC * 0.9);
+        q.slerpQuaternions(qFrom, qDown, smooth(tk));
+        const g = mine ? 1 : FAN_SCALE + (1 - FAN_SCALE) * tk;
+        scl.set(g, g, 1);
         put(atlas.back);
         scl.set(1, 1, 1);
       }

@@ -280,6 +280,57 @@ test('a full bot match runs to the end on its own and is recorded as finished', 
   }
 });
 
+test('modes: picking Chog Chaos brings its house rules (still the host\'s to change); back to Classic restores the standard set', () => {
+  const h = harness();
+  try {
+    const r = h.reg.create('a');
+    r.join(m('a'));
+    r.configure('a', false, { rules: { mode: 'chaos' } });
+    assert.equal(r.rules.mode, 'chaos');
+    assert.deepEqual([r.rules.stacking, r.rules.stackMixed, r.rules.sevenZero, r.rules.drawUntilPlayable, r.rules.mercy], [true, true, true, true, true]);
+    assert.equal(r.summary().match, 'Chog Chaos · Single round');
+    r.configure('a', false, { rules: { mercy: false } });
+    assert.equal(r.rules.mercy, false, 'a house rule changed after the mode stays changed');
+    r.configure('a', false, { rules: { mode: 'chaos', jumpIn: true } });
+    assert.equal(r.rules.mercy, false, 'the same mode again changes nothing else');
+    assert.equal(r.rules.jumpIn, true);
+    r.configure('a', false, { rules: { mode: 'classic' } });
+    assert.deepEqual([r.rules.mode, r.rules.sevenZero, r.rules.drawUntilPlayable, r.rules.mercy, r.rules.jumpIn, r.rules.stacking],
+      ['classic', false, false, false, false, true]);
+    assert.equal(r.summary().match, 'Single round');
+    r.configure('a', false, { rules: { mode: 'chaos', match: 'points' } });
+    assert.equal(r.rules.match, 'points', 'the match length is not part of a mode');
+  } finally {
+    h.done();
+  }
+});
+
+test('a full Chog Chaos match of bots and autopilots runs to the end and goes on the leaderboard', async () => {
+  const { recordCardsResult, cardsLeaderboard } = await import('../src/cards/stats.ts');
+  const h = harness();
+  try {
+    const r = h.reg.create('h');
+    r.join(m('h'));
+    r.join(m('k'));
+    r.addBot('h', false, 'hard');
+    r.addBot('h', false, 'easy');
+    r.configure('h', false, { rules: { mode: 'chaos', turnSeconds: 0 } });
+    r.start('h', false);
+    assert.equal(r.game!.deckSize, 135);
+    r.setAutopilot('h', 'h', true, false);
+    r.setAutopilot('h', 'k', true, false);
+    for (let i = 0; i < 4_000 && r.status === 'playing'; i++) h.advance(1_000);
+    assert.equal(r.status, 'finished');
+    const rec = recordCardsResult(r)!;
+    assert.equal(rec.mode, 'chaos');
+    assert.equal(rec.places[0].id, r.game!.winner);
+    const rows = cardsLeaderboard();
+    for (const id of ['h', 'k']) assert.equal(rows.find(x => x.id === id)?.games, 1, `${id} is on the board`);
+  } finally {
+    h.done();
+  }
+});
+
 test('snapshot / restore keeps a match mid-play; players come back disconnected; files round-trip', async () => {
   const h = harness();
   try {

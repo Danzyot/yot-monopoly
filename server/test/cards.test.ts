@@ -257,7 +257,7 @@ test('Wild Draw Four: legal play, the next player takes 4 and misses a turn', ()
   assert.equal(g.current.id, 'p1');
   assert.equal(g.phase, 'play');
   const v = g.view('p1');
-  assert.deepEqual(v.pendingDraw, { amount: 4, kind: 'wild4', from: 'p0', challengeable: true, prevColor: 'green' });
+  assert.deepEqual(v.pendingDraw, { amount: 4, kind: 'wild4', from: 'p0', chain: 1, challengeable: true, prevColor: 'green' });
   assert.equal(v.you!.canChallenge, true);
   assert.deepEqual(v.you!.playable, [], 'nothing stacks without the house rule');
   assertRefused(g, () => g.apply('p1', { type: 'play', card: g.player('p1').hand[0].id }), /You must draw 4 or challenge/);

@@ -4,7 +4,8 @@
 // has nothing to do right now. Choices that look random are seeded from the
 // game state, so the same position always gets the same move.
 
-import { bestColor, cardPoints, isWild, type Card, type CardColor } from '../../../shared/cards/deck.ts';
+import { DRAW_VALUE, bestColor, cardPoints, deckSize, handAfter, handPoints, isWild, type Card, type CardColor } from '../../../shared/cards/deck.ts';
+import { CARDS_MERCY_LIMIT } from '../../../shared/cards/meta.ts';
 import type { CardsAction, CardsBotLevel, CardsPlayerView, CardsView } from '../../../shared/cards/types.ts';
 import { hash } from '../engine/minigames/types.ts';
 import { LAST_CARD_GRACE_MS, type CardsGame } from './game.ts';
@@ -61,8 +62,8 @@ export function decide(v: CardsView, level: CardsBotLevel): CardsAction | null {
     case 'play': {
       const options = me.hand.filter(c => me.playable.includes(c.id));
       if (v.pendingDraw) {
-        // Pass the penalty on if we can (a Draw Two before a Draw Four: keep the Wild).
-        const stack = options.sort((a, b) => Number(a.kind === 'wild4') - Number(b.kind === 'wild4'))[0];
+        // Pass the penalty on if we can, with the smallest Draw card that answers it (keep the big ones).
+        const stack = options.sort((a, b) => (DRAW_VALUE[a.kind] ?? 0) - (DRAW_VALUE[b.kind] ?? 0))[0];
         if (stack) return playOf(v, level, stack, roll);
         if (me.canChallenge && shouldChallenge(v, level, roll)) return { type: 'challenge' };
         return { type: 'draw' };
@@ -131,7 +132,7 @@ function cardById(v: CardsView, id: number): Card {
 /** A play of `c` with the colour, swap partner and call it needs. */
 function playOf(v: CardsView, level: CardsBotLevel, c: Card, roll: (s: string) => number): CardsAction {
   const me = v.you!;
-  const rest = me.hand.filter(x => x.id !== c.id);
+  const rest = handAfter(me.hand, c);
   const a: Extract<CardsAction, { type: 'play' }> = { type: 'play', card: c.id };
   if (isWild(c)) a.color = pickColor(rest);
   if (v.rules.sevenZero && c.kind === 'number' && c.value === 7) {
@@ -154,7 +155,7 @@ function after(v: CardsView, id: string): CardsPlayerView[] {
   const out: CardsPlayerView[] = [];
   for (let k = 1; k < n; k++) {
     const p = v.players[((from + k * v.direction) % n + n) % n];
-    if (!p.left) out.push(p);
+    if (!p.left && !p.out) out.push(p);
   }
   return out;
 }
@@ -177,7 +178,12 @@ function wild4Legal(v: CardsView, c: Card): boolean {
   return !v.you!.hand.some(x => x.id !== c.id && x.color === v.color);
 }
 
-/** Higher is better. Dumps points and hurts a player close to winning; keeps Wilds for when they are needed. */
+/**
+ * Higher is better. Dumps points and hurts a player close to winning; keeps
+ * Wilds for when they are needed. Chog Chaos: a Purge is worth what it clears,
+ * and a big Draw card is saved for someone about to win, or for knocking out a
+ * player near the Mercy limit.
+ */
 function score(v: CardsView, level: CardsBotLevel, c: Card, roll: (s: string | number) => number): number {
   const me = v.you!;
   const opp = opponents(v);
@@ -188,6 +194,8 @@ function score(v: CardsView, level: CardsBotLevel, c: Card, roll: (s: string | n
   const two = opp.length === 1;
   const left = me.hand.length - 1;
   const ofColor = (col: CardColor | null) => me.hand.filter(x => x.id !== c.id && x.color === col).length;
+  /** The next player could be pushed over the Mercy limit by `n` more cards. */
+  const knockout = (n: number) => v.rules.mercy && next.cards + n >= CARDS_MERCY_LIMIT;
 
   // Shed points: the winner scores what is left in our hand.
   let s = cardPoints(c) / 2;
@@ -211,6 +219,25 @@ function score(v: CardsView, level: CardsBotLevel, c: Card, roll: (s: string | n
         s += bluff ? -10 : -1000;
       }
       break;
+    case 'purge': {
+      // Everything of its colour goes: the more (and the dearer), the better.
+      const gone = me.hand.filter(x => x.id !== c.id && x.color === c.color);
+      s += gone.length * 10 + handPoints(gone) / 3 - (gone.length ? 0 : 8);
+      break;
+    }
+    case 'blitz':
+      // A free extra turn: best with something to follow it.
+      s += (anyLow ? 20 : 6) + (left > 0 && me.hand.some(x => x.id !== c.id && x.color === c.color) ? 6 : 0);
+      break;
+    case 'wild6':
+      s += knockout(6) ? 70 : nextLow ? 50 : anyLow ? 12 : -35;
+      break;
+    case 'wild10':
+      s += knockout(10) ? 80 : nextLow ? 60 : anyLow ? 14 : -45;
+      break;
+    case 'roulette':
+      s += knockout(6) ? 45 : nextLow ? 42 : anyLow ? 8 : -30;
+      break;
     case 'number':
       if (v.rules.sevenZero && c.value === 7) {
         const gain = left - Math.min(...opp.map(p => p.cards));
@@ -224,6 +251,8 @@ function score(v: CardsView, level: CardsBotLevel, c: Card, roll: (s: string | n
   }
   // Finishing: a Wild is as good a last card as any.
   if (left <= 1 && isWild(c)) s += 35;
+  // A Purge that clears the rest of the hand wins the round.
+  if (c.kind === 'purge' && !handAfter(me.hand, c).length) s += 200;
   if (level === 'easy') s += roll(c.id) % 25;
   return s;
 }
@@ -241,8 +270,10 @@ function shouldChallenge(v: CardsView, level: CardsBotLevel, roll: (s: string) =
   // Of the cards we cannot see, roughly how many are in that colour?
   const me = v.you!;
   const seen = me.hand.filter(c => c.color === pd.prevColor).length;
-  const unseen = Math.max(1, 108 - me.hand.length - v.discardCount);
-  const q = Math.max(0, 25 - seen) / unseen;
+  const total = deckSize(v.rules.mode);
+  const perColor = v.rules.mode === 'chaos' ? 29 : 25;
+  const unseen = Math.max(1, total - me.hand.length - v.discardCount);
+  const q = Math.max(0, perColor - seen) / unseen;
   const pHeld = 1 - (1 - q) ** n;
   // Players with a legal choice rarely spend a Draw Four: discount by how often a play is a bluff at all.
   const prior = level === 'hard' ? 0.6 : 0.5;

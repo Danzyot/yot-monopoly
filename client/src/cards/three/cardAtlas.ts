@@ -1,6 +1,7 @@
 // Every card face and the back, drawn once into a texture atlas for the 3D
 // table. The faces are the same SVG art the 2D table shows (CardFace.tsx):
-// all 54 faces and the back are laid out in one SVG document, with the
+// all 65 faces (Classic's 54 and Chog Chaos's 11) and the back are laid out
+// in one SVG document, with the
 // display font embedded (an SVG loaded as an image sees no page fonts), and
 // painted onto a canvas in one go. One texture, one material, so every card
 // in the scene — the piles, each hand's fan, the cards in flight — is drawn
@@ -51,6 +52,9 @@ function allFaces(): { key: string; card: Card | null }[] {
   }
   add({ id: id++, kind: 'wild', color: null });
   add({ id: id++, kind: 'wild4', color: null });
+  // Chog Chaos.
+  for (const color of CARD_COLORS as readonly CardColor[]) for (const kind of ['purge', 'blitz'] as const) add({ id: id++, kind, color });
+  for (const kind of ['wild6', 'wild10', 'roulette'] as const) add({ id: id++, kind, color: null });
   out.push({ key: 'back', card: null });
   return out;
 }
