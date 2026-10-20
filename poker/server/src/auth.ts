@@ -104,6 +104,24 @@ export function withDiscord(profile: PlayerProfile, discord: { id: string; usern
   };
 }
 
+/**
+ * Where Discord sign-in may send a player back to, with the token on the hash: a path on this
+ * room, never anywhere else. Browsers read `//host` and `/\host` as another site, so the check
+ * is "resolves to our own origin", not a prefix test; backslashes and control characters are
+ * refused outright. (Same rule as the hub's localPath in server/src/routes/auth.ts.)
+ */
+export function localReturnPath(raw: unknown): string {
+  const ret = typeof raw === 'string' ? raw : '';
+  // eslint-disable-next-line no-control-regex
+  if (!ret.startsWith('/') || /[\\\u0000-\u001f\u007f]/.test(ret)) return '/';
+  try {
+    const u = new URL(ret, 'https://local.invalid');
+    return u.origin === 'https://local.invalid' ? `${u.pathname}${u.search}` : '/';
+  } catch {
+    return '/';
+  }
+}
+
 // Short-lived HMAC state for the OAuth redirect round-trip.
 export function signState(data: Record<string, string>): string {
   const payload = b64url(Buffer.from(JSON.stringify({ ...data, ts: Date.now() })));

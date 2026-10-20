@@ -5,7 +5,7 @@ import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Server } from 'socket.io';
 import {
-  adminModeConfigured, demoMode, makeDemoProfile, makeDiscordProfile,
+  adminModeConfigured, demoMode, localReturnPath, makeDemoProfile, makeDiscordProfile,
   signState, signToken, verifyState, verifyToken, withAdminFlag, withDiscord,
 } from './auth.ts';
 import {
@@ -486,7 +486,8 @@ app.get('/api/discord/roles', async (req, res) => {
 app.get('/api/auth/discord/start', (req, res) => {
   if (!discordEnabled()) { res.status(400).send('Discord sign-in is not configured'); return; }
   const ret = String(req.query.return ?? '/');
-  const stateData: Record<string, string> = { return: ret.startsWith('/') ? ret : '/' };
+  // Only a path here: the token goes on this address's hash, so `//evil.com` would hand it away.
+  const stateData: Record<string, string> = { return: localReturnPath(ret) };
   // Optional: link to an existing signed-in profile instead of a fresh sign-in.
   const token = String(req.query.token ?? '');
   if (token && verifyToken(token)) stateData.token = token;
@@ -597,7 +598,7 @@ app.get('/api/auth/discord/callback', async (req, res) => {
       ? withAdminFlag(withDiscord(existing, discord))
       : makeDiscordProfile(discord);
     const token = signToken(updated);
-    const ret = state.return?.startsWith('/') ? state.return : '/';
+    const ret = localReturnPath(state.return);
     // Hand the refreshed token back to the SPA via URL hash.
     res.redirect(`${ret}#dtoken=${encodeURIComponent(token)}`);
   } catch (e) {
