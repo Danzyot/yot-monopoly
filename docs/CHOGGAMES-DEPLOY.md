@@ -27,10 +27,12 @@ moved, it is the one that means the same thing.
 ## 0. Have these open before you start
 
 1. **Railway** → the project holding `yot-monopoly` and `chog-poker`.
-2. **Cloudflare** → the `choggames.com` zone → **DNS → Records**.
-3. **Discord Developer Portal** → the application Chog Poker already uses
-   (the one whose Client ID is in the poker service's variables). *This is the
-   only application both sites will use from now on.*
+2. **Wix** → **Domains** → `choggames.com` (the domain is registered there),
+   and a free **Cloudflare** account (section 3 moves the DNS there).
+3. **Discord Developer Portal** → the **Monopoly bot's** application (the one
+   whose Client ID is in the **hub's** `yot-monopoly` variables). *This is the
+   only application and bot both sites use from now on; the old Chekr poker
+   bot is retired.*
 4. The poker service's **Variables** tab. Copy the value of **`CHOG_SECRET`**
    somewhere safe — you will paste it into the hub as `APP_SECRET`.
 
@@ -52,7 +54,7 @@ Service → **Settings**:
 | Field | Value |
 |---|---|
 | Source → **Repository** | this repo (`yot-monopoly`) |
-| Source → **Branch** | `main` (or whatever you deploy from) |
+| Source → **Branch** | the branch you deploy from (today: `claude/blissful-edison-6caook`) |
 | Source → **Root Directory** | leave **empty** (repo root) |
 | Source → **Watch Paths** | optional: `!/poker/**` so a poker-only commit does not rebuild the hub |
 | **Volumes** | one volume, **Mount Path** `/data` |
@@ -94,9 +96,9 @@ retype.
 | Variable | Value | Why identical |
 |---|---|---|
 | `APP_SECRET` | the poker service's current `CHOG_SECRET` (section 0) | signs login tokens; same value = one sign-in |
-| `DISCORD_CLIENT_ID` | the application's **Application ID** | one Discord app |
-| `DISCORD_CLIENT_SECRET` | OAuth2 → **Client Secret** of that app | same |
-| `DISCORD_BOT_TOKEN` | Bot → **Token** of that app | same bot verifies members on both |
+| `DISCORD_CLIENT_ID` | the **Monopoly bot** application's **Application ID** (the hub already has it — copy it to poker) | one Discord app |
+| `DISCORD_CLIENT_SECRET` | OAuth2 → **Client Secret** of the Monopoly bot app (copy the hub's) | same |
+| `DISCORD_BOT_TOKEN` | Bot → **Token** of the Monopoly bot (copy the hub's) | same bot verifies members on both |
 | `ADMIN_DISCORD_IDS` | comma-separated Discord user ids of the operators | an operator on one is an operator on the other |
 | `DISCORD_GUILD_ID` | the Chog server id | same community |
 | `DISCORD_INVITE_URL` | the permanent invite | header link on both |
@@ -130,7 +132,38 @@ on both.
 
 ---
 
-## 3. Cloudflare DNS
+## 3. DNS — the domain is at Wix, the DNS moves to Cloudflare
+
+**Why not just use Wix's DNS:** Railway needs a `CNAME` for each address,
+and the bare `choggames.com` (the "root" or `@`) cannot be a `CNAME` at Wix —
+Wix's DNS has no CNAME flattening or ALIAS records, which is what Railway
+requires for a root domain. Subdomains (`www`, `poker`) would work at Wix,
+the root would not. Cloudflare's free plan flattens a root `CNAME`
+automatically, so the DNS moves there. **The domain stays registered (and
+paid for) at Wix**; only who answers DNS changes. (A full transfer away from
+Wix is not possible anyway for 60 days after purchase.)
+
+### 3a. Add the domain to Cloudflare
+
+1. Cloudflare → **Add a domain** → `choggames.com` → **Free** plan.
+2. Cloudflare scans the existing records. **Delete** any `A`/`CNAME` records
+   it imported for `@` and `www` that point at Wix (Wix parking or site).
+   Keep any `MX`/`TXT` records if you use email on this domain.
+3. Cloudflare shows **two nameservers** (`<name>.ns.cloudflare.com`). Copy them.
+
+### 3b. Point Wix at Cloudflare's nameservers
+
+Wix → **Domains** → `choggames.com` → **⋯ / Manage** → **Advanced** →
+**Change nameservers** (or **DNS records → Nameservers → Edit**; the label
+moves around) → choose custom nameservers → paste Cloudflare's two → **Save**.
+If the domain is connected to a Wix site, Wix asks you to disconnect it first —
+do that. Back in Cloudflare press **Check nameservers**; it usually goes
+active within an hour (up to 48 h).
+
+**If Wix does not offer a nameserver option** for your domain: ask Wix
+support to change the nameservers (they can), or use the fallback in 3d.
+
+### 3c. Records in Cloudflare
 
 Cloudflare → `choggames.com` → **DNS → Records** → **Add record**. The
 **Target** values come from Railway → each service → Settings → Networking →
@@ -142,7 +175,8 @@ Custom Domain (Railway shows them after you add the domain in section 1).
 | `CNAME` | `www` | the value Railway shows for `www.choggames.com` on the **hub** service | **Proxied** |
 | `CNAME` | `poker` | the value Railway shows for `poker.choggames.com` on the **poker** service | **Proxied** |
 
-A `CNAME` at `@` works because Cloudflare flattens it automatically. Then:
+Railway may also show a `TXT` record (`_railway-verify…`) per domain: add it
+exactly as shown, **DNS only**. Then:
 
 - **SSL/TLS → Overview**: **Full (strict)**.
 - **Network**: **WebSockets** on (it is by default — both games run on them).
@@ -157,12 +191,54 @@ orange cloud off, change both to `1`. Poker's **Audit → Address check** tab
 (the `/api/admin/ipdebug` probe) says in plain words whether the number is
 right, by comparing what the proxy reports with what is being recorded.
 
+### 3d. Fallback: stay on Wix DNS (no bare domain)
+
+Only if the nameservers cannot be moved. At Wix → **DNS records** add
+`CNAME` `www` → the hub's Railway target and `CNAME` `poker` → poker's
+target (plus Railway's `TXT` records). The site then lives at
+**`https://www.choggames.com`**; plain `choggames.com` will not reach it.
+Adjust section 2 accordingly: hub `PUBLIC_URL=https://www.choggames.com`,
+poker `HUB_URL=https://www.choggames.com`, and **`TRUSTED_PROXY_HOPS=1`** on
+both (no Cloudflare in front). Only `www.choggames.com` is added as the
+hub's custom domain in Railway.
+
 Railway's own `*.up.railway.app` addresses keep working throughout and are
 your fallback if DNS misbehaves.
 
 ---
 
-## 4. Discord Developer Portal (the one application)
+## 4. Discord Developer Portal (the one application: the Monopoly bot)
+
+Both sites sign in and run their bot features through the **Monopoly bot**
+application. Poker's old (Chekr) application is no longer used once poker's
+`DISCORD_*` variables are switched to the Monopoly bot's (section 2).
+
+**Make sure the Monopoly bot can do poker's jobs too.** Poker's bot features
+need more than the hub's did:
+
+- Developer Portal → **Bot** → **Privileged Gateway Intents**: **Server
+  Members Intent** on (poker's invite tracking and member checks), and
+  **Message Content Intent** on (poker's "post the code in the verify
+  channel" sign-in reads the code from the message).
+- In the Chog server, the bot's role needs: **View Channels**, **Send
+  Messages**, **Read Message History**, **Manage Messages** (it tidies code
+  messages), **Embed Links**, **Manage Server** (to read invites: who invited
+  whom), and **Ban Members** if poker's operators ban from the dashboard.
+  Its role must sit **above** the roles of anyone it may need to ban.
+- The simplest way to grant all of that: Developer Portal → **OAuth2 → URL
+  Generator** → scopes `bot` → tick the permissions above → open the URL →
+  pick the Chog server → **Authorize** (re-authorising updates the existing
+  bot's permissions; it does not add a second bot).
+- After poker deploys with the new token, its **Deploy Logs →
+  `Configuration check`** and its dashboard's Discord status say plainly if an
+  intent or permission is still missing.
+- Once poker runs on the Monopoly bot, **kick the old Chekr poker bot** from
+  the Chog server so two bots don't answer the same things.
+
+Players who signed in to poker with Discord before will be asked to approve
+the Monopoly bot app once the next time they use "Log in with Discord" on
+poker; their account, results and bans are kept (they are keyed by Discord
+user id, which is the same whichever app asks).
 
 Application → **OAuth2** → **Redirects** → add, one per line (Discord matches
 these as exact text):
@@ -173,8 +249,9 @@ https://www.choggames.com/api/auth/discord/callback
 https://poker.choggames.com/api/auth/discord/callback
 ```
 
-**Keep** the ones already there (the poker Railway domain and any old poker
-domain) until the cutover is finished, and **add** the hub's Railway domain:
+Also add poker's **current** addresses (its Railway domain and any old poker
+domain — copy them from the old Chekr app's Redirects list) so poker keeps
+working before DNS moves, and **keep** the hub's Railway domain:
 `https://<hub>.up.railway.app/api/auth/discord/callback`. Each site prints
 the exact string to register for the domain you open it on:
 `https://<any of them>/api/auth/discord/check`.
@@ -213,14 +290,23 @@ Intent on.
 
 ## 5. Cutover, in order
 
+**A day ahead (nothing visible changes):** add `choggames.com` to Cloudflare
+and switch Wix's nameservers to it (section 3a–3b), since that can take hours
+to go active. Leave Cloudflare without the Railway records for now.
+
 **Freeze first.** Pick a window with no tournament scheduled and none
 running, and tell operators not to create one until you say so.
 
+0. **Monopoly bot ready for poker** (section 4): intents on, permissions
+   granted, and poker's *current* addresses added to its Redirects. Copy
+   poker's old `DISCORD_*` values somewhere safe (rollback).
 1. **Hub variables** (section 2), including `APP_SECRET` = poker's
    `CHOG_SECRET`. Deploy the hub. Check `/api/health` on its Railway domain and
    sign in there with Discord.
 2. **Re-point the poker service** (section 1b): repo, Root Directory `poker`,
-   Watch Paths, auto-deploy off. Add `HUB_URL`, `HUB_ORIGINS`,
+   Watch Paths, auto-deploy off. Set `DISCORD_CLIENT_ID`,
+   `DISCORD_CLIENT_SECRET`, `DISCORD_BOT_TOKEN` to the **Monopoly bot's**
+   (copy from the hub). Add `HUB_URL`, `HUB_ORIGINS`,
    `TRUSTED_PROXY_HOPS=2`, remove `DISCORD_PUBLIC_KEY`. Press **Deploy**. Watch
    the build finish, then: `/api/health` → `persistentDisk: true`, Deploy Logs
    → `Configuration check` clean, and open poker on its *current* domain — you
@@ -237,7 +323,8 @@ running, and tell operators not to create one until you say so.
 8. Remove `HUB_ORIGINS` from poker once the hub is on `choggames.com`
    (`HUB_URL` already covers it). Old poker domains can be detached from the
    service a week later, once players have followed the new link.
-9. Announce. Unfreeze.
+9. Kick the old Chekr poker bot from the Chog server.
+10. Announce. Unfreeze.
 
 **Who gets signed out**
 
@@ -268,6 +355,8 @@ running, and tell operators not to create one until you say so.
   volume, same data.
 - DNS: switch the Cloudflare records back to the old targets (they take
   effect in a minute or two when proxied).
+- Discord: poker can go back to the old Chekr app by restoring its old
+  `DISCORD_*` values (keep a copy before you overwrite them).
 - Do **not** undo the secret unless you must; it signs everyone out again.
 
 ---
