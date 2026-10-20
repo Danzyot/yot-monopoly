@@ -12,7 +12,7 @@ import { WithModel } from '../models.tsx';
 import type { CharacterId } from '../../../../shared/characters.ts';
 import { GEO, Part, disposeMaterials, makeMaterials, type Mats } from './parts.tsx';
 import { HEAD_Y, LOOKS, DefaultBody, type Look } from './looks.tsx';
-import { OutfitLayer } from './Outfit.tsx';
+import { OutfitLayer, outfitMane } from './Outfit.tsx';
 import { OUTFIT_ITEMS, defaultOutfit, type Outfit } from '../../../../shared/outfits.ts';
 import { liteAssets } from '../quality.ts';
 import { characterModel, figureMeshes, type CharacterModel } from './merged.ts';
@@ -271,7 +271,9 @@ function ModelFigure({ id, mats, rig, outfit, lite }: { id: CharacterId; mats: M
   const cid: CharacterId = CHAR_URLS[id] ? id : 'spiky';
   const gltf = useGLTF(characterUrl(cid, lite));
   const items = useMemo(() => garmentItems(cid), [cid]);
-  const model = useMemo(() => characterModel(gltf.scene, cid, items.map(i => i.node!)), [gltf.scene, cid, items]);
+  // The mane cut back round the outfit's hat (the Chog's: Outfit.tsx).
+  const mane = outfitMane(cid, outfit);
+  const model = useMemo(() => characterModel(gltf.scene, cid, items.map(i => i.node!), mane), [gltf.scene, cid, items, mane]);
   return <RiggedModel model={model} items={items} outfit={outfit} mats={mats} rig={rig} look={LOOKS[id] ?? LOOKS.spiky} />;
 }
 
