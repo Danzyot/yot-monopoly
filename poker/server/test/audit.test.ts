@@ -7,7 +7,7 @@ import { altGroups, noteSeen, recordHandResult, suspiciousPairs } from '../src/a
 const P = (id: string, name: string) => ({ id, name, avatar: '🙂', discord: null });
 
 // A throwaway table — recordHandResult only uses it for context.
-const table = new Table({ name: 'T', mode: 'cash', sb: 1, bb: 2 }, {
+const table = new Table({ name: 'T', sb: 1, bb: 2 }, {
   broadcast: () => {}, chat: () => {}, event: () => {},
 });
 

@@ -401,12 +401,13 @@ non-operators see "Could not check your hosting rights…" and nothing is
 created. If Cloudflare bot protection is on for the hub, make sure it does not
 challenge `/api/hosting/*` (poker calls it from Railway, not a browser).
 
-**What a player host gets** (poker): 1 live or upcoming tournament and 2 open
-cash tables at a time; tournaments capped at 100 players, 20-minute levels and
-a start within 7 days, with no custom blind schedule. They can start, pause,
-resume and cancel their own tournament, write its prize line and close their
-own cash table. Kicking, Discord role requirements, results posted to Discord,
-bans and every other operator tool stay with operators. Player-hosted events
+**What a player host gets** (poker, which is tournaments only — cash tables are
+gone): 1 live or upcoming tournament at a time, with 20-minute levels and a
+start within 7 days, and no custom blind schedule. Tournaments have no player
+cap unless an operator sets one; a player host cannot. They can start, pause,
+resume and cancel their own tournament and write its prize line. Kicking,
+Discord role requirements, results posted to Discord, the player cap, bans and
+every other operator tool stay with operators. Player-hosted events
 are marked "Hosted by …" and say prizes are the host's responsibility, not
 Chog Games'. Operators see them in poker's Dashboard → Manage games and can
 pause, end or delete any of them. Details: "Player hosts" in

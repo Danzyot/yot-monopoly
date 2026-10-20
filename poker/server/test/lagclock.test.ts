@@ -8,7 +8,7 @@ const noop = { broadcast: () => {}, chat: () => {}, event: () => {} };
 
 function t2p(actionMs: number) {
   const t = new Table({
-    name: 'Lag', mode: 'tournament', sb: 5, bb: 10, maxSeats: 6,
+    name: 'Lag', sb: 5, bb: 10, maxSeats: 6,
     actionTimeMs: actionMs,
   }, noop as never);
   t.sit(0, { id: 'a', name: 'Ana', avatar: '🙂' }, 1000);

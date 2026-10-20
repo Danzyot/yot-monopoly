@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { api, type AppConfig } from '../api';
 import { useAuth } from '../auth';
 import { useToast } from '../toast';
-import BlindEditor, { niceChip, type LevelRow } from './BlindEditor';
+import BlindEditor, { type LevelRow } from './BlindEditor';
 import ThemePicker from './ThemePicker';
 import type { TableTheme } from '../../../shared/types';
 import { BRAND } from '../../../shared/brand';
-import { PLAYER_HOST_LIMITS as LIMITS } from '../../../shared/hosting';
+import { MAX_PLAYER_CAP, PLAYER_HOST_LIMITS as LIMITS } from '../../../shared/hosting';
 import LateClockField, { lateClockState, lateClockValue } from './LateClockField';
 
 // Left blank on purpose. The Discord pair below fills itself in from
@@ -24,9 +24,9 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
   const nav = useNavigate();
   const toast = useToast();
   const { profile } = useAuth();
-  // A Chog holder or approved player rather than an operator: a smaller field,
-  // a bounded length, and none of the operator-only parts (the server clamps
-  // the same way; this just never offers what it would refuse).
+  // A Chog holder or approved player rather than an operator: a bounded
+  // length, an open field, and none of the operator-only parts (the server
+  // clamps the same way; this just never offers what it would refuse).
   const playerHost = !profile?.isAdmin;
   const [name, setName] = useState('');
   const [startingStack, setStartingStack] = useState(10000);
@@ -34,7 +34,8 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
   const [levelMinutes, setLevelMinutes] = useState(5);
   const [levelMinutesCustom, setLevelMinutesCustom] = useState(false);
   const [structure, setStructure] = useState<'turbo' | 'regular' | 'deep'>('regular');
-  const [maxPlayers, setMaxPlayers] = useState(playerHost ? 45 : 500);
+  // No limit unless an operator sets one; a player host's event is always open.
+  const [maxPlayers, setMaxPlayers] = useState<number | null>(null);
   const [maxPlayersCustom, setMaxPlayersCustom] = useState(false);
   // Custom blind schedule (PokerNow-style rows). Last row minutes 0 = forever.
   const [customBlinds, setCustomBlinds] = useState(false);
@@ -115,7 +116,7 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
       }
       const { id } = await api.createTournament({
         name: name.trim(), startingStack, levelMinutes, structure,
-        maxPlayers, prizeText, lateRegMinutes, joinMinutes, approveRegistrations,
+        maxPlayers: playerHost ? null : maxPlayers, prizeText, lateRegMinutes, joinMinutes, approveRegistrations,
         betCapMinutes: betCapOn ? betCapMinutes : null,
         lateClock: lateClockValue(lateClock),
         breakEveryLevels, maxReentries, minPlayers: 2, seatsPerTable,
@@ -144,7 +145,7 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
         <h3>New tournament</h3>
         {playerHost && (
           <p className="host-disclaimer">
-            You are hosting as a player: up to {LIMITS.maxPlayers} players, levels up to {LIMITS.levelMinutes} minutes,
+            You are hosting as a player: open to everyone, levels up to {LIMITS.levelMinutes} minutes,
             one tournament at a time. You can start, pause and cancel it and write the prizes; an operator handles
             removing players. <strong>Any prizes are yours to hand out — {BRAND.hub} does not hold or pay them.</strong>
           </p>
@@ -246,25 +247,32 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
               )}
             </div>
           )}
-          <div className="field">
-            <label>Max players</label>
-            <select
-              className="input"
-              value={maxPlayersCustom ? 'custom' : String(maxPlayers)}
-              onChange={e => {
-                if (e.target.value === 'custom') { setMaxPlayersCustom(true); return; }
-                setMaxPlayersCustom(false);
-                setMaxPlayers(Number(e.target.value));
-              }}
-            >
-              {(playerHost ? [9, 18, 45, 90, LIMITS.maxPlayers] : [9, 18, 45, 90, 180, 300, 500, 1000]).map(m => <option key={m} value={m}>{m}</option>)}
-              <option value="custom">Custom…</option>
-            </select>
-            {maxPlayersCustom && (
-              <input className="input" type="number" min={2} max={playerHost ? LIMITS.maxPlayers : 1000} value={maxPlayers}
-                onChange={e => setMaxPlayers(Math.max(2, Math.min(playerHost ? LIMITS.maxPlayers : 1000, Math.floor(Number(e.target.value) || 2))))} />
-            )}
-          </div>
+          {/* Only an operator caps the field; empty means everyone may register. */}
+          {!playerHost && (
+            <div className="field">
+              <label>Max players</label>
+              <select
+                className="input"
+                value={maxPlayersCustom ? 'custom' : String(maxPlayers ?? '')}
+                onChange={e => {
+                  if (e.target.value === 'custom') { setMaxPlayersCustom(true); setMaxPlayers(m => m ?? 100); return; }
+                  setMaxPlayersCustom(false);
+                  setMaxPlayers(e.target.value ? Number(e.target.value) : null);
+                }}
+              >
+                <option value="">No limit</option>
+                {[9, 18, 45, 90, 180, 300, 500, MAX_PLAYER_CAP].map(m => <option key={m} value={m}>{m}</option>)}
+                <option value="custom">Custom…</option>
+              </select>
+              {maxPlayersCustom && (
+                <input className="input" type="number" min={2} max={MAX_PLAYER_CAP} value={maxPlayers ?? ''} placeholder="No limit"
+                  onChange={e => {
+                    const n = Math.floor(Number(e.target.value));
+                    setMaxPlayers(e.target.value === '' || !n ? null : Math.max(2, Math.min(MAX_PLAYER_CAP, n)));
+                  }} />
+              )}
+            </div>
+          )}
         </div>
 
         <div className="row">
@@ -483,257 +491,6 @@ export function CreateTournamentModal({ onClose }: { onClose: () => void }) {
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" disabled={busy || !name.trim()} onClick={() => void create()}>
             {busy ? 'Creating…' : 'Create tournament'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function CreateCashModal({ onClose }: { onClose: () => void }) {
-  const nav = useNavigate();
-  const toast = useToast();
-  const { profile } = useAuth();
-  const [name, setName] = useState('');
-  const [blinds, setBlinds] = useState('5/10');
-  const [customBlinds, setCustomBlinds] = useState(false);
-  const [customSb, setCustomSb] = useState(5);
-  const [customBb, setCustomBb] = useState(10);
-  const [ante, setAnte] = useState(0);
-  const [maxSeats, setMaxSeats] = useState(9);
-  const [buyInBb, setBuyInBb] = useState(100); // starting stack, in big blinds
-  // A cash game can run a rising schedule, written with the same editor the
-  // tournament form uses. Off means the blinds stay where the host set them.
-  const [risingBlinds, setRisingBlinds] = useState(false);
-  const [levels, setLevels] = useState<LevelRow[]>([
-    { sb: 5, bb: 10, ante: 0, minutes: 20 },
-    { sb: 10, bb: 20, ante: 0, minutes: 0 },
-  ]);
-  const [displayMode, setDisplayMode] = useState<'chips' | 'bb'>('chips');
-  const [actionSeconds, setActionSeconds] = useState(20);
-  const [actionCustom, setActionCustom] = useState(false);
-  // Cash tables have always supported a time bank server-side; only the
-  // tournament form ever offered it, so every cash game silently ran with
-  // none. Same options and the same wording as the tournament form.
-  const [timebankSeconds, setTimebankSeconds] = useState(0);
-  const [rabbitHunting, setRabbitHunting] = useState(false);
-  const [theme, setTheme] = useState<TableTheme | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const BLIND_OPTS = ['1/2', '2/5', '5/10', '10/25', '25/50', '50/100', '100/200'];
-
-  // What the table will actually be built with — the same arithmetic the
-  // create call uses, so the form can show it rather than leaving the host to
-  // work it out after the fact.
-  const [sbNow, bbNow] = customBlinds ? [customSb, customBb] : blinds.split('/').map(Number);
-  const minBuyNow = bbNow * Math.max(10, Math.round(buyInBb / 2));
-  const maxBuyNow = bbNow * buyInBb * 2;
-  // The server clamps an ante to the big blind and a big blind to at least the
-  // small blind. It did that silently, so a table could come back with limits
-  // nobody chose; the form now says so before anything is created.
-  const blindsBackwards = customBlinds && customBb < customSb;
-  const anteTooBig = ante > bbNow;
-  // Tournaments bring antes in at about an eighth of the big blind, chip
-  // rounded. A cash game that wants one has no reason to pick differently.
-  const suggestedAnte = Math.max(1, niceChip(Math.round(bbNow / 8)));
-
-  const create = async () => {
-    if (!name.trim()) {
-      toast('error', 'Give the table a name first.');
-      return;
-    }
-    if (blindsBackwards) {
-      toast('error', 'The big blind has to be at least the small blind.');
-      return;
-    }
-    setBusy(true);
-    try {
-      // With a schedule the first level IS the opening blinds — otherwise the
-      // table would deal one hand at the fixed pair before the clock caught up.
-      const first = risingBlinds ? levels.find(l => !l.isBreak) : null;
-      const [sb, bb] = first
-        ? [first.sb, first.bb]
-        : customBlinds
-          ? [customSb, customBb]
-          : blinds.split('/').map(Number);
-      const { id } = await api.createTable({
-        name: name.trim(),
-        sb, bb, ante,
-        // Buy-in range brackets the chosen starting stack.
-        minBuy: bb * Math.max(10, Math.round(buyInBb / 2)),
-        maxBuy: bb * Math.max(buyInBb, Math.round(buyInBb * 2)),
-        maxSeats, actionSeconds, timebankSeconds, rabbitHunting, displayMode,
-        customLevels: risingBlinds ? levels : undefined,
-        theme: theme ?? undefined,
-      });
-      toast('success', 'Table created — share the link to invite players!');
-      nav(`/table/${id}`);
-    } catch (e) {
-      toast('error', e instanceof Error ? e.message : 'Could not create table');
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <h3>New cash table</h3>
-        {!profile?.isAdmin && (
-          <p className="host-disclaimer">
-            You are hosting as a player: up to {LIMITS.cashTables} tables open at a time. You can close yours
-            whenever you like; an operator handles anything else.
-          </p>
-        )}
-        <div className="field">
-          <label>Table name</label>
-          <input className="input" placeholder="e.g. Friday Night Cash" value={name}
-            maxLength={40} onChange={e => setName(e.target.value)} autoFocus required />
-        </div>
-        <div className="row">
-          <div className="field">
-            <label>Blinds</label>
-            <select
-              className="input"
-              value={customBlinds ? 'custom' : blinds}
-              onChange={e => {
-                if (e.target.value === 'custom') { setCustomBlinds(true); return; }
-                setCustomBlinds(false);
-                setBlinds(e.target.value);
-              }}
-            >
-              {BLIND_OPTS.map(b => <option key={b} value={b}>{b}</option>)}
-              <option value="custom">Custom…</option>
-            </select>
-          </div>
-          <div className="field">
-            <label>Seats</label>
-            <select className="input" value={maxSeats} onChange={e => setMaxSeats(Number(e.target.value))}>
-              {[2, 6, 9].map(s => <option key={s} value={s}>{s}-max</option>)}
-            </select>
-          </div>
-        </div>
-        {customBlinds && (
-          <>
-            <div className="row">
-              <div className="field">
-                <label>Small blind</label>
-                <input
-                  className="input" type="number" min={1} value={customSb}
-                  onChange={e => {
-                    const sb = Math.max(1, Math.floor(Number(e.target.value) || 1));
-                    setCustomSb(sb);
-                    // The big blind follows the small one unless it has been
-                    // moved off the standard double — otherwise every custom
-                    // game starts by silently disagreeing with itself.
-                    if (customBb === customSb * 2) setCustomBb(sb * 2);
-                  }}
-                />
-              </div>
-              <div className="field">
-                <label>Big blind</label>
-                <input className="input" type="number" min={1} value={customBb}
-                  onChange={e => setCustomBb(Math.max(1, Math.floor(Number(e.target.value) || 1)))} />
-              </div>
-            </div>
-            {blindsBackwards && (
-              <p className="field-hint warn">
-                The big blind is smaller than the small blind. Raise it to at
-                least {customSb} — otherwise the table is built with both at {customSb}.
-              </p>
-            )}
-          </>
-        )}
-        <div className="row">
-          <div className="field">
-            <label>Starting stack</label>
-            <select className="input" value={buyInBb} onChange={e => setBuyInBb(Number(e.target.value))}>
-              {[40, 60, 100, 150, 200, 300].map(b => <option key={b} value={b}>{b} BB</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label>Ante <span className="label-opt">optional</span></label>
-            <input className="input" type="number" min={0} max={bbNow} value={ante} placeholder="0"
-              onChange={e => setAnte(Math.max(0, Math.floor(Number(e.target.value) || 0)))} />
-          </div>
-        </div>
-        <div className="row">
-          <div className="field">
-            <label>Action time</label>
-            <select
-              className="input"
-              value={actionCustom ? 'custom' : String(actionSeconds)}
-              onChange={e => {
-                if (e.target.value === 'custom') { setActionCustom(true); return; }
-                setActionCustom(false);
-                setActionSeconds(Number(e.target.value));
-              }}
-            >
-              {[10, 15, 20, 30, 45, 60].map(sec => <option key={sec} value={sec}>{sec} seconds</option>)}
-              <option value="custom">Custom…</option>
-            </select>
-            {actionCustom && (
-              <input className="input" type="number" min={5} max={120} value={actionSeconds}
-                onChange={e => setActionSeconds(Math.max(5, Math.min(120, Math.floor(Number(e.target.value) || 5))))} />
-            )}
-          </div>
-          <div className="field">
-            <label htmlFor="cash-timebank">Extra time bank <span className="hint-dot" title="Optional extra seconds a player may use once per decision, on top of the action time. 0 means the action time is exactly what they get.">?</span></label>
-            <select id="cash-timebank" className="input" value={timebankSeconds}
-              onChange={e => setTimebankSeconds(Number(e.target.value))}>
-              <option value={0}>None — action time is final</option>
-              {[5, 10, 15, 30, 60].map(v => <option key={v} value={v}>+{v} seconds</option>)}
-            </select>
-          </div>
-        </div>
-        <p className="field-hint">
-          <strong>Ante</strong> = an extra chip everyone tosses into the pot before each deal,
-          on top of the blinds. It makes pots bigger and punishes waiting for premium hands.
-          Leave it at <strong>0</strong> for a normal game.{' '}
-          {ante === 0
-            ? <>Tournaments use about an eighth of the big blind — that would be{' '}
-              <button type="button" className="link-btn" onClick={() => setAnte(suggestedAnte)}>
-                {suggestedAnte}
-              </button> here.</>
-            : anteTooBig
-              ? <span className="warn-text">An ante cannot exceed the big blind — this will be cut to {bbNow}.</span>
-              : <>Every player posts {ante} before each deal, on top of the {sbNow}/{bbNow} blinds.</>}
-        </p>
-        <label className="check-row">
-          <input type="checkbox" checked={risingBlinds} onChange={e => setRisingBlinds(e.target.checked)} />
-          <span>Rising blinds (write the exact schedule yourself)</span>
-        </label>
-        {risingBlinds && (
-          <>
-            <BlindEditor levels={levels} onChange={setLevels} />
-            <p className="field-hint">
-              Blinds move between hands, never inside one. Leave the last row's
-              minutes at <strong>0</strong> and that level plays for as long as
-              the table is up.
-            </p>
-          </>
-        )}
-        <div className="field">
-          <label>Show stacks and bets as</label>
-          <select className="input" value={displayMode}
-            onChange={e => setDisplayMode(e.target.value === 'bb' ? 'bb' : 'chips')}>
-            <option value="chips">Chip amounts</option>
-            <option value="bb">Big blinds</option>
-          </select>
-        </div>
-        <label className="check-row">
-          <input type="checkbox" checked={rabbitHunting} onChange={e => setRabbitHunting(e.target.checked)} />
-          <span>Rabbit hunting</span>
-        </label>
-        <p style={{ color: 'var(--text-dim)', fontSize: '0.85rem' }}>
-          Blinds {sbNow}/{bbNow}{ante > 0 && !anteTooBig ? ` with a ${ante} ante` : ''} — players buy in
-          for {minBuyNow.toLocaleString()} to {maxBuyNow.toLocaleString()} chips
-          ({Math.round(minBuyNow / bbNow)}–{Math.round(maxBuyNow / bbNow)} BB) and join with a shareable link.
-        </p>
-        <ThemePicker value={theme} onChange={setTheme} />
-        <div className="modal-actions">
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={busy || !name.trim()} onClick={() => void create()}>
-            {busy ? 'Creating…' : 'Create table'}
           </button>
         </div>
       </div>

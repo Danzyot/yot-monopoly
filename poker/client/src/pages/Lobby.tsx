@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
-import type { LobbyView } from '../../../shared/types';
+import type { LobbyTournament, LobbyView } from '../../../shared/types';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import AuthModal from '../components/AuthModal';
 import Avatar from '../components/Avatar';
-import { CreateCashModal, CreateTournamentModal } from '../components/CreateModals';
+import { CreateTournamentModal } from '../components/CreateModals';
 import GraphicsManager from '../components/GraphicsManager';
 import MusicManager from '../components/MusicManager';
 import { LiveGames, PastGames } from '../components/GameManager';
@@ -18,16 +18,78 @@ import { chips } from '../format';
 import { getSocket, withResub } from '../socket';
 import { IconChat, IconShield } from '../components/icons';
 import { useToast } from '../toast';
+import { fieldLabel, groupTournaments, startLabel } from '../tourneys';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
+// One state of the lobby — live, upcoming or finished — as a grid of cards.
+function TourneyGrid({ title, rows, empty }: { title: string; rows: LobbyTournament[]; empty: string }) {
+  const nav = useNavigate();
+  return (
+    <>
+      <div className="section-title">{title}</div>
+      {rows.length === 0 ? (
+        <div className="empty-note">{empty}</div>
+      ) : (
+        <div className="game-grid">
+          {rows.map(t => (
+            <div key={t.id} className="game-card">
+              <div className="gc-top">
+                <h3>{t.name}</h3>
+                {t.hasSocialReq && <span className="req-pill" title="Social requirements to register">Gated</span>}
+                {t.playerHosted && <span className="req-pill host-pill" title={`Hosted by ${t.hostName}, a player host — prizes are the host's responsibility`}>Player host</span>}
+                <span className={`state-badge state-${t.state}`}>
+                  {t.state === 'registering' ? 'Registering' : t.state}
+                </span>
+              </div>
+              <div className="gc-stats">
+                <div className="gc-stat"><span className="k">Players</span><span className="v">{fieldLabel(t)}</span></div>
+                <div className="gc-stat"><span className="k">Stack</span><span className="v">{chips(t.startingStack)}</span></div>
+                <div className="gc-stat"><span className="k">Speed</span><span className="v" style={{ textTransform: 'capitalize' }}>{t.structure}</span></div>
+                {t.state !== 'registering' && t.state !== 'finished' && (
+                  <div className="gc-stat"><span className="k">Level</span><span className="v">{t.level}</span></div>
+                )}
+              </div>
+              {t.state === 'registering' && <div className="gc-when">{startLabel(t.scheduledStart)}</div>}
+
+              {t.topPlayers.length > 0 && (
+                <div className="top-players">
+                  {t.topPlayers.map((p, i) => (
+                    <div key={i} className="top-player-row">
+                      <span className="medal">{t.state === 'finished' ? MEDALS[(p.place ?? i + 1) - 1] ?? p.place : MEDALS[i] ?? '·'}</span>
+                      <span className="tp-name"><Avatar value={p.avatar} size={15} chog={p.chog} /> {p.name}</span>
+                      <span className="tp-val">
+                        {t.state === 'finished'
+                          ? p.prize ? `${p.prize.toLocaleString()} cr` : ''
+                          : chips(p.stack)}
+                      </span>
+                    </div>
+          ))}
+            </div>
+          )}
+
+          <div className="gc-actions">
+            <button className="btn btn-primary btn-sm" onClick={() => nav(`/t/${t.id}`)}>
+              {t.state === 'registering' ? 'Register' : t.state === 'finished' ? 'Results' : 'Open'}
+            </button>
+            <span style={{ color: 'var(--text-faint)', fontSize: '0.8rem', alignSelf: 'center' }}>
+              hosted by {t.hostName}
+            </span>
+          </div>
+        </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function Lobby() {
   const feat = useFeatures();
-  const nav = useNavigate();
   const { profile, codeVerifyButton, codeVerifyChannel } = useAuth();
   const toast = useToast();
   const [lobby, setLobby] = useState<LobbyView | null>(null);
-  const [modal, setModal] = useState<'auth' | 'tournament' | 'cash' | null>(null);
+  const [modal, setModal] = useState<'auth' | 'tournament' | null>(null);
   const [postingPanel, setPostingPanel] = useState(false);
   const [health, setHealth] = useState<Awaited<ReturnType<typeof api.health>> | null>(null);
 
@@ -65,7 +127,8 @@ export default function Lobby() {
   }, []);
 
   const isAdmin = !!profile?.isAdmin;
-  const needAuth = (next: 'tournament' | 'cash') => setModal(profile ? next : 'auth');
+  const groups = groupTournaments(lobby?.tournaments ?? []);
+  const needAuth = (next: 'tournament') => setModal(profile ? next : 'auth');
 
   // The dashboard is operator-only — players join games through invite links.
   if (!isAdmin) return <Navigate to="/" replace />;
@@ -88,7 +151,6 @@ export default function Lobby() {
               </button>
             )}
             <Link className="btn btn-sm" to="/audit"><IconShield /> Audit</Link>
-            <button className="btn" onClick={() => needAuth('cash')}>New cash table</button>
             <button className="btn btn-primary" onClick={() => needAuth('tournament')}>New tournament</button>
           </>
         )}
@@ -131,86 +193,17 @@ export default function Lobby() {
         </div>
       )}
 
-      <div className="section-title">Tournaments</div>
       {!lobby || lobby.tournaments.length === 0 ? (
-        <div className="empty-note">
-          {isAdmin ? 'No tournaments yet — create the first one.' : 'No tournaments scheduled right now. Check back soon!'}
-        </div>
+        <>
+          <div className="section-title">Tournaments</div>
+          <div className="empty-note">No tournaments yet — create the first one.</div>
+        </>
       ) : (
-        <div className="game-grid">
-          {lobby.tournaments.map(t => (
-            <div key={t.id} className="game-card">
-              <div className="gc-top">
-                <h3>{t.name}</h3>
-                {t.hasSocialReq && <span className="req-pill" title="Social requirements to register">Gated</span>}
-                {t.playerHosted && <span className="req-pill host-pill" title={`Hosted by ${t.hostName}, a player host — prizes are the host's responsibility`}>Player host</span>}
-                <span className={`state-badge state-${t.state}`}>
-                  {t.state === 'registering' ? 'Registering' : t.state}
-                </span>
-              </div>
-              <div className="gc-stats">
-                <div className="gc-stat"><span className="k">Players</span><span className="v">{t.players}/{t.maxPlayers}</span></div>
-                <div className="gc-stat"><span className="k">Stack</span><span className="v">{chips(t.startingStack)}</span></div>
-                <div className="gc-stat"><span className="k">Speed</span><span className="v" style={{ textTransform: 'capitalize' }}>{t.structure}</span></div>
-                {t.state !== 'registering' && t.state !== 'finished' && (
-                  <div className="gc-stat"><span className="k">Level</span><span className="v">{t.level}</span></div>
-                )}
-              </div>
-
-              {t.topPlayers.length > 0 && (
-                <div className="top-players">
-                  {t.topPlayers.map((p, i) => (
-                    <div key={i} className="top-player-row">
-                      <span className="medal">{t.state === 'finished' ? MEDALS[(p.place ?? i + 1) - 1] ?? p.place : MEDALS[i] ?? '·'}</span>
-                      <span className="tp-name"><Avatar value={p.avatar} size={15} chog={p.chog} /> {p.name}</span>
-                      <span className="tp-val">
-                        {t.state === 'finished'
-                          ? p.prize ? `${p.prize.toLocaleString()} cr` : ''
-                          : chips(p.stack)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="gc-actions">
-                <button className="btn btn-primary btn-sm" onClick={() => nav(`/t/${t.id}`)}>
-                  {t.state === 'registering' ? 'Register' : t.state === 'finished' ? 'Results' : 'Open'}
-                </button>
-                <span style={{ color: 'var(--text-faint)', fontSize: '0.8rem', alignSelf: 'center' }}>
-                  hosted by {t.hostName}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="section-title">Cash tables</div>
-      {!lobby || lobby.cashTables.length === 0 ? (
-        <div className="empty-note">
-          {isAdmin ? 'No cash tables running — start one.' : 'No cash tables running right now.'}
-        </div>
-      ) : (
-        <div className="game-grid">
-          {lobby.cashTables.map(t => (
-            <div key={t.id} className="game-card">
-              <div className="gc-top">
-                <h3>{t.name}</h3>
-                {t.playerHosted && <span className="req-pill host-pill" title={`Hosted by ${t.hostName}, a player host`}>Player host</span>}
-                <span className="state-badge state-running">{t.sb}/{t.bb}</span>
-              </div>
-              <div className="gc-stats">
-                <div className="gc-stat"><span className="k">Seats</span><span className="v">{t.players}/{t.maxSeats}</span></div>
-                <div className="gc-stat"><span className="k">Buy-in</span><span className="v">{chips(t.minBuy)}–{chips(t.maxBuy)}</span></div>
-                <div className="gc-stat"><span className="k">Host</span><span className="v">{t.hostName}</span></div>
-              </div>
-              <div className="gc-actions">
-                <button className="btn btn-primary btn-sm" onClick={() => nav(`/table/${t.id}`)}>Join table</button>
-              </div>
-            </div>
-          ))}
-        </div>
+        <>
+          <TourneyGrid title="Live now" rows={groups.live} empty="Nothing is playing right now." />
+          <TourneyGrid title="Upcoming" rows={groups.upcoming} empty="Nothing scheduled — create a tournament." />
+          <TourneyGrid title="Finished" rows={groups.finished} empty="No finished tournaments on the board." />
+        </>
       )}
 
       <div className="section-title">Features</div>
@@ -241,7 +234,6 @@ export default function Lobby() {
 
       {modal === 'auth' && <AuthModal onClose={() => setModal(null)} />}
       {modal === 'tournament' && <CreateTournamentModal onClose={() => setModal(null)} />}
-      {modal === 'cash' && <CreateCashModal onClose={() => setModal(null)} />}
     </main>
   );
 }

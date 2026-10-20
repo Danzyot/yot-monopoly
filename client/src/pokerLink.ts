@@ -31,19 +31,26 @@ export function openPoker(e: { button: number; metaKey: boolean; ctrlKey: boolea
   location.assign(withToken(POKER_URL, token));
 }
 
+/** Where a poker code leads: a tournament (`/t/<id>`) or one of its tables (`/table/<id>`). */
+export interface PokerTarget { kind: 'tournament' | 'table'; id: string }
+
 /**
- * A poker table from what a player typed: its 8-character id (`3f2a9b1c`) or a
- * pasted table link. Null when it is neither.
+ * A poker tournament from what a player typed: its 8-character id (`3f2a9b1c`)
+ * or a pasted tournament link (`…/t/3f2a9b1c`, its `/tables` page included).
+ * Poker runs tournaments only, so a bare id is a tournament's. A pasted table
+ * link (`…/table/<id>`) still goes to that table. Null when it is none of these.
  */
-export function pokerTableId(raw: string): string | null {
+export function pokerTarget(raw: string): PokerTarget | null {
   const s = raw.trim();
-  const m = /\/table\/([0-9a-f]{8})(?:[/?#]|$)/i.exec(s) ?? /^([0-9a-f]{8})$/i.exec(s);
-  return m ? m[1].toLowerCase() : null;
+  const t = /\/t\/([0-9a-f]{8})(?:[/?#]|$)/i.exec(s) ?? /^([0-9a-f]{8})$/i.exec(s);
+  if (t) return { kind: 'tournament', id: t[1].toLowerCase() };
+  const table = /\/table\/([0-9a-f]{8})(?:[/?#]|$)/i.exec(s);
+  return table ? { kind: 'table', id: table[1].toLowerCase() } : null;
 }
 
-/** Go to a poker table, carrying the sign-in when there is one. */
-export function goToPokerTable(id: string, signedIn: boolean): void {
-  const url = `${POKER_URL}/table/${id}`;
+/** Go to a poker tournament or table, carrying the sign-in when there is one. */
+export function goToPoker(target: PokerTarget, signedIn: boolean): void {
+  const url = `${POKER_URL}/${target.kind === 'tournament' ? 't' : 'table'}/${target.id}`;
   const token = signedIn ? getToken() : null;
   location.assign(token ? withToken(url, token) : url);
 }

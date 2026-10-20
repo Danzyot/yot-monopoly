@@ -2,24 +2,8 @@ import type { ChatMsg, LobbyView, TableReaction, TournamentConfig } from '../../
 import { announceChannelId, announceWinners, type AnnounceTarget, type WinnerRow } from './discord.ts';
 import { Table } from './engine/table.ts';
 import { noteAction, recordHandResult } from './audit.ts';
-import { addCashRecord, addRecord } from './store.ts';
+import { addRecord } from './store.ts';
 import { Tournament, type TournamentSnap } from './tournament/tournament.ts';
-
-// Serialized cash-table state for restart recovery.
-export interface CashTableSnap {
-  id: string; name: string; sb: number; bb: number; ante: number;
-  maxSeats: number; minBuy: number; maxBuy: number;
-  hostId: string | null; hostName: string;
-  playerHosted?: boolean;
-  actionTimeMs: number; timebankMs: number; rabbitHunting: boolean;
-  theme?: import('../../shared/types.ts').TableTheme | null;
-  buttonSeat: number; handNumber: number;
-  seats: {
-    idx: number; player: { id: string; name: string; avatar: string };
-    stack: number; sittingOut: boolean; timebankMs: number; buyInTotal: number;
-  }[];
-  history?: ReturnType<Table['snapshotHistory']>;
-}
 
 // Emitter contract implemented by the socket layer.
 export interface Emitter {
@@ -27,8 +11,6 @@ export interface Emitter {
   tableChat: (table: Table, msg: ChatMsg) => void;
   tableEvent: (table: Table, text: string) => void;
   tableReaction: (table: Table, r: TableReaction) => void;
-  // A cash player has run out of chips — told only to them.
-  cashBust: (table: Table, info: import('./engine/table.ts').CashBustInfo) => void;
   broadcastTourney: (t: Tournament) => void;
   tourneyChat: (t: Tournament, msg: ChatMsg) => void;
   assigned: (t: Tournament, playerId: string, tableId: string) => void;
@@ -41,126 +23,12 @@ export interface Emitter {
 
 // Central in-memory registry of all live games.
 export class Registry {
-  cashTables = new Map<string, Table>();
   tournaments = new Map<string, Tournament>();
-  private hostNames = new Map<string, string>(); // tableId -> host name
   emitter: Emitter | null = null;
 
   private get e(): Emitter {
     if (!this.emitter) throw new Error('emitter not attached');
     return this.emitter;
-  }
-
-  private cashCallbacks() {
-    return {
-      broadcast: (t: Table) => this.e.broadcastTable(t),
-      chat: (t: Table, m: ChatMsg) => this.e.tableChat(t, m),
-      event: (t: Table, m: string) => this.e.tableEvent(t, m),
-      audit: (t: Table, e: Parameters<NonNullable<Table['cb']['audit']>>[1]) => {
-        if (e.kind === 'handEnd') {
-          recordHandResult(t, e.contenders, {
-            contenders: e.contenders, board: e.board,
-            tableName: e.tableName, handNumber: e.handNumber,
-          });
-          return;
-        }
-        noteAction({
-          ts: Date.now(), tableId: t.id, tableName: t.name, handNumber: e.handNumber,
-          playerId: e.playerId, playerName: e.playerName,
-          action: e.action, amount: e.amount, pot: e.pot,
-        });
-      },
-      reaction: (t: Table, r: TableReaction) => this.e.tableReaction(t, r),
-      onHandEnd: () => this.e.lobbyChanged(),
-      cashBust: (t: Table, info: import('./engine/table.ts').CashBustInfo) => this.e.cashBust(t, info),
-    };
-  }
-
-  createCashTable(
-    opts: {
-      name: string; sb: number; bb: number; minBuy: number; maxBuy: number; maxSeats: number;
-      ante?: number; rabbitHunting?: boolean; actionSeconds?: number; timebankSeconds?: number;
-      // A cash game may run a rising blind schedule like a tournament's.
-      levels?: import('../../shared/types.ts').CustomBlindLevel[] | null;
-      displayMode?: 'chips' | 'bb';
-      theme?: import('../../shared/types.ts').TableTheme | null;
-    },
-    host: { id: string; name: string; playerHosted?: boolean },
-  ): Table {
-    const table = new Table({
-      name: opts.name,
-      mode: 'cash',
-      sb: opts.sb,
-      bb: opts.bb,
-      ante: opts.ante ?? 0,
-      maxSeats: opts.maxSeats,
-      cash: { minBuy: opts.minBuy, maxBuy: opts.maxBuy },
-      hostId: host.id,
-      playerHosted: !!host.playerHosted,
-      rabbitHunting: opts.rabbitHunting,
-      actionTimeMs: (opts.actionSeconds ?? 22) * 1000,
-      timebankMs: Math.max(0, opts.timebankSeconds ?? 0) * 1000,
-      levels: opts.levels ?? null,
-      displayMode: opts.displayMode ?? 'chips',
-      theme: opts.theme ?? null,
-    }, this.cashCallbacks());
-    this.cashTables.set(table.id, table);
-    this.hostNames.set(table.id, host.name);
-    this.e.lobbyChanged();
-    return table;
-  }
-
-  // ---------- crash-safe persistence ----------
-  cashSnapshot(t: Table): CashTableSnap {
-    return {
-      id: t.id, name: t.name, sb: t.sb, bb: t.bb, ante: t.ante,
-      maxSeats: t.maxSeats,
-      minBuy: t.cash?.minBuy ?? 0, maxBuy: t.cash?.maxBuy ?? 0,
-      hostId: t.hostId, hostName: this.hostNames.get(t.id) ?? '—',
-      playerHosted: t.playerHosted,
-      actionTimeMs: t.actionTimeMs, timebankMs: t.timebankMs, rabbitHunting: t.rabbitHunting,
-      theme: t.theme,
-      buttonSeat: t.buttonSeat, handNumber: t.handNumber,
-      seats: t.snapshotSeats(),
-      history: t.snapshotHistory(),
-    };
-  }
-
-  restoreCashTable(snap: CashTableSnap): Table {
-    const table = new Table({
-      id: snap.id,
-      name: snap.name,
-      mode: 'cash',
-      sb: snap.sb,
-      bb: snap.bb,
-      ante: snap.ante,
-      maxSeats: snap.maxSeats,
-      cash: { minBuy: snap.minBuy, maxBuy: snap.maxBuy },
-      hostId: snap.hostId ?? undefined,
-      playerHosted: !!snap.playerHosted,
-      rabbitHunting: snap.rabbitHunting,
-      actionTimeMs: snap.actionTimeMs,
-      timebankMs: snap.timebankMs ?? 0,
-      theme: snap.theme ?? null,
-    }, this.cashCallbacks());
-    table.buttonSeat = snap.buttonSeat;
-    table.handNumber = snap.handNumber;
-    table.restoreHistory(snap.history);
-    for (const seat of snap.seats) {
-      table.seats[seat.idx] = {
-        player: { ...seat.player },
-        stack: seat.stack,
-        sittingOut: seat.sittingOut,
-        buyInTotal: seat.buyInTotal,
-        timebankMs: seat.timebankMs,
-        missedTurns: 0,
-        ghostHands: 0,
-      };
-    }
-    this.cashTables.set(table.id, table);
-    this.hostNames.set(table.id, snap.hostName);
-    table.scheduleStart();
-    return table;
   }
 
   restoreTournament(snap: TournamentSnap): Tournament {
@@ -284,34 +152,9 @@ export class Registry {
 
   // ---------- operator lifecycle: stop, archive, delete ----------
 
-  // Filing a closed cash table into the archive. Called on every close so the
-  // record exists whether the host clicked the button or an admin did.
-  archiveCashTable(t: Table): void {
-    if (t.mode !== 'cash') return;
-    addCashRecord({
-      id: t.id,
-      name: t.name,
-      hostName: this.hostNames.get(t.id) ?? '—',
-      openedAt: t.createdAt,
-      closedAt: Date.now(),
-      sb: t.sb, bb: t.bb,
-      hands: t.handNumber,
-      ledger: t.ledger(),
-    });
-  }
-
   // Shut a live game down without discarding it: players see the result, and
   // the name stays taken until the record is deleted from the archive.
-  stopGame(kind: 'cash' | 'tournament', id: string): void {
-    if (kind === 'cash') {
-      const t = this.cashTables.get(id);
-      if (!t) throw new Error('no such table');
-      if (t.closed) throw new Error('table already closed');
-      t.closeByHost();
-      this.archiveCashTable(t);
-      this.e.lobbyChanged();
-      return;
-    }
+  stopGame(id: string): void {
     const t = this.tournaments.get(id);
     if (!t) throw new Error('no such tournament');
     if (t.state === 'finished' || t.state === 'cancelled') throw new Error('tournament is already over');
@@ -324,17 +167,7 @@ export class Registry {
 
   // Drop a game from the live registry entirely. Anything still running is
   // stopped first, so this can never strand players at a table nobody owns.
-  deleteGame(kind: 'cash' | 'tournament', id: string): void {
-    if (kind === 'cash') {
-      const t = this.cashTables.get(id);
-      if (!t) throw new Error('no such table');
-      if (!t.closed) { t.closeByHost(); this.archiveCashTable(t); }
-      t.close();
-      this.cashTables.delete(id);
-      this.hostNames.delete(id);
-      this.e.lobbyChanged();
-      return;
-    }
+  deleteGame(id: string): void {
     const t = this.tournaments.get(id);
     if (!t) throw new Error('no such tournament');
     if (t.state !== 'finished' && t.state !== 'cancelled') t.cancel();
@@ -346,63 +179,40 @@ export class Registry {
   // Remove a player from everywhere they are currently playing. Used when a
   // ban lands mid-tournament: the ban stops them coming back, this takes the
   // seat they are sitting in right now.
-  ejectPlayer(playerId: string): { tournaments: number; tables: number } {
+  ejectPlayer(playerId: string): { tournaments: number } {
     let tournaments = 0;
-    let tables = 0;
     for (const t of this.tournaments.values()) {
       if (t.state === 'finished' || t.state === 'cancelled') continue;
       if (!t.players.has(playerId)) continue;
       try { t.kick(playerId); tournaments += 1; } catch { /* already gone */ }
     }
-    for (const table of this.cashTables.values()) {
-      if (table.closed || table.playerSeat(playerId) === null) continue;
-      try { table.stand(playerId); tables += 1; } catch { /* mid-hand or already up */ }
-    }
-    if (tournaments || tables) this.e.lobbyChanged();
-    return { tournaments, tables };
+    if (tournaments) this.e.lobbyChanged();
+    return { tournaments };
   }
 
   // Remove a player from one game only. A ban scoped to a tournament should
   // cost them that tournament, not their seat at every other table.
-  ejectFromGame(gameId: string, playerId: string): { tournaments: number; tables: number } {
+  ejectFromGame(gameId: string, playerId: string): { tournaments: number } {
     const t = this.tournaments.get(gameId);
-    if (t) {
-      if (t.state === 'finished' || t.state === 'cancelled' || !t.players.has(playerId)) {
-        return { tournaments: 0, tables: 0 };
-      }
-      try { t.kick(playerId); } catch { return { tournaments: 0, tables: 0 }; }
-      this.e.lobbyChanged();
-      return { tournaments: 1, tables: 0 };
+    if (!t || t.state === 'finished' || t.state === 'cancelled' || !t.players.has(playerId)) {
+      return { tournaments: 0 };
     }
-    const table = this.cashTables.get(gameId);
-    if (table && !table.closed && table.playerSeat(playerId) !== null) {
-      try { table.stand(playerId); } catch { return { tournaments: 0, tables: 0 }; }
-      this.e.lobbyChanged();
-      return { tournaments: 0, tables: 1 };
-    }
-    return { tournaments: 0, tables: 0 };
+    try { t.kick(playerId); } catch { return { tournaments: 0 }; }
+    this.e.lobbyChanged();
+    return { tournaments: 1 };
   }
 
   // Every name still spoken for on the server. `over` separates a game that
   // is still running from one that has ended but has not been cleared out —
   // they need different advice when a name collides.
   liveNames(): { name: string; over: boolean }[] {
-    return [
-      ...[...this.tournaments.values()].map(t => ({
-        name: t.config.name,
-        over: t.state === 'finished' || t.state === 'cancelled',
-      })),
-      ...[...this.cashTables.values()].map(t => ({ name: t.name, over: t.closed })),
-    ];
-  }
-
-  hostNameOf(tableId: string): string {
-    return this.hostNames.get(tableId) ?? '—';
+    return [...this.tournaments.values()].map(t => ({
+      name: t.config.name,
+      over: t.state === 'finished' || t.state === 'cancelled',
+    }));
   }
 
   findTable(id: string): Table | null {
-    const cash = this.cashTables.get(id);
-    if (cash) return cash;
     for (const t of this.tournaments.values()) {
       const table = t.tables.get(id);
       if (table) return table;
@@ -420,7 +230,7 @@ export class Registry {
         name: t.config.name,
         state: t.state,
         players: t.players.size,
-        maxPlayers: t.config.maxPlayers,
+        maxPlayers: t.config.maxPlayers ?? null,
         buyIn: t.config.buyIn,
         prizePool: t.prizePool,
         level: t.level.level,
@@ -442,24 +252,7 @@ export class Registry {
               .filter(s => !s.busted)
               .map(s => ({ name: s.name, avatar: s.avatar, ...(s.chog ? { chog: s.chog } : {}), stack: s.stack, place: null, prize: null })),
       }));
-    const cashTables = [...this.cashTables.values()]
-      .filter(t => !t.closed)
-      .sort((a, b) => b.seatedCount() - a.seatedCount())
-      .slice(0, 50)
-      .map(t => ({
-        id: t.id,
-        name: t.name,
-        sb: t.sb,
-        bb: t.bb,
-        players: t.seatedCount(),
-        maxSeats: t.maxSeats,
-        minBuy: t.cash?.minBuy ?? 0,
-        maxBuy: t.cash?.maxBuy ?? 0,
-        createdAt: 0,
-        hostName: this.hostNames.get(t.id) ?? '—',
-        playerHosted: t.playerHosted,
-      }));
-    return { tournaments, cashTables, online };
+    return { tournaments, online };
   }
 }
 

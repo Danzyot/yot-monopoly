@@ -10,8 +10,8 @@ const DISPLAY_KEY = 'chog.display';
 
 // The preference is per table, and the host's choice for that table is the
 // default. It used to be one key for the whole site, so flipping to big blinds
-// once — in any game, ever — silently turned every other table, cash included,
-// into big blinds with no way to tell where the setting had come from.
+// once — in any game, ever — silently turned every other table into big
+// blinds with no way to tell where the setting had come from.
 export function getDisplayMode(fallback: DisplayMode = 'chips', tableId?: string): DisplayMode {
   try {
     const v = localStorage.getItem(tableId ? `${DISPLAY_KEY}.${tableId}` : DISPLAY_KEY);

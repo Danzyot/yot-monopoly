@@ -121,16 +121,18 @@ test('HUB_URL=off: only operators host here', async () => {
 
 // ---- limits ---------------------------------------------------------------------
 
-test('a player host may run one live tournament and two cash tables', () => {
-  const L = hosting.PLAYER_HOST_LIMITS;
-  const live = (tournaments: { hostId: string; state: string }[], cashTables: { hostId: string | null; closed: boolean }[]) => ({ tournaments, cashTables });
-  assert.doesNotThrow(() => hosting.assertUnderHostLimit('tournament', 'me', live([{ hostId: 'me', state: 'finished' }, { hostId: 'me', state: 'cancelled' }, { hostId: 'you', state: 'running' }], [])));
+test('a player host may run one live or upcoming tournament at a time', () => {
+  const live = (tournaments: { hostId: string; state: string }[]) => ({ tournaments });
+  assert.doesNotThrow(() => hosting.assertUnderHostLimit('me', live([{ hostId: 'me', state: 'finished' }, { hostId: 'me', state: 'cancelled' }, { hostId: 'you', state: 'running' }])));
   for (const state of ['registering', 'running', 'break', 'paused']) {
-    assert.throws(() => hosting.assertUnderHostLimit('tournament', 'me', live([{ hostId: 'me', state }], [])), /1 tournament at a time/, state);
+    assert.throws(() => hosting.assertUnderHostLimit('me', live([{ hostId: 'me', state }])), /1 tournament at a time/, state);
   }
-  const open = Array.from({ length: L.cashTables }, () => ({ hostId: 'me', closed: false }));
-  assert.throws(() => hosting.assertUnderHostLimit('cash', 'me', live([], open)), /2 cash tables at a time/);
-  assert.doesNotThrow(() => hosting.assertUnderHostLimit('cash', 'me', live([], [{ hostId: 'me', closed: false }, { hostId: 'me', closed: true }, { hostId: 'you', closed: false }])));
+});
+
+test('the player-host limits say nothing about cash tables or field size', () => {
+  const L = hosting.PLAYER_HOST_LIMITS as Record<string, unknown>;
+  assert.equal('cashTables' in L, false);
+  assert.equal('maxPlayers' in L, false);
 });
 
 const bigConfig = (): TournamentConfig => ({
@@ -145,8 +147,8 @@ test('a player host\'s tournament is clamped and loses the operator-only parts',
   const L = hosting.PLAYER_HOST_LIMITS;
   const c = hosting.clampPlayerTournament(bigConfig());
   assert.equal(c.playerHosted, true);
-  assert.equal(c.maxPlayers, L.maxPlayers);
-  assert.equal(c.minPlayers, L.maxPlayers, 'never more than the field');
+  assert.equal(c.maxPlayers, null, 'no player cap: only an operator sets one');
+  assert.equal(c.minPlayers, 100, 'the minimum to start is theirs to choose');
   assert.equal(c.startingStack, L.startingStack);
   assert.equal(c.levelMinutes, L.levelMinutes);
   assert.equal(c.lateRegMinutes, L.lateRegMinutes);
@@ -157,9 +159,9 @@ test('a player host\'s tournament is clamped and loses the operator-only parts',
   assert.equal(c.social, null, 'no Discord role gating');
   assert.equal(c.approveRegistrations, false);
   assert.equal(c.prizeText, '1st: a Chog', 'the prize line is theirs to write');
-  // Small values are left alone.
+  // Small values are left alone — except a cap, which a player host cannot set.
   const small = hosting.clampPlayerTournament({ ...bigConfig(), maxPlayers: 12, minPlayers: 2, levelMinutes: 8, startingStack: 10_000 });
-  assert.deepEqual([small.maxPlayers, small.minPlayers, small.levelMinutes, small.startingStack], [12, 2, 8, 10_000]);
+  assert.deepEqual([small.maxPlayers, small.minPlayers, small.levelMinutes, small.startingStack], [null, 2, 8, 10_000]);
 });
 
 test('a player host may schedule at most a week ahead', () => {
@@ -203,10 +205,9 @@ test('a host controls only their own events', () => {
   assert.equal(hosting.mayDirect(operatorEvent, host, 'kick'), true);
 });
 
-test('a player host cannot reverse turns or move chips at their own cash table', () => {
-  assert.equal(mayRunTable('dc_host', host, true), false);
-  assert.equal(mayRunTable('dc_host', operator, true), true);
-  assert.equal(mayRunTable('dc_host', host, false), true, 'an operator-made table is unchanged');
+test('a player host cannot reverse turns or move chips at a table of their own event', () => {
+  assert.equal(mayRunTable(host), false);
+  assert.equal(mayRunTable(operator), true);
 });
 
 // ---- results are not announced -------------------------------------------------------
@@ -214,7 +215,7 @@ test('a player host cannot reverse turns or move chips at their own cash table',
 test('a player-hosted tournament never posts to the Discord announce channel', () => {
   process.env.DISCORD_ANNOUNCE_CHANNEL_ID = '999888777';
   registry.emitter = {
-    broadcastTable() {}, tableChat() {}, tableEvent() {}, tableReaction() {}, cashBust() {},
+    broadcastTable() {}, tableChat() {}, tableEvent() {}, tableReaction() {},
     broadcastTourney() {}, tourneyChat() {}, assigned() {}, tourneyFinished() {}, tourneyEliminated() {}, lobbyChanged() {},
   };
   const base = { ...bigConfig(), customLevels: null, social: null, minPlayers: 2 };
@@ -227,7 +228,7 @@ test('a player-hosted tournament never posts to the Discord announce channel', (
   const lobby = registry.lobbyView(0);
   assert.equal(lobby.tournaments.find(t => t.id === playerT.id)?.playerHosted, true);
   assert.equal(lobby.tournaments.find(t => t.id === opT.id)?.playerHosted, false);
-  registry.deleteGame('tournament', opT.id);
-  registry.deleteGame('tournament', playerT.id);
+  registry.deleteGame(opT.id);
+  registry.deleteGame(playerT.id);
   delete process.env.DISCORD_ANNOUNCE_CHANNEL_ID;
 });

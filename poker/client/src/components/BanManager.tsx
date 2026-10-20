@@ -61,7 +61,7 @@ export default function BanManager() {
         value: value.trim(), name: name.trim(), reason: reason.trim(),
         discordBan: kind === 'player' && discordBan,
       });
-      const gone = r.ejected.tournaments + r.ejected.tables;
+      const gone = r.ejected.tournaments;
       const base = gone
         ? `Banned — and removed from ${gone} live game${gone === 1 ? '' : 's'}`
         : 'Banned';
@@ -187,7 +187,7 @@ export default function BanManager() {
         <div className="ban-form-foot">
           <p className="tag">
             A <strong>lifetime</strong> ban keeps them off the site entirely; a{' '}
-            <strong>game</strong> ban costs them one tournament or table and
+            <strong>game</strong> ban costs them one tournament and
             nothing else. A player ban also covers the Discord account behind it.
             An IP ban covers everyone on that address — check the audit for a
             shared household first. Either way they are removed from the game

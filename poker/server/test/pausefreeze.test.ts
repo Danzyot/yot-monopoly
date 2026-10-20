@@ -8,7 +8,7 @@ const noop = { broadcast: () => {}, chat: () => {}, event: () => {} };
 
 function heads(actionMs = 20_000) {
   const t = new Table({
-    name: 'Freeze', mode: 'tournament', sb: 5, bb: 10, maxSeats: 6, actionTimeMs: actionMs,
+    name: 'Freeze', sb: 5, bb: 10, maxSeats: 6, actionTimeMs: actionMs,
   }, noop as never);
   t.sit(0, { id: 'a', name: 'Ana', avatar: '🙂' }, 1000);
   t.sit(1, { id: 'b', name: 'Bo', avatar: '🙂' }, 1000);

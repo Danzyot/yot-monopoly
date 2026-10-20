@@ -106,14 +106,6 @@ export const api = {
   codeStatus: (code: string) =>
     request<{ pending: boolean; expired?: boolean; token?: string; profile?: PlayerProfile }>(
       `/api/auth/code/status?code=${encodeURIComponent(code)}`),
-  createTable: (opts: {
-    name: string; sb: number; bb: number; minBuy: number; maxBuy: number; maxSeats: number;
-    ante?: number; actionSeconds?: number; timebankSeconds?: number; rabbitHunting?: boolean;
-    displayMode?: 'chips' | 'bb';
-    customLevels?: { sb: number; bb: number; ante?: number; minutes: number; isBreak?: boolean }[];
-    theme?: import('../../shared/types').TableTheme;
-  }) =>
-    request<{ id: string }>('/api/tables', { method: 'POST', body: JSON.stringify(opts) }),
   audit: () => request<{
     counts: { players: number; actions: number; pairs: number; flagged: number };
     players: {
@@ -245,6 +237,8 @@ export const api = {
   // Final results for a tournament whose live game is gone.
   tournamentResult: (id: string) =>
     request<{ record: import('../../shared/types').TournamentRecord }>(`/api/results/${id}`),
+  tableLookup: (id: string) =>
+    request<{ id: string; tournamentId: string | null }>(`/api/tables/${encodeURIComponent(id)}`),
   createTournament: (opts: Record<string, unknown>) =>
     request<{ id: string }>('/api/tournaments', { method: 'POST', body: JSON.stringify(opts) }),
   postVerifyMessage: (channelId?: string) =>
@@ -312,7 +306,7 @@ export const api = {
     skipPrimary?: boolean;
   }) =>
     request<{
-      ban: BanRow; ejected: { tournaments: number; tables: number };
+      ban: BanRow; ejected: { tournaments: number };
       discordNote?: string | null;
       alsoBanned?: string[];
     }>('/api/admin/bans', {
@@ -340,7 +334,7 @@ export const api = {
       `/api/admin/bans/${b.kind}/${encodeURIComponent(b.value)}${q}`, { method: 'DELETE' });
   },
   bannableGames: () =>
-    request<{ games: { id: string; name: string; kind: 'tournament' | 'cash' }[] }>(
+    request<{ games: { id: string; name: string; kind: 'tournament' }[] }>(
       '/api/admin/bannable-games'),
   liveGames: () => request<{
     tournaments: {
@@ -348,18 +342,15 @@ export const api = {
       level: number; createdAt: number; startedAt: number | null;
       hostId: string; hostName: string; playerHosted: boolean;
     }[];
-    cashTables: {
-      id: string; name: string; sb: number; bb: number; players: number;
-      maxSeats: number; hands: number; closed: boolean; createdAt: number;
-      hostId: string | null; hostName: string; playerHosted: boolean;
-    }[];
   }>('/api/admin/games'),
-  stopGame: (kind: 'cash' | 'tournament', id: string) =>
-    request<{ ok: true }>(`/api/admin/games/${kind}/${encodeURIComponent(id)}/stop`, {
+  stopGame: (id: string) =>
+    request<{ ok: true }>(`/api/admin/games/tournament/${encodeURIComponent(id)}/stop`, {
       method: 'POST', body: '{}',
     }),
-  deleteGame: (kind: 'cash' | 'tournament', id: string) =>
-    request<{ ok: true }>(`/api/admin/games/${kind}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  deleteGame: (id: string) =>
+    request<{ ok: true }>(`/api/admin/games/tournament/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  // Past games: tournaments, plus the cash sessions filed before cash tables
+  // were retired (read-only history; deleting one frees its name).
   archive: () => request<{
     tournaments: import('../../shared/types').TournamentRecord[];
     cash: import('../../shared/types').CashRecord[];

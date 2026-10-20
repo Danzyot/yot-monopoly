@@ -14,22 +14,13 @@ export default function FeltInfo({ view }: { view: TableView }) {
   const t = view.tourney;
   const blinds = `${chips(view.blinds.sb)}/${chips(view.blinds.bb)}${view.blinds.ante ? ` (${chips(view.blinds.ante)})` : ''}`;
 
-  // Cash tables: the hand and the stakes — plus the level and its clock when
-  // the host set the blinds to rise, which players need for the same reason
-  // tournament players do.
+  // No event context to hand (the tournament has gone): just the hand and
+  // the stakes.
   if (!t) {
-    const lvl = view.blindLevel ?? null;
-    const lvlLeft = lvl?.endsAt ? Math.max(0, lvl.endsAt - now) : null;
     return (
       <div className="felt-info">
         {view.handNumber > 0 && <span>Hand #{view.handNumber}</span>}
-        <span>
-          {lvl ? `Level ${lvl.level} · ` : 'Blinds '}{blinds}
-          {lvlLeft !== null && <> · {clock(lvlLeft)}</>}
-        </span>
-        {lvl?.next && (
-          <span className="dim">Next {chips(lvl.next.sb)}/{chips(lvl.next.bb)}</span>
-        )}
+        <span>Blinds {blinds}</span>
       </div>
     );
   }

@@ -128,7 +128,10 @@ export function allRecords(): TournamentRecord[] {
 }
 
 // ---------- finished cash sessions ----------
-// Their own file: cash play has no bearing on the tournament leaderboard,
+// Cash tables are retired; this file is the history of the ones that ran,
+// plus any an old live snapshot still held at boot (legacycash.ts). Past games
+// on the dashboard still shows them. Their own file: cash play has no bearing
+// on the tournament leaderboard,
 // and keeping them apart means neither can corrupt the other's load.
 const CASH_FILE = join(DATA_DIR, 'cash-history.json');
 let cashRecords: CashRecord[] = [];
@@ -156,7 +159,7 @@ function saveCashRecords(): void {
 }
 
 export function addCashRecord(record: CashRecord): void {
-  // A table can be closed twice (host click, then shutdown sweep) — keep one.
+  // Filed once: a boot that re-reads the same old snapshot must not add it again.
   if (cashRecords.some(r => r.id === record.id)) return;
   cashRecords.push(record);
   if (cashRecords.length > 2000) cashRecords = cashRecords.slice(-2000);

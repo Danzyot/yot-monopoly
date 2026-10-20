@@ -30,6 +30,7 @@ import {
   assertUnderHostLimit, clampPlayerTournament, hubCanHost, NOT_A_HOST, playerScheduledStart,
 } from './hosting.ts';
 import { mountChogs } from './chogroutes.ts';
+import { MAX_PLAYER_CAP } from '../../shared/hosting.ts';
 import { registry } from './registry.ts';
 import { DEFAULT_BET_CAP_MINUTES, parseLateClock } from './tournament/tournament.ts';
 import { loadInviteLog } from './invitelog.ts';
@@ -293,7 +294,7 @@ setInterval(() => {
 // The number is far above what a real player generates in a minute.
 app.use('/api', rateLimit(600, 60_000));
 app.use('/api/auth', rateLimit(30, 60_000));
-app.use(['/api/tables', '/api/tournaments'], rateLimit(20, 60_000));
+app.use('/api/tournaments', rateLimit(20, 60_000));
 
 // CORS. The built client is served by this same process, so in production no
 // browser needs to call /api cross-origin — except the Chog Games hub, which
@@ -357,8 +358,15 @@ attachSockets(io);
 // Bring back any games that were live when the previous process ended, then
 // keep a rolling snapshot so the next restart can do the same.
 const restored = restoreLive();
-if (restored.tournaments || restored.cashTables) {
-  console.log(`Restored ${restored.tournaments} tournament(s) and ${restored.cashTables} cash table(s) from the last snapshot`);
+if (restored.tournaments) {
+  console.log(`Restored ${restored.tournaments} tournament(s) from the last snapshot`);
+}
+if (restored.closedCash.length) {
+  // Cash tables are retired. Any still open when the old process stopped were
+  // cashed out and filed under Past games (legacycash.ts); bans scoped to them
+  // have nothing left to apply to.
+  for (const id of restored.closedCash) removeGameBans(id);
+  console.log(`Closed ${restored.closedCash.length} cash table(s) from the last snapshot — cash games are retired; see Past games`);
 }
 armPersistence();
 
@@ -629,7 +637,7 @@ app.get('/api/leaderboard', (_req, res) => {
 
 app.get('/api/health', (_req, res) => {
   const mem = process.memoryUsage();
-  let liveTables = registry.cashTables.size;
+  let liveTables = 0;
   let livePlayers = 0;
   for (const t of registry.tournaments.values()) {
     liveTables += t.tables.size;
@@ -673,7 +681,7 @@ function requireAdmin(req: express.Request, res: express.Response) {
   return me;
 }
 
-// Who may open a table or a tournament: an operator, or a player the Chog
+// Who may host a tournament: an operator, or a player the Chog
 // Games hub says may host (a Chog Genesis holder or an approved host). The
 // hub's answer is cached for a minute (hosting.ts). If the hub cannot be
 // reached the answer is no, with a message saying why — never a silent yes.
@@ -899,11 +907,6 @@ app.get('/api/admin/health', (req, res) => {
       if (!ig.ok) integrityIssues += ig.seatless.length + ig.duplicated.length + ig.overCapacity.length;
     }
   }
-  for (const c of registry.cashTables.values()) {
-    if (c.closed) continue;
-    liveTables += 1;
-    seatedPlayers += c.seatedCount();
-  }
   res.json({
     uptimeSec: Math.round(process.uptime()),
     rssMb: Math.round(mem.rss / 1048576),
@@ -1069,39 +1072,10 @@ app.get('/music/lib/:file', (req, res) => {
   res.sendFile(full);
 });
 
-app.post('/api/tables', async (req, res) => {
-  const me = await requireHost(req, res);
-  if (!me) return;
-  try {
-    // A player host may keep a couple of tables open; operators any number.
-    if (!me.isAdmin) assertUnderHostLimit('cash', me.id, registry);
-    const b = req.body ?? {};
-    const sb = clampInt(b.sb, 1, 1_000_000, 5);
-    const bb = clampInt(b.bb, sb, 2_000_000, sb * 2);
-    const minBuy = clampInt(b.minBuy, bb * 10, 10_000_000, bb * 40);
-    const maxBuy = clampInt(b.maxBuy, minBuy, 50_000_000, bb * 200);
-    const maxSeats = clampInt(b.maxSeats, 2, 9, 9);
-    const ante = clampInt(b.ante, 0, bb, 0);
-    const name = requireFreeName(b.name, 'table');
-    const cashLevels = parseCustomLevels(b.customLevels);
-    const table = registry.createCashTable(
-      {
-        name, sb, bb, ante, minBuy, maxBuy, maxSeats,
-        rabbitHunting: !!b.rabbitHunting,
-        actionSeconds: clampInt(b.actionSeconds, 5, 120, 22),
-        timebankSeconds: clampInt(b.timebankSeconds, 0, 120, 0),
-        // Optional rising blinds, validated by the same parser the tournament
-        // form's schedules go through.
-        levels: cashLevels,
-        displayMode: b.displayMode === 'bb' ? 'bb' : 'chips',
-        theme: sanitizeTheme(b.theme),
-      },
-      { id: me.id, name: me.name, playerHosted: !me.isAdmin },
-    );
-    res.json({ id: table.id });
-  } catch (e) {
-    res.status(400).json({ error: e instanceof Error ? e.message : 'Bad request' });
-  }
+// Cash tables are retired: this room runs tournaments only. An old page that
+// still offers "New cash table" gets a plain answer instead of a silent 404.
+app.post('/api/tables', (_req, res) => {
+  res.status(410).json({ error: 'Cash tables are gone — Chog Poker runs tournaments only. Host a tournament instead.' });
 });
 
 // ---------- feature switches ----------
@@ -1225,9 +1199,6 @@ app.get('/api/admin/bannable-games', (req, res) => {
       ...[...registry.tournaments.values()]
         .filter(t => t.state !== 'finished' && t.state !== 'cancelled')
         .map(t => ({ id: t.id, name: t.config.name, kind: 'tournament' as const })),
-      ...[...registry.cashTables.values()]
-        .filter(t => !t.closed)
-        .map(t => ({ id: t.id, name: t.name, kind: 'cash' as const })),
     ],
   });
 });
@@ -1320,7 +1291,7 @@ app.post('/api/admin/bans', (req, res) => {
     // Name the game from the server's own records rather than trusting the
     // label the client sent.
     const liveName = gameId
-      ? (registry.tournaments.get(gameId)?.config.name ?? registry.cashTables.get(gameId)?.name ?? '')
+      ? (registry.tournaments.get(gameId)?.config.name ?? '')
       : '';
     if (scope === 'game' && !liveName) throw new Error('That game is not running');
     // An IP ban can name the player instead of the address: the operator sees
@@ -1463,14 +1434,14 @@ app.post('/api/admin/bans', (req, res) => {
       ...extra.keys(),
     ])];
 
-    let ejected = { tournaments: 0, tables: 0 };
+    let ejected = { tournaments: 0 };
     for (const pid of targets) {
       // A lifetime ban clears them out everywhere; a game ban only out of the
       // game it names — they keep the rest of the site.
       const r = scope === 'game' && gameId
         ? registry.ejectFromGame(gameId, pid)
         : registry.ejectPlayer(pid);
-      ejected = { tournaments: ejected.tournaments + r.tournaments, tables: ejected.tables + r.tables };
+      ejected = { tournaments: ejected.tournaments + r.tournaments };
     }
     // A lifetime ban also cuts live connections; a game ban must not, or it
     // would knock someone off the whole site over one event.
@@ -1533,25 +1504,26 @@ app.get('/api/admin/games', (req, res) => {
       createdAt: t.createdAt,
       startedAt: t.startedAt ?? null,
     })),
-    cashTables: [...registry.cashTables.values()].map(t => ({
-      id: t.id, name: t.name, sb: t.sb, bb: t.bb,
-      hostId: t.hostId, hostName: registry.hostNameOf(t.id), playerHosted: t.playerHosted,
-      players: t.seatedCount(), maxSeats: t.maxSeats,
-      hands: t.handNumber, closed: t.closed,
-      createdAt: t.createdAt,
-    })),
   });
 });
 
+// Past games come in two kinds: tournaments, and the cash sessions filed
+// before cash tables were retired. Live games are tournaments only.
 function gameKind(v: unknown): 'cash' | 'tournament' {
   if (v !== 'cash' && v !== 'tournament') throw new Error('unknown game type');
+  return v;
+}
+
+function liveKind(v: unknown): 'tournament' {
+  if (v !== 'tournament') throw new Error('unknown game type');
   return v;
 }
 
 app.post('/api/admin/games/:kind/:id/stop', (req, res) => {
   if (!requireAdmin(req, res)) return;
   try {
-    registry.stopGame(gameKind(req.params.kind), String(req.params.id));
+    liveKind(req.params.kind);
+    registry.stopGame(String(req.params.id));
     res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : 'Could not stop it' });
@@ -1562,7 +1534,8 @@ app.delete('/api/admin/games/:kind/:id', (req, res) => {
   if (!requireAdmin(req, res)) return;
   try {
     const id = String(req.params.id);
-    registry.deleteGame(gameKind(req.params.kind), id);
+    liveKind(req.params.kind);
+    registry.deleteGame(id);
     // Bans that only applied to this game have nothing left to apply to.
     removeGameBans(id);
     res.json({ ok: true });
@@ -1658,7 +1631,7 @@ app.post('/api/admin/results/:id/repair-places', (req, res) => {
 // major" are the same tournament to everyone reading the lobby.
 const nameKey = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 
-function requireFreeName(raw: unknown, what: 'table' | 'tournament'): string {
+function requireFreeName(raw: unknown, what: 'tournament'): string {
   const name = String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, 48);
   if (!name) throw new Error(`Give the ${what} a name.`);
   const key = nameKey(name);
@@ -1686,18 +1659,27 @@ app.get('/api/results/:id', (req, res) => {
   res.json({ record: rec });
 });
 
+// A tournament code that is really one of its tables' ids (the hub's code box
+// treats a bare id as a tournament): the page asks here before giving up.
+app.get('/api/tables/:id', (req, res) => {
+  const table = registry.findTable(String(req.params.id));
+  if (!table) { res.status(404).json({ error: 'No such table' }); return; }
+  res.json({ id: table.id, tournamentId: table.tournamentId });
+});
+
 app.post('/api/tournaments', async (req, res) => {
   const me = await requireHost(req, res);
   if (!me) return;
   try {
-    if (!me.isAdmin) assertUnderHostLimit('tournament', me.id, registry);
+    if (!me.isAdmin) assertUnderHostLimit(me.id, registry);
     const b = req.body ?? {};
     const config: TournamentConfig = {
       name: requireFreeName(b.name, 'tournament'),
       startingStack: clampInt(b.startingStack, 100, 100_000_000, 10_000),
       levelMinutes: clampInt(b.levelMinutes, 1, 60, 8),
       structure: ['turbo', 'regular', 'deep'].includes(b.structure) ? b.structure : 'regular',
-      maxPlayers: clampInt(b.maxPlayers, 2, 1_000, 500),
+      // No limit unless an operator names one (a player host's is lifted below).
+      maxPlayers: optionalCap(b.maxPlayers),
       minPlayers: clampInt(b.minPlayers, 2, 100, 2),
       lateRegMinutes: clampInt(b.lateRegMinutes, 0, 240, 15),
       joinMinutes: clampInt(b.joinMinutes, 1, 240, 15),
@@ -1730,8 +1712,8 @@ app.post('/api/tournaments', async (req, res) => {
       const ts = Number(b.scheduledStart);
       if (Number.isFinite(ts) && ts > Date.now()) scheduledStart = ts;
     }
-    // A player host's event: a smaller field, a bounded length, and none of
-    // the operator-only parts (role gating, approvals, Discord results).
+    // A player host's event: a bounded length, an open field, and none of the
+    // operator-only parts (role gating, approvals, Discord results).
     if (!me.isAdmin) {
       clampPlayerTournament(config);
       scheduledStart = playerScheduledStart(scheduledStart);
@@ -1743,6 +1725,14 @@ app.post('/api/tournaments', async (req, res) => {
     res.status(400).json({ error: e instanceof Error ? e.message : 'Bad request' });
   }
 });
+
+// A player cap: empty, zero or junk means none.
+function optionalCap(v: unknown): number | null {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Math.floor(Number(v));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.max(2, Math.min(MAX_PLAYER_CAP, n));
+}
 
 function clampInt(v: unknown, min: number, max: number, dflt: number): number {
   const n = Math.floor(Number(v));

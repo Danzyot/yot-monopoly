@@ -15,7 +15,7 @@ import type { CardT } from '../../shared/types.ts';
 
 const P = (id: string, name: string) => ({ id, name, avatar: '🙂', discord: null });
 
-const table = new Table({ name: 'T', mode: 'cash', sb: 1, bb: 2 }, {
+const table = new Table({ name: 'T', sb: 1, bb: 2 }, {
   broadcast: () => {}, chat: () => {}, event: () => {},
 });
 

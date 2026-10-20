@@ -13,7 +13,7 @@ import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { requirementBadge, requirementSentence } from '../community.tsx';
 import { useCardsRoomList } from '../cards/net.ts';
-import { goToPokerTable, openPoker, pokerTableId } from '../pokerLink.ts';
+import { goToPoker, openPoker, pokerTarget } from '../pokerLink.ts';
 import { POKER_URL } from '../../../shared/brand.ts';
 
 // The home page has no WebGL at all: the board behind the hero is a still
@@ -37,11 +37,11 @@ const STEPS: { icon: string; title: string; body: string }[] = [
 const BLURBS = CHOG_SEASON ? {
   monopoly: 'Buy, build and trade on three 3D boards, in Chog’s purple poker lounge.',
   cards: 'Match colour, number or symbol and empty your hand before the other Chogs.',
-  poker: 'No-Limit Hold’em in the Chog room: cash tables by link, tournaments for the whole club.',
+  poker: 'No-Limit Hold’em tournaments in the Chog room, for the whole club.',
 } : {
   monopoly: 'Buy, build and trade on three 3D boards, with the Chog crew as your pieces.',
   cards: 'Match colour, number or symbol and shed your hand first. Fast rounds, big tables.',
-  poker: 'No-Limit Hold’em: cash tables you share by link, and tournaments for the whole club.',
+  poker: 'No-Limit Hold’em tournaments for the whole club.',
 };
 
 /** The hub's "tables open now" line under a game card. */
@@ -101,9 +101,9 @@ export default function Home() {
     nav(`/r/${clean}`);
   };
   const joinPoker = (c: string) => {
-    const id = pokerTableId(c);
-    if (!id) return toastError(new Error('Enter a table code or paste the table link'));
-    goToPokerTable(id, !!profile);
+    const target = pokerTarget(c);
+    if (!target) return toastError(new Error('Enter a tournament code or paste the tournament link'));
+    goToPoker(target, !!profile);
   };
   const joinCards = (c: string) => {
     const clean = c.trim().toUpperCase();
@@ -190,13 +190,13 @@ export default function Home() {
             <div className="hub-text">
               <h3>{GAMES.poker.name}</h3>
               <p>{BLURBS.poker}</p>
-              <span className="hub-meta">2–9 per table · cash & tournaments</span>
+              <span className="hub-meta">Multi-table tournaments</span>
               {/* One short line either way, so the card keeps its height when a stored sign-in is confirmed. */}
               <span className="hub-live">{profile || checking ? 'You stay signed in there' : 'On its own site'}</span>
             </div>
             <div className="hub-actions">
               <form className="hub-join" onSubmit={e => { e.preventDefault(); joinPoker(pokerCode); }}>
-                <input className="code-input" value={pokerCode} placeholder="CODE" aria-label="Poker table code or link"
+                <input className="code-input" value={pokerCode} placeholder="CODE" aria-label="Poker tournament code or link"
                   autoCapitalize="none" autoComplete="off" spellCheck={false}
                   onChange={e => setPokerCode(e.target.value)} />
                 <button className="btn gold small" type="submit">Join</button>
