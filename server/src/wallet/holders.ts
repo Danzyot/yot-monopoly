@@ -23,6 +23,10 @@ function chain(): JsonRpc {
   return rpc ??= httpRpc(process.env.CHOG_RPC_URL?.trim() || MONAD_RPC_URL);
 }
 
+/** The same chain and clock for the other wallet modules (the self-transfer check), so one test hook covers all. */
+export const chainRpc = (): JsonRpc => chain();
+export const holdersNow = (): number => clock();
+
 export interface WalletStatus extends WalletHoldings {
   address: string;
   linkedAt: number;
