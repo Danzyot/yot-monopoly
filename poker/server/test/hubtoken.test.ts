@@ -119,6 +119,7 @@ before(async () => {
     env: {
       ...process.env, PORT: String(PORT), DATA_DIR: DATA, RATE_LIMIT_OFF: '1', CHOG_SECRET: SECRET,
       NODE_ENV: 'production', HUB_ORIGINS: 'https://hub-staging.up.railway.app',
+      DISCORD_CLIENT_ID: '123456789012345678', DISCORD_CLIENT_SECRET: 'test-secret',
     },
     stdio: 'ignore',
     detached: true,
@@ -172,4 +173,23 @@ test('/api/auth/me answers with the server-side profile for a hub token', async 
   assert.equal(profile.isAdmin, true, 'the client learns it is the operator from here, not the payload');
   const bad = await fetch(`${BASE}/api/auth/me`, { headers: { authorization: `Bearer ${hubSignToken(OPERATOR, 'wrong')}` } });
   assert.equal(bad.status, 401);
+});
+
+test('Discord sign-in only ever returns to a path on this room: the token rides on the hash', async () => {
+  const { localReturnPath } = await import('../src/auth.ts');
+  assert.equal(localReturnPath('/t/3f2a9b1c?x=1'), '/t/3f2a9b1c?x=1');
+  assert.equal(localReturnPath('/'), '/');
+  for (const bad of ['//evil.com', '/\\evil.com', '/\\/evil.com', '///evil.com', 'https://evil.com', 'evil.com', '/\tevil', '', undefined, 42]) {
+    assert.equal(localReturnPath(bad), '/', `refused: ${JSON.stringify(bad)}`);
+  }
+  // Over HTTP: the return address that goes into the signed state is the cleaned one.
+  const stateReturn = async (ret: string) => {
+    const r = await fetch(`${BASE}/api/auth/discord/start?return=${encodeURIComponent(ret)}`, { redirect: 'manual' });
+    assert.equal(r.status, 302);
+    const state = new URL(r.headers.get('location')!).searchParams.get('state')!;
+    return (JSON.parse(Buffer.from(state.slice(0, state.lastIndexOf('.')), 'base64url').toString('utf8')) as { return: string }).return;
+  };
+  assert.equal(await stateReturn('/t/3f2a9b1c'), '/t/3f2a9b1c');
+  assert.equal(await stateReturn('//evil.com/steal'), '/');
+  assert.equal(await stateReturn('/\\evil.com'), '/');
 });

@@ -18,6 +18,7 @@ import { Registry, Room, RoomError, type Member } from './rooms.ts';
 import { recordResult } from './stats.ts';
 import { resolveRequirements } from './requirements.ts';
 import { takeSeat } from './seating.ts';
+import { QUICK_BOTS, pickQuickTable } from './quickJoin.ts';
 import { holdsChog } from './wallet/holders.ts';
 import { getMap } from '../../shared/maps.ts';
 import { getTheme } from '../../shared/themes.ts';
@@ -123,7 +124,7 @@ export function attachSockets(io: Server): SocketLayer {
     const standings = g.standings();
     recordResult({
       code: room.code, mapId: room.mapId, themeId: room.themeId,
-      startedAt: room.startedAt ?? Date.now(), endedAt: Date.now(), turns: g.turnNumber,
+      startedAt: room.startedAt ?? Date.now(), endedAt: Date.now(), turns: g.turnNumber, ...(room.private && { private: true as const }),
       places: standings.map(s => {
         const p = g.player(s.id);
         // Character and avatar feed public profiles (older records lack them).
@@ -270,16 +271,45 @@ export function attachSockets(io: Server): SocketLayer {
       return { rooms: registry.list() };
     });
 
-    on('room:create', () => {
-      const m = member();
+    const openRoom = (m: Member): Room => {
       if (!isOn('publicRooms') && !isAdmin()) throw new RoomError('Only operators can create rooms right now');
       if (registry.roomsOf(m.id).filter(r => r.hostId === m.id && r.status === 'lobby').length >= 3) {
         throw new RoomError('You already have 3 open lobbies — start or leave one first');
       }
       const room = registry.create(m.id, isAdmin());
       room.join(m);
+      return room;
+    };
+
+    on('room:create', () => {
+      const room = openRoom(member());
       enter(room, true);
       return { code: room.code };
+    });
+
+    // "Play now" on the home page (quickJoin.ts): a seat at the public lobby
+    // nearest to filling up, or a new public table with bots. Gated rooms are
+    // never picked, so nobody is seated past a Discord requirement.
+    on('rooms:quickJoin', () => {
+      const m = member();
+      const prof = data.profile!;
+      const pick = pickQuickTable(
+        [...registry.rooms.values()].map(room => ({
+          room, code: room.code, private: room.private, status: room.status, seats: room.seats,
+          maxPlayers: room.rules.maxPlayers, createdAt: room.createdAt, restricted: !!room.requirements,
+        })),
+        m.id,
+        t => t.room.wasKicked(m.id) || !!findBan({ id: prof.id, discordId: prof.discord?.id, ip: data.ip }, t.code),
+      );
+      if (pick) {
+        pick.room.join(m);
+        enter(pick.room, true);
+        return { code: pick.room.code, created: false };
+      }
+      const room = openRoom(m);
+      if (isOn('bots') || isAdmin()) for (let i = 0; i < QUICK_BOTS.monopoly; i++) room.addBot(m.id, isAdmin());
+      enter(room, true);
+      return { code: room.code, created: true };
     });
 
     // `watch` lets someone (typically an operator opening a room from the

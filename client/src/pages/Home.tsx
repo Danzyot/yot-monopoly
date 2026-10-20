@@ -11,6 +11,9 @@ import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { useCardsRoomList } from '../cards/net.ts';
 import { goToPoker, pokerTarget } from '../pokerLink.ts';
+import QuickPlay from '../components/QuickPlay.tsx';
+import ActivityTicker from '../components/ActivityTicker.tsx';
+import ChogOfTheDay from '../components/ChogOfTheDay.tsx';
 import ChogRoamer from '../components/roamer/ChogRoamer.tsx';
 
 // The home page has no WebGL at all: the board behind the hero is a still
@@ -136,11 +139,16 @@ export default function Home() {
       <section className="home-hero gd hub-hero">
         <h1>{BRAND.name}</h1>
         <p className="home-tag">Monopoly, cards and poker with the Chog crew.</p>
+        {/* One tap into a game: the next table to fill, or a new one with bots. */}
+        <QuickPlay />
         <div className="hero-howto">
           <HowToButton label="❓ New here? How to play" />
           <Link className="btn small ghost" to="/characters">{CHOG_SEASON ? '💜' : '🎭'} {castTitle}</Link>
         </div>
       </section>
+
+      {/* What just happened across the site; hidden when nothing has. */}
+      <ActivityTicker />
 
       {/* The hub: one card per game, with what is on right now. Each game has its
           own home (/monopoly, /cards, /poker): Play goes there, the code box joins
@@ -228,13 +236,11 @@ export default function Home() {
             <Link to="/characters">+ {others.length} more to play as</Link>
           </p>
         )}
-        {/* Holders play as their own NFT Chog, built from its traits, once their wallet is linked. */}
-        {CHOG_SEASON && (
-          <p className="cast-more cast-wallet">
-            <Link to="/wallet">Hold a Chog Genesis? Link your wallet to play as yours →</Link>
-          </p>
-        )}
+        {/* The wallet nudge lives on the Chog of the Day card just below. */}
       </section>
+
+      {/* One Chog Genesis in the spotlight, a new one every UTC day. */}
+      <ChogOfTheDay />
 
       <div className="home-body">
         <section className="panel how-panel" aria-labelledby="how-title">

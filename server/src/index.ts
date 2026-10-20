@@ -34,6 +34,7 @@ import { cardsLeaderboard, loadCardsResults, recentCardsResults } from './cards/
 import { staticClient } from './staticFiles.ts';
 import { mountCrawlerFiles, spaHandler } from './seo.ts';
 import { mountSite } from './routes/site.ts';
+import { mountActivity } from './routes/activity.ts';
 import { allResults, leaderboard, loadResults } from './stats.ts';
 import { buildProfile } from './profiles.ts';
 import { devFakeDiscord, gateInfo } from './requirements.ts';
@@ -167,6 +168,8 @@ mountGraphics(app, sockets);
 mountTextOverrides(app);
 // The info pages (/terms, /privacy, /fair-play) and the app's crash reports.
 mountSite(app);
+// The home page's live ticker: recent wins, tables starting, champions (public, cached 10 s).
+mountActivity(app, { monopoly: sockets.registry, cards: cards.registry, tournaments: tourneys.manager });
 
 app.get('/api/leaderboard', (_req, res) => {
   if (!isOn('leaderboard')) { res.status(404).json({ error: 'The leaderboard is switched off' }); return; }

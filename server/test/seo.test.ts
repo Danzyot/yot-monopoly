@@ -89,7 +89,7 @@ test('the game pages carry VideoGame data; the home page WebSite', () => {
   assert.match(home, /"@type":"WebSite"/);
   const cards = seo.headTags(routeMeta('/cards'), 'https://choggames.com');
   assert.match(cards, /"@type":"VideoGame"/);
-  assert.match(cards, /"name":"Chog Cards"/);
+  assert.match(cards, /"name":"Cards"/);
 });
 
 // ---- injecting into index.html --------------------------------------------------
@@ -128,7 +128,7 @@ test('renderIndex: the path never reaches the page unescaped', () => {
 
 test('renderIndex without markers still sets the title', () => {
   const { html } = seo.renderIndex('<head><title>Chog Games</title></head>', '/cards');
-  assert.match(html, /<title>Chog Cards · Chog Games<\/title>/);
+  assert.match(html, /<title>Cards · Chog Games<\/title>/);
 });
 
 test('siteOrigin takes a clean PUBLIC_URL and ignores junk', () => {
@@ -143,8 +143,8 @@ test('siteOrigin takes a clean PUBLIC_URL and ignores junk', () => {
 test('GET a page: its meta and status', async () => {
   for (const [path, status, title] of [
     ['/', 200, 'Chog Games: Monopoly, cards and poker with the Chog crew'],
-    ['/cards', 200, 'Chog Cards · Chog Games'],
-    ['/poker', 200, 'Chog Poker · Chog Games'],
+    ['/cards', 200, 'Cards · Chog Games'],
+    ['/poker', 200, 'Poker · Chog Games'],
     ['/monopoly', 200, 'Monopoly · Chog Games'],
     ['/characters', 200, 'Characters · Chog Games'],
     ['/tournaments', 200, 'Tournaments · Chog Games'],

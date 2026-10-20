@@ -49,7 +49,7 @@ interface Entry {
   game?: { name: string; genre: string[] };
 }
 
-const HOME_DESCRIPTION = 'Play Monopoly, Chog Cards and poker with the Chog crew. Open a table, share the code and play with friends in your browser. Free, nothing to download.';
+const HOME_DESCRIPTION = 'Play Monopoly, cards and poker with the Chog crew. Open a table, share the code and play with friends in your browser. Free, nothing to download.';
 
 export const ROUTES: Entry[] = [
   { pattern: '/', title: `${SITE_NAME}: Monopoly, cards and poker with the Chog crew`, description: HOME_DESCRIPTION, sitemap: true },
@@ -59,14 +59,14 @@ export const ROUTES: Entry[] = [
     game: { name: 'Chog Games Monopoly', genre: ['Board game', 'Family'] },
   },
   {
-    pattern: '/cards', name: 'Chog Cards', sitemap: true,
+    pattern: '/cards', name: 'Cards', sitemap: true,
     description: 'Match the colour or number, play your action cards and empty your hand first. A quick multiplayer card game with the Chog crew, in your browser.',
-    game: { name: 'Chog Cards', genre: ['Card game', 'Party'] },
+    game: { name: 'Cards', genre: ['Card game', 'Party'] },
   },
   {
-    pattern: '/poker', name: 'Chog Poker', sitemap: true,
+    pattern: '/poker', name: 'Poker', sitemap: true,
     description: 'Texas Hold\'em tournaments with the Chog crew. Play chips only: no real money, nothing to buy.',
-    game: { name: 'Chog Poker', genre: ['Card game', 'Poker'] },
+    game: { name: 'Poker', genre: ['Card game', 'Poker'] },
   },
   { pattern: '/tournaments', name: 'Tournaments', sitemap: true, description: 'Upcoming and finished Chog Games tournaments. Sign up, play your table and climb the bracket.' },
   { pattern: '/characters', name: 'Characters', sitemap: true, description: 'Meet the Chog crew: every character you can play as in Chog Games, with their outfits.' },
@@ -78,15 +78,15 @@ export const ROUTES: Entry[] = [
   { pattern: '/tournaments/new', name: 'New tournament', description: 'Set up a Chog Games tournament.', noindex: true },
   { pattern: '/tournaments/:id', name: 'Tournament', description: 'A Chog Games tournament: the tables, the standings and the results.' },
   { pattern: '/r/:code', name: 'Join the table', description: 'You are invited to a Monopoly table on Chog Games. Open the link to take a seat.', noindex: true },
-  { pattern: '/cards/r/:code', name: 'Join the table', description: 'You are invited to a Chog Cards table. Open the link to take a seat.', noindex: true },
+  { pattern: '/cards/r/:code', name: 'Join the table', description: 'You are invited to a Cards table. Open the link to take a seat.', noindex: true },
   { pattern: '/u/:id', name: 'Player profile', description: 'A Chog Games player: their results, favourite characters and recent games.', noindex: true },
   { pattern: '/wallet', name: 'Link your wallet', description: 'Link a wallet to show you hold a Chog Genesis.', noindex: true },
   { pattern: '/sso', name: 'Sign in', description: 'Sign in to Chog Games.', noindex: true },
   { pattern: '/admin/*', name: 'Dashboard', description: 'Chog Games operator dashboard.', noindex: true },
   // Pages other parts of the site may grow under these games.
   { pattern: '/monopoly/*', name: 'Monopoly', description: 'Monopoly on Chog Games.', noindex: true },
-  { pattern: '/cards/*', name: 'Chog Cards', description: 'Chog Cards on Chog Games.', noindex: true },
-  { pattern: '/poker/*', name: 'Chog Poker', description: 'Chog Poker on Chog Games.', noindex: true },
+  { pattern: '/cards/*', name: 'Cards', description: 'Cards on Chog Games.', noindex: true },
+  { pattern: '/poker/*', name: 'Poker', description: 'Poker on Chog Games.', noindex: true },
 ];
 
 const NOT_FOUND: Omit<RouteMeta, 'path'> = {
