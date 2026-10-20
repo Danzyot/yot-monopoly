@@ -24,6 +24,10 @@ material names are `chog:<key>` like every character's); aura and the
 Radioactive glow are runtime effects, not geometry.
 
     tools/blender/run.sh chog_traits.py [--preview out.png --tokens 1,186,1517 [--head] [--no-export]]
+                                        [--eyes-style refined|decal|bold|current] [--skull-style sculpted|painted|hybrid|current]
+
+The eyes and the Skull face come in versions (chog_faces.py); shared/chogs/face-style.json
+picks the ones built, the style flags override it for a run.
 
 `--preview` renders whole figures for real tokens (their look resolved by
 shared/chogs/traits.ts through chog_look.ts), one frame each, to compare with
@@ -40,9 +44,11 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy  # noqa: E402
 import bmesh  # noqa: E402
-from mathutils import Vector  # noqa: E402
+from mathutils import Matrix, Vector  # noqa: E402
 import blib  # noqa: E402
 import characters  # noqa: E402
+import chog_draw as draw  # noqa: E402
+import chog_faces  # noqa: E402
 import chog_wear  # noqa: E402
 import detailed  # noqa: E402
 from detailed import CHOG_EYE_AT, ChogFace, M, cyl, ell, loop, rbox, sheet, strand, torus  # noqa: E402
@@ -78,6 +84,34 @@ def materials():
     return mats
 
 
+# ---- styles ------------------------------------------------------------------------
+# The eyes and the Skull face come in versions (chog_faces.py); the build exports
+# one of each, the ones shared/chogs/face-style.json names (which the game also
+# reads, for the Skulls' bone colours), or per run --eyes-style / --skull-style
+# (previews). The node names are the same whichever is built, so switching is:
+# edit face-style.json, rerun this script.
+EYES_STYLES = ('current', 'refined', 'decal', 'bold')
+SKULL_STYLES = ('current', 'sculpted', 'painted', 'hybrid')
+with open(os.path.join(blib.REPO, 'shared', 'chogs', 'face-style.json')) as _f:
+    _style = json.load(_f)
+EYES_STYLE = _style['eyes']
+SKULL_STYLE = _style['skull']
+
+
+def configure(argv):
+    """Take --eyes-style / --skull-style from the command line."""
+    global EYES_STYLE, SKULL_STYLE
+    for flag, styles in (('--eyes-style', EYES_STYLES), ('--skull-style', SKULL_STYLES)):
+        if flag in argv:
+            v = argv[argv.index(flag) + 1]
+            if v not in styles:
+                raise SystemExit(f'{flag} {v}: one of {", ".join(styles)}')
+            if flag == '--eyes-style':
+                EYES_STYLE = v
+            else:
+                SKULL_STYLE = v
+
+
 # ---- placement helpers ----------------------------------------------------------
 
 def at(side, dx=0.0, dy=0.0, lift=-0.004):
@@ -109,23 +143,57 @@ def tear_drop(name, m, side, dx=0.012, dy=-0.03):
     return ell(name, (0, 0, 0), (0.0038, 0.0058, 0.003), m['c2'], parent=at(side, side * dx, dy, 0.002), seg=(10, 7))
 
 
+FACE = draw.FaceSurf(F)
+
+
+def ball(name, m, s, rx, ry, d=0.011, rim=0.0025, mat='white', dx=0.0, dy=0.0, lift=-0.004, seg=(24, 16)):
+    """A glossy eye (or a lens, a socket) of `mat` sunk into the face at eye `s`, ringed in ink where it comes out
+    of the face (`rim` wide outside that line; 0: no ring). Returns its pieces and its surface, for drawing on.
+
+    The ring is laid on the face along the very line the ball comes out of it, and what is drawn on the ball
+    (pupils, glints) is laid over it, so both eyes read alike from any angle: no outline or pupil is the sliver
+    left where two solids cross."""
+    G = at(s, dx, dy, lift)
+    B = draw.BallSurf(G, rx, ry, d)
+    out = [ell(f'{name}{s}', (0, 0, 0), (rx, ry, d), m[mat], parent=G, seg=seg)]
+    if rim:
+        pts = [p for p in draw.emergence(B, FACE) if p]
+        out.append(draw.outline_band(f'{name}Rim{s}', FACE, pts, rim * 1.5, rim, 0.0004, m['ink']))
+    return out, B
+
+
+def dot(name, B, mat, x, y, rx, ry, lift=0.0004, rot=0.0, clip=0.97):
+    """A pupil, iris or glint drawn on an eyeball B at (x, y) in its frame, cut to the ball."""
+    oval, rim = draw.ellipse(x, y, rx, ry, rot), draw.ellipse(0, 0, B.rx * clip, B.ry * clip)
+    return draw.region(name, B, lambda u, v: oval(u, v) and rim(u, v), (x, y), max(rx, ry) * 1.05, lift, mat, n=40, nr=3)
+
+
 # ---- eyes --------------------------------------------------------------------------
 
 def eyes_normal(m):
-    head = []
-    detailed.chog_eyes(CID, head, m, F, blink=False)
-    return head
+    """The base Chog's eyes (detailed.chog_eyes, whose blinking lids the game adds), drawn on the eyeball."""
+    rx, ry, rz = detailed.CHOG_EYE
+    out = []
+    for s in (-1, 1):
+        parts, B = ball(f'{CID}_Sclera', m, s, rx, ry, rz, rim=0.0022)
+        out += parts
+        out.append(dot(f'{CID}_Iris{s}', B, m['ink'], 0.0075, -0.001, 0.0205, 0.024))
+        out.append(dot(f'{CID}_Glint{s}', B, m['white'], 0.0005, 0.0095, 0.0068, 0.0068, lift=0.0009))
+        out.append(dot(f'{CID}_Glint2{s}', B, m['white'], 0.0155, -0.0105, 0.0029, 0.0029, lift=0.0009))
+        out.append(strand(f'{CID}_Lid{s}', [(-rx * 1.04, ry * 0.25, rz * 0.45), (-rx * 0.6, ry * 0.86, rz * 0.62), (0, ry * 1.04, rz * 0.62),
+                                            (rx * 0.6, ry * 0.88, rz * 0.62), (rx * 1.06, ry * 0.3, rz * 0.45)],
+                          0.0019, 0.0013, m['ink'], parent=B.G, ring=6, n=6))
+    return out
 
 
 def eyes_round(m, pupil=0.0135, rx=0.029, ry=0.030, glint=True):
     out = []
     for s in (-1, 1):
-        G = at(s)
-        out.append(ell(f'{CID}_RoundRim{s}', (0, 0, -0.0015), (rx + 0.0025, ry + 0.0025, 0.010), m['ink'], parent=G, seg=(24, 16)))
-        out.append(ell(f'{CID}_RoundWhite{s}', (0, 0, 0), (rx, ry, 0.011), m['white'], parent=G, seg=(24, 16)))
-        out.append(ell(f'{CID}_RoundPupil{s}', (0, -0.001, 0.0085), (pupil, pupil * 1.05, 0.004), m['ink'], parent=G, seg=(18, 12)))
+        parts, B = ball(f'{CID}_RoundWhite', m, s, rx, ry)
+        out += parts
+        out.append(dot(f'{CID}_RoundPupil{s}', B, m['ink'], 0, -0.001, pupil * 0.92, pupil * 0.97))
         if glint:
-            out.append(ell(f'{CID}_RoundGlint{s}', (-0.006, 0.008, 0.0125), (0.005, 0.005, 0.0018), m['white'], parent=G, seg=(10, 6)))
+            out.append(dot(f'{CID}_RoundGlint{s}', B, m['white'], -0.006, 0.008, 0.0048, 0.0048, lift=0.0009))
     return out
 
 
@@ -144,8 +212,8 @@ def eyes_round_tear(m):
 def eyes_teary(m):
     out = eyes_round(m, pupil=0.019)
     for s in (-1, 1):
-        G = at(s)
-        out.append(ell(f'{CID}_TearyGlint{s}', (0.009, -0.009, 0.0128), (0.0032, 0.0032, 0.0015), m['white'], parent=G, seg=(8, 6)))
+        B = draw.BallSurf(at(s), 0.029, 0.030, 0.011)
+        out.append(dot(f'{CID}_TearyGlint{s}', B, m['white'], 0.009, -0.009, 0.0031, 0.0031, lift=0.0009))
         out.append(tear_drop(f'{CID}_TearyDrop{s}', m, s, dx=-0.01, dy=-0.031))
     return out
 
@@ -184,10 +252,10 @@ def eyes_flat(m):
 def eyes_side(m, lid_y=0.017, lid_h=0.016, pupil_x=0.012, pupil=(0.011, 0.013), bags=False):
     out = []
     for s in (-1, 1):
-        G = at(s)
-        out.append(ell(f'{CID}_SideRim{s}', (0, 0, -0.0015), (0.0325, 0.0235, 0.010), m['ink'], parent=G, seg=(24, 14)))
-        out.append(ell(f'{CID}_SideWhite{s}', (0, 0, 0), (0.03, 0.021, 0.011), m['white'], parent=G, seg=(24, 14)))
-        out.append(ell(f'{CID}_SidePupil{s}', (pupil_x, -0.002, 0.0085), (pupil[0], pupil[1], 0.0045), m['ink'], parent=G, seg=(16, 10)))
+        parts, B = ball(f'{CID}_SideWhite', m, s, 0.03, 0.021, seg=(24, 14))
+        G = B.G
+        out += parts
+        out.append(dot(f'{CID}_SidePupil{s}', B, m['ink'], pupil_x, -0.002, pupil[0] * 0.93, pupil[1] * 0.93))
         # A straight heavy upper lid: a flat-bottomed block over the top of the white.
         out.append(rbox(f'{CID}_SideLid{s}', (0, lid_y, 0.009), (0.068, lid_h, 0.012), m['ink'], parent=G, bevel=0.003, segs=2))
         if bags:
@@ -203,10 +271,9 @@ def eyes_tired(m):
 def eyes_angry(m):
     out = []
     for s in (-1, 1):
-        G = at(s)
-        out.append(ell(f'{CID}_AngryRim{s}', (0, 0, -0.0015), (0.0305, 0.028, 0.010), m['ink'], parent=G, seg=(24, 14)))
-        out.append(ell(f'{CID}_AngryWhite{s}', (0, 0, 0), (0.028, 0.0255, 0.011), m['white'], parent=G, seg=(24, 14)))
-        out.append(ell(f'{CID}_AngryPupil{s}', (s * 0.002, -0.003, 0.0085), (0.012, 0.014, 0.0045), m['ink'], parent=G, seg=(16, 10)))
+        parts, B = ball(f'{CID}_AngryWhite', m, s, 0.028, 0.0255, seg=(24, 14))
+        out += parts
+        out.append(dot(f'{CID}_AngryPupil{s}', B, m['ink'], s * 0.002, -0.003, 0.0112, 0.013))
         # The brow slants down toward the nose.
         out.append(line(f'{CID}_Brow{s}', [(s * (EYE_X + 0.03), EYE_Y + 0.034), (s * (EYE_X + 0.008), EYE_Y + 0.026), (s * (EYE_X - 0.014), EYE_Y + 0.012)],
                         0.0042, m['ink'], lift=0.002, r1=0.0034))
@@ -216,10 +283,9 @@ def eyes_angry(m):
 def eyes_base(m):
     out = []
     for s in (-1, 1):
-        G = at(s)
-        out.append(ell(f'{CID}_BaseRim{s}', (0, 0, -0.0015), (0.0325, 0.0165, 0.010), m['ink'], parent=G, seg=(24, 12)))
-        out.append(ell(f'{CID}_BaseWhite{s}', (0, 0, 0), (0.03, 0.014, 0.011), m['white'], parent=G, seg=(24, 12)))
-        out.append(ell(f'{CID}_BasePupil{s}', (0.004, -0.001, 0.0085), (0.011, 0.012, 0.0045), m['ink'], parent=G, seg=(16, 10)))
+        parts, B = ball(f'{CID}_BaseWhite', m, s, 0.03, 0.014, seg=(24, 12))
+        out += parts
+        out.append(dot(f'{CID}_BasePupil{s}', B, m['ink'], 0.004, -0.001, 0.0102, 0.0112))
         # A thick lid line, higher at the outer corner: the determined look.
         out.append(line(f'{CID}_BaseLid{s}', [(s * (EYE_X + 0.03), EYE_Y + 0.013), (s * EYE_X, EYE_Y + 0.011), (s * (EYE_X - 0.03), EYE_Y + 0.004)],
                         0.0032, m['ink'], lift=0.0025, r1=0.0024))
@@ -229,10 +295,9 @@ def eyes_base(m):
 def eyes_vertical(m):
     out = []
     for s in (-1, 1):
-        G = at(s)
-        out.append(ell(f'{CID}_VertRim{s}', (0, 0, -0.0015), (0.021, 0.033, 0.010), m['ink'], parent=G, seg=(18, 16)))
-        out.append(ell(f'{CID}_VertWhite{s}', (0, 0, 0), (0.019, 0.031, 0.011), m['white'], parent=G, seg=(18, 16)))
-        out.append(ell(f'{CID}_VertSlit{s}', (0, -0.001, 0.0085), (0.0055, 0.022, 0.0045), m['ink'], parent=G, seg=(10, 14)))
+        parts, B = ball(f'{CID}_VertWhite', m, s, 0.019, 0.031, rim=0.0022, seg=(18, 16))
+        out += parts
+        out.append(dot(f'{CID}_VertSlit{s}', B, m['ink'], 0, -0.001, 0.0052, 0.0205))
     return out
 
 
@@ -252,7 +317,8 @@ def eyes_heart(m):
         for k in (-1, 1):
             out.append(ell(f'{CID}_HeartLobe{s}{k}', (k * 0.016, 0.011, 0), (0.0185, 0.017, 0.008), m['c1'], parent=G, seg=(16, 10)))
         out.append(rbox(f'{CID}_HeartTip{s}', (0, -0.007, -0.001), (0.037, 0.037, 0.012), m['c1'], r=(0, 0, math.pi / 4), parent=G, bevel=0.005, segs=2))
-        out.append(ell(f'{CID}_HeartGlint{s}', (-0.018, 0.017, 0.0065), (0.0045, 0.0045, 0.0015), m['white'], parent=G, seg=(8, 6)))
+        lobe = draw.BallSurf(G @ Matrix.Translation((-0.016, 0.011, 0)), 0.0185, 0.017, 0.008)
+        out.append(dot(f'{CID}_HeartGlint{s}', lobe, m['white'], -0.002, 0.006, 0.0042, 0.0042))
     return out
 
 
@@ -260,9 +326,7 @@ def eyes_laser(m):
     """Glowing discs for eyes; the beams are a node of their own (laser_beams)."""
     out = []
     for s in (-1, 1):
-        G = at(s, lift=0.0)
-        out.append(ell(f'{CID}_LaserRim{s}', (0, 0, 0), (0.0245, 0.0245, 0.005), m['ink'], parent=G, seg=(20, 12)))
-        out.append(ell(f'{CID}_LaserEye{s}', (0, 0, 0.002), (0.0205, 0.0205, 0.0065), m['glow'], parent=G, seg=(20, 12)))
+        out += ball(f'{CID}_LaserEye', m, s, 0.0205, 0.0205, 0.0065, rim=0.004, mat='glow', lift=0.002, seg=(20, 12))[0]
     return out
 
 
@@ -366,12 +430,11 @@ def eyes_smirk(m):
     """Smirk: a big pupil rolled up toward his left under a heavy arched lid, the white a crescent below it."""
     out = []
     for s in (-1, 1):
-        G = at(s)
         x = s * EYE_X
-        out.append(ell(f'{CID}_SmirkRim{s}', (0, 0, -0.0015), (0.0315, 0.027, 0.010), m['ink'], parent=G, seg=(24, 14)))
-        out.append(ell(f'{CID}_SmirkWhite{s}', (0, 0, 0), (0.029, 0.0245, 0.011), m['white'], parent=G, seg=(24, 14)))
-        out.append(ell(f'{CID}_SmirkPupil{s}', (0.0085, 0.006, 0.0085), (0.0195, 0.0185, 0.0045), m['ink'], parent=G, seg=(18, 12)))
-        out.append(ell(f'{CID}_SmirkGlint{s}', (0.0135, 0.0125, 0.0125), (0.0058, 0.0044, 0.0018), m['white'], parent=G, r=(0, 0, 0.5), seg=(10, 6)))
+        parts, B = ball(f'{CID}_SmirkWhite', m, s, 0.029, 0.0245, seg=(24, 14))
+        out += parts
+        out.append(dot(f'{CID}_SmirkPupil{s}', B, m['ink'], 0.0085, 0.006, 0.0185, 0.0175))
+        out.append(dot(f'{CID}_SmirkGlint{s}', B, m['white'], 0.0135, 0.0125, 0.0056, 0.0042, lift=0.0009, rot=0.5))
         # The lid: thick over the top, thinning down to the corners.
         out.append(line(f'{CID}_SmirkLid{s}', [(x - 0.034, EYE_Y + 0.006), (x - 0.02, EYE_Y + 0.024), (x, EYE_Y + 0.0305),
                                                (x + 0.02, EYE_Y + 0.025), (x + 0.035, EYE_Y + 0.008)], 0.0046, m['ink'], lift=0.002, r1=0.0022))
@@ -382,11 +445,10 @@ def eyes_frog(m):
     """Frog: big bulging white eyes ringed in ink, a wide oval pupil in each with a glint."""
     out = []
     for s in (-1, 1):
-        G = at(s, lift=0.002)
-        out.append(ell(f'{CID}_FrogRim{s}', (0, 0, -0.002), (0.0345, 0.036, 0.016), m['ink'], parent=G, seg=(26, 16)))
-        out.append(ell(f'{CID}_FrogWhite{s}', (0, 0, 0), (0.032, 0.0335, 0.018), m['white'], parent=G, seg=(26, 16)))
-        out.append(ell(f'{CID}_FrogPupil{s}', (0.001, -0.003, 0.013), (0.0195, 0.0145, 0.0065), m['ink'], parent=G, seg=(18, 12)))
-        out.append(ell(f'{CID}_FrogGlint{s}', (-0.0075, 0.0035, 0.0196), (0.0055, 0.0038, 0.002), m['white'], parent=G, seg=(10, 6)))
+        parts, B = ball(f'{CID}_FrogWhite', m, s, 0.032, 0.0335, 0.018, lift=0.002, seg=(26, 16))
+        out += parts
+        out.append(dot(f'{CID}_FrogPupil{s}', B, m['ink'], 0.001, -0.003, 0.0185, 0.0138))
+        out.append(dot(f'{CID}_FrogGlint{s}', B, m['white'], -0.0075, 0.0035, 0.0053, 0.0037, lift=0.0009))
     return out
 
 
@@ -406,10 +468,10 @@ def eyes_clown(m, mix=False):
     for s in (-1, 1):
         x = s * EYE_X
         out.append(face_paint(f'{CID}_ClownPaint{s}', m, 'c1' if mix and s < 0 else 'glass', s))
-        G = at(s, lift=0.001)
-        out.append(ell(f'{CID}_ClownEye{s}', (0, -0.002, 0), (0.019, 0.0235, 0.0085), m['ink'], parent=G, seg=(20, 14)))
-        out.append(ell(f'{CID}_ClownGlint{s}', (-0.006, 0.006, 0.0075), (0.0045, 0.0062, 0.0018), m['white'], parent=G, r=(0, 0, -0.3), seg=(10, 6)))
-        out.append(ell(f'{CID}_ClownGlint2{s}', (0.005, -0.011, 0.0072), (0.0026, 0.0026, 0.0015), m['white'], parent=G, seg=(8, 6)))
+        parts, B = ball(f'{CID}_ClownEye', m, s, 0.019, 0.0235, 0.0085, rim=0, mat='ink', dy=-0.002, lift=0.001, seg=(20, 14))
+        out += parts
+        out.append(dot(f'{CID}_ClownGlint{s}', B, m['white'], -0.006, 0.008, 0.0044, 0.006, rot=-0.3))
+        out.append(dot(f'{CID}_ClownGlint2{s}', B, m['white'], 0.005, -0.009, 0.0025, 0.0025))
         if mix:
             lid = [(s * (EYE_X + 0.033), EYE_Y + 0.031), (x + s * 0.012, EYE_Y + 0.026), (x - s * 0.006, EYE_Y + 0.021), (s * (EYE_X - 0.026), EYE_Y + 0.009)]
         else:
@@ -426,8 +488,8 @@ def eyes_worried(m):
     """Worried: big round eyes with wide pupils and two glints each, the lids slanting up toward the nose."""
     out = eyes_round(m, pupil=0.021, rx=0.029, ry=0.031)
     for s in (-1, 1):
-        G = at(s)
-        out.append(ell(f'{CID}_WorriedGlint{s}', (0.008, -0.009, 0.0128), (0.003, 0.003, 0.0015), m['white'], parent=G, seg=(8, 6)))
+        B = draw.BallSurf(at(s), 0.029, 0.031, 0.011)
+        out.append(dot(f'{CID}_WorriedGlint{s}', B, m['white'], 0.008, -0.009, 0.0029, 0.0029, lift=0.0009))
         out.append(line(f'{CID}_WorriedLid{s}', [(s * (EYE_X + 0.033), EYE_Y + 0.017), (s * (EYE_X + 0.012), EYE_Y + 0.029),
                                                  (s * (EYE_X - 0.01), EYE_Y + 0.037), (s * (EYE_X - 0.027), EYE_Y + 0.041)],
                         0.0042, m['ink'], lift=0.003, r1=0.0026))
@@ -438,9 +500,20 @@ def eyes_up(m):
     """Up: big glossy black eyes, a white half-moon of light across the top of each."""
     out = []
     for s in (-1, 1):
-        G = at(s)
-        out.append(ell(f'{CID}_UpEye{s}', (0, 0, 0), (0.0285, 0.031, 0.011), m['ink'], parent=G, seg=(24, 16)))
-        out.append(ell(f'{CID}_UpShine{s}', (-0.004, 0.0145, 0.0068), (0.0165, 0.0095, 0.004), m['white'], parent=G, r=(0, 0, -0.25), seg=(16, 10)))
+        parts, B = ball(f'{CID}_UpEye', m, s, 0.0285, 0.031, rim=0, mat='ink')
+        out += parts
+        out.append(dot(f'{CID}_UpShine{s}', B, m['white'], -0.004, 0.0145, 0.016, 0.0092, rot=-0.25))
+    return out
+
+
+def eyes_derp(m):
+    """Retard (in the drawn eye versions; today's build maps it to 3D glasses): big round eyes, a small pupil in
+    each looking off to its own side."""
+    out = []
+    for s in (-1, 1):
+        parts, B = ball(f'{CID}_DerpWhite', m, s, 0.031, 0.033)
+        out += parts
+        out.append(dot(f'{CID}_DerpPupil{s}', B, m['ink'], s * 0.012, 0.001, 0.0078, 0.0095))
     return out
 
 
@@ -513,7 +586,7 @@ EYES = {
     'vertical': eyes_vertical, 'base': eyes_base, 'xd': eyes_xd, 'animeGlass': eyes_anime_glass, 'retroGlass': eyes_retro_glass,
     'btcGlass': eyes_btc_glass, 'glasses3d': eyes_glasses_3d, 'shades': eyes_shades, 'visor': eyes_visor, 'goggles': eyes_goggles,
     'smirk': eyes_smirk, 'frog': eyes_frog, 'clown': eyes_clown, 'clownMix': eyes_clown_mix, 'worried': eyes_worried, 'up': eyes_up,
-    'vrModern': eyes_vr_modern, 'vrClassic': eyes_vr_classic, 'viper': eyes_viper,
+    'vrModern': eyes_vr_modern, 'vrClassic': eyes_vr_classic, 'viper': eyes_viper, 'derp': eyes_derp,
 }
 
 
@@ -645,7 +718,12 @@ def head_skull(m):
     head = [F.build(f'{CID}_SkullBone', m['skin'])]
     head.append(ell(f'{CID}_SkullCranium', (0, 0.02, -0.045), (0.114, 0.12, 0.11), m['skin'], seg=(36, 24), fuse=True))
     for s in (-1, 1):
-        head.append(ell(f'{CID}_Socket{s}', (0, 0, 0), (0.035, 0.036, 0.014), m['ink'], parent=at(s, lift=-0.009), seg=(24, 16)))
+        if EYES_STYLE == 'current':
+            head.append(ell(f'{CID}_Socket{s}', (0, 0, 0), (0.035, 0.036, 0.014), m['ink'], parent=at(s, lift=-0.009), seg=(24, 16)))
+        else:
+            # The drawn eyes lie close on the face: the sockets are drawn under them instead of standing out over them.
+            head.append(draw.oval(f'{CID}_Socket{s}', FACE, s * EYE_X, EYE_Y, 0.033, 0.034, 0.0002, m['ink'], n=48))
+            head.append(draw.oval(f'{CID}_SocketFloor{s}', FACE, s * EYE_X, EYE_Y - 0.0075, 0.031, 0.029, 0.00045, m['skin'], n=48))
     head.append(ell(f'{CID}_Nasal', (0, 0, 0), (0.011, 0.014, 0.006), m['ink'], parent=on(0, -0.0605, -0.003), seg=(14, 10)))
     G = on(0, -0.0855, 0.002)
     head.append(rbox(f'{CID}_Teeth', (0, 0, 0), (0.06, 0.017, 0.008), m['white'], parent=G, bevel=0.0035, segs=3))
@@ -677,30 +755,38 @@ def assemble(name, objs):
     return blib.join(pieces + loose, name)
 
 
-def build(m):
-    nodes = {'HeadBare': assemble(f'{CID}_HeadBare', head_bare(m)), 'HeadSkull': assemble(f'{CID}_HeadSkull', head_skull(m))}
+def part_builders():
+    """Every node of the traits file: its key (the node name less `chog_`) -> a function building it from the materials."""
+    skull = head_skull if SKULL_STYLE == 'current' else lambda m: chog_faces.skull(SKULL_STYLE, m)
+    fns = {'HeadBare': lambda m: assemble(f'{CID}_HeadBare', head_bare(m)), 'HeadSkull': lambda m: assemble(f'{CID}_HeadSkull', skull(m))}
     for vid, fn in EYES.items():
-        nodes[f'Eyes_{vid}'] = assemble(f'{CID}_Eyes_{vid}', fn(m))
-    nodes['LaserBeams'] = assemble(f'{CID}_LaserBeams', laser_beams(m))
+        fn = (EYES_STYLE != 'current' and chog_faces.eyes(EYES_STYLE, vid)) or fn
+        fns[f'Eyes_{vid}'] = lambda m, vid=vid, fn=fn: assemble(f'{CID}_Eyes_{vid}', fn(m))
+    fns['LaserBeams'] = lambda m: assemble(f'{CID}_LaserBeams', laser_beams(m))
     for vid, fn in MOUTHS.items():
-        nodes[f'Mouth_{vid}'] = assemble(f'{CID}_Mouth_{vid}', fn(m))
+        fns[f'Mouth_{vid}'] = lambda m, vid=vid, fn=fn: assemble(f'{CID}_Mouth_{vid}', fn(m))
     for trim in chog_wear.TRIMS:
-        nodes[f'Hair_{trim}'] = assemble(f'{CID}_Hair_{trim}', chog_wear.hair(m, trim))
+        fns[f'Hair_{trim}'] = lambda m, trim=trim: assemble(f'{CID}_Hair_{trim}', chog_wear.hair(m, trim))
     for shape, fn in {**chog_wear.HATS, **chog_wear.HOODS}.items():
-        nodes[f'Hat_{shape}'] = chog_wear.assemble(f'{CID}_Hat_{shape}', fn(m))
-    nodes['BrowBeam'] = chog_wear.assemble(f'{CID}_BrowBeam', chog_wear.brow_beam(m))
+        fns[f'Hat_{shape}'] = lambda m, shape=shape, fn=fn: chog_wear.assemble(f'{CID}_Hat_{shape}', fn(m))
+    fns['BrowBeam'] = lambda m: chog_wear.assemble(f'{CID}_BrowBeam', chog_wear.brow_beam(m))
     for shape, fn in chog_wear.WEARS.items():
-        nodes[f'Wear_{shape}'] = chog_wear.assemble(f'{CID}_Wear_{shape}', fn(m))
+        fns[f'Wear_{shape}'] = lambda m, shape=shape, fn=fn: chog_wear.assemble(f'{CID}_Wear_{shape}', fn(m))
     for pid, fn in chog_wear.PROPS.items():
-        nodes[f'Prop_{pid}'] = chog_wear.assemble(f'{CID}_Prop_{pid}', fn(m))
-    return nodes
+        fns[f'Prop_{pid}'] = lambda m, pid=pid, fn=fn: chog_wear.assemble(f'{CID}_Prop_{pid}', fn(m))
+    return fns
+
+
+def build(m):
+    return {key: fn(m) for key, fn in part_builders().items()}
 
 
 # ---- preview -------------------------------------------------------------------------
 
 def looks_for(ids):
     out = os.path.join(tempfile.gettempdir(), 'yot-chog-looks.json')
-    subprocess.run(['node', '--import', 'tsx', os.path.join(blib.HERE, 'chog_look.ts'), out, *map(str, ids)], cwd=blib.REPO, check=True)
+    subprocess.run(['node', '--import', 'tsx', os.path.join(blib.HERE, 'chog_look.ts'), out, *map(str, ids)], cwd=blib.REPO, check=True,
+                   env={**os.environ, 'CHOG_EYES_STYLE': EYES_STYLE, 'CHOG_SKULL_STYLE': SKULL_STYLE})
     with open(out) as f:
         return json.load(f)
 
@@ -801,6 +887,7 @@ def preview(nodes, m, ids, path, close=False):
 
 
 def main():
+    configure(sys.argv)
     blib.reset()
     m = materials()
     nodes = build(m)

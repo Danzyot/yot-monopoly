@@ -14,6 +14,7 @@
 // of the token's picture on OpenSea's CDN (see chogArtUrl).
 
 import TOKENS from './tokens.json' with { type: 'json' };
+import FACE_STYLE from './face-style.json' with { type: 'json' };
 import {
   ACCESSORY_MAP, BODY_MAP, HAT_MANE, HEAD_MAP,
   type ChogHatShape, type ChogMane, type ChogPaint, type ChogPropId, type ChogWearShape,
@@ -109,6 +110,29 @@ export const SKIN_COLORS: Record<ChogSkin, { mane: string; face: string }> = {
   Grey: { mane: '#8a8c95', face: '#9c9ea6' },
 };
 
+// ---- face versions -------------------------------------------------------------
+// The eyes and the Skull face come in versions (tools/blender/chog_faces.py);
+// face-style.json picks the one built into the traits file and shown.
+
+export type ChogEyesStyle = 'current' | 'refined' | 'decal' | 'bold';
+export type ChogSkullStyle = 'current' | 'sculpted' | 'painted' | 'hybrid';
+export interface ChogFaceStyle { eyes: ChogEyesStyle; skull: ChogSkullStyle }
+export const CHOG_FACE_STYLE = FACE_STYLE as ChogFaceStyle;
+
+/** A Skull's bone per Skin, sampled from the art (the newer skull versions; `current` derives it from the mane). */
+export const SKULL_BONE: Partial<Record<ChogSkin, string>> = {
+  White: '#f2f2f2', Red: '#c05854', Grey: '#999ca4', Metal: '#6a718e', Beige: '#efe7d8', Purple: '#9d81dc', Blue: '#65adcd',
+  Black: '#3a3944', Yellow: '#efde7b', Jade: '#85d6a4',
+};
+
+/** The colour of a Skull's bone. */
+export function skullBone(skin: ChogSkin | null, style: ChogSkullStyle = CHOG_FACE_STYLE.skull): string {
+  if (style !== 'current' && skin && SKULL_BONE[skin]) return SKULL_BONE[skin]!;
+  const sc = skin ? SKIN_COLORS[skin] : SKIN_COLORS.Origin;
+  // Today's: bone in the skin's colour (the common skins' cream face does not apply to it).
+  return skin && ['Pink', 'Origin', 'Red', 'Yellow', 'Black'].includes(skin) ? mix(sc.mane, '#ffffff', 0.35) : sc.face;
+}
+
 export const BACKGROUND_COLORS: Record<ChogBackground, string> = {
   'Light Purple': '#eaa2f6', Lemon: '#f6f6a2', Aqua: '#96eaf6', Mon: '#96aef6', Sunlight: '#ead296', 'Lemon Yellow': '#f6f696',
   Rosie: '#f6a2c6', 'Coral Pink': '#ea9696', Mint: '#a2f6ba', 'Peach Pink': '#f6a296', 'Light Magenta': '#f696f6',
@@ -127,24 +151,29 @@ export type ChogEyesVariant =
   | 'normal' | 'happy' | 'side' | 'laser' | 'dead' | 'round' | 'roundSmall' | 'heart' | 'roundCrying' | 'roundTear'
   | 'closedCrying' | 'teary' | 'tired' | 'angry' | 'flat' | 'vertical' | 'base' | 'xd'
   | 'animeGlass' | 'retroGlass' | 'btcGlass' | 'glasses3d' | 'shades' | 'visor' | 'goggles'
-  | 'smirk' | 'frog' | 'clown' | 'clownMix' | 'worried' | 'up' | 'vrModern' | 'vrClassic' | 'viper';
+  | 'smirk' | 'frog' | 'clown' | 'clownMix' | 'worried' | 'up' | 'vrModern' | 'vrClassic' | 'viper' | 'derp';
 
 export const CHOG_EYES_VARIANTS: ChogEyesVariant[] = [
   'normal', 'happy', 'side', 'laser', 'dead', 'round', 'roundSmall', 'heart', 'roundCrying', 'roundTear',
   'closedCrying', 'teary', 'tired', 'angry', 'flat', 'vertical', 'base', 'xd',
   'animeGlass', 'retroGlass', 'btcGlass', 'glasses3d', 'shades', 'visor', 'goggles',
-  'smirk', 'frog', 'clown', 'clownMix', 'worried', 'up', 'vrModern', 'vrClassic', 'viper',
+  'smirk', 'frog', 'clown', 'clownMix', 'worried', 'up', 'vrModern', 'vrClassic', 'viper', 'derp',
 ];
 
 interface EyesSpec {
   id: ChogEyesVariant;
   /** Laser beam colour (the `glow` material; also a VR headset's neon rim). */
   laser?: string;
-  /** Lens / visor colour (the `glass` material; also a clown's face paint). */
+  /** Lens / visor colour (the `glass` material; also a clown's face paint and a smirk's iris). */
   lens?: string;
   /** Not quite this: the nearest part that exists (none left, but a new value would say so). */
   fallback?: true;
+  /** The part the drawn eye versions use instead (face-style.json eyes other than `current`). */
+  drawn?: ChogEyesVariant;
 }
+
+/** Retard: big round eyes, their little pupils looking two ways (today's build shows 3D glasses). */
+const retard: EyesSpec = { id: 'glasses3d', lens: '#3a86ff', drawn: 'derp' };
 
 const laser = (c: string): EyesSpec => ({ id: 'laser', laser: c });
 const visor = (c: string): EyesSpec => ({ id: 'visor', lens: c });
@@ -158,16 +187,16 @@ export const EYES_MAP: Record<string, EyesSpec> = {
   'Closed Eye Crying': { id: 'closedCrying' }, 'Tired': { id: 'tired' }, 'Retro Glass': { id: 'retroGlass', lens: '#a9dcff' },
   'Teary': { id: 'teary' }, 'Sunset visor': visor('#ff5a3a'), 'Plasma visor': visor('#2fd0c4'), 'Angry': { id: 'angry' },
   'Flat': { id: 'flat' }, 'Vertical': { id: 'vertical' }, 'Base': { id: 'base' }, 'MOG': { id: 'goggles', lens: '#ffb03a' },
-  'Smirk': { id: 'smirk' }, 'Frog': { id: 'frog' }, 'Clown Eye': { id: 'clown', lens: '#2a4cf0' },
+  'Smirk': { id: 'smirk', lens: '#17171f' }, 'Frog': { id: 'frog' }, 'Clown Eye': { id: 'clown', lens: '#2a4cf0' },
   'Modern VR': { id: 'vrModern', lens: '#121219', laser: '#1a9cff' }, 'Chog Viper': { id: 'viper', lens: '#167ee0' },
   'Classic VR': { id: 'vrClassic', lens: '#141419' }, 'Clown Eye Mix': { id: 'clownMix', lens: '#2a4cf0' }, 'XD': { id: 'xd' },
-  'Retard': { id: 'glasses3d', lens: '#3a86ff' }, '3D Glass': { id: 'glasses3d', lens: '#3a86ff' }, 'Worried': { id: 'worried' },
+  'Retard': retard, '3D Glass': { id: 'glasses3d', lens: '#3a86ff' }, 'Worried': { id: 'worried' },
   'BTC Glass': { id: 'btcGlass', lens: '#f4a21a' }, 'cyan laser': laser('#3ae8ff'), 'Thug': { id: 'shades' },
-  'Red Round Eye': { id: 'roundSmall' }, 'Green Side Eye': { id: 'side' }, 'Blue Retard': { id: 'glasses3d', lens: '#3a86ff' },
-  'Red Flat': { id: 'flat' }, 'Up': { id: 'up' }, 'Green Happy': { id: 'happy' }, 'Mixed Retard': { id: 'glasses3d', lens: '#3a86ff' },
+  'Red Round Eye': { id: 'roundSmall' }, 'Green Side Eye': { id: 'side' }, 'Blue Retard': retard,
+  'Red Flat': { id: 'flat' }, 'Up': { id: 'up' }, 'Green Happy': { id: 'happy' }, 'Mixed Retard': retard,
   'Mixed Happy': { id: 'happy' }, 'Blue Round Eye': { id: 'roundSmall' }, 'Normal': { id: 'normal' }, 'Mixed Side Eye': { id: 'side' },
-  'Blue Smirk': { id: 'smirk' }, 'Mixed Round Eye': { id: 'roundSmall' }, 'Blue Happy': { id: 'happy' }, 'Red Retard': { id: 'glasses3d', lens: '#3a86ff' },
-  'Blue Flat': { id: 'flat' }, 'Green Round Eye': { id: 'roundSmall' }, 'Green Retard': { id: 'glasses3d', lens: '#3a86ff' }, 'Green Smirk': { id: 'smirk' },
+  'Blue Smirk': { id: 'smirk', lens: '#2f6ff0' }, 'Mixed Round Eye': { id: 'roundSmall' }, 'Blue Happy': { id: 'happy' }, 'Red Retard': retard,
+  'Blue Flat': { id: 'flat' }, 'Green Round Eye': { id: 'roundSmall' }, 'Green Retard': retard, 'Green Smirk': { id: 'smirk', lens: '#2fb64a' },
 };
 
 export type ChogMouthVariant =
@@ -265,7 +294,8 @@ function mix(a: string, b: string, t: number): string {
 /** The base Chog's own colours (looks.tsx), for the 1:1s and anything unresolved. */
 const ORIGIN_SKIN = SKIN_COLORS.Origin;
 
-export function chogLook(tokenId: number): ChogLook | null {
+/** `style`: the face versions to resolve for (default: the ones built, face-style.json). */
+export function chogLook(tokenId: number, style: ChogFaceStyle = CHOG_FACE_STYLE): ChogLook | null {
   const t = traitsOf(tokenId);
   if (!t) return null;
   const fallbacks: string[] = [];
@@ -274,8 +304,7 @@ export function chogLook(tokenId: number): ChogLook | null {
   if (!legendary && !skin) fallbacks.push(`Skin: ${t.Skin ?? 'none'}`);
   const form: ChogLook['form'] = t.Form === 'Skull' ? 'skull' : 'chog';
   const sc = skin ? SKIN_COLORS[skin] : ORIGIN_SKIN;
-  // A skull is bone in the skin's colour (the common skins' cream face does not apply to it).
-  const face = form === 'skull' && skin && ['Pink', 'Origin', 'Red', 'Yellow', 'Black'].includes(skin) ? mix(sc.mane, '#ffffff', 0.35) : sc.face;
+  const face = form === 'skull' ? skullBone(skin, style.skull) : sc.face;
 
   let eyes: EyesSpec = { id: 'normal' };
   if (t.Eyes) {
@@ -284,6 +313,7 @@ export function chogLook(tokenId: number): ChogLook | null {
     else fallbacks.push(`Eyes: ${t.Eyes}`);
     if (spec?.fallback) fallbacks.push(`Eyes: ${t.Eyes}`);
   }
+  const eyesId = style.eyes !== 'current' && eyes.drawn ? eyes.drawn : eyes.id;
   let mouth: ChogMouthVariant | null = null;
   if (t.Mouth) {
     mouth = MOUTH_MAP[t.Mouth] ?? null;
@@ -315,8 +345,8 @@ export function chogLook(tokenId: number): ChogLook | null {
     form,
     base: t.Base === 'Radioactive' ? 'radioactive' : 'origin',
     skin,
-    eyes: eyes.id,
-    lids: eyes.id === 'normal' && form === 'chog',
+    eyes: eyesId,
+    lids: eyesId === 'normal' && form === 'chog',
     mouth,
     aura,
     background,
