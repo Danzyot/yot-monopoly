@@ -7,6 +7,7 @@ import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { api } from '../api.ts';
 import { CARDS_GAME_NAME, LAST_CARD_CALL } from '../../../shared/cards/meta.ts';
+import { BRAND } from '../../../shared/brand.ts';
 import type { Card } from '../../../shared/cards/deck.ts';
 import { cardsCall, chogPref, useCardsRoomList } from './net.ts';
 import { CardBack, CardFace } from './CardFace.tsx';
@@ -40,7 +41,10 @@ export default function CardsHome() {
   const [leaders, setLeaders] = useState<Leader[]>([]);
   const canCreate = !!profile && (config.features.publicRooms || profile.isAdmin);
 
-  useEffect(() => { document.title = CARDS_GAME_NAME; }, []);
+  useEffect(() => {
+    document.title = CARDS_GAME_NAME;
+    return () => { document.title = BRAND.name; };
+  }, []);
   useEffect(() => {
     if (!config.features.leaderboard) return;
     api<{ leaders: Leader[] }>('/api/cards/leaderboard').then(r => setLeaders(r.leaders.slice(0, 5))).catch(() => {});
@@ -142,7 +146,7 @@ export default function CardsHome() {
             </ol>
           </section>
         )}
-        <p className="ch-foot muted small"><Link to="/">← Back to Monopoly</Link></p>
+        <p className="ch-foot muted small"><Link to="/">← All {BRAND.name}</Link></p>
       </div>
     </div>
   );

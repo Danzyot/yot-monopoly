@@ -12,6 +12,8 @@ import { TextEditHost } from './textEdit.tsx';
 // Only the home page ships in the first download; every other page (and
 // three.js with it) loads when it is first opened.
 const RoomPage = lazy(() => import('./pages/RoomPage.tsx'));
+// Monopoly's own home (the hub at / is about all three games).
+const MonopolyHome = lazy(() => import('./pages/MonopolyHome.tsx'));
 const Gallery = lazy(() => import('./pages/Gallery.tsx'));
 const Leaderboard = lazy(() => import('./pages/Leaderboard.tsx'));
 const Profile = lazy(() => import('./pages/Profile.tsx'));
@@ -40,6 +42,7 @@ function Shell() {
       <Suspense fallback={<PageLoading />}>
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/monopoly" element={<MonopolyHome />} />
         <Route path="/r/:code" element={<RoomPage />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/characters" element={<Gallery />} />

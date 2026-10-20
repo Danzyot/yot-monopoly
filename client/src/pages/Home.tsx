@@ -1,17 +1,14 @@
-import { Suspense, lazy, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
-import { call, useConnected, useRoomList } from '../net.ts';
+import { useConnected, useRoomList } from '../net.ts';
 import { getToken } from '../api.ts';
-import { THEMES, getTheme, resolveTheme } from '../../../shared/themes.ts';
-import { MAPS, getMap } from '../../../shared/maps.ts';
 import { BRAND, GAMES } from '../../../shared/brand.ts';
 import { CARDS_MAX_PLAYERS, CARDS_MIN_PLAYERS } from '../../../shared/cards/meta.ts';
 import type { CharacterDef, CharacterId } from '../../../shared/characters.ts';
-import { CHOG_SEASON, SEASON_THEME_ID, availableCharacters, mapThumbUrl, themeAvailable } from '../../../shared/season.ts';
+import { CHOG_SEASON, availableCharacters } from '../../../shared/season.ts';
 import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
-import { requirementBadge, requirementSentence } from '../community.tsx';
 import { useCardsRoomList } from '../cards/net.ts';
 import { goToPoker, openPoker, pokerTarget } from '../pokerLink.ts';
 import { POKER_URL } from '../../../shared/brand.ts';
@@ -69,31 +66,18 @@ function HowToButton({ label }: { label: string }) {
 
 export default function Home() {
   const nav = useNavigate();
-  const { profile, config, ready, openSignIn } = useAuth();
+  const { profile, ready } = useAuth();
   const [code, setCode] = useState('');
   const [cardsCode, setCardsCode] = useState('');
   const [pokerCode, setPokerCode] = useState('');
-  const [busy, setBusy] = useState(false);
   const rooms = useRoomList();
   const cardTables = useCardsRoomList();
   const connected = useConnected();
-  const canCreate = !!profile && (config.features.publicRooms || profile.isAdmin);
-  // While a stored sign-in is still being checked, show the button it will most
-  // likely turn into, so the hero does not change shape a moment after it appears.
+  // While a stored sign-in is still being checked, show the line it will most
+  // likely turn into, so the poker card does not change a moment after it appears.
   const checking = !ready && !!getToken();
-
-  const create = async () => {
-    if (!profile) return openSignIn();
-    setBusy(true);
-    try {
-      const r = await call<{ code: string }>('room:create');
-      nav(`/r/${r.code}`);
-    } catch (e) {
-      toastError(e);
-    } finally {
-      setBusy(false);
-    }
-  };
+  // The hub is no one game's page: the site's name in the tab (a game's page or a room may have left theirs).
+  useEffect(() => { document.title = BRAND.name; }, []);
 
   const join = (c: string) => {
     const clean = c.trim().toUpperCase();
@@ -118,7 +102,6 @@ export default function Home() {
   const playable = availableCharacters();
   const featured = FEATURED.map(id => playable.find(c => c.id === id)).filter((c): c is CharacterDef => !!c);
   const others = playable.filter(c => !FEATURED.includes(c.id));
-  const looks = THEMES.filter(t => themeAvailable(t.id));
   const castTitle = featured.length === 1 && others.length === 0 ? `Meet ${featured[0].name}` : 'Meet the characters';
 
   return (
@@ -135,9 +118,9 @@ export default function Home() {
         </div>
       </section>
 
-      {/* The hub: one card per game, with what is on right now. Monopoly's "Play"
-          is the old hero button (create a table, or sign in first); Cards has its
-          own home at /cards; Poker is its own site, reached with the sign-in in hand. */}
+      {/* The hub: one card per game, with what is on right now. Monopoly and Cards
+          have their own homes (/monopoly, /cards: Play goes there, the code box
+          joins a table directly); Poker is its own site, reached with the sign-in in hand. */}
       <section className="hub" aria-labelledby="hub-title">
         <h2 id="hub-title" className="sr-only">Pick a game</h2>
         <ul className="hub-games">
@@ -156,13 +139,7 @@ export default function Home() {
                   onChange={e => setCode(e.target.value.toUpperCase())} />
                 <button className="btn gold small" type="submit">Join</button>
               </form>
-              {profile || checking ? (
-                <button className="btn primary hub-play" disabled={busy || !connected || !canCreate} onClick={create}>
-                  {canCreate || checking ? `Play ${GAMES.monopoly.name}` : 'Tables are operators-only right now'}
-                </button>
-              ) : (
-                <button className="btn primary hub-play" onClick={openSignIn}>Play {GAMES.monopoly.name}</button>
-              )}
+              <Link className="btn primary hub-play" to={GAMES.monopoly.path}>Play {GAMES.monopoly.name}</Link>
             </div>
           </li>
 
@@ -247,72 +224,6 @@ export default function Home() {
               </li>
             ))}
           </ol>
-        </section>
-
-        {rooms.length > 0 && (
-          <section className="panel" aria-labelledby="tables-title">
-            <h2 id="tables-title">Live Tables</h2>
-            <ul className="room-cards">
-              {rooms.map(r => {
-                const map = getMap(r.mapId);
-                const theme = resolveTheme(r.themeId, r.mapId);
-                const open = r.status === 'lobby';
-                return (
-                  <li key={r.code} className={`room-card ${r.status}`}>
-                    <img className="room-thumb" src={mapThumbUrl(map.id)} alt="" width={84} height={58} loading="lazy" decoding="async" />
-                    <div className="room-main">
-                      <div className="room-top">
-                        <b className="mono room-code">{r.code}</b>
-                        <span className={`room-status ${r.status}`}>{open ? 'Open' : 'Playing'}</span>
-                      </div>
-                      <div className="room-chips">
-                        <span className="chip">{map.name}</span>
-                        <span className="chip edition-chip" style={{ background: theme.palette.board, color: theme.palette.boardText, borderColor: theme.palette.accent }}>
-                          {theme.name}
-                        </span>
-                        {r.requirements && <em className="tag req-tag" title={requirementSentence(r.requirements)}>🔒 {requirementBadge(r.requirements)}</em>}
-                      </div>
-                      <div className="muted small room-meta">host {r.hostName} · <b>{r.players}/{r.maxPlayers}</b> players</div>
-                    </div>
-                    <button className={`btn small ${open ? 'primary' : ''}`} onClick={() => join(r.code)}
-                      aria-label={`${open ? 'Join' : 'Watch'} table ${r.code}`}>
-                      {open ? 'Join' : 'Watch'}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        )}
-
-        <section className="panel" aria-labelledby="boards-title">
-          <h2 id="boards-title">Boards</h2>
-          <div className="card-grid">
-            {MAPS.map(m => (
-              <div key={m.id} className="info-card">
-                <img className="map-thumb" src={mapThumbUrl(m.id)} alt="" width={320} height={200} loading="lazy" decoding="async" />
-                <b>{m.name}</b>
-                <span className="small muted">{m.description}</span>
-                <span className="info-meta">{m.spaces.length} spaces · {m.players[0]}–{m.players[1]} players · {CHOG_SEASON ? `${getTheme(SEASON_THEME_ID).name} look` : `${m.look.name} look`}</span>
-              </div>
-            ))}
-          </div>
-          <h2 className="mt" id="editions-title">{looks.length === 1 ? 'The look' : 'Themes'}</h2>
-          <p className="muted small">{looks.length === 1 ? `Every board is in the ${looks[0].name} look right now.` : 'Any theme on any board. Original keeps each board’s own look.'}</p>
-          <div className="card-grid">
-            {looks.map(t => (
-              <div key={t.id} className="info-card edition-card" style={{ background: t.palette.board, color: t.palette.boardText, borderColor: t.palette.boardLine }}>
-                <div className="row">
-                  {t.logoUrl && <img className="edition-logo" src={t.logoUrl} alt="" width={34} height={34} loading="lazy" decoding="async" />}
-                  <b>{t.name}</b>
-                </div>
-                <div className="swatches" aria-hidden>
-                  {Object.values(t.groupColors).slice(0, 8).map((c, i) => <i key={`${c}${i}`} style={{ background: c }} />)}
-                </div>
-                <span className="small">{t.tagline}</span>
-              </div>
-            ))}
-          </div>
         </section>
       </div>
     </div>

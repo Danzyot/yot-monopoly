@@ -350,6 +350,7 @@ test('holders: seat gating asks the cache for the very token, never the client',
 test('routes: sign-in only ever returns to a path on this site', async () => {
   const { localPath } = await import('../src/routes/auth.ts');
   assert.equal(localPath('/r/ABCDE?x=1'), '/r/ABCDE?x=1');
+  assert.equal(localPath('/monopoly'), '/monopoly');
   assert.equal(localPath('/'), '/');
   for (const bad of ['//evil.com', '/\\evil.com', '/\\/evil.com', '/%5Cevil.com'.replace('%5C', '\\'), 'https://evil.com', 'evil.com', '/\tevil', '', undefined, 42]) {
     assert.equal(localPath(bad), '/', `refused: ${JSON.stringify(bad)}`);

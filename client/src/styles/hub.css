@@ -14,9 +14,6 @@
 @media (max-width: 480px) {
   .brand-logo { width: 26px; height: 26px; }
   .site-header .brand { font-size: 15px; }
-  /* The wordmark already leads home, so the Monopoly link gives way: the signed-out
-     nav then fits one row with room to spare, whichever font it is drawn in. */
-  .nav-home { display: none; }
 }
 
 /* ---- home: hero, now just the title ---- */

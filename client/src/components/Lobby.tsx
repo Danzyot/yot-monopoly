@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { GAMES } from '../../../shared/brand.ts';
 import { call, type ChatMsg } from '../net.ts';
 import { TIME_LIMIT_CHOICES, TURN_SECONDS_CHOICES, getTheme, resolveTheme, type RuleConfig } from '../../../shared/themes.ts';
 import { getMap } from '../../../shared/maps.ts';
@@ -391,7 +392,7 @@ export default function Lobby({ room, me, spectating, chat }: {
       setStarting(false);
     }
   };
-  const leave = async () => { await call('room:leave').catch(() => {}); nav('/'); };
+  const leave = async () => { await call('room:leave').catch(() => {}); nav(GAMES.monopoly.path); };
   const makeHost = async (id: string, name: string) => {
     const mine = room.hostId === me;
     if (mine && !(await askConfirm({ title: `Make ${name} the host?`, body: 'You will no longer control the room.', confirm: 'Make host' }))) return;
