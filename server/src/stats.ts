@@ -8,6 +8,8 @@ export interface GameRecord {
   startedAt: number;
   endedAt: number;
   turns: number;
+  /** Played at a private table (join by code only): kept off public feeds like the home ticker. Absent before it was recorded. */
+  private?: true;
   /** Final order: winner first, then by bankruptcy order (last out = 2nd). */
   places: {
     id: string; name: string; isBot: boolean; netWorth: number;

@@ -199,6 +199,7 @@ test('a host runs their own event: start, pause, resume, prizes, start time — 
   assert.match(String(await attempt(host, 'tourney:settings', { id: holderCup, prizeText: 'x', name: 'Renamed' })), /Only an operator/, 'one forbidden key spoils the batch');
   assert.equal(await attempt(host, 'tourney:settings', { id: holderCup, prizeText: '1st: two Chogs' }), null);
   assert.match(String(await attempt(host, 'tourney:settings', { id: holderCup, scheduledStart: Date.now() + 9 * 86_400_000 })), /7 days/);
+  assert.match(String(await attempt(host, 'tourney:settings', { id: holderCup, scheduledStart: String(Date.now() + 9 * 86_400_000) })), /7 days/, 'a start time sent as text is held to the same week');
   assert.equal(await attempt(host, 'tourney:settings', { id: holderCup, scheduledStart: Date.now() + 3_600_000 }), null);
 
   // Other players cannot touch it.

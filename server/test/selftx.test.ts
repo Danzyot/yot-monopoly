@@ -159,7 +159,8 @@ test('selftx: a challenge is an odd exact amount, half an hour, floored at the h
   const wei = BigInt(c.amountWei);
   assert.ok(wei > selftx.BASE_WEI && wei < selftx.BASE_WEI + 1_000_000n * selftx.DUST_UNIT_WEI);
   assert.equal((wei - selftx.BASE_WEI) % selftx.DUST_UNIT_WEI, 0n);
-  assert.match(c.amountMon, /^0\.0001\d{8}$/, c.amountMon);
+  // formatEther drops trailing zeros, so a dust part ending in 0 shows fewer digits.
+  assert.match(c.amountMon, /^0\.0001\d{1,8}$/, c.amountMon);
   assert.equal(c.expiresAt, now + selftx.SELFTX_TTL_MS);
   assert.equal(c.floorBlock, monad.s.head);
   assert.equal(c.chainId, 143);

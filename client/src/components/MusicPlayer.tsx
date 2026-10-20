@@ -91,7 +91,13 @@ export default function MusicPlayer({ askOnce = false }: {
   const musicSilent = m.muted || m.volume === 0;
 
   return (
-    <div className="audio-ctl" ref={wrap}>
+    // Escape closes the settings panel and hands focus back to its button.
+    <div className="audio-ctl" ref={wrap} onKeyDown={e => {
+      if (e.key !== 'Escape' || !open) return;
+      e.stopPropagation();
+      setOpen(false);
+      wrap.current?.querySelector<HTMLElement>('[aria-label="Music settings"]')?.focus();
+    }}>
       <button
         className={`audio-btn${fxOff ? ' off' : ''}`}
         title={fxOff ? 'Sound effects off' : 'Sound effects on'}

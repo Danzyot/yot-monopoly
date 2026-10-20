@@ -46,12 +46,15 @@ for (const map of MAPS) {
     page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
     page.on('console', m => { if (m.type() === 'error' && !/ERR_CERT|fonts\.g/.test(m.text())) errors.push(`console: ${m.text().slice(0, 200)}`); });
     try {
+      // The hub's Monopoly card leads to /monopoly, whose Play signs in first and then opens a table.
       await page.goto(`${BASE}/`);
       await page.click('.hub-monopoly .hub-play');
+      await page.waitForURL(/\/monopoly$/, { waitUntil: 'commit' });
+      await page.click('.mono-play');
       await page.fill('input[placeholder="Your name"]', 'Smoke');
       await page.click('.modal button:has-text("Play")');
       await page.waitForSelector('text=Sign out');
-      await page.click('.hub-monopoly >> text=Play Monopoly');
+      await page.click('.mono-play:has-text("Play Monopoly")');
       await page.waitForURL(/\/r\//, { waitUntil: 'commit' });
       await page.waitForTimeout(4000);
       await page.click(`button.map-card:has-text("${map}")`);

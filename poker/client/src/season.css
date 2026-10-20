@@ -1,0 +1,348 @@
+/* =====================================================================
+   The Chog Games look. The hub (choggames.com) wears its Chog season: the
+   Monopoly GO skin (client/src/index.css there) in the Chog room's colours
+   (client/src/styles/season.css there): bright purple grounds, chunky panels
+   with a thick violet edge, candy buttons that sit on a lip, Lilita One for
+   anything shouted and Nunito for everything read. This room is a separate
+   build, so the tokens and rules are copied here rather than imported, and
+   kept to what poker's pages use. Loaded after index.css (main.tsx), so equal
+   specificity wins here.
+
+   The table is the exception that proves it: cards, chips and the felt keep
+   their own drawing (index.css), and the action buttons stay the biggest,
+   plainest targets on the page — the theme only reaches their frame.
+   ===================================================================== */
+
+:root {
+  /* The hub's faces. --display is what this file's earlier rules set
+     everything in, so making it Nunito re-sets the room's text in one go;
+     --shout is the hub's display face, for titles, the header and buttons. */
+  --display: 'Nunito', 'Inter Variable', system-ui, sans-serif;
+  --shout: 'Lilita One', 'Nunito', system-ui, sans-serif;
+  --outline: 0 2px 0 rgba(0, 0, 0, 0.35), 0 0 2px rgba(0, 0, 0, 0.35);
+
+  /* The hub's Chog season palette. */
+  --bg: #1a0d3d;
+  --bg-2: #160a36;
+  --panel: rgba(43, 23, 100, 0.92);
+  --panel-solid: #2b1764;
+  --panel-2: #3a2189;
+  --line: #5a3aa8;
+  --line-soft: #3f2683;
+  --edge: #7a52e0;
+  --text: #ffffff;
+  --text-dim: #cbbcf0;
+  --text-faint: #a898d6;
+  --hi: #fdf6cd;
+  --well: 20 8 48;
+  --chog-pink: #d53f7c;
+  --chog-pink-hi: #ff8ec2;
+  --chog-pink-lo: #9e1d55;
+  --gold: #d53f7c;
+  --gold-2: #ff8ec2;
+  --cream: #fdf6cd;
+  --radius: 18px;
+}
+
+body {
+  font-family: var(--display);
+  font-weight: 700;
+  background: radial-gradient(120% 70% at 50% 0%, #7a4fe0 0%, #43209a 40%, var(--bg) 100%) fixed var(--bg);
+}
+b, strong { font-weight: 900; }
+h1, h2, h3, h4 { font-family: var(--shout); font-weight: 400; letter-spacing: 0.01em; text-shadow: var(--outline); }
+
+/* ---- inputs: dark wells with a soft edge, cream focus ---- */
+select,
+textarea,
+.input,
+select.input,
+textarea.input,
+input.input,
+input:not([type]),
+input[type="text"],
+input[type="number"],
+input[type="search"],
+input[type="url"],
+input[type="password"],
+input[type="datetime-local"],
+input[type="date"],
+input[type="time"] {
+  background: rgb(var(--well) / 0.55);
+  border: 2px solid color-mix(in srgb, var(--edge) 70%, transparent);
+  border-radius: 12px;
+  font-weight: 700;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25);
+}
+select:focus, textarea:focus, input:focus, .input:focus, select.input:focus { border-color: var(--chog-pink-hi); outline: none; box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25); }
+input, select, textarea, select.input, textarea.input { font-weight: 700; }
+option { background: var(--panel-solid); }
+
+/* ---- buttons: candy on a lip ----
+   One gradient for every variant; each only sets --b (the colour) and --t
+   (the ink). Purple by default, Chog pink for the main action, cream for
+   the "gold" one, as on the hub. */
+.btn {
+  --b: #7a4fe0; --t: #ffffff;
+  position: relative;
+  border: 2px solid color-mix(in srgb, var(--b) 45%, #000);
+  border-radius: 14px;
+  padding: 8px 16px 9px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--b) 55%, #fff) 0%, var(--b) 52%, color-mix(in srgb, var(--b) 85%, #000) 100%);
+  color: var(--t);
+  font: 400 15px/1.1 var(--shout);
+  letter-spacing: 0.02em;
+  text-transform: none;
+  text-shadow: 0 1.5px 0 rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45), 0 4px 0 color-mix(in srgb, var(--b) 50%, #000), 0 7px 12px rgba(0, 0, 0, 0.3);
+  transform: translateY(0);
+  transition: transform 0.08s, box-shadow 0.08s, filter 0.15s, opacity 0.15s;
+}
+.btn:hover:not(:disabled) {
+  color: var(--t);
+  border-color: color-mix(in srgb, var(--b) 45%, #000);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--b) 55%, #fff) 0%, var(--b) 52%, color-mix(in srgb, var(--b) 85%, #000) 100%);
+  filter: brightness(1.08);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.35), 0 1px 0 color-mix(in srgb, var(--b) 50%, #000), 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+.btn:disabled { opacity: 1; filter: grayscale(0.85) brightness(0.8); cursor: not-allowed; }
+.btn:focus-visible { outline: 3px solid var(--hi); outline-offset: 3px; }
+.btn svg { opacity: 1; }
+
+.btn-primary, .btn-lit, .btn-success { --b: #d53f7c; --t: #ffffff; }
+.btn-danger { --b: #e8433a; --t: #ffffff; }
+.btn-amber { --b: #fdf6cd; --t: #5a1a3c; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4); }
+.btn-discord { --b: #5865f2; --t: #ffffff; }
+.btn-ghost {
+  --b: #2b1764; --t: #ffffff;
+  background: color-mix(in srgb, var(--panel-solid) 60%, #000 20%);
+  border-color: color-mix(in srgb, var(--edge) 60%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 3px 0 rgba(0, 0, 0, 0.35);
+  color: #ffffff;
+}
+.btn-ghost:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--panel-solid) 80%, #fff 8%);
+  border-color: color-mix(in srgb, var(--edge) 60%, transparent);
+  color: #ffffff;
+}
+.btn-sm { padding: 6px 12px 7px; font-size: 14px; border-radius: 12px; }
+.btn-lg { padding: 13px 24px 14px; font-size: 20px; border-radius: 18px; }
+
+/* The cursor-following aura (glow.ts) is this room's own flourish; on the
+   hub's candy buttons it painted a flat pink over the gradient, so the
+   button keeps its candy face and the lip instead. */
+.btn-primary, .btn-lit,
+.btn-primary.is-glowing:hover:not(:disabled),
+.btn-lit.is-glowing:hover:not(:disabled) {
+  background-color: transparent;
+  background-image: linear-gradient(180deg, color-mix(in srgb, var(--b) 55%, #fff) 0%, var(--b) 52%, color-mix(in srgb, var(--b) 85%, #000) 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45), 0 4px 0 color-mix(in srgb, var(--b) 50%, #000), 0 7px 12px rgba(0, 0, 0, 0.3);
+  color: #ffffff;
+}
+
+/* ---- panels: chunky, with a bright violet edge ---- */
+.panel,
+.landing-card,
+.game-card,
+.modal,
+.side-panel,
+.big-status,
+.blind-clock,
+.start-banner {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--panel-solid) 88%, #fff 12%) 0%, var(--panel) 42%);
+  border: 3px solid var(--edge);
+  border-radius: var(--radius);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.18), 0 6px 0 rgba(0, 0, 0, 0.25), 0 14px 30px rgba(0, 0, 0, 0.35);
+}
+.modal h3 { font: 400 22px var(--shout); text-transform: none; letter-spacing: 0.01em; color: #fff; border-bottom-color: color-mix(in srgb, var(--edge) 50%, transparent); }
+.modal-backdrop { background: rgba(14, 4, 40, 0.65); backdrop-filter: blur(3px); }
+.panel h3 {
+  font: 400 19px var(--shout);
+  text-transform: none;
+  letter-spacing: 0.01em;
+  color: #ffffff;
+  text-shadow: var(--outline);
+}
+.panel h3 svg { color: var(--chog-pink-hi); }
+/* Micro-labels stay small and tracked, in the heavy Nunito. */
+.section-title, .host-section-head, .prop-strip-head, .info-cell .k, .gc-stat .k, .standings-table th, .field label, .ga-detail-meta {
+  font-family: var(--display);
+  font-weight: 900;
+  color: var(--text-dim);
+}
+.section-title { font: 400 18px var(--shout); letter-spacing: 0.01em; text-transform: none; color: #fff; text-shadow: var(--outline); }
+.info-cell .v, .gc-stat .v, .stat .v, .bc-grid .v { font-family: var(--shout); font-weight: 400; font-size: 1.25rem; text-shadow: var(--outline); letter-spacing: 0.01em; }
+
+/* Pills and badges: the hub's wells with a soft edge. */
+.pill, .elapsed-pill, .state-badge, .req-pill, .discord-badge, .admin-badge, .timebank-pill {
+  background: rgb(var(--well) / 0.55);
+  border: 2px solid color-mix(in srgb, var(--edge) 70%, transparent);
+  font-weight: 800;
+}
+.state-badge.state-registering, .state-running, .state-break {
+  background: var(--chog-pink);
+  border-color: #000;
+  color: #ffffff;
+}
+
+/* Segmented tabs: cream chip for the one you are on, as on the hub. */
+.side-tabs, .audit-tabs {
+  background: rgb(var(--well) / 0.45);
+  border: 2px solid color-mix(in srgb, var(--edge) 60%, transparent);
+}
+.side-tab, .audit-tab { font: 400 15px var(--shout); letter-spacing: 0.02em; text-transform: none; color: #ffffff; text-shadow: var(--outline); }
+.side-tab.active, .audit-tab.active {
+  background: linear-gradient(180deg, #fffbe8, #f7e6b0);
+  color: #7a1747;
+  text-shadow: none;
+  box-shadow: 0 3px 0 #8a6a1a;
+}
+.side-tabs.single .side-tab, .side-tabs.single .side-tab.active { font: 400 16px var(--shout); color: #fff; text-transform: none; letter-spacing: 0.01em; }
+
+/* =====================================================================
+   The header: the hub's own (Header.tsx mirrors its markup).
+   ===================================================================== */
+.site-header {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 10px 16px; position: sticky; top: 0; z-index: 50;
+  background: linear-gradient(180deg, #3d2190, #2b1764);
+  border-bottom: 3px solid var(--chog-pink);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.2);
+}
+.site-header.is-demo { border-bottom-color: var(--chog-pink); }
+.site-header .brand {
+  display: flex; align-items: center; gap: 8px; text-decoration: none; color: #ffffff; white-space: nowrap;
+  font: 400 24px var(--shout); letter-spacing: 0.01em; text-shadow: var(--outline);
+}
+.site-header .brand:focus-visible { outline: 3px solid var(--hi); outline-offset: 3px; border-radius: 8px; }
+.brand-logo { width: 32px; height: 32px; object-fit: contain; flex: none; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)); }
+.site-header nav { display: flex; gap: 8px; align-items: center; }
+.site-header .navlink {
+  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; text-decoration: none;
+  font: 400 16px var(--shout); color: #ffffff; text-shadow: var(--outline); opacity: 0.85;
+  padding: 6px 8px; border-radius: 8px; background: none;
+}
+.site-header .navlink:hover { opacity: 1; color: #ffffff; background: rgba(255, 255, 255, 0.1); }
+.site-header .navlink.active { opacity: 1; color: var(--hi); background: rgb(var(--well) / 0.35); box-shadow: inset 0 -3px 0 var(--chog-pink-hi); }
+.site-header .navlink.accent { color: var(--hi); }
+.site-header .navlink:focus-visible { outline: 3px solid var(--hi); outline-offset: 3px; }
+.site-header .nav-ico { display: none; font-size: 16px; line-height: 1; }
+.site-header .me { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.site-header .me .profile-name { font: 800 14px var(--display); color: #fff; max-width: none; }
+.site-header .me-link { display: inline-flex; border-radius: 50%; }
+.site-header .profile-avatar-btn { background: none; border: 0; padding: 0; cursor: pointer; }
+.site-header .avatar { font-size: 1.4rem; }
+.site-header .demo-flag { flex: none; margin-right: auto; }
+.site-header .music-btn { padding: 5px 9px 6px; }
+
+/* Long navs: the name goes first, then the non-game labels, then all of them
+   (the hub's breakpoints, styles/manage.css there). */
+@media (max-width: 1360px) { .site-header .me .hide-sm { display: none; } }
+@media (max-width: 1180px) {
+  .site-header .nav-chars .nav-ico { display: inline; }
+  .site-header .nav-chars:not(.nav-game):not(.active) .nav-label { display: none; }
+}
+@media (max-width: 960px) {
+  .site-header .nav-chars:not(.active) .nav-label { display: none; }
+}
+@media (max-width: 760px) {
+  .site-header { flex-wrap: wrap; row-gap: 4px; padding: 8px 10px; }
+  .site-header .brand { flex: none; font-size: 19px; }
+  .site-header nav { flex-wrap: wrap; justify-content: flex-end; margin-left: auto; row-gap: 4px; gap: 4px; min-width: 0; }
+  .site-header .navlink { font-size: 14px; padding: 4px 5px; }
+  .site-header .nav-chars .nav-ico { display: inline; }
+}
+@media (max-width: 480px) {
+  .site-header { gap: 6px; padding-left: 8px; padding-right: 8px; }
+  .brand-logo { width: 26px; height: 26px; }
+  .site-header .brand { font-size: 16px; gap: 5px; min-width: 0; }
+  .site-header nav { gap: 2px; }
+  .site-header .navlink { font-size: 13px; padding: 4px 6px; }
+  .site-header .nav-chars .nav-label { display: none; }
+  .site-header .nav-chars .nav-ico { font-size: 18px; }
+  /* The wordmark already leads home, so the Monopoly link gives way. */
+  .site-header .nav-home { display: none; }
+  .site-header .nav-discord { display: none; }
+  .site-header .btn-sm { padding: 5px 9px 6px; font-size: 13px; }
+}
+
+/* =====================================================================
+   Pages
+   ===================================================================== */
+
+/* ---- home ---- */
+.landing-card h1 { font: 400 clamp(40px, 8vw, 60px)/1.05 var(--shout); text-transform: none; letter-spacing: 0.01em; color: #fff; text-shadow: 0 4px 0 #2a136b, 0 8px 22px rgba(0, 0, 0, 0.45); }
+.landing-card h1 .accent { color: var(--chog-pink-hi); }
+.landing-card .tag { color: #f1e8ff; font-size: 1rem; font-weight: 700; text-shadow: var(--outline); }
+.live-game-row {
+  background: rgb(var(--well) / 0.42);
+  border: 2px solid transparent;
+  border-radius: 14px;
+}
+.live-game-row:hover { background: rgb(var(--well) / 0.6); border-color: color-mix(in srgb, var(--edge) 80%, transparent); }
+.lg-name { font: 400 17px var(--shout); letter-spacing: 0.01em; text-shadow: var(--outline); }
+.lg-meta { color: var(--text-dim); font-weight: 700; }
+.lg-group { font: 400 16px var(--shout); color: var(--hi); text-transform: none; letter-spacing: 0.01em; text-shadow: var(--outline); }
+
+/* ---- page heads (tournament, dashboard) ---- */
+.page-head h1, .page-head h2, .tourney-title, .page h1 { font-family: var(--shout); font-weight: 400; text-transform: none; letter-spacing: 0.01em; text-shadow: var(--outline); }
+.big-status { font-weight: 800; font-size: 1.05rem; }
+.blind-clock .lvl { font: 400 18px var(--shout); color: var(--chog-pink-hi); text-shadow: var(--outline); letter-spacing: 0.01em; }
+.blind-clock .time { font-family: var(--shout); font-weight: 400; color: var(--hi); text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35); }
+.table-link-row, .top-player-row, .pending-row { background: rgb(var(--well) / 0.42); border-color: transparent; border-radius: 14px; }
+
+/* ---- data tables ---- */
+.standings-table td { border-color: color-mix(in srgb, var(--edge) 30%, transparent); }
+.standings-table tr:hover td { background: rgb(var(--well) / 0.3); }
+
+/* ---- the table ---- */
+/* The page around the felt: the hub's purple, a shade darker so the felt and
+   the cards stay the brightest things on screen. */
+.table-page { background: radial-gradient(120% 90% at 50% 0%, #4a28a8 0%, #2b1764 45%, #160a36 100%); }
+.table-topbar {
+  background: linear-gradient(180deg, #3a2189, #2b1764);
+  border-bottom: 2px solid color-mix(in srgb, var(--edge) 70%, transparent);
+}
+.table-topbar .tname { font: 400 17px var(--shout); letter-spacing: 0.01em; text-shadow: var(--outline); }
+.table-topbar .btn { font-size: 14px; padding: 5px 9px 6px; }
+.table-topbar .btn-ghost { box-shadow: none; background: transparent; border-color: transparent; }
+.table-topbar .btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.1); border-color: transparent; }
+.side-panel { border-radius: 0; border-width: 0 0 0 3px; box-shadow: none; }
+
+/* The action buttons: the biggest candy on the page, one colour each —
+   pink to bet or raise, red to fold, purple to check or call. */
+.action-buttons .btn {
+  min-width: 122px;
+  padding: 14px 26px 15px;
+  border-radius: 18px;
+  font: 400 19px/1.05 var(--shout);
+  letter-spacing: 0.02em;
+}
+.action-buttons .btn:not(.btn-primary):not(.btn-danger):not(.btn-success):not(.btn-ghost),
+.action-buttons .btn:not(.btn-primary):not(.btn-danger):not(.btn-success):not(.btn-ghost):hover:not(:disabled) {
+  --b: #7a4fe0;
+  border: 2px solid color-mix(in srgb, var(--b) 45%, #000);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--b) 55%, #fff) 0%, var(--b) 52%, color-mix(in srgb, var(--b) 85%, #000) 100%);
+  color: #ffffff;
+}
+.action-buttons .btn-success { --b: #7a4fe0; }
+.action-buttons .btn-primary,
+.action-buttons .btn-primary:hover:not(:disabled),
+.action-buttons .btn-primary.is-glowing:hover:not(:disabled) {
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45), 0 4px 0 color-mix(in srgb, var(--b) 50%, #000), 0 0 26px rgba(213, 63, 124, 0.45);
+}
+.raise-panel { background: rgb(var(--well) / 0.6); border: 2px solid color-mix(in srgb, var(--edge) 60%, transparent); }
+.quick-bets .btn, .quick-bets .btn:hover:not(:disabled) { --b: #4a2aa0; font-size: 14px; border-radius: 999px; }
+.preaction-row .btn { font-size: 14px; }
+@media (max-width: 700px) {
+  .action-buttons .btn { min-width: 0; padding: 12px 10px 13px; font-size: 17px; }
+}
+
+/* The tournament page on a phone: its one column could not shrink below the
+   widest thing in it (the standings table), so the panels ran off the right
+   edge. The wide table scrolls inside its own panel instead. */
+.tourney-grid > * { min-width: 0; }
+@media (max-width: 900px) { .tourney-grid { grid-template-columns: minmax(0, 1fr); } }
