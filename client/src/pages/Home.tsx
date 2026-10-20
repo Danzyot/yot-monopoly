@@ -211,7 +211,7 @@ export default function Home() {
       <section className="cast" aria-labelledby="cast-title">
         <div className="cast-head">
           <h2 id="cast-title">{castTitle}</h2>
-          <Link className="cast-all" to="/characters">{others.length ? 'See all characters →' : 'See them move →'}</Link>
+          {others.length > 0 && <Link className="cast-all" to="/characters">See all characters →</Link>}
         </div>
         <div className={`cast-stars${featured.length === 1 ? ' solo' : ''}`}>
           {featured.map(c => (
