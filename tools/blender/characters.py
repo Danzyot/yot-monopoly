@@ -12,6 +12,8 @@ Output: one file per character, models/characters/<id>.glb, so a game only
 downloads the characters at its table. Nodes `<id>_Body|Head|HandL|HandR|FootL|FootR`
 (plus `<id>_LidL|LidR` eyelids and `<id>_Top|Chain` for the garments a detailed
 character wears), each with its origin on the rig pivot Figure.tsx animates.
+The Chog's mane is a node of its own in head space, `chog_Hair_full`, with the
+cut-down versions it wears under an outfit hat beside it (`chog_Hair_<trim>`, MANES).
 Material names are `<id>:<key>`; the game swaps each for that figure's own
 material of that key (player colour on `main`, greying in jail, fading when
 bankrupt), and merges each figure into a few skinned meshes (merged.ts).
@@ -20,7 +22,7 @@ models/characters/<id>-low.glb is the same model simplified by gltfpack
 (`characters` / `charactersLow`, by id); .cache/models/characters.glb keeps all
 of them uncompressed in one file for outfits.py.
 
-    tools/blender/run.sh characters.py [--preview out.png]
+    tools/blender/run.sh characters.py [--preview out.png] [--build chog]
 """
 
 import json
@@ -47,6 +49,10 @@ PART_PIVOTS = {'Body': (0, 0, 0), 'Head': (0, 0.29, 0), 'HandL': (0.11, 0.115, 0
 FOOT_TOKENS = ('Shoe', 'Sole', 'Toe', 'Lace', 'Boot', 'Paw', 'Tabi', 'Foot', 'Slipper', 'Tread', 'Strap', 'Cuff')
 LEG_TOKENS = ('_Leg',)
 LEG_MATS = {'snacky': 'denim', 'starer': 'skin', 'chog': 'cloth', 'robot': 'metal', 'knight': 'metal', 'astronaut': 'white', 'pirate': 'ink', 'chef': 'c1'}
+# Characters whose mane is a node of its own, with the cut-down versions worn under outfit hats
+# (client/src/three/characters/outfitFit.json `mane`; the game swaps one in for `<id>_Hair_full`).
+MANES = {'chog': ('fringe', 'crown')}
+MANE_BUDGET = 2400
 # Garment nodes (`<id>_Top`, `<id>_Chain`): a character's own clothes, shown or
 # hidden by the game as its signature outfit items (shared/outfits.ts).
 GARMENTS = ('Top', 'Chain')
@@ -257,6 +263,17 @@ def build_detailed(cid, spec):
         hinges[part] = [round(hx, 5), round(hy, 5), round(hz, 5)]
         built.setdefault(part, []).append(o)
     built['Head'] = head
+    if cid in MANES:
+        # The mane on its own node (`<id>_Hair_full`), and cut-down copies of it to swap in under an outfit's
+        # hat (`<id>_Hair_<trim>`, chog_wear.TRIMS; outfitFit.json says which for each hat).
+        import chog_wear
+        built['Head'] = [o for o in head if '_Hair' not in o.name]
+        built['Hair_full'] = [o for o in head if '_Hair' in o.name]
+        for trim in MANES[cid]:
+            built[f'Hair_{trim}'] = chog_wear.hair(mats, trim)
+            for o in built[f'Hair_{trim}']:
+                # Mostly under the hat: lighter than the whole mane.
+                o['budget'] = MANE_BUDGET
     for part, objs in built.items():
         blib.realize(objs)
         groups: dict[str, list] = {}
@@ -324,6 +341,12 @@ def preview(nodes_by_char, path, close=False):
                 n.location = blib.V(x + px + hx, py + hy, pz + hz)
                 n.scale = (1, 1, 0.5)
                 continue
+            if part.startswith('Hair_'):
+                # The mane (head space): the whole one, unless MANE_PREVIEW=<trim> picks a cut-down one.
+                if part != f'Hair_{os.environ.get("MANE_PREVIEW", "full")}':
+                    n.location = (100, 100, 0)
+                    continue
+                part = 'Head'
             px, py, pz = PART_PIVOTS[part]
             n.location = blib.V(x + px, py, pz)
         if cid in detailed.LEGS:
@@ -372,6 +395,11 @@ def preview(nodes_by_char, path, close=False):
 
 def main():
     data = extract()
+    # --build chog,snacky: rebuild and export just these (the others' files and manifest entries stay as they are;
+    # the voxel remesh is not bit-for-bit repeatable, so a full run rewrites every file).
+    some = sys.argv[sys.argv.index('--build') + 1].split(',') if '--build' in sys.argv else None
+    if some:
+        data = {cid: spec for cid, spec in data.items() if cid in some}
     blib.reset()
     by_char = {}
     for cid, spec in data.items():
@@ -385,9 +413,16 @@ def main():
         for n in nodes:
             n.location = (0, 0, 0)
             n.scale = (1, 1, 1)
-    # All of them uncompressed in one file, for outfits.py (thumbnails and fitting previews).
-    blib.export_glb(nodes, 'models/characters.glb', images='NONE', cache_only=True)
+    # All of them uncompressed in one file, for outfits.py (thumbnails and fitting previews; with --build,
+    # outfits.py --preview --chars tools/blender/.cache/models/characters/<id>.glb takes one character's own).
+    if not some:
+        blib.export_glb(nodes, 'models/characters.glb', images='NONE', cache_only=True)
     full, low = {}, {}
+    if some:
+        with open(blib.MANIFEST) as f:
+            known = json.load(f)
+        full = {k: v.split('?')[0] for k, v in known.get('characters', {}).items()}
+        low = {k: v.split('?')[0] for k, v in known.get('charactersLow', {}).items()}
     for cid, ns in by_char.items():
         rel = f'models/characters/{cid}.glb'
         blib.export_glb(ns, rel, images='NONE')
