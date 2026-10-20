@@ -12,7 +12,7 @@ import { WithModel } from '../models.tsx';
 import type { CharacterId } from '../../../../shared/characters.ts';
 import { GEO, Part, disposeMaterials, makeMaterials, type Mats } from './parts.tsx';
 import { HEAD_Y, LOOKS, DefaultBody, type Look } from './looks.tsx';
-import { OutfitLayer, outfitMane } from './Outfit.tsx';
+import { OutfitLayer, outfitMane, preloadOutfits } from './Outfit.tsx';
 import { OUTFIT_ITEMS, defaultOutfit, type Outfit } from '../../../../shared/outfits.ts';
 import { liteAssets } from '../quality.ts';
 import { characterModel, figureMeshes, type CharacterModel } from './merged.ts';
@@ -104,7 +104,7 @@ export function CharacterFigure({ outfit, lite, chogToken, ...props }: {
       {look?.aura && !(lite ?? liteModels()) && <ChogAura kind={look.aura.kind} color={look.aura.color} />}
       {look && <ChogPlinth color={look.background} />}
       {/* A token Chog wears its own traits (its hat, its outfit), not outfit items over them. */}
-      {!look && <OutfitLayer {...props} outfit={outfit} />}
+      {!look && <OutfitLayer {...props} outfit={outfit} lite={lite ?? liteModels()} />}
     </>
   );
 }
@@ -251,6 +251,7 @@ export function characterUrl(id: CharacterId, lite = liteModels()): string {
 /** Start downloading these characters' models (the ones at a table) before a scene asks for them. */
 export function preloadCharacters(ids: Iterable<CharacterId>, lite?: boolean) {
   for (const id of new Set(ids)) useGLTF.preload(characterUrl(id, lite));
+  preloadOutfits(lite ?? liteModels());
 }
 
 /** The Chog Genesis trait parts (tools/blender/chog_traits.py): one file for every token. */

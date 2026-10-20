@@ -1,5 +1,5 @@
 // Outfits: wearable items a player puts on their character, one per slot
-// (head, eyes, neck, body). The ids live here so server validation and every
+// (head, eyes, neck, body, and a prop held in the right hand). The ids live here so server validation and every
 // client view agree; the 3D models and their thumbnails are built by
 // tools/blender/outfits.py, and how each item sits on each character is in
 // client/src/three/characters/outfitFit.json.
@@ -12,13 +12,14 @@
 
 import type { CharacterId } from './characters.ts';
 
-export type OutfitSlot = 'head' | 'eyes' | 'neck' | 'body';
+export type OutfitSlot = 'head' | 'eyes' | 'neck' | 'body' | 'held';
 
 export const OUTFIT_SLOTS: { id: OutfitSlot; label: string; emoji: string }[] = [
   { id: 'head', label: 'Head', emoji: '🧢' },
   { id: 'eyes', label: 'Eyes', emoji: '🕶️' },
   { id: 'neck', label: 'Neck', emoji: '📿' },
   { id: 'body', label: 'Body', emoji: '🧥' },
+  { id: 'held', label: 'Hand', emoji: '🎈' },
 ];
 
 export interface OutfitItemDef {
@@ -37,15 +38,57 @@ export const OUTFIT_ITEMS: OutfitItemDef[] = [
   { id: 'tophat', slot: 'head', name: 'Top hat' },
   { id: 'crown', slot: 'head', name: 'Crown' },
   { id: 'headphones', slot: 'head', name: 'Headphones' },
+  { id: 'backcap', slot: 'head', name: 'Backwards cap' },
+  { id: 'bucket', slot: 'head', name: 'Bucket hat' },
+  { id: 'party', slot: 'head', name: 'Party hat' },
+  { id: 'halo', slot: 'head', name: 'Halo' },
+  { id: 'horns', slot: 'head', name: 'Devil horns' },
+  { id: 'bunny', slot: 'head', name: 'Bunny ears' },
+  { id: 'cowboy', slot: 'head', name: 'Cowboy hat' },
+  { id: 'chef', slot: 'head', name: 'Chef’s hat' },
+  { id: 'viking', slot: 'head', name: 'Viking helmet' },
+  { id: 'wizard', slot: 'head', name: 'Wizard hat' },
+  { id: 'flowers', slot: 'head', name: 'Flower crown' },
+  { id: 'propeller', slot: 'head', name: 'Propeller cap' },
+  { id: 'headband', slot: 'head', name: 'Sweatband' },
   { id: 'shades', slot: 'eyes', name: 'Sunglasses' },
   { id: 'specs', slot: 'eyes', name: 'Round glasses' },
+  { id: 'aviators', slot: 'eyes', name: 'Aviators' },
+  { id: 'hearts', slot: 'eyes', name: 'Heart glasses' },
+  { id: 'stars', slot: 'eyes', name: 'Star glasses' },
+  { id: 'monocle', slot: 'eyes', name: 'Monocle' },
+  { id: 'eyepatch', slot: 'eyes', name: 'Eye patch' },
+  { id: 'visor', slot: 'eyes', name: 'VR visor' },
+  { id: 'glasses3d', slot: 'eyes', name: '3D glasses' },
+  { id: 'pixel', slot: 'eyes', name: 'Pixel shades' },
   { id: 'chain', slot: 'neck', name: 'Gold chain' },
   { id: 'scarf', slot: 'neck', name: 'Scarf' },
   { id: 'bowtie', slot: 'neck', name: 'Bow tie' },
+  { id: 'medal', slot: 'neck', name: 'Gold medal' },
+  { id: 'bandana', slot: 'neck', name: 'Bandana' },
+  { id: 'cape', slot: 'neck', name: 'Cape' },
+  { id: 'pearls', slot: 'neck', name: 'Pearls' },
+  { id: 'lei', slot: 'neck', name: 'Flower lei' },
+  { id: 'tie', slot: 'neck', name: 'Necktie' },
   { id: 'hoodie', slot: 'body', name: 'Hoodie' },
   { id: 'jersey', slot: 'body', name: 'Jersey' },
   { id: 'suit', slot: 'body', name: 'Suit jacket' },
   { id: 'varsity', slot: 'body', name: 'Varsity jacket' },
+  { id: 'tux', slot: 'body', name: 'Tuxedo' },
+  { id: 'puffer', slot: 'body', name: 'Puffer jacket' },
+  { id: 'overalls', slot: 'body', name: 'Overalls' },
+  { id: 'monad', slot: 'body', name: 'Monad 143 jersey' },
+  { id: 'tee', slot: 'body', name: 'Heart tee' },
+  { id: 'apron', slot: 'body', name: 'Chef’s apron' },
+  { id: 'ziphoodie', slot: 'body', name: 'Zip hoodie' },
+  { id: 'coffee', slot: 'held', name: 'Coffee' },
+  { id: 'flag', slot: 'held', name: 'Flag' },
+  { id: 'balloon', slot: 'held', name: 'Balloon' },
+  { id: 'chip', slot: 'held', name: 'Poker chip' },
+  { id: 'trophy', slot: 'held', name: 'Trophy' },
+  { id: 'dice', slot: 'held', name: 'Dice' },
+  { id: 'cash', slot: 'held', name: 'Cash' },
+  { id: 'lollipop', slot: 'held', name: 'Lollipop' },
   // Signature items.
   { id: 'wawa_tee', slot: 'body', name: 'WAWA tee', only: 'snacky', node: 'Top' },
   { id: 'cuban_chain', slot: 'neck', name: 'Cuban chain', only: 'snacky', node: 'Chain' },
@@ -127,15 +170,21 @@ export function sanitizeOutfit(raw: unknown, character?: CharacterId): Outfit {
 }
 
 /**
- * A random look for a bot playing `character`: its signature items stay on;
- * every other slot is filled about half the time from the shared items.
+ * A random look for `character` (a bot's, or a player's "Surprise me"): its
+ * signature items stay on; every other slot is filled about half the time
+ * (`fill` of the time) from the shared items, or from those `fits` allows
+ * (the client leaves out items a character's own hat or helmet hides).
  */
-export function randomOutfit(rand: (n: number) => number, character: CharacterId): Outfit {
+export function randomOutfit(
+  rand: (n: number) => number, character: CharacterId,
+  opts: { fill?: number; fits?: (item: OutfitItemDef) => boolean } = {},
+): Outfit {
   const out = defaultOutfit(character);
+  const fill = opts.fill ?? 0.5;
   for (const s of OUTFIT_SLOTS) {
     if (out[s.id]) continue;
-    const items = OUTFIT_ITEMS.filter(i => i.slot === s.id && !i.only);
-    if (rand(2) === 0) out[s.id] = items[rand(items.length)].id;
+    const items = OUTFIT_ITEMS.filter(i => i.slot === s.id && !i.only && (opts.fits?.(i) ?? true));
+    if (items.length && rand(1000) < fill * 1000) out[s.id] = items[rand(items.length)].id;
   }
   return out;
 }
