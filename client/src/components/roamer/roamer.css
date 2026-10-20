@@ -1,0 +1,72 @@
+/* The home page's roaming Chog (components/roamer/Roamer.tsx). A layer over the
+   page that takes no clicks; only the Chog and its bubble do. Under the sticky
+   header (z-index 10) and dialogs, over the page's own sections (z-index 1). */
+
+.roamer { position: absolute; inset: 0; z-index: 5; overflow: hidden; pointer-events: none; }
+
+.roamer-chog {
+  position: absolute; left: 0; top: 0; width: var(--size); height: var(--size); padding: 0; margin: 0;
+  border: 0; background: none; border-radius: 40%; cursor: pointer; pointer-events: auto;
+  -webkit-tap-highlight-color: transparent; will-change: transform; transform: translate3d(-200px, 0, 0);
+  opacity: 0; transition: opacity 0.3s ease;
+}
+.roamer[data-ready] .roamer-chog { opacity: 1; }
+.roamer-chog:focus { outline: none; }
+.roamer-chog:focus-visible { outline: 3px solid #ffc629; outline-offset: 2px; }
+
+.roamer-body, .roamer-sprite { position: absolute; inset: 0; display: block; }
+.roamer-sprite {
+  background-image: var(--sheet); background-repeat: no-repeat;
+  background-size: calc(var(--cols) * var(--size)) calc(var(--rows) * var(--size));
+}
+.roamer-chog:hover .roamer-body { filter: brightness(1.12); }
+
+/* A soft shadow under its feet; it stays on the ground when the Chog hops. */
+.roamer-shadow {
+  position: absolute; left: 50%; top: 90%; width: 52%; height: 14%; transform: translate(-50%, -50%);
+  border-radius: 50%; background: radial-gradient(closest-side, rgba(0, 0, 0, 0.42), rgba(0, 0, 0, 0));
+}
+
+/* "!", "?", "♪" or a heart over its head for a moment. */
+.roamer-emote {
+  position: absolute; left: 50%; top: -8%; transform: translate(-50%, 0); opacity: 0; pointer-events: none;
+  display: grid; place-items: center; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 11px;
+  font: 400 15px/1 'Titan One', var(--display), sans-serif; color: #2a1250;
+  background: #fff; border: 2px solid #000; box-shadow: 0 2px 0 #000;
+}
+.roamer-emote[data-e="heart"] { color: #ec3f7c; }
+
+/* The speech bubble. */
+.roamer-pop {
+  position: absolute; z-index: 1; width: min(272px, calc(100% - 16px)); box-sizing: border-box; pointer-events: auto;
+  padding: 12px 14px 10px; border-radius: 18px; border: 3px solid #000; box-shadow: 0 5px 0 #000, 0 14px 28px rgba(0, 0, 0, 0.4);
+  background: linear-gradient(180deg, #fffaf0, #f6e9ff); color: #2a1250; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  animation: roamer-pop-in 0.26s cubic-bezier(.3, 1.6, .5, 1) both; transform-origin: var(--tail, 50%) 100%;
+}
+.roamer-pop[data-below="1"] { transform-origin: var(--tail, 50%) 0; }
+@keyframes roamer-pop-in { from { opacity: 0; transform: scale(0.6); } }
+.roamer-pop::after {
+  content: ''; position: absolute; left: var(--tail, 50%); bottom: -11px; width: 16px; height: 16px; margin-left: -8px;
+  background: #f6e9ff; border: 3px solid #000; border-top: 0; border-left: 0; transform: rotate(45deg);
+}
+.roamer-pop[data-below="1"]::after { bottom: auto; top: -11px; background: #fffaf0; transform: rotate(-135deg); }
+.roamer-hi { margin: 0 18px; font: 400 18px/1.15 'Titan One', var(--display), sans-serif; color: #5b2bb5; }
+.roamer-text { margin: 0; font: 700 13px/1.4 var(--font), sans-serif; color: #3b2160; }
+.roamer-go { margin-top: 4px; text-decoration: none; }
+.roamer-x {
+  position: absolute; top: 4px; right: 6px; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%;
+  background: none; color: #5b2bb5; font: 700 22px/1 var(--font), sans-serif; cursor: pointer;
+}
+.roamer-x:hover { background: rgba(91, 43, 181, 0.12); }
+.roamer-hide {
+  padding: 2px 6px; border: 0; background: none; cursor: pointer;
+  font: 700 11.5px var(--font), sans-serif; color: #7a62a0; text-decoration: underline; text-underline-offset: 2px;
+}
+.roamer-hide:hover { color: #3b2160; }
+.roamer-x:focus-visible, .roamer-hide:focus-visible { outline: 2px solid #5b2bb5; outline-offset: 1px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .roamer-chog { transition: none; }
+  .roamer-pop { animation: none; }
+}

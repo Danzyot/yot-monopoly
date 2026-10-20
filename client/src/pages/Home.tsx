@@ -15,6 +15,7 @@ import { requirementBadge, requirementSentence } from '../community.tsx';
 import { useCardsRoomList } from '../cards/net.ts';
 import { goToPoker, openPoker, pokerTarget } from '../pokerLink.ts';
 import { POKER_URL } from '../../../shared/brand.ts';
+import ChogRoamer from '../components/roamer/ChogRoamer.tsx';
 
 // The home page has no WebGL at all: the board behind the hero is a still
 // (client/public/home/, drifted by styles/home.css), so the page is up at once
@@ -315,6 +316,7 @@ export default function Home() {
           </div>
         </section>
       </div>
+      <ChogRoamer />
     </div>
   );
 }
