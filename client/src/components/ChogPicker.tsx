@@ -8,6 +8,7 @@ import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { chogArtUrl, chogLook, chogName, isLegendary } from '../../../shared/chogs/traits.ts';
 import { refreshHolderStatus, useWalletStatus, type WalletStatus } from '../wallet/walletApi.ts';
+import { useAuth } from '../auth.tsx';
 
 /** The gallery's "Play as Chog #n" remembers the token here, next to CHARACTER_PREF_KEY ('chog'). */
 export const CHOG_TOKEN_PREF_KEY = 'yot:chog-token';
@@ -51,9 +52,18 @@ export default function ChogPicker({ selected, onPick, taken, label = 'Play as' 
   label?: string;
 }) {
   const status = useYourChogs();
-  if (!status) return <p className="chog-nudge small muted">Checking your wallet for Chogs…</p>;
-  if (!status.holder || !status.chogs.length) {
-    return <p className="chog-nudge small"><Link to="/wallet">Link your wallet to play as your Chog →</Link></p>;
+  const { profile, ready } = useAuth();
+  // Signed out there is no wallet to check (the status never comes): straight to the nudge.
+  const signedOut = ready && !profile;
+  if (!status && !signedOut) return <p className="chog-nudge small muted">Checking your wallet for Chogs…</p>;
+  if (!status || !status.holder || !status.chogs.length) {
+    return (
+      <p className="chog-nudge small">
+        <Link to="/wallet">Link your wallet to play as your Chog →</Link>
+        <span className="muted"> or </span>
+        <Link to="/wallet#selftx">verify with a self-transfer, no wallet connection needed</Link>
+      </p>
+    );
   }
   return (
     <div className="chog-picker">

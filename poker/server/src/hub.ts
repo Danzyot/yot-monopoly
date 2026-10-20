@@ -39,7 +39,9 @@ export function isHubOrigin(origin: string | undefined): boolean {
   return !!origin && hubOrigins().has(origin);
 }
 
-/** The read-only endpoints the hub may show on a profile: the all-time
- *  leaderboard and a finished tournament's results. Nothing that writes, and
+/** The read-only endpoints the hub may read from a browser: the all-time
+ *  leaderboard and a finished tournament's results (profiles), and the
+ *  tournament list (the hub's /poker page: live, upcoming, just finished —
+ *  what this room's own home page shows anyone). Nothing that writes, and
  *  nothing that needs a token. */
-export const HUB_READABLE = /^\/api\/(leaderboard|results\/[^/]+)$/;
+export const HUB_READABLE = /^\/api\/(leaderboard|lobby|results\/[^/]+)$/;

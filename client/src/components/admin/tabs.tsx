@@ -10,6 +10,7 @@ import HostsTab from './HostsTab.tsx';
 import GraphicsManager from './GraphicsManager.tsx';
 import LogsTab from './LogsTab.tsx';
 import OverviewTab from './OverviewTab.tsx';
+import PagesTab from './PagesTab.tsx';
 import PlayersTab from './PlayersTab.tsx';
 import RoomsTab from './RoomsTab.tsx';
 import MusicManager from './MusicManager.tsx';
@@ -31,6 +32,7 @@ export const ADMIN_TABS: AdminTab[] = [
   { id: 'logs', label: 'Logs', icon: '📜', Component: LogsTab },
   { id: 'features', label: 'Features', icon: '🎛', Component: FeaturesTab },
   { id: 'content', label: 'Content', icon: '✏️', Component: ContentTab },
+  { id: 'pages', label: 'Pages', icon: '📄', Component: PagesTab },
   { id: 'discord', label: 'Discord', icon: '💬', Component: DiscordTab },
   { id: 'graphics', label: 'Graphics', icon: '🖼', Component: GraphicsManager },
   { id: 'music', label: 'Music', icon: '🎵', Component: MusicManager },

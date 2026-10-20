@@ -30,12 +30,23 @@ interface Fit {
   hide: Partial<Record<string, string[]>>;
   items: Partial<Record<string, Partial<Record<string, { p?: V3; s?: number | V3 }>>>>;
   neckOverBody: V3;
+  /** Per character with a mane of its own, the cut of it worn under each head item (the whole one otherwise). */
+  mane: Partial<Record<string, Partial<Record<string, string>>>>;
 }
 const FIT = FIT_JSON as unknown as Fit;
 
 /** False when `item` can't be worn by this character (it is hidden on them). */
 export function itemFits(character: CharacterId, item: string): boolean {
   return !FIT.hide[character]?.includes(item);
+}
+
+/**
+ * Which cut of its mane a character wears with this outfit (models/characters/<id>.glb `<id>_Hair_<cut>`):
+ * the Chog's spikes are cut back round a hat so some always show without poking through it.
+ */
+export function outfitMane(character: CharacterId, outfit: Outfit): string {
+  const head = outfit.head;
+  return (head && itemFits(character, head) && FIT.mane[character]?.[head]) || 'full';
 }
 
 /**

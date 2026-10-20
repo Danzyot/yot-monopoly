@@ -7,6 +7,8 @@ import { AuthProvider } from './auth';
 import { ToastProvider } from './toast';
 import { FeatureProvider } from './features';
 import './index.css';
+// The Chog Games look on top (the hub's tokens, fonts, buttons and header).
+import './season.css';
 import { armAudioOnFirstGesture, armUiClickSounds } from './sound';
 import { installButtonGlow } from './glow';
 

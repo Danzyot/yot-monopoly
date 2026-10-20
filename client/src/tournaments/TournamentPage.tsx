@@ -136,7 +136,13 @@ export default function TournamentPage() {
   if (error && !v) {
     return <div className="page tn-page"><section className="panel tn-empty"><p>{error}</p><Link className="btn primary" to="/tournaments">All tournaments</Link></section></div>;
   }
-  if (!v) return <div className="center-msg"><p className="muted">Loading tournament…</p></div>;
+  if (!v) {
+    return (
+      <div className="page lb-skeleton" aria-busy="true" aria-label="Loading the tournament">
+        <div className="sk sk-hero" /><div className="sk sk-row" /><div className="sk sk-row" /><div className="sk sk-row" />
+      </div>
+    );
+  }
 
   const isHost = me === v.hostId;
   const isAdmin = !!profile?.isAdmin;

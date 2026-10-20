@@ -1,17 +1,29 @@
-// "How to play": the whole game on two short pages (the basics, then the
-// extras: arcades, house rules, camera), reachable from the home page, the
-// lobby and the game's "?" button, which also lists the keyboard shortcuts on
-// devices that have a keyboard. Every line below was checked against the
-// engine (server/src/engine/game.ts) and the action bar, so keep them in step.
+// "How to play": for Monopoly the whole game on two short pages (the basics,
+// then the extras: arcades, house rules, camera), reachable from the home page,
+// the lobby and the game's "?" button, which also lists the keyboard shortcuts
+// on devices that have a keyboard. Every Monopoly line below was checked against
+// the engine (server/src/engine/game.ts) and the action bar, so keep them in step.
+// The same dialog shows the Cards and Poker tutorials (HowToGames.tsx): the "?"
+// on each hub card opens its game, the hero's button opens it with a tab per game.
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { GAMES } from '../../../shared/brand.ts';
 import type { RuleConfig } from '../../../shared/themes.ts';
 import { MINIGAME_INFO, MINIGAME_KINDS } from '../../../shared/minigames.ts';
 import { CAMERA_MODES } from '../three/camera.ts';
 import { CloseX, Modal } from './Modal.tsx';
 import { SHORTCUTS } from './Shortcuts.tsx';
+import { cardsSteps, pokerSteps, type GuideStep } from './HowToGames.tsx';
 
-interface Step { icon: string; title: string; text: string }
+type Step = GuideStep;
+
+/** The hub's games, in the order the home page shows them. */
+export type HowToGame = 'monopoly' | 'cards' | 'poker';
+export const HOWTO_GAMES: { id: HowToGame; icon: string; name: string }[] = [
+  { id: 'monopoly', icon: '🎩', name: GAMES.monopoly.name },
+  { id: 'cards', icon: '🃏', name: GAMES.cards.name },
+  { id: 'poker', icon: '♠️', name: GAMES.poker.name },
+];
 
 export function howToSteps(rules?: Partial<RuleConfig>, cur = '$'): Step[] {
   const auctions = rules?.auctions !== false;
@@ -50,15 +62,16 @@ const HOUSE_RULES: { key: keyof RuleConfig; label: string; text: string }[] = [
   { key: 'arcadeParking', label: 'Free Parking arcade', text: 'Free Parking starts a mini-game too.' },
 ];
 
-function Steps({ rules, cur }: { rules?: Partial<RuleConfig>; cur: string }) {
+function Steps({ steps }: { steps: Step[] }) {
   return (
     <ol className="howto-steps">
-      {howToSteps(rules, cur).map((s, i) => (
+      {steps.map((s, i) => (
         <li key={s.title}>
           <span className="howto-icon" aria-hidden>{s.icon}</span>
           <div>
             <b><span className="howto-n">{i + 1}</span>{s.title}</b>
             <p>{s.text}</p>
+            {s.art}
           </div>
         </li>
       ))}
@@ -127,37 +140,60 @@ type Tab = 'rules' | 'extras' | 'keys';
 const hasKeyboard = () => typeof window !== 'undefined' && !window.matchMedia?.('(hover: none) and (pointer: coarse)').matches;
 
 /** How to play (and, in a game with a keyboard, the shortcuts) in a dialog. */
-export default function HowToPlay({ onClose, rules, shortcuts = false, startOn = 'rules', currency = '$' }: {
+export default function HowToPlay({ onClose, game = 'monopoly', pickGame = false, rules, shortcuts = false, startOn = 'rules', currency = '$' }: {
   onClose: () => void;
-  /** The table's rules, to word the steps (auctions, game clock). */
+  /** Which game's tutorial to show (first, with pickGame). */
+  game?: HowToGame;
+  /** A tab per game on top, to switch between the three (the home page's hero button). */
+  pickGame?: boolean;
+  /** Monopoly: the table's rules, to word the steps (auctions, game clock). */
   rules?: Partial<RuleConfig>;
-  /** Offer the keyboard-shortcuts tab (in a game, on devices with a keyboard). */
+  /** Monopoly: offer the keyboard-shortcuts tab (in a game, on devices with a keyboard). */
   shortcuts?: boolean;
   startOn?: Tab;
-  /** The edition's money symbol. */
+  /** Monopoly: the edition's money symbol. */
   currency?: string;
 }) {
   const keys = shortcuts && hasKeyboard();
+  const [g, setG] = useState<HowToGame>(game);
   const [tab, setTab] = useState<Tab>(startOn === 'keys' && !keys ? 'rules' : startOn);
   const tabs: [Tab, string][] = [['rules', 'The basics'], ['extras', 'Extras'], ...(keys ? [['keys', 'Keys'] as [Tab, string]] : [])];
+  // At a Monopoly table it is plainly "How to play"; elsewhere it says which game.
+  const title = pickGame || (g === 'monopoly' && rules) ? 'How to play' : `How to play ${HOWTO_GAMES.find(x => x.id === g)!.name}`;
   return (
-    <Modal onClose={onClose} labelledBy="howto-title" className="howto">
+    <Modal onClose={onClose} labelledBy="howto-title" className={`howto howto-${g}`}>
       <div className="howto-head">
-        <h2 id="howto-title">How to play</h2>
+        <h2 id="howto-title">{title}</h2>
         <CloseX onClick={onClose} />
       </div>
-      <div className="ux-seg howto-tabs" role="tablist">
-        {tabs.map(([id, label]) => (
-          <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>{label}</button>
-        ))}
-      </div>
-      {tab === 'rules' && <Steps rules={rules} cur={currency} />}
-      {tab === 'extras' && <Extras rules={rules} />}
-      {tab === 'keys' && (
-        <table className="howto-keys">
-          <tbody>{SHORTCUTS.map(([k, what]) => <tr key={k}><td><kbd>{k}</kbd></td><td>{what}</td></tr>)}</tbody>
-        </table>
+      {pickGame && (
+        <div className="howto-pick" role="tablist" aria-label="Game">
+          {HOWTO_GAMES.map(x => (
+            <button key={x.id} type="button" role="tab" aria-selected={g === x.id} className={g === x.id ? 'on' : ''}
+              onClick={() => { setG(x.id); setTab('rules'); }}>
+              <span aria-hidden>{x.icon}</span> {x.name}
+            </button>
+          ))}
+        </div>
       )}
+      {g === 'monopoly' && (
+        <>
+          <div className="ux-seg howto-tabs" role="tablist">
+            {tabs.map(([id, label]) => (
+              <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>{label}</button>
+            ))}
+          </div>
+          {tab === 'rules' && <Steps steps={howToSteps(rules, currency)} />}
+          {tab === 'extras' && <Extras rules={rules} />}
+          {tab === 'keys' && (
+            <table className="howto-keys">
+              <tbody>{SHORTCUTS.map(([k, what]) => <tr key={k}><td><kbd>{k}</kbd></td><td>{what}</td></tr>)}</tbody>
+            </table>
+          )}
+        </>
+      )}
+      {g === 'cards' && <Steps steps={cardsSteps()} />}
+      {g === 'poker' && <Steps steps={pokerSteps()} />}
       <button className="btn primary big howto-go" onClick={onClose} data-autofocus>Let's play!</button>
     </Modal>
   );
@@ -176,14 +212,14 @@ export function markHowToSeen(): void {
  * goes to <body>: inside the home page's hero it sat in the hero's stacking
  * layer, under the character cards below it.
  */
-export function HowToPlayButton({ rules, className = 'btn small ghost', label = '❓ How to play' }: {
-  rules?: Partial<RuleConfig>; className?: string; label?: string;
+export function HowToPlayButton({ rules, game, className = 'btn small ghost', label = '❓ How to play' }: {
+  rules?: Partial<RuleConfig>; game?: HowToGame; className?: string; label?: string;
 }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button type="button" className={className} onClick={() => { setOpen(true); markHowToSeen(); }}>{label}</button>
-      {open && createPortal(<HowToPlay rules={rules} onClose={() => setOpen(false)} />, document.body)}
+      <button type="button" className={className} onClick={() => { setOpen(true); if (!game || game === 'monopoly') markHowToSeen(); }}>{label}</button>
+      {open && createPortal(<HowToPlay game={game} rules={rules} onClose={() => setOpen(false)} />, document.body)}
     </>
   );
 }

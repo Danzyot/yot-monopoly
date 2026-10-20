@@ -1,17 +1,22 @@
 // /cards: the Chog Cards home. Open a table, join one by code, or pick an
 // open one; how to play in three steps, and the top players.
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { useConnected } from '../net.ts';
 import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { api } from '../api.ts';
 import { CARDS_GAME_NAME, LAST_CARD_CALL } from '../../../shared/cards/meta.ts';
+import { BRAND } from '../../../shared/brand.ts';
 import type { Card } from '../../../shared/cards/deck.ts';
 import { cardsCall, chogPref, useCardsRoomList } from './net.ts';
 import { CardBack, CardFace } from './CardFace.tsx';
 import { CardsBackdrop } from './CardsLobby.tsx';
 import './cards.css';
+
+// The full tutorial is the hub's (the "?" on the Cards hub card), fetched when it is wanted.
+const HowToPlay = lazy(() => import('../components/HowToPlay.tsx'));
 
 const SHOWCASE: Card[] = [
   { id: 0, kind: 'number', color: 'red', value: 7 },
@@ -38,9 +43,13 @@ export default function CardsHome() {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [leaders, setLeaders] = useState<Leader[]>([]);
+  const [howTo, setHowTo] = useState(false);
   const canCreate = !!profile && (config.features.publicRooms || profile.isAdmin);
 
-  useEffect(() => { document.title = CARDS_GAME_NAME; }, []);
+  useEffect(() => {
+    document.title = CARDS_GAME_NAME;
+    return () => { document.title = BRAND.name; };
+  }, []);
   useEffect(() => {
     if (!config.features.leaderboard) return;
     api<{ leaders: Leader[] }>('/api/cards/leaderboard').then(r => setLeaders(r.leaders.slice(0, 5))).catch(() => {});
@@ -132,6 +141,8 @@ export default function CardsHome() {
               </li>
             ))}
           </ol>
+          <div className="lobby-howto"><button type="button" className="btn small ghost" onClick={() => setHowTo(true)}>❓ How to play</button></div>
+          {howTo && createPortal(<Suspense fallback={null}><HowToPlay game="cards" onClose={() => setHowTo(false)} /></Suspense>, document.body)}
         </section>
 
         {leaders.length > 0 && (
@@ -142,7 +153,7 @@ export default function CardsHome() {
             </ol>
           </section>
         )}
-        <p className="ch-foot muted small"><Link to="/">← Back to Monopoly</Link></p>
+        <p className="ch-foot muted small"><Link to="/">← All {BRAND.name}</Link></p>
       </div>
     </div>
   );

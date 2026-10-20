@@ -53,14 +53,20 @@ export interface CharacterModel {
 const keyOf = (m: Material): MatKey | 'paint' => (m.name.split(':')[1] ?? 'main') as MatKey | 'paint';
 const groupOf = (k: MatKey | 'paint'): Group => (k === 'paint' ? 'paint' : OWN[k] ?? (ATLAS_KEYS.includes(k) ? 'atlas' : 'main'));
 
-const models = new WeakMap<Object3D, CharacterModel>();
+const models = new WeakMap<Object3D, Map<string, CharacterModel>>();
 const ORIGIN = new Vector3();
 const tmpM = new Matrix4();
 
-/** The merged model of character `cid` in a loaded scene (built once per scene). */
-export function characterModel(scene: Object3D, cid: string, garments: string[]): CharacterModel {
-  let model = models.get(scene);
-  if (!model) models.set(scene, (model = build(scene, cid, garments)));
+/**
+ * The merged model of character `cid` in a loaded scene (built once per scene and mane).
+ * `mane`: for a character whose mane is a node of its own (the Chog's `chog_Hair_<mane>`), which cut of it
+ * the head wears (the whole one, 'full', unless an outfit hat calls for a cut-down one: Outfit.tsx).
+ */
+export function characterModel(scene: Object3D, cid: string, garments: string[], mane = 'full'): CharacterModel {
+  let byMane = models.get(scene);
+  if (!byMane) models.set(scene, (byMane = new Map()));
+  let model = byMane.get(mane);
+  if (!model) byMane.set(mane, (model = build(scene, cid, garments, mane)));
   return model;
 }
 
@@ -92,7 +98,7 @@ export function mergeChunks(chunks: Chunks): MergedGeos {
     .map(group => ({ group, geo: merge(chunks[group], group === 'atlas' ? 'texel' : group === 'paint' ? 'own' : null) }));
 }
 
-function build(scene: Object3D, cid: string, garments: string[]): CharacterModel {
+function build(scene: Object3D, cid: string, garments: string[], mane: string): CharacterModel {
   const bones = [...RIG_BONES, ...garments];
   const chunks = newChunks();
   const hinges: CharacterModel['hinges'] = {};
@@ -107,6 +113,9 @@ function build(scene: Object3D, cid: string, garments: string[]): CharacterModel
     }
     // Part-local space: the node as if moved to the origin (the bone supplies its rig pivot).
     collect(node, place.compose(ORIGIN, node.quaternion, node.scale), bone, chunks);
+    // A mane of its own rides the head (head space, like the head node).
+    const hair = name === 'Head' ? scene.getObjectByName(`${cid}_Hair_${mane}`) ?? scene.getObjectByName(`${cid}_Hair_full`) : undefined;
+    if (hair) collect(hair, place.compose(ORIGIN, hair.quaternion, hair.scale), bone, chunks);
   });
   return { geos: mergeChunks(chunks), bones, hinges };
 }

@@ -1,11 +1,13 @@
-// /wallet: link a wallet by signing a message (free, no gas) and see the
-// Chog Genesis tokens the linked wallets hold.
-import { useEffect, useState } from 'react';
+// /wallet: link a wallet by signing a message (free, no gas), or without
+// connecting it by a self-transfer (SelfTxPanel), and see the Chog Genesis
+// tokens the linked wallets hold.
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../auth.tsx';
 import { askConfirm } from '../components/Modal.tsx';
 import { toast, toastError } from '../toast.tsx';
 import { BRAND } from '../../../shared/brand.ts';
 import { WALLET_DOWNLOADS, getProvider, shortAddress, walletName } from './eth.ts';
+import SelfTxPanel from './SelfTxPanel.tsx';
 import {
   fetchWalletStatus, linkWalletFlow, openSeaUrl, unlinkWallet, useWalletStatus,
   type LinkStep, type WalletRow, type WalletStatus,
@@ -29,6 +31,8 @@ export default function WalletPage() {
   const [step, setStep] = useState<LinkStep | null>(null);
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState<string | null>(null);
+  const [selfTxActive, setSelfTxActive] = useState(false);
+  const onSelfTx = useCallback((on: boolean) => setSelfTxActive(on), []);
   const provider = getProvider();
 
   useEffect(() => {
@@ -76,27 +80,33 @@ export default function WalletPage() {
   const unlink = async (w: WalletRow) => {
     const ok = await askConfirm({
       title: `Unlink ${shortAddress(w.address)}?`,
-      body: 'You can link it again any time by signing another message.',
+      body: 'You can link it again any time, by signing another message or with a self-transfer.',
       confirm: 'Unlink', danger: true, icon: '🔗',
     });
     if (!ok) return;
     try { await unlinkWallet(w.address); toast(`Unlinked ${shortAddress(w.address)}`); } catch (e) { toastError(e); }
   };
 
-  if (!ready) return <div className="page"><p className="muted">Loading…</p></div>;
+  if (!ready) {
+    return (
+      <div className="page wl-page lb-skeleton" aria-busy="true" aria-label="Loading your wallets">
+        <div className="sk sk-hero" /><div className="sk sk-card" /><div className="sk sk-card" />
+      </div>
+    );
+  }
 
   return (
     <div className="page wl-page">
       <header className="lb-head">
         <h1 className="lb-title"><span aria-hidden>🔗</span> Link your wallet</h1>
-        <p className="lb-blurb">Prove you hold a Chog Genesis and the game knows it. Holding a Chog lets you host Poker tables and tournaments. Signing is free — no transaction, no gas.</p>
+        <p className="lb-blurb">Prove you hold a Chog Genesis and the game knows it. Holding a Chog lets you host Poker tables and tournaments. Two ways to prove it: connect your wallet and sign a message (free), or — without connecting anything — send a tiny amount from your wallet to itself.</p>
       </header>
 
       {!profile && (
         <section className="panel lb-empty">
           <div className="lb-empty-icon" aria-hidden>🎩</div>
           <h2>Sign in first</h2>
-          <p className="muted">A wallet links to your {BRAND.name} account, so sign in and then connect it.</p>
+          <p className="muted">A wallet links to your {BRAND.name} account, so sign in and then connect it — or verify it with a self-transfer, no connection needed.</p>
           <button className="btn primary chunky" onClick={openSignIn}>Sign in</button>
         </section>
       )}
@@ -104,34 +114,47 @@ export default function WalletPage() {
       {profile && <HolderBanner status={status} canHost={canHost} />}
 
       {profile && (
-        <section className="panel wl-connect" aria-labelledby="wl-connect-title">
-          <h2 id="wl-connect-title" className="lb-h2">Connect a wallet</h2>
-          {provider ? (
-            <>
-              <ol className="wl-steps" aria-label="What happens">
-                <li><b>1</b> Connect {walletName(provider)}</li>
-                <li><b>2</b> Switch to Monad</li>
-                <li><b>3</b> Sign a message (free)</li>
-                <li><b>4</b> We count your Chogs</li>
-              </ol>
-              <div className="row wrap wl-actions">
-                <button className="btn primary chunky" onClick={link} disabled={!!step}>
-                  {step ? <><span className="spinner" aria-hidden /> {STEP_LABEL[step]}</> : `Connect ${walletName(provider)}`}
-                </button>
-                <span className="small muted">Already linked a wallet? Connect another: an account can hold several.</span>
+        <div className={`wl-methods ${selfTxActive ? 'selftx-on' : ''}`}>
+          <section className="panel wl-method wl-connect" aria-labelledby="wl-connect-title">
+            <h2 id="wl-connect-title" className="lb-h2 wl-method-title">
+              <span>Connect wallet</span>
+              <small className="wl-method-sub">sign a message, free</small>
+            </h2>
+            {provider ? (
+              <>
+                <ol className="wl-steps" aria-label="What happens">
+                  <li><b>1</b> Connect {walletName(provider)}</li>
+                  <li><b>2</b> Switch to Monad</li>
+                  <li><b>3</b> Sign a message (free)</li>
+                  <li><b>4</b> We count your Chogs</li>
+                </ol>
+                <div className="row wrap wl-actions">
+                  <button className="btn primary chunky" onClick={link} disabled={!!step}>
+                    {step ? <><span className="spinner" aria-hidden /> {STEP_LABEL[step]}</> : `Connect ${walletName(provider)}`}
+                  </button>
+                  <span className="small muted">Already linked a wallet? Connect another: an account can hold several.</span>
+                </div>
+              </>
+            ) : (
+              <div className="wl-nowallet">
+                <p><b>No wallet extension found in this browser.</b> Install one and open it on this page — or skip connecting and use the self-transfer instead.</p>
+                <div className="row wrap">
+                  {WALLET_DOWNLOADS.map(w => <a key={w.name} className="btn" href={w.url} target="_blank" rel="noreferrer">Get {w.name} ↗</a>)}
+                </div>
+                <p className="small muted">On a phone, open <b>{location.host}</b> inside the wallet app's browser.</p>
               </div>
-            </>
-          ) : (
-            <div className="wl-nowallet">
-              <p><b>No wallet extension found in this browser.</b> Install one, open it on this page, and come back:</p>
-              <div className="row wrap">
-                {WALLET_DOWNLOADS.map(w => <a key={w.name} className="btn" href={w.url} target="_blank" rel="noreferrer">Get {w.name} ↗</a>)}
-              </div>
-              <p className="small muted">On a phone, open <b>{location.host}</b> inside the wallet app's browser.</p>
-            </div>
-          )}
-          {err && <p className="warn wl-err" role="alert">{err}</p>}
-        </section>
+            )}
+            {err && <p className="warn wl-err" role="alert">{err}</p>}
+          </section>
+
+          <section className="panel wl-method wl-selftx-card" aria-labelledby="wl-selftx-title">
+            <h2 id="wl-selftx-title" className="lb-h2 wl-method-title">
+              <span>No wallet connection</span>
+              <small className="wl-method-sub">verify with a self-transfer</small>
+            </h2>
+            <SelfTxPanel onActive={onSelfTx} />
+          </section>
+        </div>
       )}
 
       {profile && (
@@ -144,9 +167,9 @@ export default function WalletPage() {
               </button>
             )}
           </div>
-          {loading && !status && <p className="muted">Loading…</p>}
+          {loading && !status && <div className="lb-skeleton" aria-busy="true" aria-label="Loading your wallets"><div className="sk sk-row" /></div>}
           {status && status.wallets.length === 0 && (
-            <p className="muted">Nothing linked yet. Connect a wallet above and sign the message it shows you.</p>
+            <p className="muted">Nothing linked yet. Connect a wallet above and sign the message it shows you, or verify one with a self-transfer.</p>
           )}
           {!!status?.wallets.length && (
             <ul className="wl-list">
