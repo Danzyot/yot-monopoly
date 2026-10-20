@@ -197,7 +197,7 @@ export class TournamentManager {
     if (!TOURNEY_CARDS_TARGETS.includes(out.cardsTarget)) fail('Pick a points target from the list');
     if (s.cardsMode !== undefined) {
       if (s.cardsMode !== 'classic' && s.cardsMode !== 'chaos') fail('Unknown mode');
-      out.cardsMode = s.cardsMode;
+      out.cardsMode = s.cardsMode === 'chaos' ? 'chaos' : 'classic';
     }
     return out;
   }
