@@ -4,6 +4,8 @@ import { useAuth } from '../auth';
 import { BRAND } from '../../../shared/brand';
 import AuthModal from './AuthModal';
 import Avatar from './Avatar';
+import ChogPicker from './ChogPicker';
+import { forgetMyChogs, loadMyChogs, myChog, useMyChogs } from '../chog';
 import MusicPlayer from './MusicPlayer';
 import { IconDiscord } from './icons';
 import ChogLogo from './ChogLogo';
@@ -26,7 +28,16 @@ export default function Header() {
   const music = useFeature('music');
   const { profile, signOut, discordEnabled, linkDiscord, discordInviteUrl, demoMode, hubUrl } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
+  const [showChog, setShowChog] = useState(false);
+  const chogs = useMyChogs();
   const ref = useRef<HTMLElement>(null);
+
+  // Your own Chog avatar, for the chip. Asked once per sign-in.
+  const profileId = profile?.id ?? null;
+  useEffect(() => {
+    if (profileId) void loadMyChogs();
+    else forgetMyChogs();
+  }, [profileId]);
 
   // Publish the real header height so the table page can size itself to the
   // rest of the viewport exactly — felt and action buttons always on screen,
@@ -87,7 +98,17 @@ export default function Header() {
       )}
       {profile ? (
         <div className="profile-chip">
-          <Avatar value={profile.avatar} size={22} />
+          {chogs.data?.enabled ? (
+            // The way into "Your Chog": the avatar itself.
+            <button
+              type="button" className="profile-avatar-btn" onClick={() => setShowChog(true)}
+              title="Your Chog — use one of your Chog NFTs as your avatar" aria-label="Your Chog avatar"
+            >
+              <Avatar value={profile.avatar} size={22} chog={myChog(chogs)} />
+            </button>
+          ) : (
+            <Avatar value={profile.avatar} size={22} />
+          )}
           <span className="profile-name">{profile.name}</span>
           {profile.isAdmin && <span className="admin-badge">OPERATOR</span>}
           {profile.discord ? (
@@ -103,6 +124,7 @@ export default function Header() {
         <button className="btn btn-primary btn-sm" onClick={() => setShowAuth(true)}>Sign in</button>
       )}
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+      {showChog && profile && <ChogPicker onClose={() => setShowChog(false)} />}
     </header>
   );
 }

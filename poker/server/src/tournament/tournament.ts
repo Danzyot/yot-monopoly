@@ -9,6 +9,7 @@ import { computePayouts } from './payouts.ts';
 import { CHAT_COOLDOWN_MS, isBlocked, MAX_MENTIONS, resolveMentions, resolveReply } from '../chatrules.ts';
 import { logGameEvent } from '../eventlog.ts';
 import { isOnline } from '../presence.ts';
+import { chogField } from '../chogs.ts';
 
 const clamp = (n: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, Number.isFinite(n) ? n : lo));
@@ -1657,13 +1658,13 @@ export class Tournament {
 
     const out: StandingEntry[] = [];
     alive.forEach((e, i) => out.push({
-      rank: i + 1, id: e.p.id, name: e.p.name, avatar: e.p.avatar,
+      rank: i + 1, id: e.p.id, name: e.p.name, avatar: e.p.avatar, ...chogField(e.p.id),
       stack: e.stack, seated: e.seated, tableId: e.p.tableId, busted: false,
       place: e.p.place, prize: e.p.prize,
       discordTag: e.p.discord?.username ?? null, discordVerified: e.p.discordVerified,
     }));
     busted.forEach(p => out.push({
-      rank: p.place ?? out.length + 1, id: p.id, name: p.name, avatar: p.avatar,
+      rank: p.place ?? out.length + 1, id: p.id, name: p.name, avatar: p.avatar, ...chogField(p.id),
       stack: 0, seated: false, tableId: null, busted: true, place: p.place, prize: p.prize,
       lastStack: p.lastStack,
       discordTag: p.discord?.username ?? null, discordVerified: p.discordVerified,

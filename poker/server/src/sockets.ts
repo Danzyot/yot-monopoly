@@ -7,6 +7,7 @@ import { banMessage, findBan } from './bans.ts';
 import { isOn } from './features.ts';
 import { discordEnabled, guildMembership } from './discord.ts';
 import { Table } from './engine/table.ts';
+import { chogField, onChogChange, warmChog, withChog } from './chogs.ts';
 import { sanitizeTheme } from './graphics.ts';
 import { playerConnected, playerDisconnected } from './presence.ts';
 import { isInfraPeer, normalisePeer } from './net.ts';
@@ -212,6 +213,7 @@ export function attachSockets(io: IO) {
         tournamentName: t.config.name,
         name: player.name,
         avatar: player.avatar,
+        ...chogField(player.id),
         place: player.place,
         prize: player.prize,
         entrants: t.players.size,
@@ -227,7 +229,7 @@ export function attachSockets(io: IO) {
       const places = [...t.players.values()]
         .filter(p => p.place !== null && p.place <= 3)
         .sort((a, b) => (a.place ?? 9) - (b.place ?? 9))
-        .map(p => ({ playerId: p.id, place: p.place!, name: p.name, avatar: p.avatar }));
+        .map(p => ({ playerId: p.id, place: p.place!, name: p.name, avatar: p.avatar, ...chogField(p.id) }));
       const payload = {
         tournamentId: t.id,
         name: t.config.name,
@@ -258,6 +260,14 @@ export function attachSockets(io: IO) {
       if (!table.closed && table.playerSeat(playerId) !== null) pushTableState(io, table);
     }
   };
+
+  // A player's Chog avatar appeared, changed or went (picked, sold, hub back):
+  // re-push everything that shows them.
+  onChogChange(playerId => {
+    broadcastPlayerTables(playerId);
+    for (const t of registry.tournaments.values()) if (t.players.has(playerId)) pushTourneyState(io, t);
+    pushLobby(io);
+  });
 
   io.on('connection', (socket: Sock) => {
     const profile = () => (socket.data as SocketData).profile;
@@ -334,6 +344,7 @@ export function attachSockets(io: IO) {
     });
     if (pid) {
       playerConnected(pid);
+      warmChog(pid);
       broadcastPlayerTables(pid);
       // Audit trail: who connected, from which address, and from which
       // browser. The browser is the part an alt cannot change by moving to a
@@ -515,7 +526,7 @@ export function attachSockets(io: IO) {
       const me = requireAuth();
       const table = registry.findTable(p.tableId);
       if (!table) throw new Error('Table not found');
-      table.userMsg({ id: me.id, name: me.name, avatar: me.avatar }, p.text, p.replyTo);
+      table.userMsg(withChog({ id: me.id, name: me.name, avatar: me.avatar }), p.text, p.replyTo);
     }));
 
     socket.on('table:sitout', wrap((p: { tableId: string; out: boolean }) => {
@@ -767,7 +778,7 @@ export function attachSockets(io: IO) {
       if (!chatEnabled()) throw new Error('Chat is turned off right now');
       if (!isOn('chat')) throw new Error('Chat is switched off');
       const me = requireAuth();
-      getT(p.id).userChat({ id: me.id, name: me.name, avatar: me.avatar }, p.text, p.replyTo);
+      getT(p.id).userChat(withChog({ id: me.id, name: me.name, avatar: me.avatar }), p.text, p.replyTo);
     }));
 
     socket.on('disconnect', () => {

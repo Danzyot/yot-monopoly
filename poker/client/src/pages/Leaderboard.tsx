@@ -51,7 +51,7 @@ export default function Leaderboard() {
                       <td className="rank">{i + 1}</td>
                       <td>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                          <Avatar value={e.avatar} size={18} /> {e.name}
+                          <Avatar value={e.avatar} size={18} chog={e.chog} /> {e.name}
                           {e.discordTag && <span className="discord-badge verified">@{e.discordTag}</span>}
                         </span>
                       </td>

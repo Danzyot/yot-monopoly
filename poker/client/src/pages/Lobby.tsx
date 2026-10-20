@@ -161,7 +161,7 @@ export default function Lobby() {
                   {t.topPlayers.map((p, i) => (
                     <div key={i} className="top-player-row">
                       <span className="medal">{t.state === 'finished' ? MEDALS[(p.place ?? i + 1) - 1] ?? p.place : MEDALS[i] ?? '·'}</span>
-                      <span className="tp-name"><Avatar value={p.avatar} size={15} /> {p.name}</span>
+                      <span className="tp-name"><Avatar value={p.avatar} size={15} chog={p.chog} /> {p.name}</span>
                       <span className="tp-val">
                         {t.state === 'finished'
                           ? p.prize ? `${p.prize.toLocaleString()} cr` : ''

@@ -415,12 +415,12 @@ export class Registry {
           ? t.standings()
             .filter(s => s.place !== null && s.place <= 3)
             .sort((a, b) => (a.place ?? 9) - (b.place ?? 9))
-            .map(s => ({ name: s.name, avatar: s.avatar, stack: 0, place: s.place, prize: s.prize }))
+            .map(s => ({ name: s.name, avatar: s.avatar, ...(s.chog ? { chog: s.chog } : {}), stack: 0, place: s.place, prize: s.prize }))
           : t.state === 'registering'
             ? []
             : t.standings().slice(0, 3)
               .filter(s => !s.busted)
-              .map(s => ({ name: s.name, avatar: s.avatar, stack: s.stack, place: null, prize: null })),
+              .map(s => ({ name: s.name, avatar: s.avatar, ...(s.chog ? { chog: s.chog } : {}), stack: s.stack, place: null, prize: null })),
       }));
     const cashTables = [...this.cashTables.values()]
       .filter(t => !t.closed)

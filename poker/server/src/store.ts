@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { join } from 'node:path';
 import type { CashRecord, LeaderboardEntry, TournamentRecord } from '../../shared/types.ts';
 import { DATA_DIR } from './paths.ts';
+import { chogField } from './chogs.ts';
 
 const RESULTS_FILE = join(DATA_DIR, 'results.json');
 
@@ -219,5 +220,6 @@ export function leaderboard(limit = 100): LeaderboardEntry[] {
   }
   return [...byPlayer.values()]
     .sort((a, b) => b.points - a.points || b.winnings - a.winnings)
-    .slice(0, limit);
+    .slice(0, limit)
+    .map(e => ({ ...e, ...chogField(e.playerId) }));
 }

@@ -26,6 +26,7 @@ import {
 } from './audit.ts';
 import { BRAND } from '../../shared/brand.ts';
 import { HUB_READABLE, hubUrl, isHubOrigin } from './hub.ts';
+import { mountChogs } from './chogroutes.ts';
 import { registry } from './registry.ts';
 import { DEFAULT_BET_CAP_MINUTES, parseLateClock } from './tournament/tournament.ts';
 import { loadInviteLog } from './invitelog.ts';
@@ -615,6 +616,9 @@ function authed(req: express.Request) {
 app.get('/api/lobby', (_req, res) => {
   res.json(registry.lobbyView(io.engine.clientsCount));
 });
+
+// "Your Chog": the seat-avatar picker (chogroutes.ts, chogs.ts).
+mountChogs(app);
 
 app.get('/api/leaderboard', (_req, res) => {
   res.json({ leaderboard: leaderboard(100), recent: recentRecords(15) });

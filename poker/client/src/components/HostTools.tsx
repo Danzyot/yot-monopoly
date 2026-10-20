@@ -105,7 +105,7 @@ export default function HostTools({ view, onClose }: { view: TableView; onClose:
           {seated.length === 0 && <p className="tag">Nobody is seated.</p>}
           {seated.map(s => (
             <div key={s.idx} className="host-stack-row">
-              <Avatar value={s.player!.avatar} size={18} />
+              <Avatar value={s.player!.avatar} size={18} chog={s.player!.chog} />
               <span className="hs-name">{s.player!.name}</span>
               <span className="hs-now">{s.stack.toLocaleString()}</span>
               <input
@@ -136,7 +136,7 @@ export default function HostTools({ view, onClose }: { view: TableView; onClose:
             </p>
             {seated.map(s => (
               <div key={s.idx} className="host-ban-row">
-                <Avatar value={s.player!.avatar} size={18} />
+                <Avatar value={s.player!.avatar} size={18} chog={s.player!.chog} />
                 <span className="hs-name">{s.player!.name}</span>
                 <div className="host-ban-btns">
                   <button className="btn btn-sm" disabled={banning === s.player!.id}

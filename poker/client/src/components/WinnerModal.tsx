@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import Avatar from './Avatar';
+import type { ChogBadge } from '../../../shared/types';
 import Promo from './Promo';
 import { IconTrophy } from './icons';
 import { ordinal } from '../format';
@@ -10,7 +11,7 @@ export interface WinnerInfo {
   name: string;
   entrants: number;
   prizeText: string | null;
-  places: { playerId: string; place: number; name: string; avatar: string }[];
+  places: { playerId: string; place: number; name: string; avatar: string; chog?: ChogBadge }[];
 }
 
 export default function WinnerModal({ info, myPlace, onClose }: {
@@ -27,7 +28,7 @@ export default function WinnerModal({ info, myPlace, onClose }: {
         <h2 className="winner-title">Tournament finished!</h2>
         {champ && (
           <div className="winner-champ">
-            <span className="winner-champ-avatar"><Avatar value={champ.avatar} size={54} /></span>
+            <span className="winner-champ-avatar"><Avatar value={champ.avatar} size={54} chog={champ.chog} /></span>
             <div className="winner-champ-name">{champ.name}</div>
             <div className="winner-champ-sub">wins {info.name}</div>
           </div>
@@ -37,7 +38,7 @@ export default function WinnerModal({ info, myPlace, onClose }: {
             {rest.map(p => (
               <div key={p.playerId} className="winner-place-row">
                 <span className="wp-rank">{ordinal(p.place)}</span>
-                <Avatar value={p.avatar} size={20} />
+                <Avatar value={p.avatar} size={20} chog={p.chog} />
                 <span className="wp-name">{p.name}</span>
               </div>
             ))}

@@ -102,8 +102,13 @@ export default function Seat({
             {seat.lastAction}
           </span>
         )}
+        {/* A Chog holder's portrait sits on the box's top-left corner, out of
+            the flow: the seat is the same size with or without one. */}
+        {seat.player.chog && (
+          <span className="seat-chog"><Avatar value={seat.player.avatar} size={40} chog={seat.player.chog} /></span>
+        )}
         <span className="seat-name">
-          <Avatar value={seat.player.avatar} size={18} />
+          {!seat.player.chog && <Avatar value={seat.player.avatar} size={18} />}
           {/* The name needs its own element to ellipsize: a bare text node
               inside a flex row just gets chopped mid-letter. */}
           <span className="sn-text">{seat.player.name}</span>

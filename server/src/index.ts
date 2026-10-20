@@ -22,6 +22,7 @@ import { mountGraphics } from './routes/graphics.ts';
 import { mountTextOverrides } from './routes/textOverrides.ts';
 import { mountContent } from './routes/content.ts';
 import { walletRoutes } from './routes/wallet.ts';
+import { mountHostingChogs } from './routes/hostingChogs.ts';
 import { attachSockets } from './sockets.ts';
 import { attachCardsSockets } from './cards/sockets.ts';
 import { armCardsPersistence, restoreCardsLive } from './cards/persist.ts';
@@ -145,6 +146,8 @@ app.get('/api/config', (_req, res) => {
 app.use('/api/auth', authRoutes());
 app.use('/api/admin', adminRoutes(sockets, () => loopLagMs));
 app.use('/api/wallet', walletRoutes());
+// Chog Poker asks which Chogs a player holds (signed, server to server).
+mountHostingChogs(app);
 mountMusic(app);
 mountGraphics(app, sockets);
 mountTextOverrides(app);
