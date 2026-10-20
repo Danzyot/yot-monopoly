@@ -1,5 +1,5 @@
 {
-  "_doc": "How outfit items (tools/blender/outfits.py) sit on each character. Items are modelled once on a canonical figure; per character, each anchor gives where that canonical frame goes (p) and how it stretches (s, per axis). head/eyes are in the head's frame (rig.head), neck/body in the body's (rig.pose). 'hide' lists items that cannot fit a character (its own hat, helmet or visor is in the way); 'items' nudges one item on one character on top of its anchor (p adds, s multiplies). 'neckOverBody' widens the neck item when a body item is also worn, so it sits over the collar.",
+  "_doc": "How outfit items (tools/blender/outfits.py) sit on each character. Items are modelled once on a canonical figure; per character, each anchor gives where that canonical frame goes (p) and how it stretches (s, per axis). head/eyes are in the head's frame (rig.head), neck/body in the body's (rig.pose). 'hide' lists items that cannot fit a character (its own hat, helmet or visor is in the way); 'items' nudges one item on one character on top of its anchor (p adds, s multiplies). 'neckOverBody' widens the neck item when a body item is also worn, so it sits over the collar. 'mane' picks, per character whose mane is a node of its own (the Chog: chog_Hair_<cut> in its model, tools/blender/characters.py MANES), the cut of it worn under each head item, so some spikes always show without poking through the hat (the whole mane otherwise).",
   "canonical": {
     "head": { "p": [0, 0, 0], "s": [1, 1, 1], "note": "skull: sphere r 0.1 round the head pivot" },
     "eyes": { "p": [0, 0.015, 0.1], "s": [1, 1, 1], "note": "eyes 0.04 either side of centre, lenses r 0.03" },
@@ -101,5 +101,8 @@
     "cap": { "snacky": { "s": 1.16, "p": [0, 0.014, -0.004] } },
     "beanie": { "snacky": { "s": 1.16, "p": [0, 0.01, -0.004] } },
     "tophat": { "chog": { "s": 0.9, "p": [0, -0.012, 0.004] } }
+  },
+  "mane": {
+    "chog": { "cap": "fringe", "beanie": "fringe", "tophat": "crown" }
   }
 }

@@ -31,7 +31,8 @@ picks the ones built, the style flags override it for a run.
 
 `--preview` renders whole figures for real tokens (their look resolved by
 shared/chogs/traits.ts through chog_look.ts), one frame each, to compare with
-the NFT art (`--head`: a close-up of the head, `--no-export`: renders only).
+the NFT art (`--head`: a close-up of the head, `--yaw 0,60`: a frame per camera angle round the figure,
+`--no-export`: renders only, building just the parts those tokens wear).
 """
 
 import json
@@ -777,8 +778,9 @@ def part_builders():
     return fns
 
 
-def build(m):
-    return {key: fn(m) for key, fn in part_builders().items()}
+def build(m, only=None):
+    """Every node, or just the keys in `only` (a preview that exports nothing builds only what its tokens wear)."""
+    return {key: fn(m) for key, fn in part_builders().items() if only is None or key in only}
 
 
 # ---- preview -------------------------------------------------------------------------
@@ -796,16 +798,20 @@ def tint(m, look):
     for key, (color, rough, metal) in KEYS.items():
         b = m[key].node_tree.nodes['Principled BSDF']
         c = look['colors'].get(key, color)
+        if key == 'hair' and os.environ.get('PREVIEW_HAIR'):
+            # PREVIEW_HAIR=#00ff00: the mane in a colour of its own, to see where it meets a hat of the same colour.
+            c = os.environ['PREVIEW_HAIR']
         b.inputs['Base Color'].default_value = (*blib.hex_rgb(c), 1)
         glow = key == 'glow' or (look['base'] == 'radioactive' and key in ('skin', 'hair'))
         b.inputs['Emission Color'].default_value = (*blib.hex_rgb(c), 1) if glow else (0, 0, 0, 1)
         b.inputs['Emission Strength'].default_value = 1.4 if key == 'glow' else 0.9 if glow else 0.0
 
 
-def preview(nodes, m, ids, path, close=False):
-    """One figure per token, front view (`close`: the head), against its background colour; a contact sheet with the art is made by the caller."""
+def preview(nodes, m, ids, path, close=False, yaws=(0,), looks=None):
+    """One figure per token, front view (`close`: the head), against its background colour; a contact sheet with the art is made by the caller.
+    `yaws`: one frame per camera angle (degrees round the figure, + toward his left), e.g. 0,60 for the front and a three-quarter view."""
     sc = bpy.context.scene
-    looks = looks_for(ids)
+    looks = looks or looks_for(ids)
     far = (100, 100, 0)
     HEAD = Vector(blib.V(*characters.PART_PIVOTS['Head']))
     body = detailed.chog_body(CID, m)
@@ -868,11 +874,17 @@ def preview(nodes, m, ids, path, close=False):
         for bone, names in look['parts'].items():
             for name in names:
                 by_name[name].location = place[bone]
-        out = f'{os.path.splitext(path)[0]}_{tid}.png'
-        sc.render.filepath = out
-        bpy.ops.render.render(write_still=True)
-        outs.append(out)
-        blib.log('preview', tid, look['form'], look['eyes'], look['mouth'], '→', out)
+        bpy.context.view_layer.update()
+        front = cam.matrix_world.copy()
+        for yaw in yaws:
+            # Round the figure's vertical axis (blender z through the origin).
+            cam.matrix_world = Matrix.Rotation(math.radians(yaw), 4, 'Z') @ front
+            out = f'{os.path.splitext(path)[0]}_{tid}{f"_y{yaw}" if yaw else ""}.png'
+            sc.render.filepath = out
+            bpy.ops.render.render(write_still=True)
+            outs.append(out)
+            blib.log('preview', tid, look['form'], look['eyes'], look['mouth'], '→', out)
+        cam.matrix_world = front
     for n in nodes.values():
         n.location = (0, 0, 0)
     # The export wants every hat and outfit in the one paint material again.
@@ -890,12 +902,18 @@ def main():
     configure(sys.argv)
     blib.reset()
     m = materials()
-    nodes = build(m)
+    looks, only = None, None
+    if '--preview' in sys.argv:
+        ids = [int(x) for x in sys.argv[sys.argv.index('--tokens') + 1].split(',')] if '--tokens' in sys.argv else [1, 186, 1517]
+        if '--no-export' in sys.argv:
+            looks = looks_for(ids)
+            only = {name[len(CID) + 1:] for look in looks.values() for names in look['parts'].values() for name in names}
+    nodes = build(m, only)
     for name, n in nodes.items():
         blib.log(name, f'{len(n.data.polygons)}f')
     if '--preview' in sys.argv:
-        ids = [int(x) for x in sys.argv[sys.argv.index('--tokens') + 1].split(',')] if '--tokens' in sys.argv else [1, 186, 1517]
-        preview(nodes, m, ids, sys.argv[sys.argv.index('--preview') + 1], close='--head' in sys.argv)
+        yaws = [int(x) for x in sys.argv[sys.argv.index('--yaw') + 1].split(',')] if '--yaw' in sys.argv else [0]
+        preview(nodes, m, ids, sys.argv[sys.argv.index('--preview') + 1], close='--head' in sys.argv, yaws=yaws, looks=looks)
         if '--no-export' in sys.argv:
             return
     rel = f'models/characters/{CID}-traits.glb'
