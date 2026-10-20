@@ -117,7 +117,7 @@ export default function Roamer() {
   const [pop, setPop] = useState<null | { auto: boolean }>(null);
   const [reduced] = useState(() => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
   const [small] = useState(() => typeof matchMedia === 'function' && matchMedia('(max-width: 760px)').matches);
-  const size = small ? 56 : 80;
+  const size = small ? 52 : 80;
   // Everything the animation loop changes lives here, outside React: no re-render per frame.
   const sim = useRef({
     x: -size, y: 0, sector: FACING_VIEWER, mode: 'idle' as 'idle' | 'run' | 'steps',
@@ -189,12 +189,12 @@ export default function Roamer() {
     const hits = (f: Box, obs: Box[]) => obs.some(o => f.l < o.r && f.r > o.l && f.t < o.b && f.b > o.t);
     const free = (x: number, y: number, obs: Box[]) => !hits(figure(x, y), obs);
 
-    const makePath = (x1: number, y1: number): Path => {
+    const makePath = (x1: number, y1: number, curve = 0.3): Path => {
       const x0 = s.x, y0 = s.y;
       const dx = x1 - x0, dy = y1 - y0;
       const L = Math.hypot(dx, dy) || 1;
       const nx = -dy / L, ny = dx / L;
-      const k1 = rand(-0.3, 0.3) * L, k2 = Math.random() < 0.5 ? k1 : rand(-0.3, 0.3) * L;
+      const k1 = rand(-curve, curve) * L, k2 = Math.random() < 0.5 ? k1 : rand(-curve, curve) * L;
       const c1x = x0 + dx / 3 + nx * k1, c1y = y0 + dy / 3 + ny * k1;
       const c2x = x0 + (2 * dx) / 3 + nx * k2, c2y = y0 + (2 * dy) / 3 + ny * k2;
       const pts = [{ x: x0, y: y0, d: 0 }];
@@ -217,31 +217,43 @@ export default function Roamer() {
       const v = view();
       if (v.r <= v.l || v.b <= v.t) return null;
       const strict = obstacles(STRICT, v.lr), loose = obstacles(LOOSE, v.lr);
-      const far = small ? 320 : 640;
+      const far = small ? 300 : 640;
+      // Every free spot on a 10 px grid (a phone's free strips can be thin), then a few tried at random.
+      const spots = (obs: Box[]) => {
+        const out: [number, number][] = [];
+        for (let y = v.t; y <= v.b; y += 10) {
+          for (let x = v.l; x <= v.r; x += 10) {
+            if (free(x, y, obs) && Math.hypot(x - s.x, y - s.y) >= size * 0.8) out.push([x, y]);
+          }
+        }
+        return out;
+      };
       // First choice: somewhere clear of everything, on a clear path, a good run away.
+      const clear = spots(strict);
       let fallback: Path | null = null;
-      for (let i = 0; i < 50; i++) {
-        const x = rand(v.l, v.r), y = rand(v.t, v.b);
+      for (let i = 0; i < 40 && clear.length; i++) {
+        const [x, y] = pick(clear);
         const d = Math.hypot(x - s.x, y - s.y);
-        if (d < size * 0.8 || !free(x, y, strict)) continue;
         const p = makePath(x, y);
-        if (!pathClear(p, strict)) continue;
+        if (!pathClear(p, strict)) {
+          // Hemmed in (it stands in a narrow free strip): any clear spot will do, over the top.
+          fallback ??= p;
+          continue;
+        }
         if (d > size * 2 && d < far) return p;
-        fallback ??= p;
+        if (!fallback || !pathClear(fallback, strict)) fallback = p;
       }
       if (fallback) return fallback;
-      // A crowded screen (a phone's game cards): never over anything clickable, and
-      // over as little of what people read as it can.
+      // A crowded screen: never over anything clickable, and over as little of what people read as it can.
+      const ok = spots(loose);
       let best: Path | null = null, bestScore = Infinity;
-      for (let i = 0; i < 40; i++) {
-        const x = rand(v.l, v.r), y = rand(v.t, v.b);
-        const d = Math.hypot(x - s.x, y - s.y);
-        if (d < size * 0.8 || !free(x, y, loose)) continue;
+      for (let i = 0; i < 40 && ok.length; i++) {
+        const [x, y] = pick(ok);
         const f = figure(x, y);
         let cover = 0;
         for (const o of strict) cover += Math.max(0, Math.min(f.r, o.r) - Math.max(f.l, o.l)) * Math.max(0, Math.min(f.b, o.b) - Math.max(f.t, o.t));
         const p = makePath(x, y);
-        const score = cover / (size * size) + (pathClear(p, loose) ? 0 : 0.5) + (d < far ? 0 : 0.2);
+        const score = cover / (size * size) + (pathClear(p, loose) ? 0 : 0.5) + (Math.hypot(x - s.x, y - s.y) < far ? 0 : 0.2);
         if (score < bestScore) { best = p; bestScore = score; }
       }
       return best;
@@ -418,12 +430,13 @@ export default function Roamer() {
     if (reduced) {
       // Still: sat in a free spot on the first screen, clickable.
       const v = view();
-      const obs = obstacles(STRICT, v.lr);
-      // The free spot nearest the bottom right of the first screen.
+      // The free spot nearest the bottom right of the first screen (else one off anything clickable).
       let x = v.r, y = v.b;
-      search: for (let cy = v.b; cy >= v.t; cy -= 12) {
-        for (let cx = v.r; cx >= v.l; cx -= 12) {
-          if (free(cx, cy, obs)) { x = cx; y = cy; break search; }
+      search: for (const obs of [obstacles(STRICT, v.lr), obstacles(LOOSE, v.lr)]) {
+        for (let cy = v.b; cy >= v.t; cy -= 4) {
+          for (let cx = v.r; cx >= v.l; cx -= 8) {
+            if (free(cx, cy, obs)) { x = cx; y = cy; break search; }
+          }
         }
       }
       s.x = x; s.y = y;
@@ -432,14 +445,22 @@ export default function Roamer() {
       return () => { api.current = null; };
     }
 
-    // Enters running from the nearer side of the screen.
+    // Runs in from one side of the screen, level with where it is going, so it crosses nothing on the way.
     const v0 = view();
     const fromLeft = Math.random() < 0.5;
     s.x = fromLeft ? -size : v0.lr.width;
-    s.y = rand(v0.t + (v0.b - v0.t) * 0.3, v0.b);
+    s.y = rand(v0.t, v0.b);
     s.sector = fromLeft ? 0 : 4;
-    place();
-    next();
+    const first = chooseTarget();
+    if (first) {
+      const end = first.pts[first.pts.length - 1];
+      s.y = end.y;
+      place();
+      run(makePath(end.x, end.y, 0.05));
+    } else {
+      place();
+      next();
+    }
 
     // Paused while the tab is hidden.
     const onVis = () => {
