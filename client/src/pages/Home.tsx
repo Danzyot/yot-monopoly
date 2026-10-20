@@ -20,6 +20,7 @@ import { POKER_URL } from '../../../shared/brand.ts';
 // pointer heads for the button), never with the page.
 const loadHowToPlay = () => import('../components/HowToPlay.tsx');
 const HowToPlay = lazy(loadHowToPlay);
+type HowToGame = import('../components/HowToPlay.tsx').HowToGame;
 
 const STEPS: { icon: string; title: string; body: string }[] = [
   { icon: '🎮', title: 'Pick a game', body: `${GAMES.monopoly.name}, ${GAMES.cards.name} or ${GAMES.poker.name}. One sign-in works across all three.` },
@@ -51,16 +52,39 @@ function liveLine(connected: boolean, open: number, playing: number): string {
 /** The characters the home page puts first: just Chog during the Chog season. */
 const FEATURED: CharacterId[] = CHOG_SEASON ? ['chog'] : ['chog', 'snacky', 'starer'];
 
-/** The hero's "How to play" button; the same as components/HowToPlay's HowToPlayButton, without its code in the page. */
-function HowToButton({ label }: { label: string }) {
+/**
+ * A "How to play" button; the same as components/HowToPlay's HowToPlayButton,
+ * without its code in the page. With a game (the "?" on a hub card) it opens
+ * that game's tutorial; without one (the hero) it opens with a tab per game.
+ */
+function HowToButton({ game, label, className = 'btn small ghost', aria }: {
+  game?: HowToGame; label: string; className?: string; aria?: string;
+}) {
   const [open, setOpen] = useState(false);
   const warm = () => { void loadHowToPlay(); };
   return (
     <>
-      <button type="button" className="btn small ghost" onPointerEnter={warm} onFocus={warm}
-        onClick={() => { setOpen(true); void loadHowToPlay().then(m => m.markHowToSeen()); }}>{label}</button>
-      {open && createPortal(<Suspense fallback={null}><HowToPlay onClose={() => setOpen(false)} /></Suspense>, document.body)}
+      <button type="button" className={className} aria-label={aria} title={aria} onPointerEnter={warm} onFocus={warm}
+        onClick={() => {
+          setOpen(true);
+          // "Seen" is Monopoly's: it quiets the welcome hint at a Monopoly table.
+          if (game !== 'cards' && game !== 'poker') void loadHowToPlay().then(m => m.markHowToSeen());
+        }}>{label}</button>
+      {open && createPortal(
+        <Suspense fallback={null}><HowToPlay game={game} pickGame={!game} onClose={() => setOpen(false)} /></Suspense>,
+        document.body)}
     </>
+  );
+}
+
+/** A hub card's title with its small round "?" beside it. */
+function HubTitle({ game }: { game: HowToGame }) {
+  const name = GAMES[game].name;
+  return (
+    <div className="hub-title">
+      <h3>{name}</h3>
+      <HowToButton game={game} label="?" className="hub-help" aria={`How to play ${name}`} />
+    </div>
   );
 }
 
@@ -127,7 +151,7 @@ export default function Home() {
           <li className="hub-game hub-monopoly">
             <img className="hub-thumb" src="/home/monopoly-640.webp" alt="" width={640} height={400} decoding="async" />
             <div className="hub-text">
-              <h3>{GAMES.monopoly.name}</h3>
+              <HubTitle game="monopoly" />
               <p>{BLURBS.monopoly}</p>
               <span className="hub-meta">2–8 players · 45 min</span>
               <span className="hub-live" role="status">{liveLine(connected, rooms.length, live)}</span>
@@ -146,7 +170,7 @@ export default function Home() {
           <li className="hub-game hub-cards">
             <img className="hub-thumb" src="/home/cards-640.webp" alt="" width={640} height={400} loading="lazy" decoding="async" />
             <div className="hub-text">
-              <h3>{GAMES.cards.name}</h3>
+              <HubTitle game="cards" />
               <p>{BLURBS.cards}</p>
               <span className="hub-meta">{CARDS_MIN_PLAYERS}–{CARDS_MAX_PLAYERS} players · 15 min · <Link to="/tournaments">Tournaments</Link></span>
               <span className="hub-live" role="status">{liveLine(connected, cardTables.length, cardsLive)}</span>
@@ -165,7 +189,7 @@ export default function Home() {
           <li className="hub-game hub-poker">
             <img className="hub-thumb" src="/home/poker-640.webp" alt="" width={640} height={400} loading="lazy" decoding="async" />
             <div className="hub-text">
-              <h3>{GAMES.poker.name}</h3>
+              <HubTitle game="poker" />
               <p>{BLURBS.poker}</p>
               <span className="hub-meta">Multi-table tournaments</span>
               {/* One short line either way, so the card keeps its height when a stored sign-in is confirmed. */}

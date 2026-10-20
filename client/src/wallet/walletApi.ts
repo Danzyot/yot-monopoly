@@ -96,3 +96,51 @@ export async function unlinkWallet(address: string): Promise<WalletStatus> {
   await api('/api/wallet/unlink', { method: 'POST', json: { address } });
   return fetchWalletStatus();
 }
+
+// ---- No wallet connection: verify with a self-transfer ----
+
+export interface SelfTxChallenge {
+  /** Checksummed: send from this address to this same address. */
+  address: string;
+  amountWei: string;
+  /** The exact amount, every digit. */
+  amountMon: string;
+  floorBlock: number;
+  issuedAt: number;
+  expiresAt: number;
+  chainId: number;
+  /** EIP-681: opens a send to yourself, amount filled in, in wallet apps that know it. */
+  paymentUri: string;
+}
+
+export type LinkResult = WalletStatus & { wallet: WalletRow };
+
+/** The pending challenge, if one is open (it survives a reload for half an hour). */
+export const fetchSelfTx = () => api<{ challenge: SelfTxChallenge | null }>('/api/wallet/selftx').then(r => r.challenge);
+
+/** A challenge for this wallet: the exact amount to send to itself. */
+export const startSelfTx = (address: string) =>
+  api<{ challenge: SelfTxChallenge }>('/api/wallet/selftx/challenge', { method: 'POST', json: { address } }).then(r => r.challenge);
+
+export const cancelSelfTx = () => api('/api/wallet/selftx/cancel', { method: 'POST' });
+
+/** A pasted hash, or an explorer link with one in it; null when there is none. */
+export function txHashFrom(text: string): string | null {
+  return text.match(/0x[0-9a-fA-F]{64}/)?.[0] ?? null;
+}
+
+/** Checks the transaction and links the wallet. */
+export async function verifySelfTx(txHash: string): Promise<LinkResult> {
+  const r = await api<LinkResult>('/api/wallet/selftx/verify', { method: 'POST', json: { txHash } });
+  publish(r);
+  return r;
+}
+
+export type AutoCheck = { found: false; retryAt?: number; hint?: string } | (LinkResult & { found: true; txHash: string });
+
+/** Asks the server to look for the transfer itself (it throttles this). */
+export async function autoCheckSelfTx(): Promise<AutoCheck> {
+  const r = await api<AutoCheck>('/api/wallet/selftx/auto', { method: 'POST' });
+  if (r.found) publish(r);
+  return r;
+}

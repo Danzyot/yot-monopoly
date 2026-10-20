@@ -57,7 +57,13 @@ export default function ChogPicker({ selected, onPick, taken, label = 'Play as' 
   const signedOut = ready && !profile;
   if (!status && !signedOut) return <p className="chog-nudge small muted">Checking your wallet for Chogs…</p>;
   if (!status || !status.holder || !status.chogs.length) {
-    return <p className="chog-nudge small"><Link to="/wallet">Link your wallet to play as your Chog →</Link></p>;
+    return (
+      <p className="chog-nudge small">
+        <Link to="/wallet">Link your wallet to play as your Chog →</Link>
+        <span className="muted"> or </span>
+        <Link to="/wallet#selftx">verify with a self-transfer, no wallet connection needed</Link>
+      </p>
+    );
   }
   return (
     <div className="chog-picker">

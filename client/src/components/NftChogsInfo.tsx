@@ -59,7 +59,7 @@ function NftChogsDialog({ onClose, onShow }: { onClose: () => void; onShow?: (to
       <h3 className="nftc-sub">Link your wallet</h3>
       <ol className="nftc-steps">
         <li><b>Connect and sign.</b> On the Wallet page, connect the wallet that holds your Chog and sign the message it shows. Signing is free: no transaction, no gas.</li>
-        <li><b>Or prove it another way.</b> If that wallet can’t connect here, the Wallet page shows how to prove you hold it without connecting.</li>
+        <li><b>Or send a self-transfer.</b> No wallet connection needed: send the exact tiny amount of MON the Wallet page gives you from that wallet to itself. It comes straight back; you only pay gas. <Link to="/wallet#selftx" onClick={onClose}>The steps are on the Wallet page.</Link></li>
       </ol>
       <p className="small muted">Your Chogs then show up here and in the lobby’s character picker. Holding is checked on-chain, so a Chog you sell leaves your list.</p>
 

@@ -73,6 +73,14 @@
 }
 .season-chog .hub-live { color: var(--chog-cream); }
 
+/* ---- How to play: the hub cards' "?" and the tutorial dialog in cream and pink ---- */
+.season-chog .hub-help, .season-chog .howto-icon {
+  background: linear-gradient(180deg, #fffbe8, #f3d9a6); color: #7a1747;
+}
+.season-chog .howto-icon { box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.6), 0 3px 0 #7a4a8a; }
+.season-chog .howto-n { color: #7a1747; }
+.season-chog .howto-pick button.on { background: linear-gradient(180deg, #ff8ec2 0%, #e9508f 48%, #c42a6a 52%, #9e1d55 100%); }
+
 /* The home backdrop: the Classic board in the Chog look, in its purple lounge
    (client/public/home/chog-board-*; index.html preloads the same files). */
 .season-chog .home-still::before { background-image: url('/home/chog-board-1920.webp'); background-color: #1a0d3d; }
