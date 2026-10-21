@@ -21,6 +21,7 @@ import { analyticsRoutes, onlinePlayers } from './routes/analytics.ts';
 import { createLiveSampler } from './liveSamples.ts';
 import { createVisitCounter } from './visits.ts';
 import { authRoutes, mountInteractions, pokerOrigins } from './routes/auth.ts';
+import { mountFriends } from './routes/friends.ts';
 import { mountMusic } from './routes/music.ts';
 import { mountGraphics } from './routes/graphics.ts';
 import { mountTextOverrides } from './routes/textOverrides.ts';
@@ -198,6 +199,8 @@ mountSite(app);
 mountActivity(app, { monopoly: sockets.registry, cards: cards.registry, tournaments: tourneys.manager });
 // One token's traits for the home page's Chog of the Day (the page does not ship the trait table).
 mountChogs(app);
+// Friends: requests, who is online and where, invites to your table.
+mountFriends(app, io, { monopoly: sockets.registry, cards: cards.registry });
 
 app.get('/api/leaderboard', (_req, res) => {
   if (!isOn('leaderboard')) { res.status(404).json({ error: 'The leaderboard is switched off' }); return; }

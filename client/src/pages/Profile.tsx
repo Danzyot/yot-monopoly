@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api.ts';
 import { useAuth } from '../auth.tsx';
+import FriendButton from '../components/FriendButton.tsx';
 import { Avatar } from '../components/Avatar.tsx';
 import { ProfileLink } from '../community.tsx';
 import { getMap } from '../../../shared/maps.ts';
@@ -265,6 +266,7 @@ export default function Profile() {
               </>
             ) : (
               <>
+                {me && !off && <FriendButton id={id} name="this player" />}
                 <Link className="btn primary chunky" to="/">Find a game</Link>
                 <Link className="btn chunky" to="/leaderboard">Leaderboard</Link>
               </>
@@ -303,6 +305,7 @@ export default function Profile() {
             {p?.favouriteMap && <span className="chip">Favourite map · {getMap(p.favouriteMap.id).name}</span>}
           </div>
           <ShareProfile id={id} name={hero!.name} mine={mine} />
+          {!mine && <div className="pf-friend"><FriendButton id={id} name={hero!.name} /></div>}
         </div>
       </section>
 

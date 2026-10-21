@@ -27,6 +27,7 @@ import { useAuth } from '../auth.tsx';
 import Chat from '../components/Chat.tsx';
 import { Avatar } from '../components/Avatar.tsx';
 import { askConfirm } from '../components/Modal.tsx';
+import { InviteFriends } from '../components/FriendInvites.tsx';
 import { CardBack, CardFace } from './CardFace.tsx';
 import { CardsBackdrop } from './CardsBackdrop.tsx';
 import ChogPicker, { ChogArt, saveChogTokenPref } from '../components/ChogPicker.tsx';
@@ -392,6 +393,7 @@ export default function CardsLobby({ room, me, spectating, chat }: {
             <button className="btn small" onClick={() => copyLink(room.code)}>Copy link</button>
           </div>
           <p className="muted small">Friends join with the code <b className="mono">{room.code}</b> on the {CARDS_GAME_NAME} page, or with the link.</p>
+          {mySeat && <InviteFriends seated={room.seats.map(s => s.id)} />}
 
           <h3>Players {room.seats.length}/{room.maxPlayers}{room.spectators > 0 && <span className="muted small"> · {room.spectators} watching</span>}</h3>
           <SeatList room={room} me={me} isHost />

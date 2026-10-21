@@ -7,8 +7,22 @@ import { Avatar } from './Avatar.tsx';
 import { profilePath } from '../community.tsx';
 import { EditTextToggle } from '../textEdit.tsx';
 import WalletNavLink from '../wallet/WalletNavLink.tsx';
+import { useFriends } from '../friends.ts';
 
 const HEIGHT_KEY = 'yot:header-height';
+
+/** Friends, with the number of requests waiting (signed in only). */
+function FriendsNavLink() {
+  const list = useFriends(true);
+  const n = list?.incoming.length ?? 0;
+  const label = n ? `Friends, ${n} new ${n === 1 ? 'request' : 'requests'}` : 'Friends';
+  return (
+    <NavLink className="navlink nav-chars nav-friends" to="/friends" aria-label={label} title={label}>
+      <span className="nav-ico" aria-hidden="true">👥</span><span className="nav-label">Friends</span>
+      {n > 0 && <span className="nav-count" aria-hidden="true">{n > 9 ? '9+' : n}</span>}
+    </NavLink>
+  );
+}
 
 /** The header's height the last time it settled, if that was at about this window width. */
 function lastHeight(): number {
@@ -53,6 +67,7 @@ export default function Header() {
         {config.features.leaderboard && <NavLink className="navlink nav-chars" to="/leaderboard" aria-label="Leaderboard" title="Leaderboard"><span className="nav-ico" aria-hidden="true">🏆</span><span className="nav-label">Leaderboard</span></NavLink>}
         {config.inviteUrl && <a className="navlink" href={config.inviteUrl} target="_blank" rel="noreferrer">Discord</a>}
         {profile?.isAdmin && <Link className="navlink nav-chars accent" to="/admin" aria-label="Dashboard" title="Dashboard"><span className="nav-ico" aria-hidden="true">📊</span><span className="nav-label">Dashboard</span></Link>}
+        {profile && <FriendsNavLink />}
         <WalletNavLink />
         <EditTextToggle />
         {profile ? (

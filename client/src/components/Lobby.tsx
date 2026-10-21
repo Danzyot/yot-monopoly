@@ -24,6 +24,7 @@ import { ProfileLink } from '../community.tsx';
 import { askConfirm } from './Modal.tsx';
 import { loadColorPref, saveColorPref } from './outfitBits.tsx';
 import { HowToPlayButton } from './HowToPlay.tsx';
+import { InviteFriends } from './FriendInvites.tsx';
 import OutfitPicker, { loadOutfitPref, sameOutfit, saveOutfitPref } from './OutfitPicker.tsx';
 import ChogPicker, { ChogArt, loadChogTokenPref } from './ChogPicker.tsx';
 import { chogName, isLegendary } from '../../../shared/chogs/traits.ts';
@@ -425,6 +426,7 @@ export default function Lobby({ room, me, spectating, chat }: {
             <input readOnly value={link} onFocus={e => e.target.select()} />
             <button className="btn small ghost" onClick={() => { void navigator.clipboard?.writeText(link); toast('Invite link copied!'); }}>Copy link</button>
           </div>
+          {mySeat && <InviteFriends seated={room.seats.map(s => s.id)} />}
           {spectating && profile && <p className="muted small">{room.seats.length >= room.rules.maxPlayers ? 'The room is full — you are watching.' : 'You are watching.'}</p>}
 
           <h3>Players {room.seats.length}/{room.rules.maxPlayers}{room.spectators > 0 && <span className="muted small"> · {room.spectators} watching</span>}</h3>

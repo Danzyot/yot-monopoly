@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api, getToken, setToken } from './api.ts';
 import { resetSocket } from './net.ts';
+import { clearFriends } from './friends.ts';
 import { toast } from './toast.tsx';
 import { DEFAULT_FEATURES, type PlayerProfile, type SiteConfig } from '../../shared/types.ts';
 
@@ -109,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null);
       setCanHost(false);
       setNewPlayer(false);
+      clearFriends();
       resetSocket();
     },
     openSignIn: () => setSignInOpen(true),
