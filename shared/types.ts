@@ -7,6 +7,7 @@ import type { TableStyle } from './tableStyles.ts';
 import type { CharacterId } from './characters.ts';
 import type { Outfit } from './outfits.ts';
 import type { CardsDailyProfile } from './cards/daily.ts';
+import type { MonopolyDailyProfile, MonopolyDailyTableInfo } from './monopolyDaily.ts';
 
 // The character catalogue lives in characters.ts; re-exported so protocol
 // code can keep importing everything from here.
@@ -334,6 +335,8 @@ export interface RoomView {
   requirements: JoinRequirements | null;
   /** Poke bookkeeping for the current turn (added by the socket layer while a game runs). */
   poke?: PokeView | null;
+  /** A Daily Challenge table: which day, official or practice, the turn count and the result. */
+  daily?: MonopolyDailyTableInfo;
 }
 
 export interface RoomSummary {
@@ -495,6 +498,8 @@ export interface PublicProfile {
   favouriteMap: { id: string; games: number } | null;
   favouriteCharacter: { id: string; games: number } | null;
   recent: ProfileGame[];
+  /** Their Monopoly Daily Challenge record (absent before a first attempt). */
+  daily?: MonopolyDailyProfile;
 }
 
 /** One finished Cards match on a profile. */

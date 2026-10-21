@@ -19,6 +19,7 @@ import { CHOG_SEASON, SEASON_THEME_ID, mapThumbUrl, themeAvailable } from '../..
 import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { requirementBadge, requirementSentence } from '../community.tsx';
+import MonopolyDailyCard from '../monopolyDaily/MonopolyDailyCard.tsx';
 import '../styles/monopoly-home.css';
 
 const loadHowToPlay = () => import('../components/HowToPlay.tsx');
@@ -123,6 +124,9 @@ export default function MonopolyHome() {
       </section>
 
       <div className="home-body">
+        {/* Today's Daily Challenge: one seeded game for everyone, one try each. */}
+        <MonopolyDailyCard />
+
         {rooms.length > 0 && (
           <section className="panel" aria-labelledby="tables-title">
             <h2 id="tables-title">Live tables</h2>

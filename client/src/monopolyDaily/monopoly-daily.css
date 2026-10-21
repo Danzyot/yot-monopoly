@@ -1,0 +1,31 @@
+/* ==========================================================================
+   The Monopoly Daily Challenge: what it adds to the Cards daily's styles
+   (../cards/daily.css, loaded with it): the day's board on the card, the
+   rules line, and the final standings on the result screen.
+   ========================================================================== */
+
+.md-how { margin: 0; font-weight: 700; line-height: 1.4; }
+.md-today { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 8px; border-radius: 12px; background: rgba(0, 0, 0, 0.22); }
+.md-thumb { flex: none; width: 96px; height: 60px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.18); }
+.md-today-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.md-today-text b { font-size: 16px; }
+.md-scoring { border-top: 1px solid var(--line, rgba(255, 255, 255, 0.12)); padding-top: 8px; }
+
+/* ---- the result screen ---- */
+.md-over { text-align: center; }
+.md-over .cd-over-kicker { margin-bottom: 2px; }
+.md-over .trophy { margin-top: 4px; }
+.md-over-standings { list-style: none; margin: 10px auto 12px; padding: 0; max-width: 380px; display: flex; flex-direction: column; gap: 4px; text-align: left; }
+.md-over-standings li { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.22); }
+.md-over-standings li.me { background: color-mix(in srgb, var(--gold, #ffd23f) 22%, rgba(0, 0, 0, 0.22)); font-weight: 700; }
+.md-over-place { width: 18px; color: var(--muted); }
+.md-over-worth { font-variant-numeric: tabular-nums; }
+.md-over-actions { justify-content: center; gap: 8px; }
+
+/* ---- at the table: the daily badge in the top bar ---- */
+.tb-daily { color: var(--gold, #ffd23f); font-weight: 800; }
+
+@media (max-width: 600px) {
+  .md-thumb { width: 72px; height: 45px; }
+  .md-today-text b { font-size: 15px; }
+}

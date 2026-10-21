@@ -17,9 +17,14 @@ import { CHOG_SEASON, SEASON_BOT_NAMES, SEASON_CHARACTERS, SEASON_THEME_ID, char
 import { defaultOutfit, outfitForCharacter, parseOutfit, randomOutfit, sanitizeOutfit } from '../../shared/outfits.ts';
 import { cutsceneSnap, cutscenesMs, pickCutscenes, type CutsceneSnap } from '../../shared/cutscenes.ts';
 import { sanitizeRequirements } from './requirements.ts';
+import { seededDice, seededRng } from './seeded.ts';
 import {
   PLAYER_COLORS, CHARACTERS, type Action, type CharacterId, type JoinRequirements, type RoomSeat, type RoomSummary, type RoomView,
 } from '../../shared/types.ts';
+import {
+  MONOPOLY_DAILY_BOTS, MONOPOLY_DAILY_TURNS, monopolyDailyMap, monopolyDailyNumber, monopolyDailyRules,
+  type MonopolyDailyResult, type MonopolyDailyTableInfo,
+} from '../../shared/monopolyDaily.ts';
 
 const BOT_DELAY_MS = 900;
 /**
@@ -124,6 +129,8 @@ export interface RoomHooks {
   onFinished(room: Room): void;
   /** The last human left the lobby (bots don't count): the registry closes it. */
   onEmpty?(room: Room): void;
+  /** A running game was stopped without finishing (end(): an operator). */
+  onEnded?(room: Room): void;
   /**
    * Whether this account's linked wallets hold Chog Genesis token `tokenId`
    * (server/src/wallet/holders.ts). Without it nobody may play as a token.
@@ -157,7 +164,40 @@ export interface RoomSnapshot {
   departed?: string[];
   /** Players the host removed: they may watch but not sit down again. Absent in older snapshots. */
   kicked?: string[];
+  daily?: MonopolyDailyState;
 }
+
+/**
+ * A Daily Challenge table (./monopolyDaily.ts): one player and the day's three
+ * bots on the day's board, seated, shuffled and rolled from the day's seed.
+ * The room counts the player's turns, ends the game at the cap and works the
+ * result out itself, so nothing a client says can change it.
+ */
+export interface MonopolyDailyState {
+  date: string;
+  /** The day's secret seed: never sent to a client. */
+  seed: string;
+  practice: boolean;
+  userId: string;
+  /** The player's turns so far, and the game turn the last one was. */
+  turns: number;
+  lastTurn: number;
+  result?: MonopolyDailyResult;
+  /** Filled in by the daily store once an official result is recorded. */
+  rank?: number;
+  of?: number;
+  streak?: number;
+}
+
+/** The day's bots by name, picked from the seed (the daily card lists them before anyone sits down). */
+export function monopolyDailyBotNames(seed: string): string[] {
+  const rng = seededRng(`${seed}:names`);
+  const names = [...BOT_NAMES];
+  return Array.from({ length: MONOPOLY_DAILY_BOTS }, () => names.splice(rng(names.length), 1)[0] ?? 'Bot');
+}
+
+/** Trade moves: none at a daily table (no deals with the bots, nor between them). */
+const TRADE_MOVES = new Set<string>(['proposeTrade', 'acceptTrade', 'rejectTrade']);
 
 export class Room {
   seats: Seat[] = [];
@@ -204,6 +244,12 @@ export class Room {
   private kicked = new Set<string>();
   /** Per player: when their trade offers of the last minute were made (see checkOfferRate). */
   private offerTimes = new Map<string, number[]>();
+  /** Set on a Daily Challenge table (setupDaily). Snapshotted with the room. */
+  daily: MonopolyDailyState | null = null;
+  /** The seating shuffle and the game's randomness: seeded at a daily table. */
+  private rng: (n: number) => number = n => randomInt(n);
+  /** A daily table's dice: by turn alone (see seededDice). */
+  private dice: ((turn: number, k: number) => number) | undefined;
 
   constructor(readonly code: string, public hostId: string, private hooks: RoomHooks) {
     // A new table takes the season's look, with the house rules it brings (restore overwrites this).
@@ -263,11 +309,11 @@ export class Room {
    * a random real token whose traits all have parts, so a table of bots
    * looks like a crowd of different Chogs.
    */
-  private freeBotToken(): number {
+  private freeBotToken(rand: (n: number) => number = n => randomInt(n)): number {
     const pool = resolvedChogTokens();
     const used = new Set(this.seats.map(s => s.chogToken));
     for (let i = 0; i < 20; i++) {
-      const t = pool[randomInt(pool.length)];
+      const t = pool[rand(pool.length)];
       if (!used.has(t)) return t;
     }
     return pool.find(t => !used.has(t)) ?? pool[0];
@@ -301,6 +347,7 @@ export class Room {
       this.closeIfEmpty();
     } else {
       this.departed.add(id);
+      if (this.dailyWalkout(id, 'left')) return;
       // Hand over first: the forfeit below can end the game.
       if (this.hostId === id) this.passHost(id, 'left');
       if (this.game && !this.game.player(id).bankrupt && this.game.phase !== 'over') {
@@ -542,6 +589,8 @@ export class Room {
     this.requireHost(byId, isAdmin);
     if (target === byId) fail('Use leave instead');
     const s = this.seat(target) ?? fail('Not in this room');
+    // A bot out of the game is bankrupt: kicking the day's bots would be a win in no turns.
+    if (this.daily && s.isBot) fail('The Daily Challenge is played against all of the day\'s bots');
     this.hooks.onEvent(this, `${s.name} was removed by ${this.seat(byId)?.name ?? 'an operator'}`);
     // No reloading back into the seat (bots never come back anyway).
     if (!s.isBot) this.kicked.add(target);
@@ -561,6 +610,7 @@ export class Room {
       this.closeIfEmpty();
     } else {
       if (this.seat(target)) this.departed.add(target);
+      if (this.dailyWalkout(target, 'removed')) return;
       if (this.hostId === target) this.passHost(target, 'was removed');
       if (this.game && this.game.phase !== 'over' && !this.game.player(target).bankrupt) {
         this.forfeit(target, true); // not the player acting
@@ -575,7 +625,7 @@ export class Room {
     if (this.seats.length < 2) fail('Need at least 2 players (add a bot?)');
     const order = [...this.seats];
     for (let i = order.length - 1; i > 0; i--) {
-      const j = randomInt(i + 1);
+      const j = this.rng(i + 1);
       [order[i], order[j]] = [order[j], order[i]];
     }
     this.game = new Game({
@@ -585,13 +635,15 @@ export class Room {
         id: s.id, name: s.name, character: s.character, color: s.color, outfit: s.outfit ?? {}, isBot: s.isBot,
         ...(s.chogToken !== undefined ? { chogToken: s.chogToken } : {}),
       })),
-      rng: n => randomInt(n),
+      rng: this.rng,
+      ...(this.dice && { dice: this.dice }),
       onLog: text => this.hooks.onEvent(this, text),
       // The operator's site-wide switch wins over the room's house rule, even mid-game.
       minigamesEnabled: () => isOn('minigames'),
     });
     this.status = 'playing';
     this.startedAt = Date.now();
+    this.trackDaily();
     this.schedule();
   }
 
@@ -605,6 +657,7 @@ export class Room {
   rematch(byId: string, isAdmin: boolean, present: (id: string) => boolean) {
     this.dirty = true;
     this.requireHost(byId, isAdmin);
+    if (this.daily) fail('The Daily Challenge is one game — play it again as practice from the Monopoly page');
     if (this.status !== 'finished') fail('The game is not over yet');
     this.clearTimers();
     const gone = this.seats.filter(s => !s.isBot && !present(s.id));
@@ -627,9 +680,13 @@ export class Room {
     this.dirty = true;
     this.clearTimers();
     this.hooks.onEvent(this, `Game ended by an operator: ${reason}`);
+    const running = this.status === 'playing';
+    // A daily attempt stopped before its end is a walk-out (a loss), like leaving it.
+    if (running && this.daily && !this.daily.result && this.game) this.daily.result = this.dailyResult(true);
     this.status = 'finished';
     this.finishedAt = Date.now();
     if (this.game && this.game.endedAt === null) this.game.endedAt = this.finishedAt;
+    if (running) this.hooks.onEnded?.(this);
   }
 
   /**
@@ -639,10 +696,121 @@ export class Room {
    */
   abandon() {
     const g = this.runningGame();
+    // Abandoning the daily attempt is leaving it: a loss, whatever the money says.
+    if (this.daily && !this.daily.result) this.daily.result = this.dailyResult(true);
     g.abandon();
     this.hooks.onEvent(this, 'Game ended: nobody has been at the table for 30 minutes');
     this.afterChange();
     this.hooks.onChange(this);
+  }
+
+  // ---- the Daily Challenge ----------------------------------------------------
+
+  /**
+   * Make this new room the day's daily table and start it: private, the day's
+   * board and fixed rules, the player and the day's three bots (names and
+   * looks from the seed, the same ids at every table), and the seating, the
+   * Chance and Community Chest decks and the dice all seeded, so everyone
+   * plays the same game that day.
+   */
+  setupDaily(d: { date: string; seed: string; practice: boolean }, m: Member) {
+    this.requireLobby();
+    if (this.seats.length) fail('This table is taken');
+    this.daily = { date: d.date, seed: d.seed, practice: d.practice, userId: m.id, turns: 0, lastTurn: 0 };
+    this.rng = seededRng(`${d.seed}:game`);
+    this.dice = seededDice(d.seed);
+    // The looks have their own stream, so a change to them never moves the game.
+    const looks = seededRng(`${d.seed}:looks`);
+    this.private = true;
+    this.mapId = monopolyDailyMap(d.date);
+    this.rules = monopolyDailyRules(this.mapId);
+    this.join(m);
+    const names = monopolyDailyBotNames(d.seed);
+    for (let i = 0; i < MONOPOLY_DAILY_BOTS; i++) {
+      const character = this.freeCharacter();
+      const chogToken = CHOG_SEASON && character === 'chog' ? this.freeBotToken(looks) : undefined;
+      const outfit = randomOutfit(looks, character);
+      if (chogToken) delete outfit.eyes;
+      this.seats.push({
+        // The same ids at every daily table that day: bots seed their auction bids from their own id.
+        id: `bot-daily-${d.date}-${i + 1}`, name: this.uniqueName(names[i], ''), avatar: '🤖', isBot: true,
+        connected: true, disconnectedAt: null, character, color: this.freeColor(), outfit, ...(chogToken ? { chogToken } : {}),
+      });
+    }
+    this.start(m.id, false);
+  }
+
+  /**
+   * The daily player leaving, removed, or idle (three turn steps in a row run
+   * out) mid-game: the attempt ends there, as a loss. True when it did.
+   */
+  private dailyWalkout(id: string, why: 'left' | 'removed' | 'idle'): boolean {
+    const d = this.daily;
+    const g = this.game;
+    if (!d || id !== d.userId || this.status !== 'playing' || !g || g.phase === 'over') return false;
+    d.result = this.dailyResult(true);
+    const name = this.seat(id)?.name ?? 'The player';
+    if (!g.player(id).bankrupt) g.forfeit(id);
+    g.finishNow(why === 'idle' ? `💤 ${name} stopped playing — the Daily Challenge is over.` : `🚪 ${name} left the Daily Challenge.`);
+    this.setConnected(id, false);
+    this.afterChange();
+    return true;
+  }
+
+  /**
+   * After every change at a daily table: count the player's turns (one each
+   * time play comes round to them), end the game on net worth when their
+   * MONOPOLY_DAILY_TURNS are up or they go broke, and end the attempt when
+   * they have gone idle. True when the attempt was ended as a walk-out.
+   */
+  private trackDaily(): boolean {
+    const d = this.daily;
+    const g = this.game;
+    if (!d || !g || this.status !== 'playing' || g.phase === 'over') return false;
+    const me = g.players.find(p => p.id === d.userId);
+    if (!me) return false;
+    if (me.bankrupt) {
+      g.finishNow(`💸 ${me.name} went broke — the Daily Challenge is over.`);
+      return false;
+    }
+    if (me.afk) return this.dailyWalkout(d.userId, 'idle');
+    if (g.current.id === d.userId && d.lastTurn !== g.turnNumber) {
+      if (d.turns >= MONOPOLY_DAILY_TURNS) {
+        g.finishNow(`🏁 That was ${me.name}'s ${MONOPOLY_DAILY_TURNS}th turn — the game ends here, richest first.`);
+        return false;
+      }
+      d.turns++;
+      d.lastTurn = g.turnNumber;
+    }
+    return false;
+  }
+
+  /** The attempt's outcome from the game itself. `left`: walked out (or abandoned) before the end. */
+  private dailyResult(left: boolean): MonopolyDailyResult {
+    const g = this.game!;
+    const d = this.daily!;
+    const me = g.player(d.userId);
+    const bankrupt = !left && me.bankrupt;
+    return {
+      won: !left && !me.bankrupt && g.active().length === 1,
+      turns: d.turns,
+      netWorth: g.netWorth(d.userId),
+      place: g.standings().findIndex(s => s.id === d.userId) + 1,
+      botsOut: g.players.filter(p => p.isBot && p.bankrupt).length,
+      ...(bankrupt && { bankrupt: true }),
+      ...(left && { left: true }),
+    };
+  }
+
+  private dailyView(): MonopolyDailyTableInfo | undefined {
+    const d = this.daily;
+    if (!d) return undefined;
+    return {
+      date: d.date, number: monopolyDailyNumber(d.date), practice: d.practice, turns: d.turns, maxTurns: MONOPOLY_DAILY_TURNS,
+      ...(d.result && { result: d.result }),
+      ...(d.rank !== undefined && { rank: d.rank, of: d.of }),
+      ...(d.streak !== undefined && { streak: d.streak }),
+    };
   }
 
   // ---- play -----------------------------------------------------------------
@@ -653,6 +821,8 @@ export class Room {
     if (this.status === 'finished') fail('The game is over');
     // Bots and autopilot moving is no sign anyone is still here (see the sweep).
     if (!auto) this.lastActivity = Date.now();
+    // No deals at a daily table: a bot talked into a bad trade would be a win anyone could copy.
+    if (this.daily && TRADE_MOVES.has(a?.type)) fail('No trades in the Daily Challenge');
     const offer = a?.type === 'proposeTrade' && !auto;
     if (offer) this.checkOfferRate(id);
     const s = this.seat(id);
@@ -693,6 +863,7 @@ export class Room {
   pause(id: string, isAdmin: boolean, byName: string) {
     this.dirty = true;
     this.requireHost(id, isAdmin);
+    if (this.daily) fail('The Daily Challenge cannot be paused');
     const g = this.runningGame();
     g.pause(byName);
     this.hooks.onEvent(this, `Game paused by ${byName}`);
@@ -711,6 +882,7 @@ export class Room {
   setAutopilot(byId: string, target: string, on: boolean, isAdmin: boolean) {
     this.dirty = true;
     this.requireHost(byId, isAdmin);
+    if (this.daily) fail('Nobody plays the Daily Challenge for you');
     const g = this.runningGame();
     const s = this.seat(target) ?? fail('Not in this room');
     if (s.isBot) fail('Bots already play themselves');
@@ -740,9 +912,12 @@ export class Room {
   private afterChange() {
     this.dirty = true;
     this.failedMoves.clear();
+    // A walk-out ran its own afterChange (the game is over and recorded).
+    if (this.trackDaily()) return;
     if (this.game?.phase === 'over' && this.status !== 'finished') {
       this.status = 'finished';
       this.finishedAt = Date.now();
+      if (this.daily && !this.daily.result) this.daily.result = this.dailyResult(false);
       this.hooks.onFinished(this);
     }
     this.schedule();
@@ -751,6 +926,8 @@ export class Room {
   /** Is this seat played by the computer right now? */
   private automated(s: Seat, now: number): 'bot' | 'autopilot' | null {
     if (s.isBot) return 'bot';
+    // A daily result is the player's own: away, the turn timer takes the safe step for them, nothing cleverer.
+    if (this.daily) return null;
     if (s.disconnectedAt !== null && now - s.disconnectedAt >= AUTOPILOT_GRACE_MS) return 'autopilot';
     // Handed over by the host, or marked away after timing out: until they act again.
     if (s.autopilot || this.game?.players.find(p => p.id === s.id)?.afk) return 'autopilot';
@@ -887,6 +1064,9 @@ export class Room {
         continue;
       }
       if (!action) continue;
+      // No deals at a daily table: a bot with nothing else to do ends its turn instead.
+      if (this.daily && TRADE_MOVES.has(action.type)) action = action.type === 'proposeTrade' && g.phase === 'done' ? { type: 'endTurn' } : null;
+      if (!action) continue;
       // Autopilot keeps an absent player's game moving but never spends their
       // money on a whim or makes deals in their name.
       if (mode === 'autopilot') {
@@ -965,6 +1145,7 @@ export class Room {
       style: this.style,
       now: Date.now(),
       requirements: this.requirements,
+      ...(this.daily && { daily: this.dailyView() }),
     };
   }
 
@@ -992,6 +1173,7 @@ export class Room {
       requirements: this.requirements ? { ...this.requirements } : null,
       departed: [...this.departed],
       kicked: [...this.kicked],
+      ...(this.daily && { daily: { ...this.daily } }),
     };
   }
 
@@ -1025,10 +1207,20 @@ export class Room {
       for (const seat of r.seats) r.toSeason(seat);
       if (!themeAvailable(r.themeId)) r.setTheme(SEASON_THEME_ID);
     }
+    if (s.daily && typeof s.daily === 'object' && typeof s.daily.userId === 'string') {
+      r.daily = {
+        ...s.daily, seed: String(s.daily.seed), practice: !!s.daily.practice,
+        turns: Number(s.daily.turns) || 0, lastTurn: Number(s.daily.lastTurn) || 0,
+      };
+      // Still seeded after a restart: the dice go by turn, as before; the rest from here.
+      r.rng = seededRng(`${r.daily.seed}:resumed:${s.game?.turnNumber ?? 0}`);
+      r.dice = seededDice(r.daily.seed);
+    }
     if (s.game) {
       const game = { ...s.game, players: s.game.players.map(withCharacter) };
       r.game = Game.restore({
-        theme: resolveTheme(r.themeId, r.mapId), rules: r.rules, rng: n => randomInt(n),
+        ...(r.dice && { dice: r.dice }),
+        theme: resolveTheme(r.themeId, r.mapId), rules: r.rules, rng: r.rng,
         onLog: text => hooks.onEvent(r, text), minigamesEnabled: () => isOn('minigames'),
       }, game);
     }

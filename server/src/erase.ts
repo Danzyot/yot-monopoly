@@ -19,6 +19,7 @@ import { clearCardCache } from './playerCard.ts';
 import { anonymizeResults } from './stats.ts';
 import { anonymizeCardsResults } from './cards/stats.ts';
 import { eraseCardsDaily } from './cards/daily.ts';
+import { eraseMonopolyDaily } from './monopolyDaily.ts';
 import { cancelSelfTx } from './wallet/selftx.ts';
 import { unlinkWallet, walletsOf } from './wallet/store.ts';
 
@@ -81,7 +82,7 @@ export function erasePlayer(id: string, d: EraseDeps | null = deps): EraseReport
     id, placeholder, name,
     monopolyGames: anonymizeResults(id, placeholder),
     cardsGames: anonymizeCardsResults(id, placeholder),
-    dailyAttempts: eraseCardsDaily(id),
+    dailyAttempts: eraseCardsDaily(id) + eraseMonopolyDaily(id),
     tournaments,
     wallets,
     friends: friendIds.length,

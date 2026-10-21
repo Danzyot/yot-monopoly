@@ -24,6 +24,7 @@ import MinigamePanel from './MinigamePanel.tsx';
 import { DebtClock, PauseButton, PausedBanner, TimeLeft, TurnClock } from './GameClock.tsx';
 import { ChooseBar, DiceRead } from './SpeedChoice.tsx';
 import EndScreen from './EndScreen.tsx';
+import MonopolyDailyOver from '../monopolyDaily/MonopolyDailyOver.tsx';
 import { PlayerBadge } from './PlayerBadge.tsx';
 import { recordHistory } from '../gameHistory.ts';
 import { useCutsceneOverlay } from '../three/cinematics/store.ts';
@@ -48,6 +49,8 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   room: RoomView; game: GameView; me: string; chat: ChatMsg[]; skew: number;
 }) {
   const theme = resolveTheme(game.themeId, game.mapId);
+  /** A Daily Challenge table: no trades, no pause, a turn count and its own result screen. */
+  const daily = room.daily;
   // Stage this view before any of the HUD below renders: the throw (the dice
   // mark it too, but the board renders after the HUD) and the move it brought,
   // so the action bar, tips and player cards already hold back what it led to.
@@ -80,6 +83,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   const openHelp = () => { setHelpOpen(true); markHowToSeen(); markHint('welcome'); };
   /** A new offer, to whoever holds the rest of a set I've started (else the first opponent). */
   const openTrade = () => {
+    if (daily) { toast('No trades in the Daily Challenge — it’s you against the bots'); return; }
     const id = tradePartnerFor(game, me) ?? game.players.find(x => x.id !== me && !x.bankrupt)?.id;
     if (id) { setTradeWith(id); markHint('trade'); }
   };
@@ -167,9 +171,14 @@ export default function GameScreen({ room, game, me, chat, skew }: {
 
   const leave = async () => {
     if (myPlayer && !myPlayer.bankrupt && game.phase !== 'over' && room.status !== 'finished'
-      && !(await askConfirm({
+      && !(await askConfirm(daily && !daily.practice ? {
+        icon: '🚪', title: 'Leave the Daily Challenge?', danger: true, confirm: 'Leave & lose', cancel: 'Keep playing',
+        body: 'Leaving ends your one try for today, and it counts as a loss.',
+      } : {
         icon: '🚪', title: 'Leave the game?', danger: true, confirm: 'Leave & forfeit', cancel: 'Keep playing',
-        body: 'Leaving forfeits the game — your property goes back to the bank. (Just closing the tab keeps your seat: auto-play plays until you are back.)',
+        body: daily
+          ? 'This is practice: leaving just ends it.'
+          : 'Leaving forfeits the game — your property goes back to the bank. (Just closing the tab keeps your seat: auto-play plays until you are back.)',
       }))) return;
     await call('room:leave').catch(() => {});
     nav(GAMES.monopoly.path);
@@ -184,14 +193,18 @@ export default function GameScreen({ room, game, me, chat, skew }: {
           {theme.logoUrl && <img className="brand-mark" src={theme.logoUrl} alt="" />}
           <b className="mono accent tb-code">{room.code}</b>
           <span className="tb-meta">{tableLabel(getMap(game.mapId).name, theme.name)}</span>
-          <span className="tb-turn">Turn {game.turnNumber}</span>
+          {daily
+            ? <span className="tb-turn tb-daily" title={`Daily Challenge #${daily.number}${daily.practice ? ' (practice)' : ''}: your turn ${daily.turns} of ${daily.maxTurns}`}>
+                📅 Daily #{daily.number}{daily.practice ? ' · practice' : ''} · Your turn {daily.turns}/{daily.maxTurns}
+              </span>
+            : <span className="tb-turn">Turn {game.turnNumber}</span>}
           {!connected && <span className="tag warn">reconnecting…</span>}
           {!myPlayer && <span className="tag watch-tag" title="You are watching this game">👀 Watching</span>}
           {myPlayer?.bankrupt && !over && <span className="tag watch-tag" title="You are out — watching the rest">👀 Out · watching</span>}
         </div>
         <div className="tb-right">
           <TimeLeft game={game} skew={skew} />
-          <PauseButton room={room} game={game} me={me} />
+          {!daily && <PauseButton room={room} game={game} me={me} />}
           {/* The bank's stock in one place: buildings left and the jackpot. */}
           <span className="pill tb-bank" title={game.rules.limitedBuildings ? 'Houses and hotels left in the bank' : 'Unlimited houses and hotels'}>
             {game.rules.limitedBuildings
@@ -211,7 +224,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
       <div className="hud-bottom">
       <EventFeed game={game} me={me} />
       <CoachHint game={game} me={me} busy={dialogOpen || moveBusy || game.phase === 'auction' || game.phase === 'minigame'}
-        onHelp={openHelp} onBuild={() => openManage('build')} onRaise={() => openManage('raise')} onTrade={openTrade} />
+        onHelp={openHelp} onBuild={() => openManage('build')} onRaise={() => openManage('raise')} onTrade={daily ? undefined : openTrade} />
       {/* The dock: bottom-left on desktop and landscape phones (both lay the
           bottom wrapper out as `display: contents`); on portrait phones one
           compact row in the bottom stack, just above the tab row. */}
@@ -220,7 +233,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
         {me && config.features.chat && <QuickChatButton />}
         {reactionsOn && !over && <PokeButton room={room} game={game} me={me} skew={skew} />}
         {/* Every open trade (mine and everyone else's); the badge counts offers waiting for me. */}
-        {!over && (
+        {!over && !daily && (
           <button className={`dock-btn trades-btn ${offersForMe ? 'hot' : ''}`} onClick={() => viewTrade(null)}
             aria-label={`Trades${game.trades.length ? `: ${game.trades.length} open` : ''}${offersForMe ? `, ${offersForMe} for you` : ''}`}
             title={offersForMe ? `${offersForMe} trade offer${offersForMe > 1 ? 's' : ''} waiting for your answer` : 'Open trades at the table'}>
@@ -301,7 +314,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
       )}
 
       <ActionBar game={game} me={me} skew={skew} selected={selected} onManage={openManage} onLeave={leave}
-        onTrade={openTrade} />
+        onTrade={openTrade} noTrade={!!daily} />
       </div>
 
       <AuctionPanel game={game} me={me} skew={skew} />
@@ -333,7 +346,9 @@ export default function GameScreen({ room, game, me, chat, skew }: {
         <ManagePanel game={game} me={me} mode={manage} onClose={() => setManage(null)} onPick={i => { setManage(null); setSelected(i); }} />
       )}
       {helpOpen && <HowToPlay rules={game.rules} mapId={game.mapId} currency={theme.currency} shortcuts={!!myPlayer} onClose={() => setHelpOpen(false)} />}
-      {endReady && <EndScreen room={room} game={game} me={me} onLeave={leave} />}
+      {endReady && (daily
+        ? <MonopolyDailyOver daily={daily} game={game} me={me} />
+        : <EndScreen room={room} game={game} me={me} onLeave={leave} />)}
     </div>
   );
 }
@@ -452,7 +467,7 @@ function Players({ game, room, me, onTrade, reactions, onPortfolio }: {
                 </div>
               )}
             </div>
-            {amIn && p.id !== me && !p.bankrupt && game.phase !== 'over' && (
+            {amIn && !room.daily && p.id !== me && !p.bankrupt && game.phase !== 'over' && (
               <button className="btn tiny ptrade" onClick={() => onTrade(p.id)} title={`Trade with ${p.name}`} aria-label={`Trade with ${p.name}`}>⇄</button>
             )}
             <PlayerMenu room={room} player={p} me={me} />
@@ -463,9 +478,11 @@ function Players({ game, room, me, onTrade, reactions, onPortfolio }: {
   );
 }
 
-function ActionBar({ game, me, skew, selected, onManage, onLeave, onTrade }: {
+function ActionBar({ game, me, skew, selected, onManage, onLeave, onTrade, noTrade = false }: {
   game: GameView; me: string; skew: number; selected: number | null;
   onManage: (mode: ManageMode) => void; onLeave: () => void; onTrade: () => void;
+  /** The Daily Challenge: no deals, so no Trade button. */
+  noTrade?: boolean;
 }) {
   const theme = resolveTheme(game.themeId, game.mapId);
   const cur = (n: number) => `${theme.currency}${n.toLocaleString()}`;
@@ -647,9 +664,11 @@ function ActionBar({ game, me, skew, selected, onManage, onLeave, onTrade }: {
     return (
       <div className="actionbar mine">
         {dice}
-        <span className="ab-prompt small ab-hint">{buildable ? 'Build, trade — then' : 'Trade or manage — then'}</span>
+        <span className="ab-prompt small ab-hint">
+          {noTrade ? (buildable ? 'Build — then' : 'Manage — then') : buildable ? 'Build, trade — then' : 'Trade or manage — then'}
+        </span>
         {buildBtn(buildable)}
-        <button className="btn small ghost" onClick={onTrade} aria-keyshortcuts="t" title="Offer another player a trade (T)">🤝 Trade</button>
+        {!noTrade && <button className="btn small ghost" onClick={onTrade} aria-keyshortcuts="t" title="Offer another player a trade (T)">🤝 Trade</button>}
         <button className="btn primary chunky" disabled={busy} onClick={() => run({ type: 'endTurn' })} aria-keyshortcuts="e">End turn ✓</button>
       </div>
     );

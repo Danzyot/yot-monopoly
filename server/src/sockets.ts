@@ -16,6 +16,7 @@ import { isLibraryFile } from './graphics.ts';
 import { clientIp } from './ip.ts';
 import { noteIpSample } from './ipdebug.ts';
 import { Registry, Room, RoomError, type Member } from './rooms.ts';
+import { settleMonopolyDaily, startMonopolyDaily } from './monopolyDaily.ts';
 import { recordResult } from './stats.ts';
 import { resolveRequirements } from './requirements.ts';
 import { takeSeat } from './seating.ts';
@@ -116,12 +117,19 @@ export function attachSockets(io: Server): SocketLayer {
     onChange: room => { broadcast(room); },
     onEvent: (room, text) => logGameEvent(room.code, `${getMap(room.mapId).name} · ${room.hostName()}`, text),
     onFinished: room => finished(room),
+    // A daily attempt stopped before its end (an operator) is still a result: a loss.
+    onEnded: room => {
+      try { settleMonopolyDaily(room); } catch (e) { console.error('[daily] could not record a daily result', e); }
+    },
     holdsChog,
   });
 
   function finished(room: Room) {
     const g = room.game;
     if (!g) return;
+    if (room.daily) {
+      try { settleMonopolyDaily(room); } catch (e) { console.error('[daily] could not record a daily result', e); }
+    }
     const standings = g.standings();
     recordResult({
       code: room.code, mapId: room.mapId, themeId: room.themeId,
@@ -142,7 +150,8 @@ export function attachSockets(io: Server): SocketLayer {
     });
     lobbyChanged();
     const channel = announceChannelId();
-    if (channel && isOn('announceResults')) {
+    // Daily games are one player against bots: their place is the daily leaderboard, not the channel.
+    if (channel && isOn('announceResults') && !room.daily) {
       void postToChannel(channel, resultEmbed(
         standings.map(s => g.player(s.id).name),
         `${getMap(room.mapId).name} · ${getTheme(room.themeId).name} · ${g.turnNumber} turns`,
@@ -320,6 +329,18 @@ export function attachSockets(io: Server): SocketLayer {
       return { code: room.code, created: true };
     });
 
+    // The Daily Challenge (./monopolyDaily.ts): today's official attempt, back to it
+    // while it runs, or a practice game once it is done. The server decides which, never the client.
+    on('room:daily', () => {
+      const m = member();
+      if (!isOn('bots') && !isAdmin()) throw new RoomError('The Daily Challenge needs bots, and they are switched off');
+      const started = startMonopolyDaily(registry, m, { exempt: isAdmin() });
+      enter(started.room, true);
+      logGameEvent(started.room.code, getMap(started.room.mapId).name,
+        `Daily Challenge ${started.practice ? 'practice ' : ''}${started.resumed ? 'resumed' : 'started'}: ${getMap(started.room.mapId).name}`);
+      return { code: started.room.code, practice: started.practice, resumed: started.resumed };
+    });
+
     // `watch` lets someone (typically an operator opening a room from the
     // dashboard) look in without taking a free lobby seat.
     // Async because a Discord-gated room asks Discord before seating anyone
@@ -330,6 +351,8 @@ export function attachSockets(io: Server): SocketLayer {
       const prof = data.profile;
       const ban = findBan({ id: prof?.id, discordId: prof?.discord?.id, ip: data.ip }, room.code);
       if (ban) throw new RoomError(banMessage(ban));
+      // Everyone gets the same dice on the same turn: watching someone's daily would show you yours.
+      if (room.daily && !(prof && room.seat(prof.id)) && !isAdmin()) throw new RoomError('Daily Challenge games can’t be watched');
       // "Check again" and reconnects ask Discord; a refusal from moments ago is
       // reused rather than asking again, so nobody can hammer the Discord API.
       const recent = prof ? recentRefusals.get(prof.id) : undefined;

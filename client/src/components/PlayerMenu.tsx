@@ -40,7 +40,8 @@ export default function PlayerMenu({ room, player, me }: { room: RoomView; playe
   const self = player.id === me;
   const hostPowers = room.hostId === me || isAdmin;
   const seat = room.seats.find(s => s.id === player.id);
-  const canRemove = !self && hostPowers && !player.bankrupt && room.game?.phase !== 'over';
+  // The Daily Challenge is played against all of the day's bots: none of them can be removed.
+  const canRemove = !self && hostPowers && !player.bankrupt && room.game?.phase !== 'over' && !(room.daily && player.isBot);
   const canBan = !self && isAdmin && !player.isBot;
   const canMakeHost = !self && hostPowers && !player.isBot && !!seat?.connected && player.id !== room.hostId && room.status !== 'finished';
   const canProfile = !player.isBot && config.features.leaderboard;

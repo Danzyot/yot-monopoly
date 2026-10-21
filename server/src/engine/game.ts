@@ -66,6 +66,12 @@ export interface GameInit {
   rules: RuleConfig;
   players: NewPlayer[];
   rng?: Rng;
+  /**
+   * The dice, when they must depend on nothing but the turn (the Daily
+   * Challenge): face `k` (0, 1, 2, ...) thrown in turn `turn`, 1–6. Without
+   * it the dice come from `rng` like everything else.
+   */
+  dice?: (turn: number, k: number) => number;
   now?: () => number;
   /** Mirror of every log line, for the durable room log. */
   onLog?: (text: string) => void;
@@ -174,6 +180,9 @@ export interface GameSnapshot {
   stats?: Record<string, PlayerStats>;
   startedAt?: number;
   endedAt?: number | null;
+  /** Optional: with injected dice, the turn of the last face thrown and how many it has had. */
+  diceTurn?: number;
+  diceDrawn?: number;
 }
 
 interface LandingOpts {
@@ -281,6 +290,10 @@ export class Game {
   private onLog?: (text: string) => void;
   private onBank?: (amount: number, reason: string) => void;
   private rng: Rng;
+  private diceFor?: (turn: number, k: number) => number;
+  /** Injected dice: the turn the faces counted below were thrown in, and how many. */
+  private diceTurn = 0;
+  private diceDrawn = 0;
   private now: () => number;
 
   constructor(init: GameInit) {
@@ -296,6 +309,7 @@ export class Game {
     this.jailIndex = this.spaces.findIndex(s => s.kind === 'jail');
     if (this.jailIndex < 0) fail('Board has no jail');
     this.rng = init.rng ?? (n => Math.floor(Math.random() * n));
+    this.diceFor = init.dice;
     this.now = init.now ?? Date.now;
     this.onLog = init.onLog;
     this.onBank = init.onBank;
@@ -351,7 +365,12 @@ export class Game {
   }
 
   private die(): number {
-    return this.rng(6) + 1;
+    if (!this.diceFor) return this.rng(6) + 1;
+    if (this.diceTurn !== this.turnNumber) {
+      this.diceTurn = this.turnNumber;
+      this.diceDrawn = 0;
+    }
+    return this.diceFor(this.turnNumber, this.diceDrawn++);
   }
 
   ownedBy(id: string): number[] {
@@ -1922,6 +1941,15 @@ export class Game {
     this.say(`Final ranking: ${st.map((x, i) => `${i + 1}. ${this.player(x.id).name} ${this.money(x.netWorth)}`).join(' · ')}`);
   }
 
+  /** The room ends the game here (a Daily Challenge's turn cap, or its player going broke): on net worth, as the time limit would. */
+  finishNow(text: string) {
+    if (this.phase === 'over') return;
+    this.paused = null;
+    this.say(text);
+    this.finishByTime();
+    this.syncClocks();
+  }
+
   /** The room gave up on the table (nobody has been at it for a long while): end it as the time limit would. */
   abandon() {
     if (this.phase === 'over') return;
@@ -2045,6 +2073,7 @@ export class Game {
       speed: this.speed, choice: this.choice, speedPending: this.speedPending, endAfter: this.endAfter, points: this.points,
       estateQueue: this.estateQueue, resumePhase: this.resumePhase,
       stats: this.stats, startedAt: this.startedAt, endedAt: this.endedAt,
+      ...(this.diceFor && { diceTurn: this.diceTurn, diceDrawn: this.diceDrawn }),
     });
   }
 

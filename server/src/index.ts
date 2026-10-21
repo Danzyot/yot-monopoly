@@ -30,6 +30,8 @@ import { mountTextOverrides } from './routes/textOverrides.ts';
 import { mountContent } from './routes/content.ts';
 import { mountCardsProfile } from './routes/cardsProfile.ts';
 import { mountCardsDaily } from './routes/cardsDaily.ts';
+import { mountMonopolyDaily } from './routes/monopolyDaily.ts';
+import { loadMonopolyDaily, monopolyDailyProfile, reconcileMonopolyDaily } from './monopolyDaily.ts';
 import { mountPlayerCard } from './routes/playerCard.ts';
 import { cardPath, configurePlayerCards, playerBanned, playerSnapshot, profileMeta } from './playerCard.ts';
 import { commandDefinitions, configureSlashCommands, dailyAvailable } from './discordCommands.ts';
@@ -74,6 +76,7 @@ loadEvents();
 loadResults();
 loadCardsResults();
 loadCardsDaily();
+loadMonopolyDaily();
 loadGraphics();
 void primeVerifyChannel();
 
@@ -135,6 +138,8 @@ mountContent(app);
 const restored = restoreLive(sockets.registry);
 if (restored) console.log(`Restored ${restored} live room(s) from the last snapshot`);
 armPersistence(sockets.registry);
+// Monopoly daily attempts whose tables did not come back are walk-outs (losses).
+reconcileMonopolyDaily(sockets.registry);
 // Chog Cards tables: their own registry and events (cards:*), same server and sign-in.
 // Holders sit at card tables as their own Chogs too, checked against the same wallet store.
 const cards = attachCardsSockets(io, { taken: code => !!sockets.registry.get(code), holdsChog });
@@ -248,12 +253,18 @@ app.get('/api/players/:id', (req, res) => {
   // An unknown player is an ordinary answer ({ profile: null }), not an error:
   // a shared link to someone with no finished games is expected, and the page
   // explains it rather than the console logging a failed request.
-  res.json({ profile: buildProfile(String(req.params.id), allResults()) });
+  const id = String(req.params.id);
+  const profile = buildProfile(id, allResults());
+  // The Daily Challenge record rides along (a daily game is a finished game, so there is a profile).
+  const daily = profile ? monopolyDailyProfile(id) : null;
+  res.json({ profile: profile && daily ? { ...profile, daily } : profile });
 });
 // ...and the Cards half (/api/players/:id/cards).
 mountCardsProfile(app);
 // The Cards Daily Challenge: today's deal, its leaderboard and the days before.
 mountCardsDaily(app, cards.registry);
+// The Monopoly Daily Challenge: the same shape, at /api/monopoly/daily.
+mountMonopolyDaily(app, sockets.registry);
 // Badges (/api/players/:id/achievements) and the share card (/api/players/:id/card.png).
 configurePlayerCards({ tournamentsOf: id => tourneys.manager.resultsOf(id, 1000) });
 mountPlayerCard(app);

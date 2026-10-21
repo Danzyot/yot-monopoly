@@ -17,6 +17,7 @@ import type { CardsProfile, CardsProfileGame, PublicProfile } from '../../../sha
 import { BRAND, GAMES } from '../../../shared/brand.ts';
 import ProfileTournaments from '../tournaments/ProfileTournaments.tsx';
 import ProfileDaily from '../cards/ProfileDaily.tsx';
+import ProfileMonopolyDaily from '../monopolyDaily/ProfileMonopolyDaily.tsx';
 import { BadgeGrid, ShareProfile } from '../achievements.tsx';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
@@ -102,6 +103,7 @@ function MonopolySection({ p, titled }: { p: PublicProfile; titled: boolean }) {
       {p.rankedGames < p.games && (
         <p className="muted small pf-note">Points count only games with at least two people ({p.rankedGames} of {p.games}); games against bots alone still show below.</p>
       )}
+      {p.daily && <ProfileMonopolyDaily d={p.daily} />}
 
       <section className="pf-favs" aria-label="Favourites">
         <div className="panel pf-fav">

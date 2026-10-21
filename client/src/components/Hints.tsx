@@ -60,7 +60,9 @@ export function CoachHint({ game, me, busy, onHelp, onBuild, onRaise, onTrade }:
   game: GameView; me: string;
   /** Something else is going on (dice rolling, a dialog open): hold the tip. */
   busy: boolean;
-  onHelp: () => void; onBuild: () => void; onRaise: () => void; onTrade: () => void;
+  onHelp: () => void; onBuild: () => void; onRaise: () => void;
+  /** Absent: no trading at this table (the Daily Challenge), so no trade tip. */
+  onTrade?: () => void;
 }) {
   const seen = useSeen();
   // The welcome tip is for a first look: it retires itself once my first turn
@@ -98,7 +100,7 @@ type Hint = { id: HintId; icon: string; text: string; action?: [string, () => vo
 
 /** The one tip worth showing right now, if any. */
 function pickHint(game: GameView, me: string, busy: boolean, seen: Set<string>, { onHelp, onBuild, onRaise, onTrade }: {
-  onHelp: () => void; onBuild: () => void; onRaise: () => void; onTrade: () => void;
+  onHelp: () => void; onBuild: () => void; onRaise: () => void; onTrade?: () => void;
 }): Hint | null {
   const p = game.players.find(x => x.id === me);
   if (!p || p.bankrupt || game.phase === 'over' || game.paused || busy) return null;
@@ -117,7 +119,7 @@ function pickHint(game: GameView, me: string, busy: boolean, seen: Set<string>, 
     };
   } else if (calm && canBuildAnywhere(game, theme.spaces, me) && !seen.has('build')) {
     hint = { id: 'build', icon: '🏗️', text: 'You own a full colour set! Build houses on it — rent shoots way up.', action: ['Build', onBuild] };
-  } else if (mine && game.phase === 'done' && !seen.has('trade') && tradePartnerFor(game, me)) {
+  } else if (onTrade && mine && game.phase === 'done' && !seen.has('trade') && tradePartnerFor(game, me)) {
     hint = { id: 'trade', icon: '🤝', text: 'One trade away from a full set? Offer cash or deeds for the missing one.', action: ['Trade', onTrade] };
   } else if (!seen.has('welcome') && !howToSeen()) {
     hint = { id: 'welcome', icon: '👋', text: 'New here? The rules fit on one short page.', action: ['How to play', onHelp] };
