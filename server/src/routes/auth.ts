@@ -8,12 +8,13 @@ import { banMessage, findBan } from '../bans.ts';
 import { canHost } from '../hosting.ts';
 import { authorizeUrl, completeOAuth, discordEnabled, redirectUriFor } from '../discord.ts';
 import { handleInteraction, interactionsConfigured, validSignature } from '../interactions.ts';
+import { answerLiveCommand, type CommandInteraction } from '../discordCommands.ts';
 import { codeStatus, startCode } from '../verifycode.ts';
 import { authed, fail, requestBase } from '../http.ts';
 
 /** Must be mounted BEFORE express.json(): Discord signs the raw body. */
 export function mountInteractions(app: express.Express) {
-  app.post('/api/discord/interactions', express.raw({ type: '*/*', limit: '256kb' }), (req, res) => {
+  app.post('/api/discord/interactions', express.raw({ type: '*/*', limit: '256kb' }), async (req, res) => {
     const publicKey = process.env.DISCORD_PUBLIC_KEY?.trim();
     const sig = req.headers['x-signature-ed25519'] as string | undefined;
     const ts = req.headers['x-signature-timestamp'] as string | undefined;
@@ -25,6 +26,16 @@ export function mountInteractions(app: express.Express) {
     }
     let body: unknown;
     try { body = JSON.parse(raw.toString('utf8')); } catch { res.status(400).json({ error: 'bad body' }); return; }
+    // Slash commands (type 2): discordCommands.ts, deferred when slow.
+    if ((body as { type?: unknown } | null)?.type === 2) {
+      try {
+        res.json(await answerLiveCommand(body as CommandInteraction));
+      } catch (e) {
+        console.error('[discord] command failed:', e);
+        res.json({ type: 4, data: { content: 'Something went wrong on our side. Try again in a moment.', flags: 64 } });
+      }
+      return;
+    }
     const out = handleInteraction(body as Parameters<typeof handleInteraction>[0]);
     if (out) { res.status(out.status).json(out.body); return; }
     res.json({ type: 4, data: { content: 'Unsupported interaction.', flags: 64 } });

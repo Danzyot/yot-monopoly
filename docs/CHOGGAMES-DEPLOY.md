@@ -294,6 +294,47 @@ with Discord" also still works exactly as before.
 **Bot**: nothing changes — it is already in the server with Server Members
 Intent on.
 
+### 4a. Slash commands (`/play`, `/stats`, `/leaderboard`, `/tables`, `/chog`, `/daily`)
+
+The hub registers the bot's slash commands in the Chog server
+(`DISCORD_GUILD_ID`) by itself on startup, so they appear at once (guild
+commands, no hour-long wait). They arrive at the same Interactions Endpoint
+URL as the Verify button, so nothing new is needed there. What the owner must
+check, once:
+
+1. **The `applications.commands` scope.** A bot invited with only the `bot`
+   scope cannot have slash commands. Developer Portal → the Monopoly bot app →
+   **OAuth2 → URL Generator** → tick scopes **`bot`** *and*
+   **`applications.commands`** → tick the bot permissions from section 4
+   (plus **Embed Links**, **Use Application Commands**) → open the generated
+   URL → pick the Chog server → **Authorize**. Re-authorising updates the
+   existing bot; it does not add a second one.
+2. **Hub variables**: `DISCORD_CLIENT_ID`, `DISCORD_BOT_TOKEN`,
+   `DISCORD_GUILD_ID` and `DISCORD_PUBLIC_KEY` set (section 2). Without the
+   public key Discord accepts the commands but cannot deliver them.
+3. **Dashboard → Discord → Slash commands** shows where registration stands
+   (`Registered` / `Up to date` / `Failed: …`). After re-authorising in step 1,
+   press **Re-register Discord commands**. "Missing Access" there means step 1
+   is not done or `DISCORD_GUILD_ID` is not the Chog server.
+4. In Discord: type `/` in any channel → the CHOG GAMES commands are listed.
+   **Server Settings → Integrations → CHOG GAMES** lets you limit which
+   channels or roles may use them (optional).
+
+How it behaves:
+
+- Registration is one bulk overwrite of the guild's commands, sent only when
+  the command list changed (its hash is kept in `DATA_DIR`), so redeploys do
+  not re-register. A failure never stops the site; it is logged and shown on
+  the dashboard.
+- `/stats` and `/leaderboard` follow the **leaderboard** feature switch: with
+  it off they are refused and removed from Discord.
+- `/daily` is only offered while the site has a Cards Daily Challenge.
+- Replies show only what the public site shows (names, results, badges,
+  public table codes): never wallet addresses, IPs or linked accounts. Banned
+  players get no stats, no leaderboard row and no answers. Results are public
+  in the channel; errors are only visible to whoever asked. Each Discord user
+  may run a few commands every 20 seconds.
+
 ---
 
 ## 5. Cutover, in order

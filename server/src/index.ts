@@ -23,7 +23,9 @@ import { mountTextOverrides } from './routes/textOverrides.ts';
 import { mountContent } from './routes/content.ts';
 import { mountCardsProfile } from './routes/cardsProfile.ts';
 import { mountPlayerCard } from './routes/playerCard.ts';
-import { configurePlayerCards, profileMeta } from './playerCard.ts';
+import { cardPath, configurePlayerCards, playerBanned, playerSnapshot, profileMeta } from './playerCard.ts';
+import { commandDefinitions, configureSlashCommands, dailyAvailable } from './discordCommands.ts';
+import { configureCommandDefinitions, syncCommands } from './discordRegister.ts';
 import { walletRoutes } from './routes/wallet.ts';
 import { holdsChog } from './wallet/holders.ts';
 import { hostingRoutes } from './routes/hosting.ts';
@@ -34,9 +36,9 @@ import { armCardsPersistence, restoreCardsLive } from './cards/persist.ts';
 import { attachTournaments } from './tournament/sockets.ts';
 import { cardsLeaderboard, loadCardsResults, recentCardsResults } from './cards/stats.ts';
 import { staticClient } from './staticFiles.ts';
-import { mountCrawlerFiles, spaHandler } from './seo.ts';
+import { mountCrawlerFiles, siteOrigin, spaHandler } from './seo.ts';
 import { mountSite } from './routes/site.ts';
-import { mountActivity } from './routes/activity.ts';
+import { activitySources, mountActivity } from './routes/activity.ts';
 import { mountChogs } from './routes/chogs.ts';
 import { allResults, leaderboard, loadResults } from './stats.ts';
 import { buildProfile } from './profiles.ts';
@@ -200,6 +202,23 @@ mountCardsProfile(app);
 configurePlayerCards({ tournamentsOf: id => tourneys.manager.resultsOf(id, 1000) });
 mountPlayerCard(app);
 
+// The bot's slash commands (discordCommands.ts), answered at /api/discord/interactions,
+// read the same public stores as the pages above.
+{
+  const live = activitySources({ monopoly: sockets.registry, cards: cards.registry, tournaments: tourneys.manager });
+  configureSlashCommands({
+    origin: () => siteOrigin(),
+    statsPublic: () => isOn('leaderboard'),
+    banned: playerBanned,
+    snapshot: playerSnapshot,
+    cardPath,
+    leaders: (game, n) => (game === 'cards' ? cardsLeaderboard(n) : leaderboard(n)),
+    tables: game => [...(game === 'cards' ? live.cardsTables() : live.monopolyTables())],
+    now: () => Date.now(),
+  });
+  configureCommandDefinitions(() => commandDefinitions({ statsPublic: isOn('leaderboard'), daily: dailyAvailable() }));
+}
+
 // What the lobby's Discord requirement picker can offer. Any signed-in player
 // may host, so any signed-in player may ask; roles are cached (requirements.ts).
 app.get('/api/community/discord', async (req, res) => {
@@ -255,4 +274,9 @@ http.listen(PORT, () => {
       : '⚠️  ADMIN_DISCORD_IDS is unset — every signed-in account is an operator.');
   }
   if (!process.env.DATA_DIR) console.warn('⚠️  DATA_DIR is unset — bans, results and live games are stored in server/data (lost on redeploy without a volume).');
+  // Slash commands: a bulk overwrite in the guild, skipped when Discord already has these ones.
+  void syncCommands().then(s => {
+    // Not configured is the norm on a dev machine; worth a line only where a bot exists.
+    if (s.state === 'failed' || (s.state === 'not-configured' && process.env.DISCORD_BOT_TOKEN)) console.warn(`⚠️  Discord slash commands: ${s.message}`);
+  });
 });
