@@ -146,7 +146,7 @@ export default function Home() {
         <QuickPlay />
         <div className="hero-howto">
           <HowToButton label="❓ New here? How to play" />
-          <Link className="btn small ghost" to="/characters">{CHOG_SEASON ? '💜' : '🎭'} {castTitle}</Link>
+          <Link className="btn small ghost" to="/characters">{CHOG_SEASON ? <Face emoji="💜" image="/faces/chog.webp" /> : '🎭'} {castTitle}</Link>
         </div>
       </section>
 

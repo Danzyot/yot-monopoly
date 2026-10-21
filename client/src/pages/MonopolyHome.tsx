@@ -20,6 +20,7 @@ import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { requirementBadge, requirementSentence } from '../community.tsx';
 import MonopolyDailyCard from '../monopolyDaily/MonopolyDailyCard.tsx';
+import { Face } from '../components/CharacterFace.tsx';
 import '../styles/monopoly-home.css';
 
 const loadHowToPlay = () => import('../components/HowToPlay.tsx');
@@ -114,7 +115,7 @@ export default function MonopolyHome() {
         </div>
         <div className="hero-howto">
           <HowToButton />
-          <Link className="btn small ghost" to="/characters">{CHOG_SEASON ? '💜 Meet Chog' : '🎭 Characters'}</Link>
+          <Link className="btn small ghost" to="/characters">{CHOG_SEASON ? <><Face emoji="💜" image="/faces/chog.webp" /> Meet Chog</> : '🎭 Characters'}</Link>
         </div>
         <p className="hero-status muted small" role="status">
           {!connected ? 'Connecting…'

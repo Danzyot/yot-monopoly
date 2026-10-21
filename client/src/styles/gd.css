@@ -14,16 +14,24 @@
   font: 400 clamp(48px, 8.5vw, 100px)/1 'Titan One', var(--display);
   background: linear-gradient(180deg, #fffbd0 0%, #ffe94a 34%, #ffb300 66%, #ff7a00 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
-  -webkit-text-stroke: 5px #000; paint-order: stroke fill;
+  /* The outline and the drop shadow scale with the type: a stroke cut for 100px
+     letters swallows 48px ones on a phone. */
+  -webkit-text-stroke: clamp(3px, 0.05em, 5px) #000; paint-order: stroke fill;
   text-shadow: none;
-  filter: drop-shadow(0 6px 0 #000) drop-shadow(0 14px 22px rgba(0, 0, 0, 0.45));
+  filter: drop-shadow(0 clamp(3px, 0.06em, 6px) 0 #000) drop-shadow(0 14px 22px rgba(0, 0, 0, 0.45));
   transform: none;
   letter-spacing: 0.02em;
 }
 .home-hero.gd h1 .h1-accent { color: transparent; }
 .home-hero.gd .home-tag {
-  font: 400 clamp(16px, 2.1vw, 22px) 'Titan One', var(--display);
-  color: #fff; -webkit-text-stroke: 3px #000; paint-order: stroke fill; text-shadow: 0 3px 0 #000;
+  font: 400 clamp(16px, 2.1vw, 22px)/1.25 'Titan One', var(--display);
+  color: #fff; -webkit-text-stroke: clamp(1.5px, 0.12em, 3px) #000; paint-order: stroke fill; text-shadow: 0 clamp(2px, 0.12em, 3px) 0 #000;
+  /* Two even lines on a phone, not a line and a stray word. */
+  text-wrap: balance; max-width: 34ch; margin-left: auto; margin-right: auto;
+}
+@media (max-width: 480px) {
+  .home-hero.gd h1 { font-size: clamp(38px, 11.5vw, 48px); letter-spacing: 0; }
+  .home-hero.gd .home-tag { font-size: 15px; }
 }
 
 .home-hero.gd .hero-cta,
