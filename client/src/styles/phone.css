@@ -29,3 +29,18 @@
   .modal .bp-name { box-sizing: border-box; min-height: 36px; padding: 8px 0; }
   .deed-actions .btn { min-height: 36px; }
 }
+
+/* The dark outline under white words (--outline) is drawn for desktop type;
+   at phone sizes, on a sharp screen, its 2px drop reads as a smudge under
+   every word. Half of it on phones, and the few hand-sized heavy shadows
+   and strokes step down with their type. */
+@media (max-width: 760px) {
+  :root { --outline: 0 1px 0 rgba(0, 0, 0, 0.32), 0 0 1px rgba(0, 0, 0, 0.3); }
+  .hub-play, .hub-play:hover:not(:disabled) { -webkit-text-stroke: 2px #000; text-shadow: 0 1.5px 0 #000; }
+  .home-hero.gd .hero-cta, .home-hero.gd .hero-join .btn { -webkit-text-stroke: 3px #000; text-shadow: 0 2px 0 #000; }
+  .turn-banner span { -webkit-text-stroke: clamp(3px, 0.065em, 6px) #0b2a72; text-shadow: 0 clamp(4px, 0.09em, 8px) 0 #0b2a72, 0 12px 28px rgba(0, 0, 0, 0.45); }
+  .fx-money { -webkit-text-stroke: 3px rgba(10, 20, 50, 0.85); }
+  .dl-head h1 { text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35); }
+  .go-word, .mg-pad .mga-pad-word { text-shadow: 0 2px 0 rgba(0, 0, 0, 0.3); }
+  .rr-total { text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35), 0 0 2px rgba(0, 0, 0, 0.4); }
+}
