@@ -5,7 +5,7 @@
 import { useState, type ReactNode } from 'react';
 import { chogArtUrl, chogName } from '../../../shared/chogs/traits.ts';
 import type { PlayerState } from '../../../shared/types.ts';
-import { characterEmoji } from '../format.ts';
+import { CharacterFace } from './CharacterFace.tsx';
 
 type Who = Pick<PlayerState, 'character' | 'color' | 'chogToken'>;
 
@@ -25,7 +25,7 @@ export function PlayerBadge({ p, className = '', onClick, children }: {
       {token
         ? <img className="chog-art" src={chogArtUrl(token, 96)} alt={chogName(token)} width={30} height={30} loading="lazy" draggable={false}
             onError={() => setFailed(token)} />
-        : characterEmoji(p.character)}
+        : <CharacterFace id={p.character} />}
       {children}
     </span>
   );

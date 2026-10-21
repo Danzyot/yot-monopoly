@@ -13,7 +13,7 @@ import { getMap } from '../../../shared/maps.ts';
 import { MINIGAME_INFO } from '../../../shared/minigames.ts';
 import type { GameView, RoomView } from '../../../shared/types.ts';
 import { useConnected } from '../net.ts';
-import { characterEmoji } from '../format.ts';
+import { CharacterFace } from './CharacterFace.tsx';
 import { themeStyle } from '../themeStyle.ts';
 import { Avatar } from './Avatar.tsx';
 import BoardScene from '../three/BoardScene.tsx';
@@ -142,7 +142,7 @@ function WaitingThird({ room, theme }: { room: RoomView; theme: Theme }) {
       <div className="bc-lt-seats">
         {room.seats.map(s => (
           <span key={s.id} className="bc-seat" style={{ borderColor: s.color }}>
-            <span className="bc-seat-tok" style={{ background: s.color }}>{characterEmoji(s.character)}</span>{s.name}
+            <span className="bc-seat-tok" style={{ background: s.color }}><CharacterFace id={s.character} /></span>{s.name}
           </span>
         ))}
       </div>
@@ -184,7 +184,7 @@ function LowerThird({ game, room, theme }: { game: GameView; room: RoomView; the
       <div className="bc-lt-avatar" style={{ background: p.color }}>
         {seat?.avatar && /^https:/.test(seat.avatar)
           ? <Avatar src={seat.avatar} size={56} />
-          : <span className="bc-lt-emoji">{characterEmoji(p.character)}</span>}
+          : <span className="bc-lt-emoji"><CharacterFace id={p.character} /></span>}
       </div>
       <div className="bc-lt-main">
         <span className="bc-lt-kicker">{game.winner ? '🏆 Champion' : game.phase === 'over' ? 'Final turn' : 'Now playing'}{p.isBot ? ' · bot' : ''}</span>
@@ -247,7 +247,7 @@ function Standings({ game, theme }: { game: GameView; theme: Theme }) {
           <div key={p.id} ref={el => { if (el) rows.current.set(p.id, el); else rows.current.delete(p.id); }}
             className={`bc-row ${p.id === game.current && !p.bankrupt ? 'turn' : ''} ${p.bankrupt ? 'out' : ''} ${i === 0 && !p.bankrupt ? 'lead' : ''}`}>
             <span className="bc-rank">{p.bankrupt ? '—' : i + 1}</span>
-            <span className="bc-chip" style={{ background: p.color }}>{characterEmoji(p.character)}</span>
+            <span className="bc-chip" style={{ background: p.color }}><CharacterFace id={p.character} /></span>
             <span className="bc-row-main">
               <span className="bc-row-name">{p.name}{p.inJail && <span title="In jail"> 🔒</span>}</span>
               <span className="bc-row-sub">{p.bankrupt ? 'bankrupt' : <>{deeds} {deeds === 1 ? 'deed' : 'deeds'}</>}</span>

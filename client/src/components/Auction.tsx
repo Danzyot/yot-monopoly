@@ -15,7 +15,7 @@ import { resolveTheme } from '../../../shared/themes.ts';
 import type { Auction, GameView } from '../../../shared/types.ts';
 import { act } from '../net.ts';
 import { toastError } from '../toast.tsx';
-import { characterEmoji } from '../format.ts';
+import { CharacterFace } from './CharacterFace.tsx';
 import { debtOf, inkOn } from '../gameHelpers.ts';
 
 /** The quick-bid raises, on top of the current top bid. */
@@ -100,7 +100,7 @@ export function AuctionPanel({ game, me, skew }: { game: GameView; me: string; s
           <span className="ax-label">{leader ? 'Top bid' : 'No bids yet'}</span>
           <b className="ax-bid">{leader ? cur(a.highBid) : '—'}</b>
           {leader
-            ? <span className="ax-by">by <b style={{ color: leader.color }}>{characterEmoji(leader.character)} {winning ? 'you' : leader.name}</b></span>
+            ? <span className="ax-by">by <b style={{ color: leader.color }}><CharacterFace id={leader.character} /> {winning ? 'you' : leader.name}</b></span>
             : <span className="ax-by">Opening bid: {cur(minBid)} or more</span>}
         </div>
       </div>
@@ -152,7 +152,7 @@ export function AuctionPanel({ game, me, skew }: { game: GameView; me: string; s
             return (
               <span key={p.id} className={`ax-bidder ${still ? '' : 'out'} ${p.id === a.highBidder ? 'top' : ''}`} style={{ borderColor: p.color }}
                 title={still ? `${p.name} is still in` : `${p.name} dropped out`}>
-                {characterEmoji(p.character)} {p.id === me ? 'You' : p.name}{p.id === a.highBidder ? ' 🏆' : ''}
+                <CharacterFace id={p.character} /> {p.id === me ? 'You' : p.name}{p.id === a.highBidder ? ' 🏆' : ''}
               </span>
             );
           })}

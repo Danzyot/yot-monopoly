@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react';
 import { resolveTheme, type Theme } from '../../../shared/themes.ts';
 import type { GameView, PlayerState } from '../../../shared/types.ts';
-import { characterEmoji } from '../format.ts';
+import { CharacterFace } from './CharacterFace.tsx';
 import { CloseX, Modal } from './Modal.tsx';
 
 interface Group {
@@ -72,7 +72,7 @@ export default function Portfolio({ game, me, focus, onPick, onTrade, compact }:
               onClick={() => setPick(p.id)} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') setPick(p.id); }}>
               <td>
                 <span className="pfo-who">
-                  <i className="pf-dot" style={{ background: p.color }}>{characterEmoji(p.character)}</i>
+                  <i className="pf-dot" style={{ background: p.color }}><CharacterFace id={p.character} /></i>
                   <span className="pf-name">{p.name}{p.id === me ? ' (you)' : ''}</span>
                 </span>
               </td>

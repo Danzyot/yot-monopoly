@@ -12,7 +12,7 @@ import { resolveTheme, type Theme } from '../../../shared/themes.ts';
 import type { GameView, PlayerState, Trade, TradeSide } from '../../../shared/types.ts';
 import { act } from '../net.ts';
 import { toastError } from '../toast.tsx';
-import { characterEmoji } from '../format.ts';
+import { CharacterFace } from './CharacterFace.tsx';
 import { debtOf, groupLabel, ownedBy, ownsSet } from '../gameHelpers.ts';
 import { CloseX, Modal } from './Modal.tsx';
 
@@ -138,7 +138,7 @@ function SideCard({ game, theme, who, side, onChange, title, other, otherSide, m
 }) {
   return (
     <section className="tr-side" style={{ ['--who' as string]: who.color }}>
-      <h3 className="tr-side-title"><span className="tr-dot">{characterEmoji(who.character)}</span>{title}</h3>
+      <h3 className="tr-side-title"><span className="tr-dot"><CharacterFace id={who.character} /></span>{title}</h3>
       <CashPicker theme={theme} who={who} side={side} onChange={onChange} />
       {who.jailCards.length > 0 && (
         <div className="tr-jail">
@@ -219,7 +219,7 @@ export function TradeModal({ game, me, withId, onClose, counter }: {
           {partners.map(p => (
             <button key={p.id} type="button" role="radio" aria-checked={p.id === them.id}
               className={`tr-partner ${p.id === them.id ? 'on' : ''}`} style={{ ['--who' as string]: p.color }} onClick={() => pick(p.id)}>
-              <span className="tr-dot">{characterEmoji(p.character)}</span>{p.name}
+              <span className="tr-dot"><CharacterFace id={p.character} /></span>{p.name}
             </button>
           ))}
         </div>
@@ -331,7 +331,7 @@ function TradeSideView({ game, theme, me, leg, title }: { game: GameView; theme:
   const nothing = !side.cash && !side.spaces.length && !side.jailCards;
   return (
     <section className="tc-side" style={{ ['--who' as string]: giver.color }}>
-      <h4 className="tc-side-title"><span className="tr-dot" aria-hidden>{characterEmoji(giver.character)}</span>{title}</h4>
+      <h4 className="tc-side-title"><span className="tr-dot" aria-hidden><CharacterFace id={giver.character} /></span>{title}</h4>
       {nothing ? <p className="tc-nothing">Nothing</p> : (
         <ul className="tc-items">
           {side.spaces.map(i => <DeedRow key={i} game={game} theme={theme} me={me} i={i} leg={leg} />)}

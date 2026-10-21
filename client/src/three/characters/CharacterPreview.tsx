@@ -11,6 +11,7 @@ import type { Outfit } from '../../../../shared/outfits.ts';
 import { CharacterFigure, newRig, poseRig, useCharacterMaterials } from './Figure.tsx';
 import { SceneEnv } from '../SceneEnv.tsx';
 import { ShaderGate, setupRenderer } from '../shaderGate.tsx';
+import { CharacterFace } from '../../components/CharacterFace.tsx';
 
 let webglOk: boolean | null = null;
 function hasWebGL(): boolean {
@@ -56,7 +57,7 @@ export default function CharacterPreview({ character, color, outfit, chogToken }
   chogToken?: number;
 }) {
   if (!hasWebGL()) {
-    return <span className="char-preview-emoji" style={{ background: color }}>{getCharacter(character).emoji}</span>;
+    return <span className="char-preview-emoji" style={{ background: color }}><CharacterFace id={character} /></span>;
   }
   return (
     <Canvas className="char-preview-canvas" dpr={[1, 2]} gl={{ alpha: true, antialias: true }}

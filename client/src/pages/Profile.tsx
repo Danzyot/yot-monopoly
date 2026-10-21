@@ -20,6 +20,7 @@ import ProfileDaily from '../cards/ProfileDaily.tsx';
 import ProfileMonopolyDaily from '../monopolyDaily/ProfileMonopolyDaily.tsx';
 import ProfilePokerDaily from '../poker/daily/ProfilePokerDaily.tsx';
 import { BadgeGrid, ShareProfile } from '../achievements.tsx';
+import { Face } from '../components/CharacterFace.tsx';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
@@ -116,7 +117,7 @@ function MonopolySection({ p, titled }: { p: PublicProfile; titled: boolean }) {
           </div>
         </div>
         <div className="panel pf-fav">
-          {favChar && <span className="pf-fav-emoji" aria-hidden>{favChar.emoji}</span>}
+          {favChar && <span className="pf-fav-emoji" aria-hidden><Face emoji={favChar.emoji} image={favChar.face} /></span>}
           <div className="pf-fav-text">
             <span className="muted small">Favourite character</span>
             <b>{favChar ? favChar.name : '—'}</b>
@@ -142,7 +143,7 @@ function MonopolySection({ p, titled }: { p: PublicProfile; titled: boolean }) {
                   <div className="pf-game-top">
                     <b className="pf-game-map">{getMap(g.mapId).name}</b>
                     <span className="chip pf-edition" style={{ background: theme.palette.board, color: theme.palette.boardText, borderColor: theme.palette.boardLine }}>{theme.name}</span>
-                    {ch && <span className="chip pf-char-chip" title={`Played as ${ch.name}`}><span aria-hidden>{ch.emoji}</span> {ch.name}</span>}
+                    {ch && <span className="chip pf-char-chip" title={`Played as ${ch.name}`}><span aria-hidden><Face emoji={ch.emoji} image={ch.face} /></span> {ch.name}</span>}
                   </div>
                   <div className="muted small pf-game-meta">{plural(g.turns, 'turn')} · {when(g.endedAt)}</div>
                   <Opponents list={g.opponents} />
@@ -188,7 +189,7 @@ function CardsSection({ c, id, titled }: { c: CardsProfile | null; id: string; t
                     <div className="pf-game-top">
                       <b className="pf-game-map">{matchName(g)}</b>
                       <span className="chip">{g.score} pts</span>
-                      {ch && <span className="chip pf-char-chip" title={`Played as ${ch.name}`}><span aria-hidden>{ch.emoji}</span> {ch.name}</span>}
+                      {ch && <span className="chip pf-char-chip" title={`Played as ${ch.name}`}><span aria-hidden><Face emoji={ch.emoji} image={ch.face} /></span> {ch.name}</span>}
                       {g.left && <span className="chip">left early</span>}
                     </div>
                     <div className="muted small pf-game-meta">{plural(g.rounds, 'round')} · {when(g.endedAt)}</div>
@@ -292,13 +293,13 @@ export default function Profile() {
       <section className="panel pf-hero" aria-labelledby="pf-name">
         <div className="pf-hero-avatar">
           <Avatar src={hero!.avatar} size={96} />
-          {favChar && <span className="pf-hero-char" role="img" aria-label={`Plays as ${favChar.name}`}>{favChar.emoji}</span>}
+          {favChar && <span className="pf-hero-char" role="img" aria-label={`Plays as ${favChar.name}`}><Face emoji={favChar.emoji} image={favChar.face} /></span>}
         </div>
         <div className="pf-who">
           <h1 id="pf-name">{hero!.name}{mine && <em className="tag">you</em>}</h1>
           <p className="pf-sub">
             {favChar
-              ? <span className="pf-sub-item"><span aria-hidden>{favChar.emoji}</span> Plays as <b>{favChar.name}</b></span>
+              ? <span className="pf-sub-item"><span aria-hidden><Face emoji={favChar.emoji} image={favChar.face} /></span> Plays as <b>{favChar.name}</b></span>
               : <span className="pf-sub-item"><span aria-hidden>{p ? '🎩' : '🃏'}</span> Plays <b>{[p && GAMES.monopoly.name, c && GAMES.cards.name].filter(Boolean).join(' and ')}</b></span>}
             {Number.isFinite(since) && <span className="pf-sub-item"><span aria-hidden>📅</span> Playing since <b>{monthYear(since)}</b></span>}
           </p>

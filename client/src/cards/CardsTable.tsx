@@ -38,6 +38,7 @@ import { useCinematicPref } from '../three/cinematic.ts';
 import { useAchievementToasts } from '../achievements.tsx';
 import { useCardsSounds } from './useCardsSounds.ts';
 import DailyOver from './DailyOver.tsx';
+import { Face } from '../components/CharacterFace.tsx';
 
 // The 3D table brings three.js: fetched when a table is first seen (the 2D felt stands in while it loads).
 const CardsScene = lazy(() => import('./three/CardsScene.tsx'));
@@ -170,7 +171,7 @@ function SeatAvatar({ seat, size = 46 }: { seat?: CardsSeatView; size?: number }
     <span className={`ct-ava-badge ${token ? 'ct-ava-chog' : ''}`} style={{ background: seat?.color ?? '#888', width: size, height: size, fontSize: size * 0.5 }} aria-hidden>
       {token
         ? <img className="chog-art" src={chogArtUrl(token, Math.max(96, size * 2))} alt="" loading="lazy" draggable={false} onError={() => setFailed(token)} />
-        : ch.emoji}
+        : <Face emoji={ch.emoji} image={ch.face} />}
       {hat && <span className="ct-ava-hat"><OutfitThumb id={hat} color={seat!.color} size={Math.round(size * 0.62)} /></span>}
       {seat && !seat.isBot && <span className="ct-ava-me"><Avatar src={seat.avatar} size={Math.round(size * 0.4)} /></span>}
     </span>

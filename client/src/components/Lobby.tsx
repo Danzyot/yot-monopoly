@@ -6,7 +6,7 @@ import { TIME_LIMIT_CHOICES, TURN_SECONDS_CHOICES, getTheme, resolveTheme, type 
 import { getMap } from '../../../shared/maps.ts';
 import { PLAYER_COLORS, type RoomSeat, type RoomView } from '../../../shared/types.ts';
 import { getCharacter, isCharacterId, type CharacterId } from '../../../shared/characters.ts';
-import { characterEmoji } from '../format.ts';
+import { CharacterFace } from './CharacterFace.tsx';
 import { toast, toastError } from '../toast.tsx';
 import { useAuth } from '../auth.tsx';
 import Chat from './Chat.tsx';
@@ -29,6 +29,7 @@ import OutfitPicker, { loadOutfitPref, sameOutfit, saveOutfitPref } from './Outf
 import ChogPicker, { ChogArt, loadChogTokenPref } from './ChogPicker.tsx';
 import { chogName, isLegendary } from '../../../shared/chogs/traits.ts';
 import type { Outfit } from '../../../shared/outfits.ts';
+import { Face } from './CharacterFace.tsx';
 
 const TOGGLES: [keyof RuleConfig, string, string][] = [
   ['auctions', 'Auctions', 'Unbought property goes to auction'],
@@ -129,7 +130,7 @@ function SeatBadge({ seat: s }: { seat: RoomSeat }) {
       </span>
     );
   }
-  return <span className="token-badge" style={{ background: s.color }} role="img" aria-label={`${seatName(s)}, ${s.color}`}>{characterEmoji(s.character)}</span>;
+  return <span className="token-badge" style={{ background: s.color }} role="img" aria-label={`${seatName(s)}, ${s.color}`}><CharacterFace id={s.character} /></span>;
 }
 
 /** Our own seat: character (3D preview + grid), the holder's own Chogs, outfit and colour. */
@@ -163,7 +164,7 @@ function CharacterPicker({ room, me, seat, onWear }: {
                 aria-label={holder ? `${c.name}, taken by ${holder.name}` : c.name}
                 className={`char-pick ${on ? 'on' : ''}`}
                 onClick={() => call('room:seat', { character: c.id }).catch(toastError)}>
-                <span className="char-emoji">{c.emoji}</span>
+                <span className="char-emoji"><Face emoji={c.emoji} image={c.face} /></span>
                 <span className="char-name">{c.name}</span>
                 {holder && <span className="char-taken" style={{ background: holder.color }} />}
               </button>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Face } from './components/CharacterFace.tsx';
 
 type Toast = { id: number; text: string; kind: 'error' | 'info' };
 let seq = 0;
@@ -67,6 +68,8 @@ export interface AchievementToast {
   /** The badge id: the same badge never shows twice at once. */
   key: string;
   emoji: string;
+  /** A picture in place of the emoji (AchievementDef.image). */
+  image?: string;
   name: string;
   blurb: string;
 }
@@ -94,7 +97,7 @@ function AchievementToasts() {
     <div className="ach-toasts" aria-live="polite">
       {items.map(t => (
         <div key={t.key} className="ach-toast" role="status">
-          <span className="ach-toast-face" aria-hidden>{t.emoji}</span>
+          <span className="ach-toast-face" aria-hidden><Face emoji={t.emoji} image={t.image} /></span>
           <span className="ach-toast-text">
             <small>Achievement unlocked!</small>
             <b>{t.name}</b>

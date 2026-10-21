@@ -8,6 +8,7 @@ import { toast, toastAchievement } from './toast.tsx';
 import type { Achievement, AchievementsReply } from '../../shared/achievements.ts';
 import { BRAND } from '../../shared/brand.ts';
 import './styles/achievements.css';
+import { Face } from './components/CharacterFace.tsx';
 
 const fetchAchievements = (id: string) => api<AchievementsReply>(`/api/players/${encodeURIComponent(id)}/achievements`);
 
@@ -29,7 +30,7 @@ function Badge({ a }: { a: Achievement }) {
   const pct = a.progress ? Math.round((a.progress.have / a.progress.need) * 100) : 0;
   return (
     <li className={`ach-badge tier-${a.tier} ${a.earned ? 'earned' : 'locked'}`} title={tipFor(a)} tabIndex={0}>
-      <span className="ach-face" aria-hidden>{a.emoji}</span>
+      <span className="ach-face" aria-hidden><Face emoji={a.emoji} image={a.image} /></span>
       <span className="ach-name">{a.name}</span>
       {!a.earned && a.progress && a.progress.have > 0 && (
         <span className="ach-bar" aria-hidden><i style={{ width: `${pct}%` }} /></span>
@@ -115,7 +116,7 @@ export function useAchievementToasts(over: boolean, me: string | null | undefine
       fetchAchievements(me).then(r => {
         const seen = seenSet();
         const fresh = r.achievements.filter(a => a.earned && a.earnedAt && r.now - a.earnedAt < FRESH_MS && !seen.has(`${me}:${a.id}`));
-        fresh.slice(0, 3).forEach((a, i) => setTimeout(() => toastAchievement({ key: a.id, emoji: a.emoji, name: a.name, blurb: a.blurb }), i * 900));
+        fresh.slice(0, 3).forEach((a, i) => setTimeout(() => toastAchievement({ key: a.id, emoji: a.emoji, image: a.image, name: a.name, blurb: a.blurb }), i * 900));
         for (const a of fresh) seen.add(`${me}:${a.id}`);
         if (fresh.length) saveSeen(seen);
       }).catch(() => { /* badges are a bonus: no error for the player */ });

@@ -12,6 +12,7 @@ import { getCharacter } from '../../../shared/characters.ts';
 import { BRAND, GAMES, POKER_URL } from '../../../shared/brand.ts';
 import { openPoker } from '../pokerLink.ts';
 import { CHOG_SEASON } from '../../../shared/season.ts';
+import { Face } from '../components/CharacterFace.tsx';
 
 interface Row {
   id: string; name: string; games: number; wins: number; points: number;
@@ -34,7 +35,7 @@ const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 function Disc({ row, size }: { row: Row; size: number }) {
   if (row.character) {
     const c = getCharacter(row.character);
-    return <span className="lb-disc" style={{ width: size, height: size, fontSize: size * 0.54 }} role="img" aria-label={c.name}>{c.emoji}</span>;
+    return <span className="lb-disc" style={{ width: size, height: size, fontSize: size * 0.54 }} role="img" aria-label={c.name}><Face emoji={c.emoji} image={c.face} /></span>;
   }
   return <Avatar src={row.avatar || '🎩'} size={size} />;
 }
@@ -176,7 +177,7 @@ export default function Leaderboard() {
                       <td className="lb-c-num lb-points" data-label="Points"><b>{r.points}</b></td>
                       {showChar && (
                         <td className="lb-c-char" data-label="Plays as">
-                          {c ? <span className="lb-char" title={c.name}><span className="lb-char-emoji" aria-hidden>{c.emoji}</span><span className="lb-char-name">{c.name}</span></span> : <span className="muted">—</span>}
+                          {c ? <span className="lb-char" title={c.name}><span className="lb-char-emoji" aria-hidden><Face emoji={c.emoji} image={c.face} /></span><span className="lb-char-name">{c.name}</span></span> : <span className="muted">—</span>}
                         </td>
                       )}
                     </tr>

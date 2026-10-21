@@ -17,6 +17,7 @@ import ActivityTicker from '../components/ActivityTicker.tsx';
 import ChogOfTheDay from '../components/ChogOfTheDay.tsx';
 import ChogRoamer from '../components/roamer/ChogRoamer.tsx';
 import { NextTournamentLink } from '../tournaments/NextTournament.tsx';
+import { Face } from '../components/CharacterFace.tsx';
 
 // The home page has no WebGL at all: the board behind the hero is a still
 // (client/public/home/, drifted by styles/home.css), so the page is up at once
@@ -231,14 +232,14 @@ export default function Home() {
         <div className={`cast-stars${featured.length === 1 ? ' solo' : ''}`}>
           {featured.map(c => (
             <Link key={c.id} to="/characters" className="cast-star" aria-label={`${c.name}: ${c.blurb}`}>
-              <span className="cast-emoji" aria-hidden>{c.emoji}</span>
+              <span className="cast-emoji" aria-hidden><Face emoji={c.emoji} image={c.face} /></span>
               <span className="cast-text"><b>{c.name}</b><span>{c.blurb}</span></span>
             </Link>
           ))}
         </div>
         {others.length > 0 && (
           <p className="cast-more">
-            <span className="cast-dots" aria-hidden>{others.map(c => <i key={c.id} title={c.name}>{c.emoji}</i>)}</span>
+            <span className="cast-dots" aria-hidden>{others.map(c => <i key={c.id} title={c.name}><Face emoji={c.emoji} image={c.face} /></i>)}</span>
             <Link to="/characters">+ {others.length} more to play as</Link>
           </p>
         )}

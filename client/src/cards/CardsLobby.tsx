@@ -32,6 +32,7 @@ import { CardBack, CardFace } from './CardFace.tsx';
 import { CardsBackdrop } from './CardsBackdrop.tsx';
 import ChogPicker, { ChogArt, saveChogTokenPref } from '../components/ChogPicker.tsx';
 import { WornItems, loadColorPref, loadOutfitPref, sameOutfit, saveColorPref, saveOutfitPref } from '../components/outfitBits.tsx';
+import { CharacterFace, Face } from '../components/CharacterFace.tsx';
 
 // The 3D character preview and the outfit picker's fit check bring three.js: only when someone opens the picker.
 const CharacterPreview = lazy(() => import('../three/characters/CharacterPreview.tsx'));
@@ -105,7 +106,7 @@ function SeatBadge({ seat: s, hidden }: { seat: CardsSeatView; hidden?: boolean 
   }
   return (
     <span className="token-badge" style={{ background: s.color }} role={hidden ? undefined : 'img'} aria-label={label} aria-hidden={hidden || undefined}>
-      {getCharacter(s.character).emoji}
+      <CharacterFace id={s.character} />
     </span>
   );
 }
@@ -164,7 +165,7 @@ function CharacterPicker({ room, me, seat, onWear }: { room: CardsRoomView; me: 
     <>
       <div className="char-picker">
         <div className="char-preview">
-          <Suspense fallback={<span className="char-preview-emoji" style={{ background: seat.color }}>{getCharacter(seat.character).emoji}</span>}>
+          <Suspense fallback={<span className="char-preview-emoji" style={{ background: seat.color }}><CharacterFace id={seat.character} /></span>}>
             <CharacterPreview character={seat.character} color={seat.color} outfit={seat.outfit} chogToken={token} />
           </Suspense>
           <div className="char-about">
@@ -188,7 +189,7 @@ function CharacterPicker({ room, me, seat, onWear }: { room: CardsRoomView; me: 
                 title={holder ? `${c.name} — taken by ${holder.name}` : c.name}
                 className={`char-pick ${on ? 'on' : ''}`}
                 onClick={() => pick(c.id)}>
-                <span className="char-emoji">{c.emoji}</span>
+                <span className="char-emoji"><Face emoji={c.emoji} image={c.face} /></span>
                 <span className="char-name">{c.name}</span>
                 {holder && <span className="char-taken" style={{ background: holder.color }} />}
               </button>

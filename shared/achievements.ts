@@ -12,6 +12,8 @@ export interface AchievementDef {
   name: string;
   /** The badge's face on the profile (the share card draws a medal instead). */
   emoji: string;
+  /** A picture to show in place of the emoji on the site. */
+  image?: string;
   /** How to earn it, in a line. */
   blurb: string;
   group: AchievementGroup;
@@ -75,7 +77,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'tourney-champ', name: 'Champion', emoji: '🏆', blurb: 'Win a tournament', group: 'tournaments', tier: 3 },
   // ---- Chog holders
   { id: 'wallet', name: 'Chog Certified', emoji: '🔗', blurb: 'Link a wallet', group: 'chog', tier: 1 },
-  { id: 'own-chog', name: 'That’s My Chog', emoji: '💜', blurb: 'Play as your own NFT Chog', group: 'chog', tier: 2 },
+  { id: 'own-chog', name: 'That’s My Chog', emoji: '💜', image: '/faces/chog.webp', blurb: 'Play as your own NFT Chog', group: 'chog', tier: 2 },
   { id: 'own-chog-win', name: 'Chog of Destiny', emoji: '✨', blurb: 'Win as your own NFT Chog', group: 'chog', tier: 3 },
 ];
 

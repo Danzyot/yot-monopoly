@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { resolveTheme } from '../../../shared/themes.ts';
 import type { GameView, PlayerState, RoomView } from '../../../shared/types.ts';
 import { call } from '../net.ts';
-import { characterEmoji } from '../format.ts';
+import { CharacterFace } from './CharacterFace.tsx';
 import { toastError } from '../toast.tsx';
 import { groupLabel, ordinal } from '../gameHelpers.ts';
 import { groupIndices, type SpaceDef } from '../../../shared/board.ts';
@@ -211,7 +211,7 @@ export default function EndScreen({ room, game, me, onLeave }: {
           <ol className="podium" aria-label="Podium">
             {podium.map(({ p, place }) => p ? (
               <li key={p.id} className={`podium-spot p${place} ${p.id === me ? 'me' : ''}`} style={{ ['--pc' as string]: p.color }}>
-                <span className="podium-char" aria-hidden>{p.chogToken ? <PlayerBadge p={p} className="podium-face" /> : characterEmoji(p.character)}</span>
+                <span className="podium-char" aria-hidden>{p.chogToken ? <PlayerBadge p={p} className="podium-face" /> : <CharacterFace id={p.character} />}</span>
                 <span className="podium-name">{p.name}</span>
                 <span className="podium-block">
                   <span className="podium-medal" aria-hidden>{MEDALS[place - 1]}</span>
