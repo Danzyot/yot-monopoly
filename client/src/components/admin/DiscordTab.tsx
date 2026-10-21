@@ -45,11 +45,75 @@ export default function DiscordTab() {
         </form>
       </div>
 
+      <SlashCommands />
+
       <section className="adm-card adm-stack">
         <h3>Diagnostics</h3>
         {DIAGNOSTICS.map(([path, title, hint]) => <Diagnostic key={path} path={path} title={title} hint={hint} />)}
       </section>
     </div>
+  );
+}
+
+/** Where the bot's slash commands stand (server/src/discordRegister.ts). */
+interface CommandSyncStatus {
+  state: 'idle' | 'syncing' | 'registered' | 'unchanged' | 'failed' | 'not-configured';
+  message: string;
+  at: number | null;
+  commands: string[];
+  guildId: string | null;
+  registeredAt: number | null;
+}
+
+const SYNC_LABEL: Record<CommandSyncStatus['state'], [string, string]> = {
+  idle: ['⏳', 'Not checked yet'],
+  syncing: ['⏳', 'Registering…'],
+  registered: ['✅', 'Registered'],
+  unchanged: ['✅', 'Up to date'],
+  failed: ['⚠️', 'Failed'],
+  'not-configured': ['⚪', 'Off'],
+};
+
+const SYNC_TONE: Record<CommandSyncStatus['state'], string> = {
+  idle: 'info', syncing: 'info', registered: 'good', unchanged: 'good', failed: 'warn', 'not-configured': 'info',
+};
+
+function SlashCommands() {
+  const { data: s, reload } = usePoll<CommandSyncStatus>('/api/admin/discord/commands');
+  const [busy, setBusy] = useState(false);
+  const [icon, label] = s ? SYNC_LABEL[s.state] : ['…', 'Loading'];
+  return (
+    <section className="adm-card adm-stack">
+      <h3>Slash commands</h3>
+      <p className="muted small">
+        /play, /stats, /leaderboard, /tables, /daily and /chog, registered in the Chog server.
+        They register by themselves on startup and when the leaderboard switch changes; press the button after
+        re-inviting the bot or if they are missing in Discord.
+      </p>
+      {s && (
+        <div className={`adm-alert ${SYNC_TONE[s.state]}`} role={s.state === 'failed' ? 'alert' : undefined}>
+          <span aria-hidden>{icon}</span>
+          <div>
+            <b>{label}</b>: {s.message}
+            {s.commands.length > 0 && <div className="small">{s.commands.join('  ')}</div>}
+            <div className="muted small">
+              {s.registeredAt ? `Last accepted by Discord: ${new Date(s.registeredAt).toLocaleString()}` : 'Never accepted by Discord on this data volume.'}
+              {s.guildId ? ` · server ${s.guildId}` : ''}
+            </div>
+          </div>
+        </div>
+      )}
+      <div>
+        <button className="btn small primary" disabled={busy} onClick={() => {
+          setBusy(true);
+          void act(async () => {
+            const r = await post('/api/admin/discord/commands') as CommandSyncStatus;
+            if (r.state === 'failed' || r.state === 'not-configured') throw new Error(r.message);
+          }, { ok: 'Discord commands registered' })
+            .finally(() => { setBusy(false); void reload(); });
+        }}>{busy ? 'Registering…' : 'Re-register Discord commands'}</button>
+      </div>
+    </section>
   );
 }
 

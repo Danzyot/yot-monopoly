@@ -7,3 +7,6 @@ export const CHOG_SUPPLY = 1969;
 export const CHOG_CONTRACT = '0xc96d31f8626c6d03fae5dcd3d61e3fb9f4a73763';
 
 export const chogName = (tokenId: number) => `Chog #${tokenId}`;
+
+/** A token's page on OpenSea (the wallet page, the Chog of the Day, the Discord bot's /chog). */
+export const openSeaUrl = (tokenId: number, contract = CHOG_CONTRACT) => `https://opensea.io/item/monad/${contract}/${tokenId}`;

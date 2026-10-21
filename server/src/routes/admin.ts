@@ -6,6 +6,7 @@ import { addBan, listBans, removeBan, type BanKind, type BanScope } from '../ban
 import { isMuted, listMutes, setMute } from '../chat.ts';
 import { forgetAccount, getAccount, searchAccounts, sharedIpGroups } from '../connections.ts';
 import { botEnabled, postVerifyMessage, sendDirectMessage } from '../discord.ts';
+import { commandSyncStatus, syncCommands } from '../discordRegister.ts';
 import { eventsForGame, loggedGames } from '../eventlog.ts';
 import { getFeatures, setFeatures } from '../features.ts';
 import { approveHost, holderHosts, listApprovedHosts, normalizeHostId, revokeHost } from '../hosting.ts';
@@ -254,6 +255,8 @@ export function adminRoutes(sockets: SocketLayer, loopLag: () => number): expres
       const next = setFeatures((req.body ?? {}) as Partial<Features>);
       const changed = (Object.keys(next) as (keyof Features)[]).filter(k => next[k] !== before[k]);
       if (changed.length) adminLog(who(res), `features: ${changed.map(k => `${k}=${next[k] ? 'on' : 'off'}`).join(', ')}`);
+      // /stats and /leaderboard follow the leaderboard switch (a no-op unless the list changed).
+      if (changed.includes('leaderboard')) void syncCommands();
       res.json(next);
     } catch (e) { fail(res, e, 500); }
   });
@@ -267,6 +270,14 @@ export function adminRoutes(sockets: SocketLayer, loopLag: () => number): expres
       adminLog(who(res), `posted the Verify panel in channel ${channel}`);
       res.json({ ok: true });
     } catch (e) { fail(res, e); }
+  });
+
+  // Slash commands (discordRegister.ts): where registration stands, and a forced re-register.
+  r.get('/discord/commands', (_req, res) => res.json(commandSyncStatus()));
+  r.post('/discord/commands', async (_req, res) => {
+    const s = await syncCommands({ force: true });
+    adminLog(who(res), `re-registered Discord slash commands: ${s.state}`);
+    res.json(s);
   });
 
   r.post('/dm', async (req, res) => {

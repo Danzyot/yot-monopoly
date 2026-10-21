@@ -28,7 +28,8 @@ export interface WalletStatus {
   refreshed: boolean;
 }
 
-export const openSeaUrl = (tokenId: number, contract = CHOG_CONTRACT) => `https://opensea.io/item/monad/${contract}/${tokenId}`;
+// One definition for the site and the Discord bot's /chog.
+export { openSeaUrl } from '../../../shared/chogs/meta.ts';
 
 let last: WalletStatus | null = null;
 const listeners = new Set<(s: WalletStatus | null) => void>();
