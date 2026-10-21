@@ -103,3 +103,44 @@ export const CLASSIC_CHEST: CardDef[] = [
   { text: 'You have won second prize in a beauty contest. Collect $10.', effect: { type: 'collect', amount: 10 } },
   { text: 'You inherit $100.', effect: { type: 'collect', amount: 100 } },
 ];
+
+// Blitz (shared/maps.ts): a 24-space board where the salary rises every lap,
+// so the cards say "your salary", not a sum. More of them move you, and one
+// sends you to the Jackpot corner.
+export const BLITZ_CHANCE: CardDef[] = [
+  { text: 'Advance to {0}. Collect your salary.', effect: { type: 'advance', to: 0 } },
+  { text: 'Advance to {23}. If you pass {0}, collect your salary.', effect: { type: 'advance', to: 23 } },
+  { text: 'Advance to {13}. If you pass {0}, collect your salary.', effect: { type: 'advance', to: 13 } },
+  { text: 'Advance to {7}. If you pass {0}, collect your salary.', effect: { type: 'advance', to: 7 } },
+  { text: 'Hit the jackpot: advance to {12}. If you pass {0}, collect your salary.', effect: { type: 'advance', to: 12 } },
+  { text: 'Advance to the nearest Railroad. If owned, pay the owner twice the rental.', effect: { type: 'nearest', kind: 'railroad' } },
+  { text: 'Go back 3 spaces.', effect: { type: 'back', steps: 3 } },
+  { text: 'Go back 2 spaces.', effect: { type: 'back', steps: 2 } },
+  { text: 'Go to {jail}. Do not pass {0}, do not collect your salary.', effect: { type: 'jail' } },
+  { text: 'Get Out of Jail Free.', effect: { type: 'jailFree' } },
+  { text: 'Bank pays you a dividend of $50.', effect: { type: 'collect', amount: 50 } },
+  { text: 'Your building loan matures. Collect $100.', effect: { type: 'collect', amount: 100 } },
+  { text: 'Speeding fine $25.', effect: { type: 'pay', amount: 25 } },
+  { text: 'You have been elected Chairman of the Board. Pay each player $25.', effect: { type: 'payEach', amount: 25 } },
+  { text: 'Make general repairs on all your property: $20 per house, $80 per hotel.', effect: { type: 'repairs', perHouse: 20, perHotel: 80 } },
+  { text: 'Take a trip to {4}. If you pass {0}, collect your salary.', effect: { type: 'advance', to: 4 } },
+];
+
+export const BLITZ_CHEST: CardDef[] = [
+  { text: 'Advance to {0}. Collect your salary.', effect: { type: 'advance', to: 0 } },
+  { text: 'Bank error in your favour. Collect $150.', effect: { type: 'collect', amount: 150 } },
+  { text: "Doctor's fee. Pay $40.", effect: { type: 'pay', amount: 40 } },
+  { text: 'From sale of stock you get $40.', effect: { type: 'collect', amount: 40 } },
+  { text: 'Get Out of Jail Free.', effect: { type: 'jailFree' } },
+  { text: 'Go to {jail}. Do not pass {0}, do not collect your salary.', effect: { type: 'jail' } },
+  { text: 'Holiday fund matures. Receive $75.', effect: { type: 'collect', amount: 75 } },
+  { text: 'It is your birthday. Collect $10 from every player.', effect: { type: 'collectEach', amount: 10 } },
+  { text: 'High score! Collect $20 from every player.', effect: { type: 'collectEach', amount: 20 } },
+  { text: 'Pay hospital fees of $75.', effect: { type: 'pay', amount: 75 } },
+  { text: 'Income tax refund. Collect $20.', effect: { type: 'collect', amount: 20 } },
+  { text: 'You are assessed for street repair: $30 per house, $90 per hotel.', effect: { type: 'repairs', perHouse: 30, perHotel: 90 } },
+  { text: 'You have won second prize in a beauty contest. Collect $10.', effect: { type: 'collect', amount: 10 } },
+  { text: 'You inherit $75.', effect: { type: 'collect', amount: 75 } },
+  { text: 'Pay school fees of $40.', effect: { type: 'pay', amount: 40 } },
+  { text: 'Take a trip to {19}. If you pass {0}, collect your salary.', effect: { type: 'advance', to: 19 } },
+];

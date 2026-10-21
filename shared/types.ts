@@ -36,6 +36,8 @@ export interface PlayerState {
   afk?: boolean;
   /** Has passed GO at least once (the Speed Die joins in from then on). */
   passedGo?: boolean;
+  /** GO salaries collected so far (on a board where every lap pays more; absent: none). */
+  laps?: number;
 }
 
 export interface OwnedSpace {
@@ -66,7 +68,14 @@ export const SPEED_FACES: SpeedFace[] = [1, 2, 3, 'mr', 'mr', 'bus'];
 /** A move the current player must pick (phase 'choose'). */
 export type MoveChoice =
   | { kind: 'bus'; options: number[] }
-  | { kind: 'triples' };
+  | { kind: 'triples' }
+  /**
+   * A board with a lane: the player stopped on Junction and throws the points
+   * for everyone (GameView.points). `lane` and `loop` are the first space each
+   * way, the values to send; `double` carries a "nearest railroad" card's
+   * double rent on to the landing.
+   */
+  | { kind: 'points'; lane: number; loop: number; double?: boolean };
 
 export interface PauseState {
   /** Name of whoever paused (host or operator). */
@@ -150,6 +159,11 @@ export interface MoveLeg {
   steps?: number;
   /** The first hop is a leap out of the jail cell (out on doubles or after paying). */
   leap?: boolean;
+  /**
+   * The spaces walked, in order, ending on `to`: only on a board with a lane
+   * (shared/route.ts), where `steps` alone does not say which way it went.
+   */
+  via?: number[];
   /** The card drawn on arriving at the end of this leg; it is shown before the next leg plays. */
   card?: CardShown;
 }
@@ -225,6 +239,8 @@ export interface GameView {
   speed: SpeedFace | null;
   /** Phase 'choose': what the current player is choosing. */
   choice: MoveChoice | null;
+  /** A board with a lane: which way the points at Junction send every piece walking past (absent: no lane). */
+  points?: 'lane' | 'loop';
   /** Net worth per player as the official short-game rules count it (see Game.netWorth). */
   netWorth: Record<string, number>;
   /** Per-player counters kept during play, for the end-of-game summary. */

@@ -433,5 +433,94 @@ const rooftop: Piece = {
   },
 };
 
-export const PIECES: Piece[] = [study, pokerRoom, ticker, pitLane, rooftop];
+// ---------------------------------------------------------------------------
+// Insert Coin — Blitz: an 8-bit chiptune at 150 BPM. A minor, square-wave
+// lead and fast arpeggios, a triangle bass in octaves, noise-channel drums,
+// and a hook that only plays every other phrase.
+// ---------------------------------------------------------------------------
+const CHIP = {
+  key: 57, // A
+  roots: [0, -4, -7, -2],          // Am F C G
+  shapes: [MIN, MAJ, MAJ, MAJ],
+  // The hook: [sixteenth-step, semitone above key, sixteenths long].
+  hook: [
+    [0, 12, 2], [2, 15, 2], [4, 19, 2], [6, 17, 1], [7, 15, 1], [8, 12, 4], [12, 10, 2], [14, 12, 2],
+  ] as [number, number, number][],
+};
+
+const insertCoin: Piece = {
+  id: 'chiptune', name: 'Insert Coin', blurb: '8-bit chiptune', bpm: 150,
+  bar(L, when, bar) {
+    const beat = 60 / this.bpm;
+    const s16 = beat / 4;
+    const i = bar % 4;
+    const root = CHIP.key + CHIP.roots[i];
+    const shape = CHIP.shapes[i];
+    // Arpeggio: the chord tones up and down in sixteenths, a soft pulse wave.
+    const tones = [...shape, 12, ...[...shape].reverse().slice(1, -1)].map(iv => root + iv);
+    for (let s = 0; s < 16; s++) {
+      note(L, midi(tones[s % tones.length]), when + s * s16, s16 * 0.9, 0.035, { type: 'square', cutoff: 3200, attack: 0.002 });
+    }
+    // Bass: a triangle in octaves on the eighths.
+    for (let s = 0; s < 8; s++) {
+      note(L, midi(root - 24 + (s % 2 ? 12 : 0)), when + s * beat / 2, beat / 2 * 0.8, 0.16, { type: 'triangle', attack: 0.003 });
+    }
+    // Noise drums: kick on 1 and 3, snare on 2 and 4, a hat on every eighth.
+    kick(L, when, 0.22, { from: 160, to: 50, dur: 0.12 });
+    kick(L, when + beat * 2, 0.2, { from: 160, to: 50, dur: 0.12 });
+    for (const b of [1, 3]) hit(L, when + beat * b, 0.09, 0.08, 'highpass', 1800);
+    for (let s = 0; s < 8; s++) perc(L, when + s * beat / 2, 0.025, s % 2 ? 0.012 : 0.02, 7000);
+    if (bar % 8 === 7) for (let s = 12; s < 16; s++) hit(L, when + s * s16, 0.05, 0.05, 'highpass', 2200);
+    // The hook, on the second half of every eight bars.
+    if (bar % 8 >= 4) {
+      for (const [step, semi, len] of CHIP.hook) {
+        note(L, midi(CHIP.key + 12 + semi + (i === 3 ? 2 : 0)), when + step * s16, s16 * len * 0.92, 0.05, { type: 'square', attack: 0.003, detune: 4 });
+      }
+    }
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Meadow — Crossroads: a sunny garden afternoon at 96 BPM. G major folk: a
+// plucked-guitar arpeggio, a sine-and-triangle flute melody now and then, a
+// warm bass and a light shaker.
+// ---------------------------------------------------------------------------
+const MEADOW = {
+  key: 55, // G
+  roots: [0, 7, -3, 5],            // G D Em C
+  shapes: [MAJ, MAJ, MIN, MAJ9],
+  tune: [[0, 7], [2, 9], [3, 11], [4, 14], [6, 12], [8, 11], [10, 9], [12, 7]] as [number, number][],
+};
+
+const meadow: Piece = {
+  id: 'meadow', name: 'Meadow', blurb: 'sunny folk', bpm: 96,
+  bar(L, when, bar) {
+    const beat = 60 / this.bpm;
+    const i = bar % 4;
+    const root = MEADOW.key + MEADOW.roots[i];
+    const shape = MEADOW.shapes[i];
+    // Guitar: a travis-ish picking pattern in eighths, each pluck a quick triangle.
+    const pattern = [0, 2, 1, 2, 0, 2, 1, 3];
+    pattern.forEach((k, s) => {
+      const iv = k === 0 ? -12 : shape[Math.min(k, shape.length - 1)];
+      note(L, midi(root + iv), when + s * beat / 2 + swing(s, beat, 0.06), beat * 0.9, 0.06, { type: 'triangle', cutoff: 2400, attack: 0.004 });
+    });
+    // Bass on 1 and 3.
+    note(L, midi(root - 12), when, beat * 1.6, 0.15, { type: 'sine', attack: 0.01 });
+    note(L, midi(root - 12 + 7), when + beat * 2, beat * 1.6, 0.12, { type: 'sine', attack: 0.01 });
+    // Shaker and a soft kick.
+    for (let s = 0; s < 8; s++) perc(L, when + s * beat / 2 + swing(s, beat, 0.06), 0.04, s % 2 ? 0.01 : 0.016, 6000);
+    kick(L, when, 0.12, { from: 90, to: 45, dur: 0.25 });
+    // The flute: a phrase every so often, sine with a breath of triangle.
+    if (bar % 8 === 2 || (bar % 8 === 6 && chance(0.5))) {
+      for (const [step, semi] of MEADOW.tune) {
+        const t = when + step * beat / 4;
+        note(L, midi(MEADOW.key + 12 + semi), t, beat * 0.7, 0.05, { type: 'sine', attack: 0.04 });
+        note(L, midi(MEADOW.key + 12 + semi), t, beat * 0.6, 0.012, { type: 'triangle', attack: 0.05, cutoff: 3000 });
+      }
+    }
+  },
+};
+
+export const PIECES: Piece[] = [study, pokerRoom, ticker, pitLane, rooftop, insertCoin, meadow];
 export const pieceById = (id: string) => PIECES.find(p => p.id === id);

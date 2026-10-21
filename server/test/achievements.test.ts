@@ -10,6 +10,7 @@ import { ACH, ACHIEVEMENTS, sortAchievements, type Achievement } from '../../sha
 import type { TournamentResult } from '../../shared/tournaments.ts';
 import type { CardsRoundResult } from '../../shared/cards/types.ts';
 import { scripted } from './helpers.ts';
+import { MAPS } from '../../shared/maps.ts';
 
 const DAY = 86_400_000;
 type MonoPlace = GameRecord['places'][number];
@@ -47,7 +48,7 @@ test('the catalogue: 20 to 30 badges, unique ids, every one with a rule', () => 
   const all: GameRecord[] = [];
   const allCards: CardsRecord[] = [];
   for (let i = 0; i < 60; i++) {
-    all.push(mono(t0 + i * DAY, [human('ann', { sets: 3, chogToken: 7 }), human('b'), human('c'), human('d')], ['classic', 'speed', 'metropolis'][i % 3]));
+    all.push(mono(t0 + i * DAY, [human('ann', { sets: 3, chogToken: 7 }), human('b'), human('c'), human('d')], MAPS[i % MAPS.length].id));
     allCards.push(cards(t0 + i * DAY + 1, [chuman('ann', { bestRound: 150, roundCards: 20 }), chuman('b'), chuman('c'), cbot('d')], 'points'));
   }
   const b = badges({ monopoly: all, cards: allCards, tournaments: [tourney(t0, 1, true)], walletLinkedAt: t0 });

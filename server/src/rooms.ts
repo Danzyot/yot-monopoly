@@ -210,10 +210,10 @@ export class Room {
     if (!themeAvailable(this.themeId)) this.setTheme(SEASON_THEME_ID);
   }
 
-  /** Switch the look; an edition brings its own default house rules. */
+  /** Switch the look; an edition brings its own default house rules (the board's own still win: Blitz keeps its jackpot). */
   private setTheme(themeId: string) {
     this.themeId = getTheme(themeId).id;
-    this.rules = sanitizeRules({ ...this.rules, ...getTheme(this.themeId).rules });
+    this.rules = sanitizeRules({ ...this.rules, ...getTheme(this.themeId).rules, ...getMap(this.mapId).rules });
   }
 
   // ---- lobby ----------------------------------------------------------------
@@ -423,9 +423,14 @@ export class Room {
     this.requireHost(id, isAdmin);
     this.requireLobby();
     if (p.mapId) {
-      this.mapId = getMap(p.mapId).id;
-      const cash = getMap(this.mapId).startingCash;
-      if (cash) this.rules = { ...this.rules, startingCash: cash };
+      const map = getMap(p.mapId);
+      this.mapId = map.id;
+      // The map's own economy (Blitz: a smaller salary and its jackpot); every
+      // map states its salary so leaving Blitz brings back the usual one.
+      this.rules = {
+        ...this.rules, ...map.rules, goSalary: map.goSalary ?? DEFAULT_RULES.goSalary,
+        ...(map.startingCash ? { startingCash: map.startingCash } : {}),
+      };
     }
     // During the Chog season every table wears the season's look, whatever is asked for.
     if (p.themeId) this.setTheme(themeAvailable(p.themeId) ? p.themeId : SEASON_THEME_ID);

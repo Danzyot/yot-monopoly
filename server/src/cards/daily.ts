@@ -268,6 +268,11 @@ export function cardsDailyProfile(id: string, now = Date.now()): CardsDailyProfi
   };
 }
 
+/** Every official attempt on record, oldest first (the dashboard's Analytics tab counts them). */
+export function allCardsDailyAttempts(): readonly CardsDailyAttempt[] {
+  return attempts;
+}
+
 /** For tests: forget everything (the salt included, unless one is set). */
 export function resetCardsDaily(): void {
   attempts = [];

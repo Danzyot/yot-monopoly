@@ -46,7 +46,7 @@ const PINNED: Playlist[] = PIECES.map(p => ({ id: `builtin:${p.id}`, name: `${p.
 
 /** Which piece plays for which room (music/tracks.ts). */
 const SCENE_PIECE: Record<AmbienceScene, string> = {
-  classic: 'study', chog: 'poker', tptv: 'ticker', speedway: 'pitlane', skyline: 'rooftop',
+  classic: 'study', chog: 'poker', tptv: 'ticker', speedway: 'pitlane', skyline: 'rooftop', arcade: 'chiptune', garden: 'meadow',
 };
 
 /** Two pieces overlap for this long when the scene (or the pick) changes. */

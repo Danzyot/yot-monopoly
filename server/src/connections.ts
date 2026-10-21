@@ -63,6 +63,11 @@ export function newAccounts(since: number): { id: string; firstSeen: number }[] 
   return Object.values(accounts).filter(a => a.firstSeen >= since).map(a => ({ id: a.id, firstSeen: a.firstSeen }));
 }
 
+/** Every account's first-seen time (the dashboard's Analytics tab counts sign-ups). */
+export function accountsFirstSeen(): { id: string; firstSeen: number }[] {
+  return Object.values(accounts).map(a => ({ id: a.id, firstSeen: a.firstSeen }));
+}
+
 /** Newest first, optionally filtered by name / id / Discord / IP substring. */
 export function searchAccounts(q: string, limit = 200): AccountRow[] {
   const needle = q.trim().toLowerCase();

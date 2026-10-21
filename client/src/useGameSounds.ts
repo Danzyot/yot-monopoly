@@ -6,6 +6,7 @@
 import { useEffect, useRef } from 'react';
 import { resolveTheme } from '../../shared/themes.ts';
 import type { GameView } from '../../shared/types.ts';
+import { routeBetween } from './three/layout.ts';
 import {
   playArcadeStart, playBankrupt, playBid, playBuild, playBuy, playBuzz, playCardFlip, playDiceRoll, playDoubles,
   playAuctionStart, playGoLight, playJail, playJailOpen, playOffer, playPay, playReceive, playTrade, playWin,
@@ -45,7 +46,7 @@ export function useGameSounds(game: GameView | null, me: string): void {
       const was = before.players.find(x => x.id === p.id);
       if (!was) continue;
       if (p.position !== was.position) {
-        const steps = (p.position - was.position + n) % n;
+        const steps = routeBetween(was.position, p.position, n).length;
         const start = rolled ? WALK_S : 0;
         if (!p.inJail && steps > 0 && steps <= MAX_HOPS) {
           // The footfalls come from the piece itself as each hop lands (Pieces.tsx).

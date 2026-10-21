@@ -29,7 +29,7 @@ export interface LegalPage {
 
 export const LEGAL_LIMITS = { title: 60, body: 20_000 } as const;
 
-const UPDATED = '2026-10-20';
+const UPDATED = '2026-10-21';
 
 const TERMS = `Chog Games is a free, community-run site for playing Monopoly-style board games, Chog Cards and poker with friends in the browser. By using it you agree to these terms. If you don't agree, please don't use the site.
 
@@ -83,6 +83,7 @@ const PRIVACY = `This page explains what Chog Games stores about you, why, and w
 - **Linked wallets.** The wallet addresses you link and which Chog Genesis tokens they hold, read from the public blockchain.
 - **IP address and country.** Each time you connect we record your IP address and the country it comes from. We use it only against abuse: spotting duplicate accounts, enforcing bans and limiting floods of requests.
 - **Logs.** A log of game events, admin actions and error reports, used to fix problems and settle disputes.
+- **Visit counts.** We count page loads per page per day, and roughly how many different visitors came, using a code made from your IP address and browser that changes every day and cannot be turned back into either; only the totals are kept, for 90 days.
 
 ## In your browser
 We don't use tracking cookies. Your browser's local storage keeps your sign-in and your preferences: sound and music, camera and graphics settings, your character and outfit, and which tips you've already seen. Clearing this site's data removes them.

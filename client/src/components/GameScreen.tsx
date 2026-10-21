@@ -332,7 +332,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
       {manage && amIn && (
         <ManagePanel game={game} me={me} mode={manage} onClose={() => setManage(null)} onPick={i => { setManage(null); setSelected(i); }} />
       )}
-      {helpOpen && <HowToPlay rules={game.rules} currency={theme.currency} shortcuts={!!myPlayer} onClose={() => setHelpOpen(false)} />}
+      {helpOpen && <HowToPlay rules={game.rules} mapId={game.mapId} currency={theme.currency} shortcuts={!!myPlayer} onClose={() => setHelpOpen(false)} />}
       {endReady && <EndScreen room={room} game={game} me={me} onLeave={leave} />}
     </div>
   );

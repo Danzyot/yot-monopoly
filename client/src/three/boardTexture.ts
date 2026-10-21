@@ -7,15 +7,23 @@
 //   night     Metropolis, Original theme: navy and gold, a skyline in the middle.
 //   tptv      Takeprofit TV on any map: the takeprofit-tv site's broadcast look.
 //   chog      Chog on any map: the purple room with the Chog portrait.
+//   pixel     Blitz, Original theme: an arcade cabinet's attract screen.
+//   atlas     Crossroads, Original theme: a printed road atlas.
+//
+// A board with a lane (Crossroads) prints the lane's tiles up the middle and
+// lays its centre out round them (centreLane).
 //
 // Every colour band also carries its set's glyph (SET_GLYPHS), so sets stay
 // distinguishable without colour vision.
 
 import { CanvasTexture, SRGBColorSpace } from 'three';
 import type { Theme } from '../../../shared/themes.ts';
-import { BAND, C, W, tile, tileWidth } from './layout.ts';
+import { getMap, shapeOf } from '../../../shared/maps.ts';
+import { BAND, C, W, ringOf, tile, tileWidth } from './layout.ts';
 import { drawGlyph, drawIcon, SET_GLYPHS, type IconKind } from './boardIcons.ts';
-import { centreHeritage, centreLogo, centreNight, centreRainbow, centreTptv, drawTptvMark, TPTV } from './boardCentres.ts';
+import {
+  centreHeritage, centreLane, centreLogo, centreNight, centrePixel, centreRainbow, centreTptv, drawTptvMark, laneMarks, TPTV,
+} from './boardCentres.ts';
 import { fitFont, HALF_DIAG, IN, PX, S, seeded, wrap } from './boardPaint.ts';
 import { luminance, oklch } from './oklch.ts';
 
@@ -123,12 +131,64 @@ function skinFor(theme: Theme): Skin {
     case 'chog':
       return {
         ...base, gloss: 0.3, grain: 0.22,
-        tile: (ctx, _i, _n, w, d) => {
+        tile: (ctx, i, n, w, d) => {
+          // The lane (a board with one) in Chog pink: the fast chain across the middle.
+          const lane = i >= ringOf(n);
           const g = ctx.createLinearGradient(0, -d / 2, 0, d / 2);
-          g.addColorStop(0, '#2a1a5c');
-          g.addColorStop(1, pal.board);
+          g.addColorStop(0, lane ? '#4a1d5e' : '#2a1a5c');
+          g.addColorStop(1, lane ? '#2b1050' : pal.board);
           ctx.fillStyle = g;
           ctx.fillRect(-w / 2, -d / 2, w, d);
+        },
+      };
+    case 'pixel':
+      return {
+        ...base,
+        rule: 'rgba(160, 140, 255, 0.45)', hair: null, paper: '#0d0b1d', price: '#ffe14d', gloss: 0.2, grain: 0.1,
+        frame: '#2b2460', textStroke: 'rgba(7, 6, 15, 0.9)',
+        jail: { cell: '#ff4fd8', bars: '#07060f', label: '#ffffff', outline: '#07060f' },
+        tile: (ctx, i, _n, w, d) => {
+          ctx.fillStyle = i % 2 ? '#0d0b1d' : '#100d24';
+          ctx.fillRect(-w / 2, -d / 2, w, d);
+          // Scanlines and a faint pixel grid, like a CRT up close.
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.035)';
+          for (let y = -d / 2; y < d / 2; y += 8) ctx.fillRect(-w / 2, y, w, 3);
+          ctx.fillStyle = 'rgba(120, 100, 255, 0.07)';
+          for (let x = -w / 2; x < w / 2; x += 24) ctx.fillRect(x, -d / 2, 2, d);
+          // A neon strip along the outer edge.
+          ctx.fillStyle = i % 2 ? '#41e0ff' : '#ff4fd8';
+          ctx.fillRect(-w / 2, d / 2 - 8, w, 8);
+        },
+      };
+    case 'atlas':
+      return {
+        ...base,
+        rule: 'rgba(60, 74, 86, 0.75)', hair: 'rgba(60, 74, 86, 0.35)', paper: '#f2ecd9', gloss: 0.08, grain: 0.34,
+        frame: '#2f3b45',
+        jail: { cell: '#d2492f', bars: '#2f3b45', label: '#ffffff', outline: '#2f3b45' },
+        tile: (ctx, i, n, w, d) => {
+          const lane = i >= ringOf(n);
+          ctx.fillStyle = lane ? '#e9eef2' : '#f2ecd9';
+          ctx.fillRect(-w / 2, -d / 2, w, d);
+          // Faint contour lines, as on the map round them.
+          ctx.strokeStyle = 'rgba(176, 140, 90, 0.18)';
+          ctx.lineWidth = 2;
+          for (let k = 0; k < 4; k++) {
+            ctx.beginPath();
+            for (let x = -w / 2; x <= w / 2; x += 8) {
+              const y = -d / 2 + d * (0.3 + k * 0.18) + Math.sin(x / 40 + i * 1.7 + k) * 9;
+              if (x === -w / 2) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+          }
+          // The Express is a motorway: blue with white edge lines along its outer side.
+          if (lane) {
+            ctx.fillStyle = '#2f5ea8';
+            ctx.fillRect(-w / 2, d / 2 - 30, w, 30);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(-w / 2, d / 2 - 24, w, 3);
+            ctx.fillRect(-w / 2, d / 2 - 9, w, 3);
+          }
         },
       };
   }
@@ -371,18 +431,24 @@ export function drawBoard(theme: Theme, logo?: HTMLImageElement | null, px = PX)
   ctx.lineJoin = 'round';
 
   // ---- centre ----
-  switch (theme.art) {
-    case 'tptv': centreTptv(ctx, theme, roomLogo); break;
-    case 'rainbow': centreRainbow(ctx, theme, face, logo ?? null); break;
-    case 'night': centreNight(ctx, theme, face, logo ?? null); break;
-    default:
-      if (logo) centreLogo(ctx, theme, face, logo);
-      else centreHeritage(ctx, theme, face);
+  const n = theme.spaces.length;
+  const map = getMap(theme.mapId);
+  const lane = shapeOf(n).lane;
+  if (lane) centreLane(ctx, theme, face, logo ?? null);
+  else {
+    switch (theme.art) {
+      case 'tptv': centreTptv(ctx, theme, roomLogo); break;
+      case 'rainbow': centreRainbow(ctx, theme, face, logo ?? null); break;
+      case 'night': centreNight(ctx, theme, face, logo ?? null); break;
+      case 'pixel': centrePixel(ctx, theme, face, logo ?? null); break;
+      default:
+        if (logo) centreLogo(ctx, theme, face, logo);
+        else centreHeritage(ctx, theme, face);
+    }
   }
 
   // ---- tiles ----
   let utilityN = 0;
-  const n = theme.spaces.length;
   const T = tileWidth(n);
   // Narrow tiles (big maps) get smaller lettering.
   const scale = Math.min(1, T / 0.8889);
@@ -472,8 +538,10 @@ export function drawBoard(theme: Theme, logo?: HTMLImageElement | null, px = PX)
         return { top: ws.slice(0, half).join(' '), bottom: ws.slice(half).join(' '), caption: '' };
       };
       if (s.kind === 'go') {
+        // The board's own salary; Blitz's rises every lap.
+        const salary = map.goSalary ?? 200;
         big('COLLECT', -108, 30);
-        big(`${money(200)} SALARY`, -72, 30);
+        big(map.salaryRise ? `${money(salary)} +${money(map.salaryRise.step)} A LAP` : `${money(salary)} SALARY`, -72, 30);
         big(s.name.toUpperCase(), 30, 130, skin.accent);
         // Filled, outlined chevron pointing along the direction of play.
         ctx.fillStyle = skin.accent;
@@ -562,6 +630,7 @@ export function drawBoard(theme: Theme, logo?: HTMLImageElement | null, px = PX)
   });
 
   skin.after?.(ctx, n);
+  if (lane) laneMarks(ctx, theme, n);
 
   // ---- print finish ----
   grain(ctx, skin.grain);
@@ -573,9 +642,10 @@ export function drawBoard(theme: Theme, logo?: HTMLImageElement | null, px = PX)
   ctx.strokeRect(7, 7, PX - 14, PX - 14);
   ctx.lineWidth = 2;
   ctx.strokeRect(26, 26, PX - 52, PX - 52);
-  // Inner frame around the centre, and its hairline.
+  // Inner frame around the centre, and its hairline (and round the lane up the middle).
   ctx.lineWidth = 6;
   ctx.strokeRect(IN, IN, PX - 2 * IN, PX - 2 * IN);
+  if (lane) ctx.strokeRect(PX / 2 - (C / 2) * S, IN, C * S, PX - 2 * IN);
   ctx.lineWidth = 1.5;
   if (theme.art !== 'rainbow') ctx.strokeRect(IN + 10, IN + 10, PX - 2 * IN - 20, PX - 2 * IN - 20);
   return cv;

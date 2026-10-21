@@ -14,7 +14,7 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { DoubleSide, Vector3, type Group, type Mesh, type MeshBasicMaterial } from 'three';
 import type { GameView, PlayerState } from '../../../../shared/types.ts';
-import { tileWidth, tokenSpot } from '../layout.ts';
+import { legTiles, routeBetween, tileWidth, tokenSpot } from '../layout.ts';
 import {
   CharacterFigure, EMOTE_MS, EMOTE_OUT, Tinter, emotePose, newRig, poseRig, useCharacterMaterials, type EmoteKind, type PoseInput,
 } from './Figure.tsx';
@@ -94,20 +94,19 @@ interface Anim {
 }
 
 /** Queue a leg's hops starting at `t0`. */
-function addLeg(a: Anim, leg: Pick<MoveLeg, 'to' | 'kind' | 'steps' | 'leap'>, t0: number, n: number) {
+function addLeg(a: Anim, leg: Pick<MoveLeg, 'to' | 'kind' | 'steps' | 'leap' | 'via'>, t0: number, n: number) {
   const walk = legWalkMs(leg);
   const steps = leg.steps ?? 0;
   if (walk > 0 && leg.kind !== 'jail' && leg.kind !== 'teleport' && steps !== 0 && Math.abs(steps) <= MAX_HOPS) {
-    // Tile by tile (backwards for "go back 3"), from where the server says the leg began.
-    const dir = Math.sign(steps);
-    const origin = ((leg.to - steps) % n + n) % n;
+    // Tile by tile (backwards for "go back 3"), from where the server says the
+    // leg began, and the way it went at Junction on a board with a lane.
     let t = t0;
-    for (let k = 1; k <= Math.abs(steps); k++) {
-      const leap = k === 1 && !!leg.leap;
+    legTiles(leg, n).forEach((tile, k) => {
+      const leap = k === 0 && !!leg.leap;
       const dur = leap ? HOP_MS * 2 : HOP_MS;
-      a.segs.push({ tile: ((origin + dir * k) % n + n) % n, t0: t, dur, fly: false, leap, first: k === 1 });
+      a.segs.push({ tile, t0: t, dur, fly: false, leap, first: k === 0 });
       t += dur;
-    }
+    });
   } else if (walk > 0) {
     a.segs.push({ tile: leg.to, t0, dur: walk, fly: true, leap: false, first: true });
   }
@@ -210,10 +209,11 @@ function Piece({ p, slot, count, turn, winner, emote, n, reaction, focusId, wait
     if (a.target !== p.position) {
       // A change no move record explains (an older server, a missed update):
       // work out the walk from the positions, after the dice if there were any.
-      const steps = (p.position - a.target + n) % n;
-      const leg: Pick<MoveLeg, 'to' | 'kind' | 'steps' | 'leap'> = p.inJail || steps > MAX_HOPS
+      const way = routeBetween(a.target, p.position, n);
+      const steps = way.length;
+      const leg: Pick<MoveLeg, 'to' | 'kind' | 'steps' | 'leap' | 'via'> = p.inJail || steps > MAX_HOPS
         ? { to: p.position, kind: p.inJail ? 'jail' : 'teleport' }
-        : { to: p.position, kind: 'roll', steps, leap: a.jailed && !p.inJail };
+        : { to: p.position, kind: 'roll', steps, leap: a.jailed && !p.inJail, via: way };
       addLeg(a, leg, reserveWalk(diceSettleAt(), legWalkMs(leg)), n);
     }
   }
@@ -582,8 +582,8 @@ function pickReactions(players: PlayerState[], was: ReactionSnapshot, now: React
     const built = [...now.houses].some(([i, h]) => now.owner.get(i) === p.id && was.owner.get(i) === p.id && h > (was.houses.get(i) ?? 0));
     // Came round the corner on an ordinary move (a trip to jail flies the other way).
     const from = was.pos.get(p.id) ?? p.position;
-    const steps = (p.position - from + n) % n;
-    const passedGo = !p.inJail && steps > 0 && steps <= 12 && (p.position < from || p.position === 0);
+    const way = routeBetween(from, p.position, n);
+    const passedGo = !p.inJail && way.length > 0 && way.length <= 12 && way.includes(0);
     if (p.inJail && !was.jail.has(p.id)) picks.push([p.id, 'stomp']);
     else if (traded.has(p.id)) picks.push([p.id, 'deal']);
     else if (bought) picks.push([p.id, 'sold']);

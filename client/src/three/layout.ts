@@ -1,14 +1,52 @@
 // Board geometry, in world units. The board lies on the XZ plane centred on
 // the origin with its top face at y = 0. GO is the bottom-right corner (+x,+z,
 // nearest the default camera) and play runs clockwise as seen from above.
+//
+// `n` is the board's number of spaces, which names its map (shared/maps.ts
+// shapeOf): the loop's spaces go round the edge, and a board with a lane
+// (Crossroads) lays the lane's spaces straight up the middle, from the middle
+// of GO's side to the middle of the far side, the same size as edge tiles.
+
+import { shapeOf } from '../../../shared/maps.ts';
+import { routeTo } from '../../../shared/route.ts';
+import type { MoveLeg } from '../../../shared/types.ts';
 
 export const W = 11;          // board width
 export const C = 1.5;         // corner tile size / edge tile depth
 export const BAND = 0.3;      // colour band depth on properties
 
-/** Edge tile width for a board of `n` spaces (n/4 - 1 tiles between corners). */
+/** Spaces round the edge of a board of `n` spaces (all of them, unless it has a lane). */
+export function ringOf(n: number): number {
+  return shapeOf(n).ring;
+}
+
+/** The jail corner of a board of `n` spaces. */
+export function jailOf(n: number): number {
+  return ringOf(n) / 4;
+}
+
+/** Edge tile width for a board of `n` spaces (ring/4 - 1 tiles between corners; lane tiles match). */
 export function tileWidth(n: number): number {
-  return (W - 2 * C) / (n / 4 - 1);
+  return (W - 2 * C) / (ringOf(n) / 4 - 1);
+}
+
+/**
+ * The tiles a recorded walk steps on, in order, ending on `leg.to`: the
+ * server's own list on a board with a lane (MoveLeg.via), else counted back
+ * round the loop from where it ended (backwards for "go back 3").
+ */
+export function legTiles(leg: Pick<MoveLeg, 'to' | 'steps' | 'via'>, n: number): number[] {
+  if (leg.via?.length) return leg.via;
+  const steps = leg.steps ?? 0;
+  const ring = ringOf(n);
+  const dir = Math.sign(steps);
+  const origin = ((leg.to - steps) % ring + ring) % ring;
+  return Array.from({ length: Math.abs(steps) }, (_, k) => ((origin + dir * (k + 1)) % ring + ring) % ring);
+}
+
+/** The way forward from tile `from` to tile `to` (a board with a lane: the shorter one), the tiles stepped on. */
+export function routeBetween(from: number, to: number, n: number): number[] {
+  return from === to ? [] : routeTo(shapeOf(n), from, to);
 }
 
 export type Side = 0 | 1 | 2 | 3; // bottom, left, top, right
@@ -29,8 +67,14 @@ export interface TileGeom {
 const H = W / 2;
 
 export function tile(i: number, n: number): TileGeom {
-  const per = n / 4;
+  const ring = ringOf(n);
   const T = tileWidth(n);
+  if (i >= ring) {
+    // The lane, south to north up the middle, read from its west side (like the left edge).
+    const k = i - ring;
+    return { x: 0, z: H - C - (k + 0.5) * T, side: 1, corner: false, out: [-1, 0], along: [0, -1], rot: Math.PI / 2 };
+  }
+  const per = ring / 4;
   const side = Math.floor(i / per) as Side;
   const k = i % per;
   const corner = k === 0;
@@ -47,9 +91,13 @@ export function tile(i: number, n: number): TileGeom {
 export function tileAt(x: number, z: number, n: number): number | null {
   if (Math.abs(x) > H || Math.abs(z) > H) return null;
   const inner = H - C;
-  if (Math.abs(x) < inner && Math.abs(z) < inner) return null;
-  const per = n / 4;
+  const ring = ringOf(n);
   const T = tileWidth(n);
+  if (Math.abs(x) < inner && Math.abs(z) < inner) {
+    if (ring === n || Math.abs(x) > C / 2) return null;
+    return ring + Math.min(n - ring - 1, Math.max(0, Math.floor((inner - z) / T)));
+  }
+  const per = ring / 4;
   const k = (d: number) => Math.min(per - 1, Math.max(1, Math.floor((d - C) / T) + 1));
   if (z > inner) { // bottom row
     if (x > inner) return 0;
@@ -69,7 +117,7 @@ export function tileAt(x: number, z: number, n: number): number | null {
 export function tokenSpot(i: number, slot: number, count: number, inJail: boolean, n: number): [number, number] {
   const g = tile(i, n);
   const T = tileWidth(n);
-  if (i === n / 4) {
+  if (i === jailOf(n)) {
     if (inJail) {
       // Inside the cell, the inner square of the corner.
       const cx = g.x + 0.22, cz = g.z - 0.22;

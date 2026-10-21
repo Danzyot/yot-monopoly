@@ -8,7 +8,7 @@
 //
 //   DEMO_MODE=1 DATA_DIR=$(mktemp -d) PORT=8090 node --import tsx server/src/index.ts &
 //   node tools/e2e/smoke.mjs [--base http://localhost:8090] [--rounds 12] [--out /tmp/smoke]
-//                            [--maps Classic,Speedway] [--editions Original,Chog] [--phone]
+//                            [--maps Classic,Blitz] [--editions Original,Chog] [--phone]
 //
 // Needs Playwright with Chromium: `npm i -g playwright && npx playwright install chromium`.
 // Software GL works (slowly): the script already passes the flags for it.
@@ -27,7 +27,7 @@ const arg = (name, dflt) => {
 const BASE = arg('base', 'http://localhost:8090');
 const ROUNDS = Number(arg('rounds', 12));
 const OUT = arg('out', '/tmp/yot-smoke');
-const MAPS = arg('maps', 'Classic,Speedway,Metropolis').split(',');
+const MAPS = arg('maps', 'Classic,Speedway,Metropolis,Blitz,Crossroads').split(',');
 const EDITIONS = arg('editions', 'Original,Takeprofit,Chog').split(',');
 const PHONE = process.argv.includes('--phone');
 mkdirSync(OUT, { recursive: true });
@@ -69,7 +69,8 @@ for (const map of MAPS) {
       await page.waitForSelector('.actionbar');
 
       for (let r = 0; r < ROUNDS; r++) {
-        for (const label of ['Roll', 'Buy it', 'End turn', 'Pay', 'Got it']) {
+        // (Express: Crossroads' points at Junction, thrown on stopping there.)
+        for (const label of ['Roll', 'Buy it', 'End turn', 'Pay', 'Got it', 'Express']) {
           const loc = page.locator(`.actionbar button:has-text("${label}"), .hint button:has-text("${label}")`);
           if (await loc.count()) { await loc.first().click({ force: true, timeout: 2000 }).catch(() => {}); break; }
         }

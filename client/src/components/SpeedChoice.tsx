@@ -34,7 +34,7 @@ export function DiceRead({ game }: { game: GameView }) {
   );
 }
 
-/** Phase 'choose': Bus (a die or the sum) or triples (any space). */
+/** Phase 'choose': Bus (a die or the sum), triples (any space) or the points at Junction (the lane or the loop). */
 export function ChooseBar({ game, me, selected }: { game: GameView; me: string; selected: number | null }) {
   const theme = resolveTheme(game.themeId, game.mapId);
   const c = game.choice;
@@ -54,10 +54,25 @@ export function ChooseBar({ game, me, selected }: { game: GameView; me: string; 
     act({ type: 'choose', value }).catch(toastError).finally(() => setBusy(false));
   };
   if (game.current !== me) {
+    const doing = c.kind === 'bus' ? 'is taking the bus…' : c.kind === 'points' ? `is throwing the points at ${theme.spaces[cur.position]?.name ?? 'the junction'}…` : 'rolled triples and is picking a space…';
     return (
       <div className="actionbar">
         <DiceRead game={game} />
-        <span className="muted"><b style={{ color: cur.color }}>{cur.name}</b> {c.kind === 'bus' ? 'is taking the bus…' : 'rolled triples and is picking a space…'}</span>
+        <span className="muted"><b style={{ color: cur.color }}>{cur.name}</b> {doing}</span>
+      </div>
+    );
+  }
+  if (c.kind === 'points') {
+    // Junction (a board with a lane): set the points for everyone walking past from now on.
+    const lane = theme.spaces[c.lane]?.name ?? 'the lane';
+    const now = game.points ?? 'lane';
+    return (
+      <div className="actionbar mine">
+        <span className="ab-prompt"><b className="ab-big">🔀 The points!</b> Everyone walking past {theme.spaces[cur.position]?.name} goes the way you set them</span>
+        <button className={`btn ${now === 'lane' ? 'primary' : ''}`} disabled={busy} onClick={() => choose(c.lane)}
+          title={`Send everyone up the Express, along ${lane}`}>⬆ Express ({lane})</button>
+        <button className={`btn ${now === 'loop' ? 'primary' : ''}`} disabled={busy} onClick={() => choose(c.loop)}
+          title="Send everyone the long way round">⬅ Long way round</button>
       </div>
     );
   }
