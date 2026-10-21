@@ -5,7 +5,7 @@
 import { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth.tsx';
-import { BRAND } from '../../../shared/brand.ts';
+import { BRAND, GAMES } from '../../../shared/brand.ts';
 import { modeLabel } from '../../../shared/cards/rules.ts';
 import { PRIZE_NOTE, tournamentUrl, type TournamentSummary } from '../../../shared/tournaments.ts';
 import type { ScheduledEvent } from '../../../shared/tournamentSchedules.ts';
@@ -133,6 +133,14 @@ export default function TournamentsPage() {
         <>
           <Section title="Live now" items={live} now={now} />
           <Section title="Upcoming" items={upcoming} scheduled={scheduled} now={now} empty={live.length ? undefined : 'Nothing scheduled right now — check back soon.'} />
+          {!live.length && !upcoming.length && !scheduled.length && (
+            <p className="tn-meanwhile row wrap">
+              <span className="muted">In the meantime:</span>
+              <Link className="btn small" to={GAMES.cards.path}>Play {GAMES.cards.name}</Link>
+              <Link className="btn small" to={`${GAMES.cards.path}#daily`}>Daily Challenge</Link>
+              <Link className="btn small" to={GAMES.monopoly.path}>Play {GAMES.monopoly.name}</Link>
+            </p>
+          )}
           {me?.isAdmin && <Schedules />}
           <Section title="Finished" items={done} now={now} />
         </>

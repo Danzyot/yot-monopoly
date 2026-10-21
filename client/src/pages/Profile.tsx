@@ -257,8 +257,18 @@ export default function Profile() {
                   : 'We have no finished games for this player — the link may be wrong, or they have not finished a game yet.'}
           </p>
           <div className="row center wrap">
-            <Link className="btn primary chunky" to="/">Find a game</Link>
-            <Link className="btn chunky" to="/leaderboard">Leaderboard</Link>
+            {mine ? (
+              <>
+                <Link className="btn primary chunky" to={GAMES.monopoly.path}>Play {GAMES.monopoly.name}</Link>
+                <Link className="btn primary chunky" to={GAMES.cards.path}>Play {GAMES.cards.name}</Link>
+                <Link className="btn chunky" to={`${GAMES.cards.path}#daily`}>Daily Challenge</Link>
+              </>
+            ) : (
+              <>
+                <Link className="btn primary chunky" to="/">Find a game</Link>
+                <Link className="btn chunky" to="/leaderboard">Leaderboard</Link>
+              </>
+            )}
           </div>
         </section>
         {!off && <ProfileTournaments id={id} />}
