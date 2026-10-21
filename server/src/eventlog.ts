@@ -82,6 +82,11 @@ export function eventsForGame(gameId: string): GameEvent[] {
   return out.sort((a, b) => a.ts - b.ts);
 }
 
+/** The recent lines held in memory, oldest first (the dashboard's Analytics tab counts them). */
+export function recentEvents(): readonly GameEvent[] {
+  return recent;
+}
+
 // The games that left a record, newest first — what the operator picks from.
 export function loggedGames(): { gameId: string; gameName: string; events: number; from: number; to: number }[] {
   const by = new Map<string, { gameId: string; gameName: string; events: number; from: number; to: number }>();
