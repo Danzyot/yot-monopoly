@@ -16,7 +16,12 @@ export { CHOG_TOKEN_PREF_KEY, loadChogTokenPref, saveChogTokenPref } from '../ch
 /** The holder status, re-verified when the component using it mounts (the server rate-limits the chain read). */
 export function useYourChogs(): WalletStatus | null {
   const status = useWalletStatus();
-  useEffect(() => { refreshHolderStatus().catch(() => { /* signed out or offline: the last status stands */ }); }, []);
+  const { profile } = useAuth();
+  const signedIn = !!profile;
+  // Signed out there is nothing to ask (the server would only answer 401).
+  useEffect(() => {
+    if (signedIn) refreshHolderStatus().catch(() => { /* offline: the last status stands */ });
+  }, [signedIn]);
   return status;
 }
 
