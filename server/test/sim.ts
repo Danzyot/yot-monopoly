@@ -94,6 +94,9 @@ export function simulate(games: number, seed0 = 1): SimStats {
       // Some games run the turn timer with one dozy human seat the timeouts and autopilot cover for.
       turnSeconds: seed % 4 === 0 ? 30 : 0,
       timeLimitMin: coin(5) === 0 ? 3 : 0,
+      // As a room sets up the board (rooms.ts): its own rules and salary win.
+      ...map.rules,
+      goSalary: map.goSalary ?? DEFAULT_RULES.goSalary,
     };
     let clock = 0;
     let bank = 0;
