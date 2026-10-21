@@ -37,6 +37,7 @@ import { QUALITY_LEVELS, useQuality } from '../three/quality.ts';
 import { useCinematicPref } from '../three/cinematic.ts';
 import { useAchievementToasts } from '../achievements.tsx';
 import { useCardsSounds } from './useCardsSounds.ts';
+import DailyOver from './DailyOver.tsx';
 
 // The 3D table brings three.js: fetched when a table is first seen (the 2D felt stands in while it loads).
 const CardsScene = lazy(() => import('./three/CardsScene.tsx'));
@@ -537,6 +538,7 @@ function RoundOver({ view, skew }: { view: CardsView; skew: number }) {
 
 function MatchOver({ room, view, me, isHost }: { room: CardsRoomView; view: CardsView | null; me: string; isHost: boolean }) {
   const nav = useNavigate();
+  if (room.daily) return <DailyOver daily={room.daily} view={view} />;
   const order = view ? standings(view) : [];
   const seats = Object.fromEntries(room.seats.map(s => [s.id, s]));
   const podium = [order[1], order[0], order[2]].filter(Boolean) as CardsPlayerView[];
@@ -784,7 +786,9 @@ export default function CardsTable({ room, me, chat, skew, fromLobby }: {
         <div className="ct-top-l">
           <span className="ct-logo">{CARDS_GAME_NAME}</span>
           <span className="ct-code mono" title="Table code">{room.code}</span>
-          <span className="ct-meta">Round {view.round} · {tableLabel(view.rules)}{room.spectators ? ` · ${room.spectators} watching` : ''}</span>
+          {room.daily
+            ? <span className="ct-meta"><span className="ct-daily">📅 Daily #{room.daily.number}{room.daily.practice ? ' · Practice' : ''}</span> · {room.daily.turns} turn{room.daily.turns === 1 ? '' : 's'}</span>
+            : <span className="ct-meta">Round {view.round} · {tableLabel(view.rules)}{room.spectators ? ` · ${room.spectators} watching` : ''}</span>}
         </div>
         <div className="ct-top-r">
           <MusicPlayer />
@@ -795,14 +799,17 @@ export default function CardsTable({ room, me, chat, skew, fromLobby }: {
             </button>
           )}
           <button className="btn tiny ghost" onClick={() => setRulesOpen(true)} aria-label="Rules">{compact ? '❓' : '❓ Rules'}</button>
-          {isHost && live && (
+          {isHost && live && !room.daily && (
             <button className="btn tiny ghost" onClick={() => cardsCall('cards:pause', { paused: !view.paused }).catch(toastError)}>
               {view.paused ? (compact ? '▶' : '▶ Resume') : (compact ? '⏸' : '⏸ Pause')}
             </button>
           )}
           {compact && <button className="btn tiny ghost" onClick={() => setSideOpen(o => !o)} aria-expanded={sideOpen} aria-label="Feed and chat">💬</button>}
           <button className="btn tiny danger" onClick={async () => {
-            if (room.status === 'playing' && you && !meP?.left && !(await askConfirm({ title: 'Leave the table?', body: 'You will be out of this match.', confirm: 'Leave', danger: true }))) return;
+            const body = !room.daily ? 'You will be out of this match.'
+              : room.daily.practice ? 'This practice deal ends here.'
+                : 'Your Daily Challenge ends here and counts as a loss. There is no second official try today.';
+            if (room.status === 'playing' && you && !meP?.left && !(await askConfirm({ title: 'Leave the table?', body, confirm: 'Leave', danger: true }))) return;
             await cardsCall('cards:leave').catch(() => {});
             nav('/cards');
           }}>Leave</button>
@@ -888,7 +895,9 @@ export default function CardsTable({ room, me, chat, skew, fromLobby }: {
                 <SeatAvatar seat={meSeat} size={compact ? 36 : 44} />
               </div>
               <div className="ct-me-text">
-                <b>{meP.name}{view.rules.match === 'points' && <span className="muted small"> · {meP.score} pts</span>}</b>
+                <b>{meP.name}{view.rules.match === 'points' && <span className="muted small"> · {meP.score} pts</span>}
+                  {/* A phone's top bar has no room for the table's details: the daily badge rides here. */}
+                  {compact && room.daily && <span className="ct-daily small"> · 📅 #{room.daily.number}{room.daily.practice ? ' practice' : ''} · {room.daily.turns} turn{room.daily.turns === 1 ? '' : 's'}</span>}</b>
                 <span className={`ct-status ${myTurn && !held ? 'mine' : ''}`} role="status">
                   {meP.left ? 'You left this match' : meP.out && live ? 'Knocked out — back next round' : status}{myTimer !== null && !held ? ` · ${myTimer}s` : ''}
                 </span>
@@ -910,7 +919,8 @@ export default function CardsTable({ room, me, chat, skew, fromLobby }: {
           </div>
           {away && (
             <div className="ct-away" role="status">
-              <span>Auto-play is on for you.</span>
+              {/* Nobody plays a daily for you (the server never automates it): the timer only draws and passes. */}
+              <span>{room.daily ? 'Your turns are timing out: the clock draws and passes for you.' : 'Auto-play is on for you.'}</span>
               <button className="btn small primary" onClick={() => cardsCall('cards:back').catch(toastError)}>I'm back!</button>
             </div>
           )}

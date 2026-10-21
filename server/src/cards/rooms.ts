@@ -8,11 +8,14 @@
 // catch, a late call, a jump-in) belong to whoever is quickest, not to the
 // player whose turn it is: one "current player first" timer would starve them.
 
-import { randomInt } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import { CardsError, CardsGame, type CardsSnapshot } from './game.ts';
 import { cardsAutopilotAction, cardsBotAction, cardsBotThinkMs } from './bot.ts';
 import { CARDS_MAX_PLAYERS, CARDS_MIN_PLAYERS } from '../../../shared/cards/meta.ts';
-import { bestColor } from '../../../shared/cards/deck.ts';
+import { bestColor, handPoints } from '../../../shared/cards/deck.ts';
+import {
+  CARDS_DAILY_BOTS, CARDS_DAILY_BOT_LEVEL, CARDS_DAILY_RULES, dailyNumber, type CardsDailyResult, type CardsDailyTableInfo,
+} from '../../../shared/cards/daily.ts';
 import { CARDS_MODES, DEFAULT_CARDS_RULES, normalizeCardsRules, type CardsRules } from '../../../shared/cards/rules.ts';
 import type { CardsAction, CardsBotLevel } from '../../../shared/cards/types.ts';
 import { cardsPlayMs, CARDS_MAX_QUEUE_MS } from '../../../shared/cards/pacing.ts';
@@ -79,6 +82,8 @@ export interface CardsRoomHooks {
   onFinished(room: CardsRoom): void;
   /** The last human left the lobby: the registry closes it. */
   onEmpty?(room: CardsRoom): void;
+  /** The match was stopped without finishing (end()): an operator, an idle table, a walk-out from a daily. */
+  onEnded?(room: CardsRoom): void;
   /**
    * Whether this account's linked wallets hold Chog Genesis token `tokenId`
    * (../wallet/holders.ts). Without it nobody may play as a token.
@@ -90,6 +95,52 @@ export interface CardsRoomHooks {
 export interface CardsRoomOptions {
   now?: () => number;
   rng?: (n: number) => number;
+}
+
+/**
+ * A Daily Challenge table (./daily.ts): one player and the day's bots, dealt
+ * from the day's seed. The room counts the player's turns and works the
+ * result out itself, so nothing a client says can change it.
+ */
+export interface CardsDailyState {
+  date: string;
+  /** The day's secret seed (./daily.ts): never sent to a client. */
+  seed: string;
+  practice: boolean;
+  userId: string;
+  turns: number;
+  /** Play is with the player right now (turns count each time it comes round to them). */
+  onTurn: boolean;
+  result?: CardsDailyResult;
+  /** Filled in by the daily store once an official result is recorded. */
+  rank?: number;
+  of?: number;
+  streak?: number;
+}
+
+/**
+ * A seeded shuffle source: integers in [0, n) from SHA-256 in counter mode.
+ * The same seed deals the same cards. Not a 32-bit generator on purpose: a
+ * player who sees their opening hand must not be able to search every seed
+ * for the one that deals it, and so learn the deck.
+ */
+export function seededRng(seed: string): (n: number) => number {
+  let block = 0;
+  let words: number[] = [];
+  return (n: number) => {
+    if (!words.length) {
+      const h = createHash('sha256').update(`${seed}:${block++}`).digest();
+      for (let i = 0; i < h.length; i += 4) words.push(h.readUInt32BE(i));
+    }
+    return Math.floor((words.shift()! / 4294967296) * n);
+  };
+}
+
+/** The day's bots by name, picked from the seed (the daily card lists them before anyone sits down). */
+export function dailyBotNames(seed: string): string[] {
+  const rng = seededRng(`${seed}:names`);
+  const names = [...BOT_NAMES];
+  return Array.from({ length: CARDS_DAILY_BOTS }, () => names.splice(rng(names.length), 1)[0] ?? 'Bot');
 }
 
 export interface CardsRoomSnapshot {
@@ -105,6 +156,7 @@ export interface CardsRoomSnapshot {
   game: CardsSnapshot | null;
   departed: string[];
   kicked: string[];
+  daily?: CardsDailyState;
 }
 
 export class CardsRoom {
@@ -143,8 +195,10 @@ export class CardsRoom {
    * (operators still do). Never snapshotted: the tournament puts it back.
    */
   tournament: TableLock | null = null;
+  /** Set on a Daily Challenge table (setupDaily). Snapshotted with the room. */
+  daily: CardsDailyState | null = null;
   private readonly now: () => number;
-  private readonly rng: (n: number) => number;
+  private rng: (n: number) => number;
 
   constructor(readonly code: string, public hostId: string, private hooks: CardsRoomHooks, opts: CardsRoomOptions = {}) {
     this.now = opts.now ?? Date.now;
@@ -247,6 +301,7 @@ export class CardsRoom {
       return;
     }
     this.departed.add(id);
+    if (this.dailyWalkout(id)) return;
     if (this.hostId === id) this.passHost(id, 'left');
     if (this.status === 'playing' && this.game && this.game.phase !== 'over' && !this.game.player(id).left) {
       this.hooks.onEvent(this, `${s.name} left the match`);
@@ -462,6 +517,7 @@ export class CardsRoom {
       return;
     }
     if (this.seat(target)) this.departed.add(target);
+    if (this.dailyWalkout(target)) return;
     if (this.hostId === target) this.passHost(target, 'was removed');
     if (this.status === 'playing' && this.game && this.game.phase !== 'over' && !this.game.player(target).left) {
       this.game.forfeit(target);
@@ -502,6 +558,7 @@ export class CardsRoom {
   rematch(byId: string, isAdmin: boolean, present: (id: string) => boolean) {
     this.dirty = true;
     this.requireHost(byId, isAdmin);
+    if (this.daily) fail('The Daily Challenge is one deal — play it again as practice from the Cards home');
     if (this.status !== 'finished') fail('The game is not over yet');
     this.clearTimers();
     const gone = this.seats.filter(s => !s.isBot && !present(s.id));
@@ -524,8 +581,93 @@ export class CardsRoom {
     this.dirty = true;
     this.clearTimers();
     this.hooks.onEvent(this, `Game ended: ${reason}`);
+    const running = this.status === 'playing';
     this.status = 'finished';
     this.finishedAt = this.now();
+    if (running && this.daily && !this.daily.result && this.game) this.daily.result = this.dailyResult(true);
+    if (running) this.hooks.onEnded?.(this);
+  }
+
+  // ---- the Daily Challenge ----------------------------------------------------
+
+  /**
+   * Make this new room the day's daily table and deal it: private, the fixed
+   * rules, the player and the day's bots (names, looks and level from the
+   * seed), and the room's shuffle seeded too, so the seating, the hands and
+   * the deck come out the same for everyone that day.
+   */
+  setupDaily(d: { date: string; seed: string; practice: boolean }, m: CardsMember, chogToken?: number) {
+    this.requireLobby();
+    if (this.seats.length) fail('This table is taken');
+    this.daily = { date: d.date, seed: d.seed, practice: d.practice, userId: m.id, turns: 0, onTurn: false };
+    this.rng = seededRng(d.seed);
+    // The looks have their own stream, so a change to them never moves the deal.
+    const looks = seededRng(`${d.seed}:looks`);
+    this.private = true;
+    this.rules = { ...CARDS_DAILY_RULES };
+    this.maxPlayers = 1 + CARDS_DAILY_BOTS;
+    this.join(m, chogToken);
+    const names = dailyBotNames(d.seed);
+    for (let i = 0; i < CARDS_DAILY_BOTS; i++) {
+      const name = this.uniqueName(names[i], '');
+      const character = this.freeCharacter();
+      this.seats.push({
+        // The same ids at every daily table that day: bots seed their choices from their own id.
+        id: `bot-daily-${d.date}-${i + 1}`, name, avatar: '🤖', isBot: true, level: CARDS_DAILY_BOT_LEVEL,
+        connected: true, disconnectedAt: null, character, color: this.freeColor(), outfit: randomOutfit(looks, character),
+      });
+    }
+    this.start(m.id, false);
+  }
+
+  /** The daily player leaving (or being removed) mid-match: the attempt ends there, as a loss. */
+  private dailyWalkout(id: string): boolean {
+    const d = this.daily;
+    const g = this.game;
+    if (!d || id !== d.userId || this.status !== 'playing' || !g || g.phase === 'over') return false;
+    d.result = this.dailyResult(true);
+    if (!g.player(id).left) g.forfeit(id);
+    this.setConnected(id, false);
+    this.end(`${this.seat(id)?.name ?? 'The player'} left the Daily Challenge`);
+    return true;
+  }
+
+  /** Count the player's turns: one each time play comes round to them. */
+  private trackDaily() {
+    const d = this.daily;
+    const g = this.game;
+    if (!d || !g) return;
+    const mine = g.phase !== 'over' && g.phase !== 'roundOver' && g.current.id === d.userId;
+    if (mine && !d.onTurn) d.turns++;
+    d.onTurn = mine;
+  }
+
+  /** The attempt's outcome from the game itself. `left`: walked out (or abandoned) before the end. */
+  private dailyResult(left: boolean): CardsDailyResult {
+    const g = this.game!;
+    const d = this.daily!;
+    const me = g.player(d.userId);
+    const won = !left && g.winner === d.userId;
+    const others = g.players.filter(p => p.id !== d.userId);
+    return {
+      won, turns: d.turns,
+      points: won ? g.history.at(-1)?.points ?? 0 : 0,
+      handPoints: won ? 0 : handPoints(me.hand),
+      cards: me.hand.length,
+      oppCards: others.reduce((n, p) => n + p.hand.length, 0),
+      ...(left && { left: true }),
+    };
+  }
+
+  private dailyView(): CardsDailyTableInfo | undefined {
+    const d = this.daily;
+    if (!d) return undefined;
+    return {
+      date: d.date, number: dailyNumber(d.date), practice: d.practice, turns: d.turns,
+      ...(d.result && { result: d.result }),
+      ...(d.rank !== undefined && { rank: d.rank, of: d.of }),
+      ...(d.streak !== undefined && { streak: d.streak }),
+    };
   }
 
   // ---- play -----------------------------------------------------------------
@@ -565,6 +707,7 @@ export class CardsRoom {
   pause(id: string, isAdmin: boolean, byName: string) {
     this.dirty = true;
     this.requireHost(id, isAdmin);
+    if (this.daily) fail('The Daily Challenge cannot be paused');
     this.runningGame().pause(byName);
     this.afterChange();
   }
@@ -586,6 +729,7 @@ export class CardsRoom {
   setAutopilot(byId: string, target: string, on: boolean, isAdmin: boolean) {
     this.dirty = true;
     this.requireHost(byId, isAdmin);
+    if (this.daily) fail('Nobody plays the Daily Challenge for you');
     const g = this.runningGame();
     const s = this.seat(target) ?? fail('Not at this table');
     if (s.isBot) fail('Bots already play themselves');
@@ -604,10 +748,12 @@ export class CardsRoom {
   private afterChange() {
     this.dirty = true;
     this.failedMoves.clear();
+    this.trackDaily();
     if (this.game?.phase === 'over' && this.status === 'playing') {
       this.status = 'finished';
       this.finishedAt = this.now();
       this.clearTimers();
+      if (this.daily && !this.daily.result) this.daily.result = this.dailyResult(false);
       this.hooks.onFinished(this);
     }
     this.schedule();
@@ -616,6 +762,8 @@ export class CardsRoom {
   /** Is this seat played by the computer right now? */
   automated(s: Seat, now = this.now()): 'bot' | 'autopilot' | null {
     if (s.isBot) return 'bot';
+    // A daily result is the player's own: away, the turn timer draws and passes for them, nothing cleverer.
+    if (this.daily) return null;
     if (s.disconnectedAt !== null && now - s.disconnectedAt >= CARDS_AUTOPILOT_GRACE_MS) return 'autopilot';
     if (s.autopilot || this.game?.players.find(p => p.id === s.id)?.afk) return 'autopilot';
     return null;
@@ -826,6 +974,7 @@ export class CardsRoom {
       now: Date.now(),
       startedAt: this.startedAt,
       ...(this.tournament && { tournament: this.tournament.info }),
+      ...(this.daily && { daily: this.dailyView() }),
     };
   }
 
@@ -844,6 +993,7 @@ export class CardsRoom {
       rules: { ...this.rules }, maxPlayers: this.maxPlayers, private: this.private, status: this.status,
       seats: structuredClone(this.seats), game: this.game?.snapshot() ?? null,
       departed: [...this.departed], kicked: [...this.kicked],
+      ...(this.daily && { daily: { ...this.daily } }),
     };
   }
 
@@ -877,6 +1027,11 @@ export class CardsRoom {
     });
     // A lobby re-checks its holders' Chogs; a match under way keeps its look.
     if (r.status === 'lobby') for (const seat of r.seats) r.recheckChog(seat);
+    if (s.daily && typeof s.daily === 'object' && typeof s.daily.userId === 'string') {
+      r.daily = { ...s.daily, seed: String(s.daily.seed), turns: Number(s.daily.turns) || 0, onTurn: !!s.daily.onTurn };
+      // Still seeded after a restart: a reshuffle later in the deal stays the same for everyone.
+      r.rng = seededRng(`${r.daily.seed}:resumed:${s.game?.seq ?? 0}`);
+    }
     if (s.game) {
       r.game = CardsGame.restore({ rng: r.rng, now: r.now, onLog: text => hooks.onEvent(r, text) }, s.game);
       // What was on screen before the restart has played already.

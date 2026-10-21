@@ -12,6 +12,7 @@ import { isOn } from '../features.ts';
 import { CardsError } from './game.ts';
 import { CardsRegistry, CardsRoom, CardsRoomError, type CardsMember } from './rooms.ts';
 import { recordCardsResult } from './stats.ts';
+import { settleCardsDaily, startCardsDaily } from './daily.ts';
 import { QUICK_BOTS, pickQuickTable } from '../quickJoin.ts';
 import { CARDS_GAME_NAME } from '../../../shared/cards/meta.ts';
 import type { CardsAction } from '../../../shared/cards/types.ts';
@@ -103,7 +104,12 @@ export function attachCardsSockets(io: Server, opts: CardsSocketOptions = {}): C
     onEvent: (room, text) => logGameEvent(room.code, `${CARDS_GAME_NAME} · ${room.hostName()}`, text),
     onFinished: room => {
       try { recordCardsResult(room); } catch (e) { console.error('[cards] could not record result', e); }
+      try { settleCardsDaily(room); } catch (e) { console.error('[cards] could not record a daily result', e); }
       lobbyChanged();
+    },
+    // A daily attempt stopped before its end (a walk-out, an idle sweep) is still a result: a loss.
+    onEnded: room => {
+      try { settleCardsDaily(room); } catch (e) { console.error('[cards] could not record a daily result', e); }
     },
     holdsChog: opts.holdsChog,
   });
@@ -225,6 +231,18 @@ export function attachCardsSockets(io: Server, opts: CardsSocketOptions = {}): C
       if (isOn('bots') || isAdmin()) for (let i = 0; i < QUICK_BOTS.cards; i++) room.addBot(m.id, isAdmin());
       enter(room, true);
       return { code: room.code, created: true };
+    });
+
+    // The Daily Challenge (./daily.ts): today's official attempt, back to it while it
+    // runs, or a practice deal once it is done. The server decides which, never the client.
+    on<{ chogToken?: unknown }>('cards:daily', p => {
+      const m = member();
+      if (!isOn('bots') && !isAdmin()) throw new CardsRoomError('The Daily Challenge needs bots, and they are switched off');
+      const started = startCardsDaily(registry, m, {
+        chogToken: typeof p.chogToken === 'number' ? p.chogToken : undefined, exempt: isAdmin(), taken: opts.taken,
+      });
+      enter(started.room, true);
+      return { code: started.room.code, practice: started.practice, resumed: started.resumed };
     });
 
     // Seated if there is a seat (or it is yours already), watching otherwise.

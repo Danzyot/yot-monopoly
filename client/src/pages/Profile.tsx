@@ -15,6 +15,7 @@ import { getCharacter, isCharacterId } from '../../../shared/characters.ts';
 import type { CardsProfile, CardsProfileGame, PublicProfile } from '../../../shared/types.ts';
 import { BRAND, GAMES } from '../../../shared/brand.ts';
 import ProfileTournaments from '../tournaments/ProfileTournaments.tsx';
+import ProfileDaily from '../cards/ProfileDaily.tsx';
 import { BadgeGrid, ShareProfile } from '../achievements.tsx';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
@@ -164,6 +165,7 @@ function CardsSection({ c, id, titled }: { c: CardsProfile | null; id: string; t
       {c && c.rankedGames < c.games && (
         <p className="muted small pf-note">Points count only matches with at least two people ({c.rankedGames} of {c.games}); matches against bots alone still show below.</p>
       )}
+      {c?.daily && <ProfileDaily d={c.daily} />}
       {/* Tournaments are played at Cards tables. */}
       <ProfileTournaments id={id} />
       {c && (

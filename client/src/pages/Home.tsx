@@ -5,6 +5,7 @@ import { useConnected, useRoomList } from '../net.ts';
 import { getToken } from '../api.ts';
 import { BRAND, GAMES } from '../../../shared/brand.ts';
 import { CARDS_MAX_PLAYERS, CARDS_MIN_PLAYERS } from '../../../shared/cards/meta.ts';
+import { dailyDate, dailyNumber } from '../../../shared/cards/daily.ts';
 import type { CharacterDef, CharacterId } from '../../../shared/characters.ts';
 import { CHOG_SEASON, availableCharacters } from '../../../shared/season.ts';
 import { useAuth } from '../auth.tsx';
@@ -177,6 +178,10 @@ export default function Home() {
 
           <li className="hub-game hub-cards">
             <img className="hub-thumb" src="/home/cards-640.webp" alt="" width={640} height={400} loading="lazy" decoding="async" />
+            {/* Today's Cards Daily Challenge (shared/cards/daily.ts): the number is worked out here, nothing is fetched. */}
+            <Link className="hub-daily-chip" to="/cards#daily" aria-label={`${GAMES.cards.name} Daily Challenge #${dailyNumber(dailyDate())}: play today's deal`}>
+              <span aria-hidden>📅</span> Daily #{dailyNumber(dailyDate())}
+            </Link>
             <div className="hub-text">
               <HubTitle game="cards" />
               <p>{BLURBS.cards}</p>

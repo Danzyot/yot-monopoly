@@ -28,6 +28,7 @@ import Chat from '../components/Chat.tsx';
 import { Avatar } from '../components/Avatar.tsx';
 import { askConfirm } from '../components/Modal.tsx';
 import { CardBack, CardFace } from './CardFace.tsx';
+import { CardsBackdrop } from './CardsBackdrop.tsx';
 import ChogPicker, { ChogArt, saveChogTokenPref } from '../components/ChogPicker.tsx';
 import { WornItems, loadOutfitPref, sameOutfit, saveOutfitPref } from '../components/outfitBits.tsx';
 
@@ -55,17 +56,6 @@ function preloadTable(characters: string, tokens: boolean) {
 }
 
 const withCurrent = (choices: number[], v: number) => (choices.includes(v) ? choices : [...choices, v].sort((a, b) => a - b));
-
-/** A few cards drifting behind the lobby panels. */
-const DECOR: Card[] = [
-  { id: 1, kind: 'number', color: 'red', value: 7 },
-  { id: 2, kind: 'wild', color: null },
-  { id: 3, kind: 'skip', color: 'green' },
-  { id: 4, kind: 'number', color: 'blue', value: 4 },
-  { id: 5, kind: 'draw2', color: 'yellow' },
-  { id: 6, kind: 'wild4', color: null },
-  { id: 7, kind: 'reverse', color: 'red' },
-];
 
 /** Each mode's three signature cards, for its picker button and the summary. */
 const MODE_FAN: Record<CardsGameMode, Card[]> = {
@@ -96,16 +86,6 @@ function ChaosCards() {
         </li>
       ))}
     </ul>
-  );
-}
-
-export function CardsBackdrop() {
-  return (
-    <div className="cl-bg" aria-hidden>
-      {DECOR.map((c, i) => (
-        <div key={c.id} className={`cl-float f${i}`}>{i === 3 ? <CardBack /> : <CardFace card={c} />}</div>
-      ))}
-    </div>
   );
 }
 

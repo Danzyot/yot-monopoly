@@ -6,6 +6,7 @@ import type { RuleConfig } from './themes.ts';
 import type { TableStyle } from './tableStyles.ts';
 import type { CharacterId } from './characters.ts';
 import type { Outfit } from './outfits.ts';
+import type { CardsDailyProfile } from './cards/daily.ts';
 
 // The character catalogue lives in characters.ts; re-exported so protocol
 // code can keep importing everything from here.
@@ -515,6 +516,8 @@ export interface CardsProfile {
   firstGameAt: number;
   lastGameAt: number;
   recent: CardsProfileGame[];
+  /** The Daily Challenge: streaks and best result (absent before their first official attempt). */
+  daily?: CardsDailyProfile;
 }
 // ---- table social: reactions and pokes -------------------------------------
 

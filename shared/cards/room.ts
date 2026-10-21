@@ -7,6 +7,7 @@ import type { Outfit } from '../outfits.ts';
 import { modeLabel, type CardsRules } from './rules.ts';
 import type { CardsAction, CardsBotLevel, CardsView } from './types.ts';
 import type { TournamentTableInfo } from '../tournaments.ts';
+import type { CardsDailyTableInfo } from './daily.ts';
 
 export type CardsRoomStatus = 'lobby' | 'playing' | 'finished';
 
@@ -67,6 +68,8 @@ export interface CardsRoomView {
   startedAt: number | null;
   /** Set on a tournament table: which event and round it belongs to (shared/tournaments.ts). */
   tournament?: TournamentTableInfo;
+  /** Set on a Daily Challenge table (shared/cards/daily.ts): the day, official or practice, and the result once it is in. */
+  daily?: CardsDailyTableInfo;
 }
 
 export interface CardsRoomSummary {
@@ -101,6 +104,8 @@ export interface CardsClientEvents {
   'cards:list': { subscribe?: boolean };
   /** `chogToken` (create and join): sit down as this Chog Genesis token, if the server finds it in a wallet linked to the account. */
   'cards:create': { chogToken?: number };
+  /** Today's Daily Challenge: the official attempt (or back to it while it runs), a practice deal after. Answers { code, practice }. */
+  'cards:daily': { chogToken?: number };
   'cards:join': { code: string; watch?: boolean; chogToken?: number };
   'cards:leave': Record<string, never>;
   'cards:away': { code: string };
