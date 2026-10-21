@@ -507,6 +507,7 @@ export class TournamentManager {
       .map(t => ({
         id: t.id, game: t.d.game, name: t.d.name, place: t.d.places.indexOf(playerId) + 1,
         of: t.d.places.length, endedAt: t.d.finishedAt ?? 0,
+        ...(t.d.rounds.some(r => r.final && r.tables.some(x => x.players.includes(playerId))) ? { finalTable: true } : {}),
       }));
   }
 

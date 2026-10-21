@@ -453,16 +453,19 @@ export class CardsGame {
   /** A round's end: the winner scores everyone else's cards; the match may be over. */
   private endRound(w: CardsPlayerState, blocked: boolean | 'time' = false) {
     const hands: Record<string, number> = {};
+    const cards: Record<string, number> = {};
     let points = 0;
     for (const q of this.active()) {
       if (q === w) continue;
       // A knocked-out hand went back under the pile: it still counts, as it was.
       hands[q.id] = q.out ? q.outPoints ?? 0 : handPoints(q.hand);
+      // Cards still held (achievements); a knocked-out hand holds none.
+      cards[q.id] = q.out ? 0 : q.hand.length;
       points += hands[q.id];
     }
     w.score += points;
     this.history.push({
-      round: this.round, winner: w.id, points, ...(blocked && { blocked: true }), hands,
+      round: this.round, winner: w.id, points, ...(blocked && { blocked: true }), hands, cards,
       ...(this.knocked.length && { out: [...this.knocked] }),
     });
     const matchOver = this.rules.match === 'single' || w.score >= this.rules.targetScore;
@@ -1293,7 +1296,7 @@ export class CardsGame {
       })),
       round: this.round,
       turn: this.turn,
-      history: this.history.map(h => ({ ...h, hands: { ...h.hands } })),
+      history: this.history.map(h => ({ ...h, hands: { ...h.hands }, ...(h.cards && { cards: { ...h.cards } }) })),
       winner: this.winner,
       lastPlay: this.lastPlay && {
         seq: this.lastPlay.seq,

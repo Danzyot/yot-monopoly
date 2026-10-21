@@ -181,6 +181,8 @@ export interface CardsRoundResult {
   blocked?: boolean;
   /** Each loser's hand value at the end of the round (a knocked-out player's, as it was when they went out). */
   hands: Record<string, number>;
+  /** Each loser's number of cards at the end of the round (achievements); absent in older games. */
+  cards?: Record<string, number>;
   /** Knocked out by the Mercy rule, in order. */
   out?: string[];
 }

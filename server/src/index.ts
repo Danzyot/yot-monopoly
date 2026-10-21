@@ -23,6 +23,8 @@ import { mountTextOverrides } from './routes/textOverrides.ts';
 import { mountContent } from './routes/content.ts';
 import { mountCardsProfile } from './routes/cardsProfile.ts';
 import { mountCardsDaily } from './routes/cardsDaily.ts';
+import { mountPlayerCard } from './routes/playerCard.ts';
+import { configurePlayerCards, profileMeta } from './playerCard.ts';
 import { walletRoutes } from './routes/wallet.ts';
 import { holdsChog } from './wallet/holders.ts';
 import { hostingRoutes } from './routes/hosting.ts';
@@ -201,6 +203,9 @@ app.get('/api/players/:id', (req, res) => {
 mountCardsProfile(app);
 // The Cards Daily Challenge: today's deal, its leaderboard and the days before.
 mountCardsDaily(app, cards.registry);
+// Badges (/api/players/:id/achievements) and the share card (/api/players/:id/card.png).
+configurePlayerCards({ tournamentsOf: id => tourneys.manager.resultsOf(id, 1000) });
+mountPlayerCard(app);
 
 // What the lobby's Discord requirement picker can offer. Any signed-in player
 // may host, so any signed-in player may ask; roles are cached (requirements.ts).
@@ -237,7 +242,8 @@ if (existsSync(dist)) {
   app.use(staticClient(dist));
   // Every page is index.html, with that page's title, description and share
   // tags written in (seo.ts), and status 404 where no page answers.
-  app.get(/^\/(?!api|socket\.io).*/, spaHandler(join(dist, 'index.html')));
+  // A profile's preview is the player's own card (playerCard.ts).
+  app.get(/^\/(?!api|socket\.io).*/, spaHandler(join(dist, 'index.html'), profileMeta));
 }
 
 // Failing to listen (port taken) is fatal: without this it would only be logged above.

@@ -1602,10 +1602,29 @@ export class Game {
   private settle() {
     // Whatever moves next is a new move.
     this.moveOpen = false;
+    this.noteSets();
     // Out of time and between turn steps: that was the last one.
     if (this.timeUp && this.phase === 'roll' && !this.paused) this.finishByTime();
     this.pumpEstate();
     this.syncClocks();
+  }
+
+  /**
+   * Remember every colour group a player has held whole, for the Landlord and
+   * Mogul achievements: once held it counts, whatever happens to it later.
+   * Every change of owner (buying, auctions, trades, bankruptcies) passes
+   * through settle(), so checking here misses none.
+   */
+  private noteSets() {
+    const seen = new Set<string>();
+    for (const s of this.spaces) {
+      if (s.kind !== 'property' || !s.group || seen.has(s.group)) continue;
+      seen.add(s.group);
+      const owner = this.owned[groupIndices(this.spaces, s.group)[0]]?.owner;
+      if (!owner || !this.ownsGroup(owner, s.group)) continue;
+      const st = this.stat(owner);
+      if (!st.sets?.includes(s.group)) st.sets = [...(st.sets ?? []), s.group];
+    }
   }
 
   private syncClocks() {

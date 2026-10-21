@@ -248,6 +248,8 @@ export interface PlayerStats {
   jailed: number;
   /** Mini-game rounds that paid this player out. */
   minigamesWon: number;
+  /** Colour groups this player has held whole at some point (achievements). Absent until the first. */
+  sets?: string[];
 }
 
 /** Everything a player can ask the engine to do. */

@@ -42,6 +42,7 @@ import { useSocial, useSystemLines } from '../social.ts';
 import { useNotifyPref, useTurnAlerts } from '../turnAlerts.ts';
 import type { ReactionMsg } from '../../../shared/types.ts';
 import { GAMES } from '../../../shared/brand.ts';
+import { useAchievementToasts } from '../achievements.tsx';
 
 export default function GameScreen({ room, game, me, chat, skew }: {
   room: RoomView; game: GameView; me: string; chat: ChatMsg[]; skew: number;
@@ -107,6 +108,8 @@ export default function GameScreen({ room, game, me, chat, skew }: {
   const nav = useNavigate();
   const myPlayer = game.players.find(p => p.id === me);
   useGameSounds(game, me);
+  // "Achievement unlocked!" for badges this game earned you (players only, not spectators).
+  useAchievementToasts(game.phase === 'over', game.players.some(p => p.id === me && !p.isBot) ? me : null);
   useAmbience(game);
   useMusicScene(game);
   const social = useSocial(me, room);

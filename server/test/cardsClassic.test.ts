@@ -62,7 +62,8 @@ test(`Classic plays exactly as before Chog Chaos: ${GAMES} seeded bot games, eve
     assert.equal(g.phase, 'over', `game ${gi} finishes`);
     for (const p of g.players) assert.ok(!p.out, 'nobody is ever knocked out in Classic');
     h.update(JSON.stringify([
-      g.players.map(p => [p.hand, p.score]), g.winner, g.history,
+      // (Round card counts are bookkeeping for achievements, not play: left out of the fingerprint.)
+      g.players.map(p => [p.hand, p.score]), g.winner, g.history.map(({ cards: _cards, ...h }) => h),
       g.log.map(e => e.text).filter(t => !t.startsWith('🔥 Stacked!')).slice(-120),
     ]));
   }
