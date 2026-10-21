@@ -78,6 +78,41 @@ test('card.png: a 1200×630 PNG, cached for a few minutes', async () => {
   assert.equal(card.cachedCard('dc_111', Date.now() + card.CARD_TTL_MS + 1), null);
 });
 
+test('the card cache is bounded by bytes, not only by count (each card is a few hundred KB)', async () => {
+  card.clearCardCache();
+  const one = await card.cardPng(card.playerSnapshot('dc_111')!);
+  const max = Math.floor(one.length * 1.5);
+  card.clearCardCache();
+  await card.cardPng(card.playerSnapshot('dc_111')!, { maxCacheBytes: max });
+  await card.cardPng(card.playerSnapshot('dc_222')!, { maxCacheBytes: max });
+  assert.ok(card.cardCacheBytes() <= max, `${card.cardCacheBytes()} cached bytes`);
+  assert.equal(card.cachedCard('dc_111'), null, 'the oldest went first');
+  assert.ok(card.cachedCard('dc_222'), 'the newest stays');
+  card.clearCardCache();
+  assert.equal(card.cardCacheBytes(), 0);
+});
+
+test('card.png: drawing is limited per address (a miss blocks the event loop for a moment)', async () => {
+  const app = express();
+  mountPlayerCard(app, { rendersPerMinute: 2 });
+  const srv = await new Promise<Server>(r => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
+  const url = (id: string) => `http://127.0.0.1:${(srv.address() as AddressInfo).port}/api/players/${id}/card.png`;
+  try {
+    card.clearCardCache();
+    assert.equal((await fetch(url('dc_111'))).status, 200);
+    assert.equal((await fetch(url('dc_111'))).status, 200, 'a cached card costs nothing');
+    assert.equal((await fetch(url('dc_222'))).status, 200);
+    card.clearCardCache();
+    const slow = await fetch(url('dc_111'));
+    assert.equal(slow.status, 429, 'a third drawing within the minute');
+    assert.ok(Number(slow.headers.get('retry-after')) > 0);
+    assert.equal((await fetch(url('dc_nobody'))).status, 404, 'nothing to draw is still a plain 404');
+  } finally {
+    srv.close();
+    card.clearCardCache();
+  }
+});
+
 test('card.png: 404 for unknown players, bad ids, banned players and with profiles switched off', async () => {
   assert.equal((await fetch(`${base}/api/players/dc_nobody/card.png`)).status, 404, 'no finished games');
   assert.equal((await fetch(`${base}/api/players/${encodeURIComponent('bad id!')}/card.png`)).status, 404);

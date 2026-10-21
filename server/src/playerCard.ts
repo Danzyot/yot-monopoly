@@ -387,11 +387,27 @@ export function renderSvg(svg: string): Buffer {
 }
 
 const MAX_CACHED = 500;
+/** A card is a few hundred KB (a photo-like picture does not compress): the cache is held to this many bytes too. */
+export const MAX_CACHE_BYTES = 48 * 1024 * 1024;
 const cache = new Map<string, { png: Buffer; at: number }>();
+let cacheBytes = 0;
 const inFlight = new Map<string, Promise<Buffer>>();
 
 export function clearCardCache(): void {
   cache.clear();
+  cacheBytes = 0;
+}
+
+/** What the cached cards weigh, in bytes. */
+export function cardCacheBytes(): number {
+  return cacheBytes;
+}
+
+function forget(id: string) {
+  const old = cache.get(id);
+  if (!old) return;
+  cacheBytes -= old.png.length;
+  cache.delete(id);
 }
 
 /** A card drawn within CARD_TTL_MS, if there is one (checked before working out the snapshot again). */
@@ -404,7 +420,7 @@ export function cachedCard(id: string, now = Date.now()): Buffer | null {
  * The card PNG for a snapshot, reused for CARD_TTL_MS per player. Requests for
  * the same player while one is drawing share it.
  */
-export async function cardPng(s: PlayerSnapshot, opts: { now?: number; fetchImpl?: typeof fetch } = {}): Promise<Buffer> {
+export async function cardPng(s: PlayerSnapshot, opts: { now?: number; fetchImpl?: typeof fetch; maxCacheBytes?: number } = {}): Promise<Buffer> {
   const now = opts.now ?? Date.now();
   const hit = cachedCard(s.id, now);
   if (hit) return hit;
@@ -412,10 +428,12 @@ export async function cardPng(s: PlayerSnapshot, opts: { now?: number; fetchImpl
   if (running) return running;
   const job = (async () => {
     const png = renderSvg(cardSvg(s, await picturesFor(s, opts.fetchImpl)));
-    cache.delete(s.id);
+    forget(s.id);
     cache.set(s.id, { png, at: now });
-    // Oldest first out: a Map keeps insertion order.
-    while (cache.size > MAX_CACHED) cache.delete(cache.keys().next().value!);
+    cacheBytes += png.length;
+    // Oldest first out: a Map keeps insertion order. The card just drawn always stays.
+    const maxBytes = opts.maxCacheBytes ?? MAX_CACHE_BYTES;
+    while (cache.size > 1 && (cache.size > MAX_CACHED || cacheBytes > maxBytes)) forget(cache.keys().next().value!);
     return png;
   })();
   inFlight.set(s.id, job);
