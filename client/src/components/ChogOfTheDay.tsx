@@ -92,10 +92,12 @@ export default function ChogOfTheDay() {
               )}
           <div className="cotd-links">
             <a className="btn small ghost" href={openSeaUrl(id)} target="_blank" rel="noopener noreferrer">See it on OpenSea ↗</a>
-            {!spin && (
-              <button type="button" className="btn small ghost" onPointerEnter={() => { void loadPreview(); }}
-                onFocus={() => { void loadPreview(); }} onClick={() => setSpin(true)}>Spin it in 3D</button>
-            )}
+            {spin
+              ? <button type="button" className="btn small ghost" onClick={() => setSpin(false)}>See the NFT art</button>
+              : (
+                <button type="button" className="btn small ghost" onPointerEnter={() => { void loadPreview(); }}
+                  onFocus={() => { void loadPreview(); }} onClick={() => setSpin(true)}>Spin it in 3D</button>
+              )}
             <Link className="cotd-wallet" to="/wallet">Play as yours: link your wallet →</Link>
           </div>
         </div>

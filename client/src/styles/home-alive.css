@@ -35,7 +35,7 @@
 @media (max-width: 480px) {
   .qp { gap: 8px; margin-bottom: 12px; }
   .home-hero.gd .hero-cta.qp-go { min-width: 0; width: min(100%, 300px); font-size: 26px; padding: 10px 24px 12px; }
-  .qp-pick button { font-size: 15px; padding: 5px 12px 6px; }
+  .qp-pick button { font-size: 14px; padding: 5px 9px 6px; }
   .qp-hint { font-size: 12px; }
 }
 

@@ -1,7 +1,9 @@
-// "Play now" in the home hero: one tap into a game. Pick Monopoly or Cards
-// (remembered on this device), and the server (rooms:quickJoin /
-// cards:quickJoin, server/src/quickJoin.ts) seats you at the open public lobby
-// nearest to filling up, or opens a table with bots when there is none.
+// "Play now" in the home hero: one tap into a game. Pick Monopoly, Cards or
+// Poker (remembered on this device). For Monopoly and Cards the server
+// (rooms:quickJoin / cards:quickJoin, server/src/quickJoin.ts) seats you at the
+// open public lobby nearest to filling up, or opens a table with bots when there
+// is none. Poker is tournaments only: you go to the soonest one taking
+// registrations (on poker's own site, signed in), or to /poker when none is.
 // Signed out, the sign-in dialog comes first and the tap carries on after it,
 // even across Discord's round trip (the pending pick waits in sessionStorage).
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -11,17 +13,31 @@ import { call } from '../net.ts';
 import { chogPref } from '../cards/net.ts';
 import { toastError } from '../toast.tsx';
 import { GAMES } from '../../../shared/brand.ts';
+import { POKER_BASE, pokerHref, withToken } from '../pokerLink.ts';
+import { getToken } from '../api.ts';
 import '../styles/home-alive.css';
 
-type QuickGame = 'monopoly' | 'cards';
-const CHOICES: { id: QuickGame; icon: string }[] = [{ id: 'monopoly', icon: '🎲' }, { id: 'cards', icon: '🃏' }];
+type QuickGame = 'monopoly' | 'cards' | 'poker';
+const CHOICES: { id: QuickGame; icon: string }[] = [{ id: 'monopoly', icon: '🎲' }, { id: 'cards', icon: '🃏' }, { id: 'poker', icon: '♠️' }];
 
 const PICK_KEY = 'quickplay:game';
 const PENDING_KEY = 'quickplay:pending';
 /** A sign-in that takes longer than this (or is abandoned) does not throw anyone into a game later. */
 const PENDING_MS = 10 * 60_000;
 
-const isGame = (v: unknown): v is QuickGame => v === 'monopoly' || v === 'cards';
+const isGame = (v: unknown): v is QuickGame => v === 'monopoly' || v === 'cards' || v === 'poker';
+
+/** Poker's soonest tournament taking registrations, or null (none, or poker unreachable). */
+async function nextPokerTournament(): Promise<string | null> {
+  try {
+    const r = await fetch(`${POKER_BASE}/api/lobby`, { headers: { accept: 'application/json' } });
+    if (!r.ok) return null;
+    const { tournaments = [] } = await r.json() as { tournaments?: { id: string; state: string; scheduledStart: number | null; createdAt: number }[] };
+    const open = tournaments.filter(t => t.state === 'registering')
+      .sort((a, b) => (a.scheduledStart ?? Infinity) - (b.scheduledStart ?? Infinity) || b.createdAt - a.createdAt);
+    return open[0]?.id ?? null;
+  } catch { return null; }
+}
 
 function loadPick(): QuickGame {
   try {
@@ -62,6 +78,14 @@ export default function QuickPlay() {
 
   const play = useCallback(async (g: QuickGame) => {
     setBusy(true);
+    if (g === 'poker') {
+      const id = await nextPokerTournament();
+      const token = getToken();
+      if (!id) { nav(GAMES.poker.path); return; }
+      const url = pokerHref(`/t/${id}`);
+      location.assign(token ? withToken(url, token) : url);
+      return;
+    }
     try {
       const r = g === 'cards'
         ? await call<{ code: string }>('cards:quickJoin', chogPref())
@@ -112,7 +136,7 @@ export default function QuickPlay() {
       <button type="button" className="btn primary hero-cta qp-go" onClick={go} disabled={busy} aria-busy={busy}>
         {busy ? 'Finding a seat…' : 'Play now'}
       </button>
-      <p className="qp-hint">Sits you at the next table to fill, or starts one with bots.</p>
+      <p className="qp-hint">{game === 'poker' ? 'Takes you to the next tournament taking sign-ups.' : 'Sits you at the next table to fill, or starts one with bots.'}</p>
     </div>
   );
 }
