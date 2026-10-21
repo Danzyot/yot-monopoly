@@ -1,0 +1,91 @@
+/* ==========================================================================
+   The Cards Daily Challenge: its card on the Cards home, the result screen at
+   the table and the profile tiles. Loaded with those only.
+   ========================================================================== */
+
+.cd-daily { position: relative; border: 2px solid color-mix(in srgb, var(--gold, #ffd23f) 55%, transparent);
+  background: linear-gradient(160deg, rgba(255, 210, 63, 0.12), rgba(0, 0, 0, 0) 40%), var(--panel, rgba(0, 0, 0, 0.3)); scroll-margin-top: 80px; }
+.cd-loading { min-height: 168px; }
+.cd-head { display: flex; align-items: flex-start; gap: 14px; }
+.cd-titles { flex: 1; min-width: 0; }
+.cd-titles h2 { margin: 2px 0 4px; }
+.cd-titles p { margin: 0; }
+.cd-num { color: var(--gold, #ffd23f); }
+
+/* A tear-off calendar page with the day's date. */
+.cd-cal { flex: none; width: 58px; border-radius: 10px; overflow: hidden; text-align: center; background: #fff; color: #2a136b;
+  box-shadow: 0 4px 0 #2a136b, 0 8px 16px rgba(0, 0, 0, 0.35); transform: rotate(-4deg); }
+.cd-cal span { display: block; background: #ff5a5f; color: #fff; font: 800 11px var(--font), sans-serif; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 0; }
+.cd-cal b { display: block; font: 400 28px/1.25 var(--display); }
+
+.cd-streak { flex: none; display: flex; flex-direction: column; align-items: center; line-height: 1; padding: 6px 10px; border-radius: 12px;
+  background: linear-gradient(#ff8c1a, #ff5a5f); color: #fff; box-shadow: 0 3px 0 #a3271b; font-size: 18px; }
+.cd-streak b { font: 400 24px var(--display); }
+.cd-streak small { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.9; }
+
+.cd-status { margin: 12px 0 10px; }
+.cd-status p { margin: 0; }
+.cd-result { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(0, 0, 0, 0.28); }
+.cd-result.won { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold, #ffd23f) 60%, transparent); }
+.cd-result-icon { font-size: 28px; }
+.cd-result b { display: block; font-size: 17px; }
+.cd-result-meta { display: block; }
+.cd-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.cd-actions .btn { width: auto; margin: 0; }
+.cd-toggle { margin-left: auto !important; }
+
+/* The board: rank, name, result. */
+.cd-board { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.cd-board li { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 10px; background: rgba(0, 20, 70, 0.35); }
+.cd-board li.me { background: color-mix(in srgb, var(--gold, #ffd23f) 22%, rgba(0, 20, 70, 0.35)); }
+.cd-board li.left { opacity: 0.7; }
+.cd-rank { flex: none; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: rgba(255, 255, 255, 0.1); font: 400 14px var(--display); }
+.cd-board li:nth-child(1) .cd-rank { background: #ffd23f; color: #2a136b; }
+.cd-board li:nth-child(2) .cd-rank { background: #d9dee8; color: #2a136b; }
+.cd-board li:nth-child(3) .cd-rank { background: #e39b5c; color: #2a136b; }
+.cd-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.cd-res { flex: none; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.cd-board li.won .cd-res { color: var(--text); }
+.cd-empty { margin: 12px 0 0; }
+.cd-full { margin-top: 12px; }
+.cd-days { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.cd-days button { flex: none; position: relative; background: rgba(0, 0, 0, 0.3); color: var(--muted); border: 1px solid var(--line); border-radius: 99px;
+  padding: 4px 11px; font: 700 12px var(--font), sans-serif; cursor: pointer; }
+.cd-days button.on { color: #2a136b; background: var(--gold, #ffd23f); border-color: var(--gold, #ffd23f); }
+.cd-day-dot { display: inline-block; width: 6px; height: 6px; margin-left: 5px; border-radius: 50%; background: #3ddc84; vertical-align: middle; }
+.cd-board-meta { margin: 10px 0 0; }
+.cd-help { margin: 10px 0 0; }
+
+/* ---- the result screen at the table ---- */
+.cd-over-kicker { margin: 0; color: var(--gold, #ffd23f); font: 800 13px var(--font), sans-serif; letter-spacing: 0.08em; text-transform: uppercase; }
+.cd-over h2 { margin: 6px 0 12px; }
+.cd-tiles { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.cd-tiles > div { flex: 1 1 0; min-width: 76px; max-width: 120px; display: flex; flex-direction: column; align-items: center; padding: 10px 6px; border-radius: 12px;
+  background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.14); }
+.cd-tiles b { font: 400 26px/1.1 var(--display); }
+.cd-tiles span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.cd-tiles .gold b { color: var(--gold, #ffd23f); }
+.cd-tiles .fire { background: linear-gradient(rgba(255, 140, 26, 0.35), rgba(255, 90, 95, 0.25)); }
+.cd-share { margin: 6px auto 12px; max-width: 380px; }
+.cd-share pre { margin: 0; padding: 10px 12px; border-radius: 10px; background: rgba(0, 0, 0, 0.4); border: 1px dashed rgba(255, 255, 255, 0.25);
+  font: 600 13px/1.5 var(--font), sans-serif; text-align: left; white-space: pre-wrap; word-break: break-word; user-select: all; }
+
+/* ---- at the table: the daily badge in the top bar ---- */
+.ct-daily { color: var(--gold, #ffd23f); font-weight: 800; font-family: var(--font), sans-serif; }
+
+/* ---- on a profile ---- */
+.pf-daily .pf-stat.fire { background: linear-gradient(rgba(255, 140, 26, 0.3), rgba(255, 90, 95, 0.18)); }
+.pf-daily-best { margin: 8px 0 0; }
+
+@media (max-width: 600px) {
+  .cd-head { gap: 10px; }
+  .cd-cal { width: 48px; }
+  .cd-cal b { font-size: 22px; }
+  .cd-titles h2 { font-size: 20px; }
+  .cd-toggle { margin-left: 0 !important; }
+  .cd-actions .btn.primary { flex: 1 1 auto; }
+  .cd-tiles { flex-wrap: nowrap; gap: 6px; }
+  .cd-tiles > div { min-width: 0; padding: 8px 4px; }
+  .cd-tiles b { font-size: 22px; }
+  .cd-tiles span { font-size: 10px; letter-spacing: 0.03em; }
+}

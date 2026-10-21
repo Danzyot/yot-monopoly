@@ -12,7 +12,9 @@ import { BRAND } from '../../../shared/brand.ts';
 import type { Card } from '../../../shared/cards/deck.ts';
 import { cardsCall, chogPref, useCardsRoomList } from './net.ts';
 import { CardBack, CardFace } from './CardFace.tsx';
-import { CardsBackdrop } from './CardsLobby.tsx';
+import DailyCard from './DailyCard.tsx';
+// Not from CardsLobby: that would bring the trait table with the page (see CardsBackdrop.tsx).
+import { CardsBackdrop } from './CardsBackdrop.tsx';
 import './cards.css';
 
 // The full tutorial is the hub's (the "?" on the Cards hub card), fetched when it is wanted.
@@ -111,6 +113,7 @@ export default function CardsHome() {
       </section>
 
       <div className="ch-body">
+        <DailyCard />
         {rooms.length > 0 && (
           <section className="panel" aria-labelledby="ch-tables">
             <h2 id="ch-tables">Open tables</h2>

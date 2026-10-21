@@ -22,6 +22,8 @@ export default function CardsRoomPage() {
   // Seen in the lobby: the first deal is staged rather than shown dealt.
   const sawLobby = useRef(false);
   if (room?.status === 'lobby') sawLobby.current = true;
+  // A daily table is dealt the moment it opens (there is no lobby): a fresh deal is staged all the same.
+  if (room?.daily && room.daily.turns <= 1 && room.startedAt && room.now - room.startedAt < 10_000) sawLobby.current = true;
 
   useEffect(() => {
     document.title = room ? `${room.code} · ${CARDS_GAME_NAME} · ${BRAND.name}` : `${CARDS_GAME_NAME} · ${BRAND.name}`;

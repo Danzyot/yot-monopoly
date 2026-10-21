@@ -22,6 +22,7 @@ import { mountGraphics } from './routes/graphics.ts';
 import { mountTextOverrides } from './routes/textOverrides.ts';
 import { mountContent } from './routes/content.ts';
 import { mountCardsProfile } from './routes/cardsProfile.ts';
+import { mountCardsDaily } from './routes/cardsDaily.ts';
 import { walletRoutes } from './routes/wallet.ts';
 import { holdsChog } from './wallet/holders.ts';
 import { hostingRoutes } from './routes/hosting.ts';
@@ -31,6 +32,7 @@ import { attachCardsSockets } from './cards/sockets.ts';
 import { armCardsPersistence, restoreCardsLive } from './cards/persist.ts';
 import { attachTournaments } from './tournament/sockets.ts';
 import { cardsLeaderboard, loadCardsResults, recentCardsResults } from './cards/stats.ts';
+import { loadCardsDaily, reconcileCardsDaily } from './cards/daily.ts';
 import { staticClient } from './staticFiles.ts';
 import { mountCrawlerFiles, spaHandler } from './seo.ts';
 import { mountSite } from './routes/site.ts';
@@ -58,6 +60,7 @@ loadAccounts();
 loadEvents();
 loadResults();
 loadCardsResults();
+loadCardsDaily();
 loadGraphics();
 void primeVerifyChannel();
 
@@ -126,6 +129,8 @@ sockets.registry.taken = code => !!cards.registry.get(code);
 const restoredCards = restoreCardsLive(cards.registry);
 if (restoredCards) console.log(`Restored ${restoredCards} live card table(s) from the last snapshot`);
 armCardsPersistence(cards.registry);
+// Daily attempts whose tables did not come back are walk-outs (losses).
+reconcileCardsDaily(cards.registry);
 // Tournaments (Cards only) seat their tables in the Cards registry, so they come back after it.
 const tourneys = attachTournaments(io, { monopoly: sockets, cards });
 const restoredTourneys = tourneys.manager.restore();
@@ -194,6 +199,8 @@ app.get('/api/players/:id', (req, res) => {
 });
 // ...and the Cards half (/api/players/:id/cards).
 mountCardsProfile(app);
+// The Cards Daily Challenge: today's deal, its leaderboard and the days before.
+mountCardsDaily(app, cards.registry);
 
 // What the lobby's Discord requirement picker can offer. Any signed-in player
 // may host, so any signed-in player may ask; roles are cached (requirements.ts).
