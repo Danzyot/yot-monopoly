@@ -76,7 +76,8 @@ Ask in [our Discord](discord:). See also the [privacy notice](/privacy).`;
 const PRIVACY = `This page explains what Chog Games stores about you, why, and who can see it. It is written in plain language and is not legal advice.
 
 ## What we store
-- **Your Discord basics.** When you sign in with Discord we keep your Discord user id, username, display name and avatar. We never see your Discord password or email address.
+- **Your Discord basics.** When you sign in with Discord we keep your Discord user id, username, display name and avatar. We never see your Discord password.
+- **Your email address.** Signing in with Discord also gives us the email address on your Discord account and whether Discord has verified it. It is stored on our server only: other players never see it, and it is never on your profile, the leaderboard, share cards or Discord bot replies. We use it only to send the emails you turn on in your [notification settings](/settings) (tournament reminders, Daily Challenge streak reminders, friend invites, the weekly digest, announcements), plus rare notices about your account itself. Everything else is off until you turn it on, every email has a one-click unsubscribe link, and we only ever email addresses Discord has verified.
 - **Your Discord servers and roles.** Some tables are only open to members of a server or role. To check, we ask Discord which servers you are in and your roles there. We keep the list of servers while you're signed in, not your messages.
 - **The name you choose.** If you pick a name to play under (the welcome tour), we keep it with your account so it stays when you sign in again.
 - **Friends.** Who you are friends with and the friend requests you send and receive, until you or they remove them.
@@ -91,24 +92,26 @@ const PRIVACY = `This page explains what Chog Games stores about you, why, and w
 We don't use tracking cookies. Your browser's local storage keeps your sign-in and your preferences: sound and music, camera and graphics settings, your character and outfit, and which tips you've already seen. Clearing this site's data removes them.
 
 ## What we don't do
-- No ads, no analytics or tracking scripts, and we never sell or trade your data.
+- No ads, no analytics or tracking scripts, and we never sell or trade your data. Your email address is never sold or shared with anyone except our email provider, and only to deliver the emails you chose.
+- No tracking pixels or tracked links in our emails.
 - No payments, so we never ask for card or bank details.
 
 ## Who sees what
 - **Everyone:** your name, avatar, results, profile, badges and leaderboard place. A badge shows that you have linked a wallet, never which one.
 - **Players at your table:** your name, avatar, character and chat.
 - **Your friends:** whether you are online and which game you are in. They see your table's code only when it is public with a seat free.
-- **Admins:** all of the above plus IP addresses, countries and linked wallets, for moderation only.
-- **Services we use:** Discord (sign-in), our hosting provider (it runs the servers that hold this data), a Monad blockchain node (we ask it which tokens a linked address holds) and Google Fonts (your browser fetches two fonts from Google, which sees your IP address).
+- **Admins:** all of the above plus IP addresses, countries and linked wallets, for moderation only. Operators can also see how many players chose each email topic and can export the list of subscribers' addresses, only to run the emails you asked for; every export is logged.
+- **Services we use:** Discord (sign-in), Resend (our email provider: it receives your address and the email to deliver only when we send you one you asked for), our hosting provider (it runs the servers that hold this data), a Monad blockchain node (we ask it which tokens a linked address holds) and Google Fonts (your browser fetches two fonts from Google, which sees your IP address).
 
 ## How long we keep it
-We keep game results for the leaderboard and history for as long as the site runs. Connection records and logs are kept while they're useful against abuse. Bans and the evidence behind them are kept as long as the ban lasts.
+We keep game results for the leaderboard and history for as long as the site runs. Connection records and logs are kept while they're useful against abuse. Bans and the evidence behind them are kept as long as the ban lasts. Your email address is updated each time you sign in with Discord and kept until you ask us to delete your data, which removes it together with your notification choices.
 
 ## Your choices
+- Turn emails on or off any time in your [notification settings](/settings), or with the unsubscribe link in any email.
 - Unlink a wallet any time on the [wallet page](/wallet).
 - Remove a friend, or decline or cancel a request, any time on the [friends page](/friends).
 - Sign out and clear this site's data to remove what's stored in your browser.
-- To see what we hold about you, or to have it deleted, ask an admin in [our Discord](discord:). We may keep the minimum needed to keep a ban in place.
+- To see what we hold about you, or to have it deleted (your email address and notification choices included), ask an admin in [our Discord](discord:). We may keep the minimum needed to keep a ban in place.
 
 ## Children
 Chog Games is not meant for children under 13.

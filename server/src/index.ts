@@ -7,7 +7,7 @@ import { Server } from 'socket.io';
 import { adminModeConfigured, demoMode, isProduction } from './auth.ts';
 import { loadBans } from './bans.ts';
 import { loadMutes } from './chat.ts';
-import { loadAccounts } from './connections.ts';
+import { getAccount, loadAccounts } from './connections.ts';
 import { loadDisplayNames } from './displayNames.ts';
 import { defaultInviteUrl, discordEnabled } from './discord.ts';
 import { loadEvents } from './eventlog.ts';
@@ -44,8 +44,8 @@ import { attachSockets } from './sockets.ts';
 import { attachCardsSockets } from './cards/sockets.ts';
 import { armCardsPersistence, restoreCardsLive } from './cards/persist.ts';
 import { attachTournaments } from './tournament/sockets.ts';
-import { cardsLeaderboard, loadCardsResults, recentCardsResults } from './cards/stats.ts';
-import { cardsDailyInfo, loadCardsDaily, reconcileCardsDaily } from './cards/daily.ts';
+import { allCardsResults, cardsLeaderboard, loadCardsResults, recentCardsResults } from './cards/stats.ts';
+import { cardsDailyAttempt, cardsDailyInfo, cardsDailyProfile, loadCardsDaily, reconcileCardsDaily } from './cards/daily.ts';
 import { dailyDate } from '../../shared/cards/daily.ts';
 import { staticClient } from './staticFiles.ts';
 import { mountCrawlerFiles, siteOrigin, spaHandler } from './seo.ts';
@@ -57,7 +57,13 @@ import { buildProfile } from './profiles.ts';
 import { devFakeDiscord, gateInfo } from './requirements.ts';
 import { buttonFlowAvailable, codeVerifyAvailable, primeVerifyChannel, verifyChannelName } from './verifycode.ts';
 import type { SiteConfig } from '../../shared/types.ts';
-import { BRAND } from '../../shared/brand.ts';
+import { BRAND, GAMES } from '../../shared/brand.ts';
+import { loadEmailStore } from './email/store.ts';
+import { mailer } from './email/mailer.ts';
+import { EmailTriggers, configureEmailTriggers, registerDailySource } from './email/triggers.ts';
+import { buildDigest, digestYou, type DigestSources } from './email/digest.ts';
+import { mountEmail, mountEmailWebhook } from './routes/email.ts';
+import { tournamentUrl } from '../../shared/tournaments.ts';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 8080);
@@ -78,6 +84,7 @@ loadCardsResults();
 loadCardsDaily();
 loadMonopolyDaily();
 loadGraphics();
+loadEmailStore();
 void primeVerifyChannel();
 
 const app = express();
@@ -95,6 +102,8 @@ app.use((_req, res, next) => {
 
 // Discord signs the raw body, so this goes in before the JSON parser.
 mountInteractions(app);
+// Resend's bounce and spam-report events, signed over the raw body too.
+mountEmailWebhook(app);
 app.use(express.json({ limit: '64kb' }));
 
 app.use('/api', rateLimit(600, 60_000));
@@ -226,6 +235,51 @@ mountActivity(app, { monopoly: sockets.registry, cards: cards.registry, tourname
 mountChogs(app);
 // Friends: requests, who is online and where, invites to your table.
 const friends = mountFriends(app, io, { monopoly: sockets.registry, cards: cards.registry });
+// Email notifications (email/*): the settings, the unsubscribe link, the dashboard's Email tab,
+// and the clocks that send tournament reminders, streak nudges and the weekly digest.
+mountEmail(app);
+{
+  // Each Daily Challenge the streak reminder knows about. Other games register theirs the same way.
+  registerDailySource({
+    id: 'cards',
+    label: GAMES.cards.name,
+    path: `${GAMES.cards.path}#daily`,
+    status: (id, t) => {
+      const streak = cardsDailyProfile(id, t)?.streaks.streak;
+      return streak === undefined ? null : { streak, playedToday: !!cardsDailyAttempt(dailyDate(t), id) };
+    },
+  });
+  const weekAhead = (now: number) => [
+    ...[...tourneys.manager.tournaments.values()]
+      .filter(t => t.d.status === 'registering' && t.d.settings.startAt)
+      .map(t => ({ name: t.d.name, start: t.d.settings.startAt! })),
+    ...[...tourneys.scheduler.schedules.values()]
+      .filter(d => d.enabled)
+      .flatMap(d => tourneys.scheduler.upcomingOf(d, 14).filter(o => o.start <= now + 7 * 86_400_000).map(o => ({ name: o.name, start: o.start }))),
+  ];
+  const digestSrc: DigestSources = { monopoly: allResults(), cards: allCardsResults(), banned: playerBanned, tournaments: weekAhead };
+  const fresh = (): DigestSources => ({ ...digestSrc, monopoly: allResults(), cards: allCardsResults() });
+  const triggers = new EmailTriggers({
+    mailer: mailer(),
+    name: id => getAccount(id)?.name ?? null,
+    banned: playerBanned,
+    tournaments: () => [...tourneys.manager.tournaments.values()]
+      .filter(t => t.d.status === 'registering' && t.d.settings.startAt)
+      .map(t => ({
+        id: t.id, name: t.d.name, start: t.d.settings.startAt!, href: tournamentUrl(t.id), prize: t.d.prize || undefined,
+        ...(t.d.schedule && { scheduleKey: `s:${t.d.schedule.id}:${t.d.schedule.slot}` }),
+        entrants: t.d.entrants.filter(e => !e.removed).map(e => ({ id: e.id, at: e.at })),
+      })),
+    scheduled: () => [...tourneys.scheduler.schedules.values()]
+      .filter(d => d.enabled)
+      .flatMap(d => tourneys.scheduler.upcomingOf(d, 2).map(o => ({ key: `s:${d.id}:${o.start}`, name: o.name, start: o.start, opensAt: o.opensAt, prize: d.prize || undefined }))),
+    digest: now => buildDigest(fresh(), now),
+    digestYou: (id, now) => digestYou(fresh(), id, now),
+  });
+  configureEmailTriggers(triggers);
+  triggers.start(60_000);
+}
+
 // Deleting a player's data from the dashboard (erase.ts) reaches every store above.
 configureErase({
   seatedAt: id => [
@@ -353,6 +407,7 @@ http.listen(PORT, () => {
       ? '⚠️  ADMIN_DISCORD_IDS is unset — nobody is an operator (NODE_ENV=production fails closed).'
       : '⚠️  ADMIN_DISCORD_IDS is unset — every signed-in account is an operator.');
   }
+  if (!mailer().configured) console.log('Email: RESEND_API_KEY is unset, so notification emails are logged as "not configured" instead of sent.');
   if (!process.env.DATA_DIR) console.warn('⚠️  DATA_DIR is unset — bans, results and live games are stored in server/data (lost on redeploy without a volume).');
   // Slash commands: a bulk overwrite in the guild, skipped when Discord already has these ones.
   void syncCommands().then(s => {

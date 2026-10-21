@@ -2,7 +2,8 @@
 // data; DELETE /api/admin/players/:id). What is theirs alone goes: the
 // connection history (addresses, first and last seen), linked wallets and any
 // pending wallet check, friends and friend requests, the chosen name, Daily
-// Challenge attempts, host approval and chat mute. In finished games and
+// Challenge attempts, host approval and chat mute, and their email address with
+// every notification choice (email/store.ts) and anything queued for them. In finished games and
 // tournaments other people played, they become "Deleted player" under a fresh
 // placeholder id (deleted.ts), so everyone else's results, points and brackets
 // stay as they were; no profile, card or leaderboard row is built for it.
@@ -20,6 +21,9 @@ import { anonymizeResults } from './stats.ts';
 import { anonymizeCardsResults } from './cards/stats.ts';
 import { eraseCardsDaily } from './cards/daily.ts';
 import { eraseMonopolyDaily } from './monopolyDaily.ts';
+import { eraseEmail } from './email/store.ts';
+import { mailer } from './email/mailer.ts';
+import { emailTriggers } from './email/triggers.ts';
 import { cancelSelfTx } from './wallet/selftx.ts';
 import { unlinkWallet, walletsOf } from './wallet/store.ts';
 
@@ -46,6 +50,8 @@ export interface EraseReport {
   friends: number;
   chosenName: boolean;
   host: boolean;
+  /** Their email address and notification choices were on file. */
+  email: boolean;
 }
 
 export class EraseRefused extends Error {}
@@ -88,8 +94,11 @@ export function erasePlayer(id: string, d: EraseDeps | null = deps): EraseReport
     friends: friendIds.length,
     chosenName: forgetChosenName(id),
     host: revokeHost(id),
+    email: eraseEmail(id),
     account: forgetAccount(id),
   };
+  mailer().forget(id);
+  emailTriggers()?.forget(id);
   if (isMuted(id)) setMute(id, '', 0, 'erase');
   clearCardCache();
   return report;
