@@ -54,6 +54,9 @@ for (const map of MAPS) {
       await page.fill('input[placeholder="Your name"]', 'Smoke');
       await page.click('.modal button:has-text("Play")');
       await page.waitForSelector('text=Sign out');
+      // A brand-new account gets the welcome tour first: skip it.
+      await page.waitForTimeout(1500);
+      if (await page.locator('text=Welcome to Chog Games').count()) await page.keyboard.press('Escape');
       await page.click('.mono-play:has-text("Play Monopoly")');
       await page.waitForURL(/\/r\//, { waitUntil: 'commit' });
       await page.waitForTimeout(4000);
