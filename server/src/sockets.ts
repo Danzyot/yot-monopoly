@@ -8,7 +8,7 @@ import { verifyToken } from './auth.ts';
 import { banMatches, banMessage, findBan, type Ban } from './bans.ts';
 import { ChatError, checkChat, isMuted, isQuickChat } from './chat.ts';
 import { recordConnection } from './connections.ts';
-import { announceChannelId, postToChannel } from './discord.ts';
+import { announceChannelId, postToChannel, resultEmbed } from './discord.ts';
 import { EngineError } from './engine/game.ts';
 import { logGameEvent } from './eventlog.ts';
 import { isOn } from './features.ts';
@@ -143,12 +143,10 @@ export function attachSockets(io: Server): SocketLayer {
     lobbyChanged();
     const channel = announceChannelId();
     if (channel && isOn('announceResults')) {
-      const medals = ['🥇', '🥈', '🥉'];
-      const lines = standings.slice(0, 5).map((s, i) => `${medals[i] ?? `**${i + 1}.**`} ${g.player(s.id).name}`);
-      void postToChannel(channel, {
-        title: `🏆 ${g.player(standings[0].id).name} wins!`,
-        description: `${lines.join('\n')}\n\n${getMap(room.mapId).name} · ${getTheme(room.themeId).name} · ${g.turnNumber} turns`,
-      });
+      void postToChannel(channel, resultEmbed(
+        standings.map(s => g.player(s.id).name),
+        `${getMap(room.mapId).name} · ${getTheme(room.themeId).name} · ${g.turnNumber} turns`,
+      ));
     }
   }
 

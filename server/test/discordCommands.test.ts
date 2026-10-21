@@ -256,9 +256,21 @@ test('a command that throws is an ephemeral apology, not a crash', async () => {
 });
 
 test('names cannot inject markdown, links or mentions', () => {
-  assert.equal(cmd.safeName('[x](https://evil) @everyone *b*'), '\\[x\\]\\(https://evil\\) \\@everyone \\*b\\*');
+  assert.equal(cmd.safeName('[x](https://evil) @everyone *b*'), '\\[x\\]\\(https\\://evil\\) \\@everyone \\*b\\*');
+  // A bare address in a name is not turned into a link the bot posts (Discord links only "scheme://").
+  assert.equal(cmd.safeName('https://evil.example'), 'https\\://evil.example');
   assert.equal(cmd.plainName('a‮b\n c'), 'ab c');
   assert.equal(cmd.plainName('x'.repeat(40), 10).length, 10);
+});
+
+test('a result announcement shows chosen names as text: no masked links, formatting or pings', async () => {
+  const { resultEmbed } = await import('../src/discord.ts');
+  const e = resultEmbed(['[nitro](https://x.co)', '@everyone', '**Bob**'], 'Classic · 40 turns');
+  assert.equal(e.title, '🏆 [nitro](https://x.co) wins!', 'a title shows no markdown, so the name is just cleaned');
+  assert.ok(e.description.includes('🥇 \\[nitro\\]\\(https\\://x.co\\)'), e.description);
+  assert.ok(e.description.includes('🥈 \\@everyone'));
+  assert.ok(e.description.includes('🥉 \\*\\*Bob\\*\\*'));
+  assert.ok(e.description.endsWith('\n\nClassic · 40 turns'));
 });
 
 test('rate limit: a few commands per user, then an ephemeral "slow down"', async () => {

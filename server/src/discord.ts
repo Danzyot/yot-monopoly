@@ -9,6 +9,7 @@
 //                       guild list from OAuth time is used).
 
 import { BRAND, GAMES } from '../../shared/brand.ts';
+import { plainName, safeName } from './discordCommands.ts';
 
 const API = 'https://discord.com/api/v10';
 
@@ -350,13 +351,24 @@ export async function sendDirectMessage(discordUserId: string, content: string):
 // ---- result announcements ----
 
 /** Post a message (with one embed) to a channel through the bot. Never throws. */
+/**
+ * A finished game's announcement (winner first). Names are players' own (a
+ * Discord name or one they chose), so they go in as text: no masked links,
+ * formatting or mentions.
+ */
+export function resultEmbed(names: readonly string[], tail: string): { title: string; description: string } {
+  const medals = ['🥇', '🥈', '🥉'];
+  const lines = names.slice(0, 5).map((n, i) => `${medals[i] ?? `**${i + 1}.**`} ${safeName(n)}`);
+  return { title: `🏆 ${plainName(names[0] ?? 'Player')} wins!`, description: `${lines.join('\n')}\n\n${tail}` };
+}
+
 export async function postToChannel(channelId: string, embed: { title: string; description: string; color?: number }): Promise<void> {
   if (!botEnabled()) return;
   try {
     const res = await fetch(`${API}/channels/${channelId}/messages`, {
       method: 'POST',
       headers: { Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ embeds: [{ color: 0xd53f7c, ...embed, timestamp: new Date().toISOString() }] }),
+      body: JSON.stringify({ embeds: [{ color: 0xd53f7c, ...embed, timestamp: new Date().toISOString() }], allowed_mentions: { parse: [] } }),
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) console.error('Discord post rejected:', res.status, (await res.text().catch(() => '')).slice(0, 160));

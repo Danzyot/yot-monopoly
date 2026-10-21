@@ -190,9 +190,13 @@ export function plainName(name: string, max = 32): string {
   return one.length > max ? `${one.slice(0, max - 1)}…` : one;
 }
 
-/** A display name made safe inside Discord markdown (descriptions, fields): no formatting, links or mentions. */
+/**
+ * A display name made safe inside Discord markdown (descriptions, fields): no
+ * formatting, links or mentions. The colon is escaped too, so "https://…" in a
+ * name is shown as text, never as a link the bot posted.
+ */
 export function safeName(name: string, max = 32): string {
-  return plainName(name, max).replace(/([\\*_~`|>[\]()<@#])/g, '\\$1');
+  return plainName(name, max).replace(/([\\*_~`|>[\]()<@#:])/g, '\\$1');
 }
 
 const pct = (r: number) => `${Math.round(r * 100)}%`;
