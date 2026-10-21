@@ -41,7 +41,9 @@ EDL = [
     ('tour', ('frames', 'shot02', None), 7.5, 0.35, {'smear': [(2.32, 2.78), (4.82, 5.28)]}),
     ('site', ('page', 'screens.html#home'), 3.5, 0.0, {}),
     ('monopoly', ('frames', 'shot03', None), 10.0, 0.0, {}),
+    ('monopoly-web', ('page', 'screens.html#monopoly-game'), 3.0, 0.0, {}),
     ('cards', ('frames', 'shot05', None), 7.0, 0.0, {}),
+    ('cards-web', ('page', 'screens.html#cards-table'), 3.0, 0.0, {}),
     ('poker', ('frames', 'shot06', None), 4.0, 0.0, {}),
     ('poker-web', ('page', 'screens.html#poker-table'), 3.0, 0.0, {}),
     ('nft', ('page', 'nft.html'), 4.0, 0.0, {}),
@@ -57,6 +59,7 @@ CAPTIONS = {
     'monopoly': [(0.3, 2.5, 'Roll the dice', 'lower'), (5.5, 7.9, 'Build up to a hotel', 'lower'), (8.1, 9.9, 'Mind the cops', 'lower')],
     'cards': [(1.7, 3.8, 'Stack the Draw Fours', 'lower'), (5.0, 6.9, 'Last card. On fire.', 'lower')],
     'poker': [(0.2, 1.9, 'Chog Poker', 'lower'), (2.4, 3.95, 'Read the table. Take the pot.', 'lower')],
+    'monopoly-web': [(0.15, 2.9, 'Friends or bots, any time.', 'top')],
     'poker-web': [(0.15, 2.9, 'Pull up a seat.', 'top')],
     'nft': [(0.15, 1.9, 'Hold a Chog?', 'top'), (2.0, 3.9, 'Play as it.', 'top')],
     'nft-run': [(0.5, 3.8, 'Your Chog. In the game.', 'top')],
@@ -102,6 +105,8 @@ def effects():
     p = 'poker'
     ev += [(p, 1.3, 'chips', {'n_clicks': 8, 'dur': 0.5}, 0.6), (p, 2.05, 'flick', {}, 0.4), (p, 2.5, 'slap', {}, 0.6),
            (p, 2.85, 'chime', {}, 0.4), (p, 3.2, 'chips', {'n_clicks': 16, 'dur': 0.7, 'seed': 3}, 0.7)]
+    ev += [('monopoly-web', 0.0, 'whoosh', {'dur': 0.4, 'f_from': 1200, 'f_to': 3000}, 0.3),
+           ('cards-web', 0.0, 'whoosh', {'dur': 0.4, 'f_from': 1200, 'f_to': 3000}, 0.3)]
     ev += [('poker-web', 0.0, 'whoosh', {'dur': 0.4, 'f_from': 1200, 'f_to': 3000}, 0.3)]
     ev += [('nft', 0.2 + 0.25 * k, 'pop', {'pitch': 1.2 + 0.1 * k}, 0.5) for k in range(4)]
     ev += [('nft', 1.55, 'whoosh', {'dur': 0.5}, 0.4), ('nft', 2.05, 'chime', {'notes': (0, 4, 7, 12, 16)}, 0.45)]

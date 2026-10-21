@@ -9,7 +9,7 @@
   html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #0b0614; }
   #bg { position: absolute; inset: 0; background: radial-gradient(ellipse 60% 55% at 50% 58%, #3a1a72 0%, #1c0c38 45%, #0b0614 80%); }
   #stage { position: absolute; inset: 0; perspective: 2200px; }
-  .win { position: absolute; left: 50%; top: 56%; transform-style: preserve-3d; border-radius: 22px; overflow: hidden;
+  .win { position: absolute; left: 50%; top: 60%; transform-style: preserve-3d; border-radius: 22px; overflow: hidden;
          background: #1a1030; box-shadow: 0 60px 140px rgba(0,0,0,0.6), 0 0 0 1.5px rgba(255,255,255,0.12), 0 0 120px rgba(139,92,246,0.35); }
   .browser { width: 1500px; height: 905px; }
   .bar { height: 62px; background: linear-gradient(#2a1b4a, #22163e); display: flex; align-items: center; gap: 12px; padding: 0 24px; }
@@ -17,6 +17,7 @@
   .url { margin-left: 28px; flex: 1; max-width: 560px; height: 36px; border-radius: 18px; background: rgba(255,255,255,0.08);
          color: #d9ccff; font: 800 20px Nunito; display: flex; align-items: center; padding-left: 22px; letter-spacing: 0.02em; }
   .browser img { display: block; width: 1500px; height: 843.75px; object-fit: cover; object-position: top; }
+  .win.phone { top: 56%; }
   .phone { width: 430px; height: 930px; border-radius: 64px; padding: 16px; background: #120a22;
            box-shadow: 0 60px 140px rgba(0,0,0,0.6), inset 0 0 0 3px #3b2a63, 0 0 120px rgba(139,92,246,0.4); }
   .phone img { display: block; width: 398px; height: 862px; border-radius: 50px; object-fit: cover; object-position: top; }
@@ -59,12 +60,13 @@ async function frame(i) {
 }
 
 window.draw = async t => {
-  const i = Math.min(Math.floor(t * 24), M.frames - 1);
+  // The whole capture plays within the segment (a little faster than real time if it's longer).
+  const i = Math.min(Math.floor(t * Math.max(24, M.frames / (M.dur || 3.5))), M.frames - 1);
   await frame(i);
   const k = smooth(t / (M.dur || 3.5));
   const enter = easeOut(t / 0.6);
   const phone = M.kind === 'phone';
-  const s = (phone ? 0.92 : 0.98) * (0.9 + 0.1 * enter);
+  const s = (phone ? 0.9 : 0.86) * (0.9 + 0.1 * enter);
   const ry = phone ? 14 - 22 * k : -11 + 16 * k;
   const rx = 6 - 4 * k;
   const ty = 60 * (1 - enter);
