@@ -14,6 +14,7 @@ import { goToPoker, pokerTarget } from '../pokerLink.ts';
 import QuickPlay from '../components/QuickPlay.tsx';
 import ActivityTicker from '../components/ActivityTicker.tsx';
 import ChogOfTheDay from '../components/ChogOfTheDay.tsx';
+import ChogRoamer from '../components/roamer/ChogRoamer.tsx';
 
 // The home page has no WebGL at all: the board behind the hero is a still
 // (client/public/home/, drifted by styles/home.css), so the page is up at once
@@ -255,6 +256,7 @@ export default function Home() {
           </ol>
         </section>
       </div>
+      <ChogRoamer />
     </div>
   );
 }
