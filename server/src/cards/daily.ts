@@ -268,6 +268,16 @@ export function cardsDailyProfile(id: string, now = Date.now()): CardsDailyProfi
   };
 }
 
+/** A deleted player (../erase.ts): their attempts go (nobody else's rank depends on a row of theirs being kept). */
+export function eraseCardsDaily(id: string): number {
+  const before = attempts.length;
+  attempts = attempts.filter(a => a.id !== id);
+  for (const day of byDay.values()) day.delete(id);
+  const n = before - attempts.length;
+  if (n) markDirty();
+  return n;
+}
+
 /** Every official attempt on record, oldest first (the dashboard's Analytics tab counts them). */
 export function allCardsDailyAttempts(): readonly CardsDailyAttempt[] {
   return attempts;

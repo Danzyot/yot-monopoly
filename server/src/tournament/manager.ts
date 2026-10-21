@@ -531,6 +531,46 @@ export class TournamentManager {
   }
 
   /** Finished tournaments a player took part in, latest first (their profile). */
+  /**
+   * A deleted player (../erase.ts). Refused while an event they are in is
+   * running (an operator removes them first); off the list of events still
+   * taking registrations; and in finished or cancelled ones, every mention
+   * becomes `to`, "Deleted player" (hosting one too), so the brackets and
+   * everyone else's places stay as they were. Returns the events changed.
+   */
+  forgetPlayer(id: string, to: string, name: string): number {
+    const all = [...this.tournaments.values()];
+    const running = all.find(t => t.d.status === 'running' && t.d.entrants.some(e => e.id === id && !e.removed));
+    if (running) throw new TournamentError(`They are playing in "${running.d.name}" — remove them from it first`);
+    const swap = (x: string) => (x === id ? to : x);
+    let n = 0;
+    for (const t of all) {
+      const d = t.d;
+      const mentioned = d.hostId === id || d.entrants.some(e => e.id === id) || d.places.includes(id);
+      if (!mentioned) continue;
+      if (d.status === 'registering') {
+        d.entrants = d.entrants.filter(e => e.id !== id);
+        if (d.hostId === id) { d.hostId = to; d.hostName = name; }
+      } else {
+        d.entrants = d.entrants.map(e => (e.id === id ? { id: to, name, avatar: '🎩', at: e.at, ...(e.removed && { removed: true }) } : e));
+        d.places = d.places.map(swap);
+        for (const r of d.rounds) {
+          r.byes = r.byes.map(swap);
+          for (const tb of r.tables) {
+            tb.players = tb.players.map(swap);
+            tb.arrived = tb.arrived.map(swap);
+            tb.noShows = tb.noShows.map(swap);
+            if (tb.order) tb.order = tb.order.map(swap);
+          }
+        }
+        if (d.hostId === id) { d.hostId = to; d.hostName = name; }
+      }
+      this.changed(t);
+      n++;
+    }
+    return n;
+  }
+
   resultsOf(playerId: string, limit = 20): TournamentResult[] {
     return [...this.tournaments.values()]
       .filter(t => t.d.status === 'finished' && t.d.places.includes(playerId))

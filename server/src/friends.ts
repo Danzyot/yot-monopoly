@@ -200,6 +200,16 @@ export class FriendStore {
     };
   }
 
+  /** A deleted player (erase.ts): every friendship and request either way. Returns the ids they were friends with. */
+  forget(id: string): string[] {
+    const friends = this.friendIds(id);
+    for (const f of friends) this.unlink(id, f);
+    for (const [from, to] of this.requestsWhere((f, t) => f === id || t === id)) this.requests.delete(`${from}|${to}`);
+    this.byId.delete(id);
+    this.save();
+    return friends;
+  }
+
   /** How `me` and `other` stand, for the button on a profile. */
   status(me: string, other: string): 'self' | 'friends' | 'sent' | 'received' | 'none' {
     if (me === other) return 'self';

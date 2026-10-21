@@ -26,7 +26,9 @@ export interface FriendsDepsLive {
   cards: Pick<CardsRegistry, 'get'>;
 }
 
-export function mountFriends(app: express.Express, io: Server, d: FriendsDepsLive, file: string | null = 'friends.json'): FriendStore {
+export function mountFriends(
+  app: express.Express, io: Server, d: FriendsDepsLive, file: string | null = 'friends.json',
+): { store: FriendStore; changed: (...ids: string[]) => void } {
   const socketsOf = (id: string): Socket[] =>
     [...io.sockets.sockets.values()].filter(s => (s.data as PresenceData).profile?.id === id);
 
@@ -122,5 +124,5 @@ export function mountFriends(app: express.Express, io: Server, d: FriendsDepsLiv
       reply({ ok: true });
     });
   });
-  return store;
+  return { store, changed };
 }

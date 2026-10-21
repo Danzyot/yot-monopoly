@@ -4,6 +4,7 @@
 // its own section.
 // TODO: fold into the shared leaderboard (a game tab, `game: 'cards'` on each
 // record) once the leaderboard page can tell games apart.
+import { DELETED_NAME, isDeletedId } from '../deleted.ts';
 import { debouncedWriter, readJson } from '../jsonstore.ts';
 import { CARDS_GAME_ID } from '../../../shared/cards/meta.ts';
 import type { CardsGameMode, CardsMatchMode } from '../../../shared/cards/rules.ts';
@@ -115,13 +116,27 @@ export function allCardsResults(): readonly CardsRecord[] {
 /** Matches against bots only do not count towards the leaderboard. */
 const isRankedCards = (r: CardsRecord) => r.places.filter(p => !p.isBot).length >= 2;
 
+/** A deleted player (../erase.ts): like Monopoly's anonymizeResults. */
+export function anonymizeCardsResults(id: string, to: string): number {
+  let n = 0;
+  for (const r of records) {
+    r.places = r.places.map(p => {
+      if (p.id !== id) return p;
+      n++;
+      return { id: to, name: DELETED_NAME, isBot: false, score: p.score, ...(p.left && { left: p.left }), ...(p.character && { character: p.character }) };
+    });
+  }
+  if (n) save();
+  return n;
+}
+
 /** Like Monopoly's: games against bots only do not count; a point per opponent beaten. */
 export function cardsLeaderboard(limit = 50): CardsLeaderRow[] {
   const by = new Map<string, CardsLeaderRow>();
   for (const r of records) {
     if (!isRankedCards(r)) continue;
     r.places.forEach((p, i) => {
-      if (p.isBot) return;
+      if (p.isBot || isDeletedId(p.id)) return;
       const row = by.get(p.id) ?? { id: p.id, name: p.name, games: 0, wins: 0, points: 0 };
       row.name = p.name;
       if (p.avatar) row.avatar = p.avatar;

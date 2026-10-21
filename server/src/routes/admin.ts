@@ -5,6 +5,7 @@ import { adminModeConfigured, demoMode } from '../auth.ts';
 import { addBan, listBans, removeBan, type BanKind, type BanScope } from '../bans.ts';
 import { isMuted, listMutes, setMute } from '../chat.ts';
 import { forgetAccount, getAccount, searchAccounts, sharedIpGroups } from '../connections.ts';
+import { EraseRefused, erasePlayer } from '../erase.ts';
 import { botEnabled, postVerifyMessage, sendDirectMessage } from '../discord.ts';
 import { commandSyncStatus, syncCommands } from '../discordRegister.ts';
 import { eventsForGame, loggedGames } from '../eventlog.ts';
@@ -149,6 +150,15 @@ export function adminRoutes(sockets: SocketLayer, loopLag: () => number): expres
     const ok = forgetAccount(req.params.id);
     if (ok) adminLog(who(res), `erased audit history of ${req.params.id}`);
     res.json({ ok });
+  });
+
+  // Everything stored about a player, gone or anonymised (../erase.ts). Bans stay.
+  r.delete('/players/:id', (req, res) => {
+    try {
+      const report = erasePlayer(String(req.params.id));
+      adminLog(who(res), `deleted the data of ${report.name ?? report.id} (${report.id}): ${report.monopolyGames} Monopoly and ${report.cardsGames} Cards games anonymised, ${report.tournaments} tournaments, ${report.wallets} wallets, ${report.friends} friends`);
+      res.json(report);
+    } catch (e) { fail(res, e, e instanceof EraseRefused ? 409 : 500); }
   });
 
   r.get('/alts', (_req, res) => res.json(sharedIpGroups().slice(0, 300)));

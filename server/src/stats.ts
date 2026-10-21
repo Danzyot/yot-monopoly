@@ -1,5 +1,6 @@
 // Finished games and the all-time leaderboard.
 import { debouncedWriter, readJson } from './jsonstore.ts';
+import { DELETED_NAME, isDeletedId } from './deleted.ts';
 
 export interface GameRecord {
   code: string;
@@ -50,6 +51,24 @@ export function recordResult(r: GameRecord): void {
   save();
 }
 
+/**
+ * A deleted player (erase.ts): every place they held becomes `to`, named
+ * "Deleted player", with no picture or Chog. The other players' results and
+ * points stay as they were. Returns how many games they were in.
+ */
+export function anonymizeResults(id: string, to: string): number {
+  let n = 0;
+  for (const r of records) {
+    r.places = r.places.map(p => {
+      if (p.id !== id) return p;
+      n++;
+      return { id: to, name: DELETED_NAME, isBot: false, netWorth: p.netWorth, ...(p.character && { character: p.character }) };
+    });
+  }
+  if (n) save();
+  return n;
+}
+
 /** Every stored result, oldest first (profiles aggregate over these). */
 export function allResults(): readonly GameRecord[] {
   return records;
@@ -75,7 +94,7 @@ export function leaderboard(limit = 100): LeaderRow[] {
   for (const r of records) {
     if (!isRanked(r)) continue;
     r.places.forEach((p, i) => {
-      if (p.isBot) return;
+      if (p.isBot || isDeletedId(p.id)) return;
       const row = by.get(p.id) ?? { id: p.id, name: p.name, games: 0, wins: 0, points: 0 };
       row.name = p.name;
       if (p.avatar) row.avatar = p.avatar;

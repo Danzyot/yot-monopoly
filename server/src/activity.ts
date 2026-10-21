@@ -13,6 +13,7 @@
 import type { ActivityGame, ActivityItem } from '../../shared/activity.ts';
 import type { TournamentSummary } from '../../shared/tournaments.ts';
 import { GAMES } from '../../shared/brand.ts';
+import { isDeletedId } from './deleted.ts';
 
 /** One live table, as much of it as the ticker reads (Monopoly rooms and card tables alike). */
 export interface ActivityTable {
@@ -90,7 +91,7 @@ export function buildActivity(src: ActivitySources): ActivityItem[] {
       for (const r of recent(records, x => x.endedAt)) {
         if (n >= PER_SOURCE) break;
         const w = r.places[0];
-        if (r.private || !w || w.isBot || src.banned(w.id)) continue;
+        if (r.private || !w || w.isBot || isDeletedId(w.id) || src.banned(w.id)) continue;
         const others = r.places.length - 1;
         const text = game === 'monopoly'
           ? `${clip(w.name)} won on ${src.mapName(r.mapId ?? 'classic')}`
@@ -134,7 +135,7 @@ export function buildActivity(src: ActivitySources): ActivityItem[] {
     const href = `/tournaments/${encodeURIComponent(t.id)}`;
     if (t.status === 'finished' && t.champion && t.finishedAt !== null && now - t.finishedAt <= RESULTS_WINDOW_MS) {
       // A champion is a winner's name: published only while results are.
-      if (!src.resultsPublic() || champs >= PER_SOURCE || src.banned(t.champion.id)) continue;
+      if (!src.resultsPublic() || champs >= PER_SOURCE || isDeletedId(t.champion.id) || src.banned(t.champion.id)) continue;
       champs++;
       out.push({ id: `champion:${t.id}`, kind: 'champion', game, at: t.finishedAt, href, text: `${clip(t.champion.name)} took 1st in ${clip(t.name)}` });
     } else if (t.status === 'running' && t.startedAt !== null && running < PER_SOURCE) {
