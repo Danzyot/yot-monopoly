@@ -20,10 +20,10 @@ import {
   type ChogHatShape, type ChogMane, type ChogPaint, type ChogPropId, type ChogWearShape,
 } from './wear.ts';
 
-export * from './wear.ts';
+import { CHOG_CONTRACT, CHOG_SUPPLY, chogName } from './meta.ts';
 
-export const CHOG_SUPPLY = 1969;
-export const CHOG_CONTRACT = '0xc96d31f8626c6d03fae5dcd3d61e3fb9f4a73763';
+export * from './wear.ts';
+export { CHOG_CONTRACT, CHOG_SUPPLY, chogName };
 
 export type ChogSkin =
   | 'Pink' | 'Origin' | 'Red' | 'Black' | 'Yellow' | 'Blue' | 'White' | 'Green' | 'Purple' | 'Multi Colored'
@@ -87,8 +87,6 @@ export function chogArtUrl(tokenId: number, size?: number): string {
   const url = `https://i2c.seadn.io/monad/${CHOG_CONTRACT}/${stem.slice(2)}/${stem}.webp`;
   return size ? `${url}?w=${size}&auto=format` : url;
 }
-
-export const chogName = (tokenId: number) => `Chog #${tokenId}`;
 
 // ---- colours (sampled from the art) ----------------------------------------
 

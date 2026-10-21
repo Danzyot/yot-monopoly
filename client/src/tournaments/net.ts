@@ -1,7 +1,7 @@
 // Tournaments over the shared socket (../net.ts): every event is `tourney:*`.
 import { useEffect, useState } from 'react';
 import { call, getSocket, onEveryConnect } from '../net.ts';
-import { loadChogTokenPref } from '../components/ChogPicker.tsx';
+import { loadChogTokenPref } from '../chogTokenPref.ts';
 import type { TournamentMe, TournamentSummary, TournamentView } from '../../../shared/tournaments.ts';
 
 export const tourneyCall = call;

@@ -4,7 +4,8 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
-import type { Server } from 'node:http';
+import { get as httpGet, type IncomingHttpHeaders, type Server } from 'node:http';
+import { brotliDecompressSync, gunzipSync } from 'node:zlib';
 
 process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'yot-seo-'));
 process.env.RATE_LIMIT_OFF = '1';
@@ -158,6 +159,44 @@ test('GET a page: its meta and status', async () => {
     const html = await res.text();
     assert.ok(html.includes(`<title>${title}</title>`), `${path}: ${html.slice(0, 300)}`);
   }
+});
+
+/** A raw GET (fetch would undo the compression): status, headers and the bytes as sent. */
+function rawGet(path: string, headers: Record<string, string>): Promise<{ status: number; headers: IncomingHttpHeaders; body: Buffer }> {
+  return new Promise((resolve, reject) => {
+    httpGet(base + path, { headers }, res => {
+      const parts: Buffer[] = [];
+      res.on('data', (c: Buffer) => parts.push(c));
+      res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body: Buffer.concat(parts) }));
+    }).on('error', reject);
+  });
+}
+
+test('the page goes out Brotli- or gzip-compressed when the browser takes it, the same page either way', async () => {
+  const plain = await rawGet('/cards', { 'accept-encoding': 'identity' });
+  assert.equal(plain.headers['content-encoding'], undefined);
+  assert.match(String(plain.headers.vary), /Accept-Encoding/i);
+  const html = plain.body.toString('utf8');
+  assert.ok(html.includes('<title>Cards · Chog Games</title>'));
+
+  const br = await rawGet('/cards', { 'accept-encoding': 'gzip, deflate, br' });
+  assert.equal(br.headers['content-encoding'], 'br');
+  assert.match(String(br.headers['content-type']), /text\/html/);
+  assert.equal(br.headers['cache-control'], 'no-cache');
+  assert.match(String(br.headers.vary), /Accept-Encoding/i);
+  assert.equal(brotliDecompressSync(br.body).toString('utf8'), html);
+  assert.ok(br.body.length < html.length / 2, `${br.body.length} of ${html.length}`);
+
+  const gz = await rawGet('/cards', { 'accept-encoding': 'gzip' });
+  assert.equal(gz.headers['content-encoding'], 'gzip');
+  assert.equal(gunzipSync(gz.body).toString('utf8'), html);
+
+  // Unknown pages too, keeping their 404; and a repeat visit is still a 304.
+  const missing = await rawGet('/what', { 'accept-encoding': 'br' });
+  assert.equal(missing.status, 404);
+  assert.equal(missing.headers['content-encoding'], 'br');
+  const again = await rawGet('/cards', { 'accept-encoding': 'gzip, deflate, br', 'if-none-match': String(br.headers.etag) });
+  assert.equal(again.status, 304);
 });
 
 test('robots.txt keeps crawlers out of private pages and points at the sitemap', async () => {

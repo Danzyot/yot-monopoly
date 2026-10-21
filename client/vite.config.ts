@@ -80,6 +80,9 @@ export default defineConfig({
           // React's string renderer (the card table draws its SVG faces to textures with it,
           // cards/three/cardAtlas.ts) is 200 KB the home page never needs: keep it out of 'react'.
           if (/[\\/]node_modules[\\/]react-dom[\\/](server|cjs[\\/]react-dom-server)/.test(id)) return 'react-server';
+          // The socket client: on the first load (the hub's live table counts), but it changes far
+          // less often than the app, so a deploy does not make returning players fetch it again.
+          if (/[\\/]node_modules[\\/](socket\.io-client|socket\.io-parser|engine\.io-client|engine\.io-parser|@socket\.io)[\\/]/.test(id)) return 'socket';
           // Named, or Rollup would pull React into 'three' (fiber imports it).
           if (/[\\/]node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom)[\\/]/.test(id)) return 'react';
           // Bundler helpers (Vite's lazy-import preloader…) ride with React,

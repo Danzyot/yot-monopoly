@@ -35,6 +35,7 @@ import { staticClient } from './staticFiles.ts';
 import { mountCrawlerFiles, spaHandler } from './seo.ts';
 import { mountSite } from './routes/site.ts';
 import { mountActivity } from './routes/activity.ts';
+import { mountChogs } from './routes/chogs.ts';
 import { allResults, leaderboard, loadResults } from './stats.ts';
 import { buildProfile } from './profiles.ts';
 import { devFakeDiscord, gateInfo } from './requirements.ts';
@@ -170,6 +171,8 @@ mountTextOverrides(app);
 mountSite(app);
 // The home page's live ticker: recent wins, tables starting, champions (public, cached 10 s).
 mountActivity(app, { monopoly: sockets.registry, cards: cards.registry, tournaments: tourneys.manager });
+// One token's traits for the home page's Chog of the Day (the page does not ship the trait table).
+mountChogs(app);
 
 app.get('/api/leaderboard', (_req, res) => {
   if (!isOn('leaderboard')) { res.status(404).json({ error: 'The leaderboard is switched off' }); return; }

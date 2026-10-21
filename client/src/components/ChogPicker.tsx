@@ -10,22 +10,8 @@ import { chogArtUrl, chogLook, chogName, isLegendary } from '../../../shared/cho
 import { refreshHolderStatus, useWalletStatus, type WalletStatus } from '../wallet/walletApi.ts';
 import { useAuth } from '../auth.tsx';
 
-/** The gallery's "Play as Chog #n" remembers the token here, next to CHARACTER_PREF_KEY ('chog'). */
-export const CHOG_TOKEN_PREF_KEY = 'yot:chog-token';
-
-export function loadChogTokenPref(): number | null {
-  try {
-    const n = Number(localStorage.getItem(CHOG_TOKEN_PREF_KEY));
-    return Number.isInteger(n) && n > 0 ? n : null;
-  } catch { return null; }
-}
-
-export function saveChogTokenPref(token: number | null) {
-  try {
-    if (token) localStorage.setItem(CHOG_TOKEN_PREF_KEY, String(token));
-    else localStorage.removeItem(CHOG_TOKEN_PREF_KEY);
-  } catch { /* private mode */ }
-}
+// The remembered pick lives apart from the picker (chogTokenPref.ts), so the home page can read it.
+export { CHOG_TOKEN_PREF_KEY, loadChogTokenPref, saveChogTokenPref } from '../chogTokenPref.ts';
 
 /** The holder status, re-verified when the component using it mounts (the server rate-limits the chain read). */
 export function useYourChogs(): WalletStatus | null {
