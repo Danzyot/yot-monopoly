@@ -22,6 +22,7 @@ import { themeStyle } from '../themeStyle.ts';
 import RequirementsPicker from './RequirementsPicker.tsx';
 import { ProfileLink } from '../community.tsx';
 import { askConfirm } from './Modal.tsx';
+import { loadColorPref, saveColorPref } from './outfitBits.tsx';
 import { HowToPlayButton } from './HowToPlay.tsx';
 import OutfitPicker, { loadOutfitPref, sameOutfit, saveOutfitPref } from './OutfitPicker.tsx';
 import ChogPicker, { ChogArt, loadChogTokenPref } from './ChogPicker.tsx';
@@ -182,7 +183,7 @@ function CharacterPicker({ room, me, seat, onWear }: {
             return (
               <button key={c} disabled={taken} aria-label={`Colour ${c}${taken ? ' (taken)' : ''}`} aria-pressed={seat.color === c}
                 className={`color-pick ${seat.color === c ? 'on' : ''}`} style={{ background: c }}
-                onClick={() => call('room:seat', { color: c }).catch(toastError)} />
+                onClick={() => { saveColorPref(c); call('room:seat', { color: c }).catch(toastError); }} />
             );
           })}
         </div>
@@ -364,6 +365,15 @@ export default function Lobby({ room, me, spectating, chat }: {
       && (characterShared(prefChar) || !room.seats.some(s => s.character === prefChar && s.id !== me));
     const pref = loadOutfitPref(free ? prefChar as CharacterId : mySeat.character);
     if (!sameOutfit(pref, mySeat.outfit)) call('room:seat', { outfit: pref }).catch(() => {});
+  }, [mySeat, room.code, room.seats, me]);
+  // The colour picked in the welcome tour (or last picked in a lobby): once per room, when nobody wears it.
+  const tinted = useRef<string | null>(null);
+  useEffect(() => {
+    if (!mySeat || tinted.current === room.code) return;
+    tinted.current = room.code;
+    const pref = loadColorPref();
+    if (!pref || pref === mySeat.color || !PLAYER_COLORS.includes(pref) || room.seats.some(s => s.color === pref && s.id !== me)) return;
+    call('room:seat', { color: pref }).catch(() => {});
   }, [mySeat, room.code, room.seats, me]);
   const wear = (o: Outfit) => {
     if (mySeat) saveOutfitPref(o, mySeat.character);

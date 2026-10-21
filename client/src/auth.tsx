@@ -10,6 +10,10 @@ interface AuthState {
   canHost: boolean;
   /** Re-asks the server (after linking a wallet, say). */
   refreshMe(): Promise<void>;
+  /** An account first seen in the last few days: the welcome tour shows once. */
+  newPlayer: boolean;
+  /** Play under a new name (the welcome tour): a fresh session carrying it. */
+  rename(name: string): Promise<void>;
   config: SiteConfig;
   ready: boolean;
   /** Set when the server says this account or address is banned. */
@@ -35,6 +39,7 @@ const Ctx = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [canHost, setCanHost] = useState(false);
+  const [newPlayer, setNewPlayer] = useState(false);
   const [config, setConfig] = useState<SiteConfig>(EMPTY_CONFIG);
   const [ready, setReady] = useState(false);
   const [banned, setBanned] = useState<string | null>(null);
@@ -51,8 +56,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const loadConfig = api<SiteConfig>('/api/config').then(setConfig).catch(() => {});
     const loadMe = getToken()
-      ? api<{ profile: PlayerProfile; canHost?: boolean }>('/api/auth/me')
-        .then(r => { setProfile(r.profile); setCanHost(!!r.canHost); if (t) toast(`Signed in as ${r.profile.name}`); })
+      ? api<{ profile: PlayerProfile; canHost?: boolean; newPlayer?: boolean }>('/api/auth/me')
+        .then(r => { setProfile(r.profile); setCanHost(!!r.canHost); setNewPlayer(!!r.newPlayer); if (t) toast(`Signed in as ${r.profile.name}`); })
         .catch((e: Error & { status?: number }) => {
           if (e.status === 403) setBanned(e.message);
           if (e.status === 401 || e.status === 403) setToken(null);
@@ -67,9 +72,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshMe = useCallback(async () => {
     if (!getToken()) { setCanHost(false); return; }
     try {
-      const r = await api<{ profile: PlayerProfile; canHost?: boolean }>('/api/auth/me');
+      const r = await api<{ profile: PlayerProfile; canHost?: boolean; newPlayer?: boolean }>('/api/auth/me');
       setProfile(r.profile);
       setCanHost(!!r.canHost);
+      setNewPlayer(!!r.newPlayer);
     } catch { /* keep what we have; a refused token is handled on the next load */ }
   }, []);
 
@@ -82,7 +88,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshMe]);
 
   const value: AuthState = {
-    profile, canHost, refreshMe, config, ready, banned, setBanned,
+    profile, canHost, refreshMe, newPlayer, config, ready, banned, setBanned,
+    async rename(name: string) {
+      const r = await api<{ token: string; profile: PlayerProfile }>('/api/auth/name', { method: 'POST', json: { name } });
+      setToken(r.token);
+      setProfile(p => (p ? { ...p, name: r.profile.name } : r.profile));
+      // Tables read the name from the socket's session.
+      resetSocket();
+    },
     signInDiscord() {
       location.href = `/api/auth/discord/start?return=${encodeURIComponent(location.pathname + location.search)}`;
     },
@@ -95,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(null);
       setProfile(null);
       setCanHost(false);
+      setNewPlayer(false);
       resetSocket();
     },
     openSignIn: () => setSignInOpen(true),

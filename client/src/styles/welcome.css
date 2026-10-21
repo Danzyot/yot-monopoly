@@ -1,0 +1,65 @@
+/* The first-visit welcome tour (components/WelcomeTour.tsx). Loaded with it. */
+
+.modal.welcome { max-width: 640px; display: flex; flex-direction: column; gap: 12px; }
+.welcome .howto-head h2 { margin: 0; }
+
+.welcome-steps { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; }
+.welcome-steps li {
+  flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0;
+  padding: 6px 8px; border-radius: 10px; background: rgba(0, 0, 0, 0.25);
+  font: 800 13px/1.2 var(--font), sans-serif; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.welcome-steps li span {
+  flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(255, 255, 255, 0.12); font-size: 12px;
+}
+.welcome-steps li.on { color: var(--text); background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.welcome-steps li.on span, .welcome-steps li.done span { background: var(--accent); color: #fff; }
+
+.welcome-body { display: flex; flex-direction: column; gap: 10px; }
+.welcome-q { margin: 4px 0 0; font: 800 17px/1.3 var(--font), sans-serif; color: var(--text); }
+.welcome-name {
+  font: 800 20px/1.2 var(--font), sans-serif; padding: 10px 12px; border-radius: 10px;
+  border: 2px solid var(--line); background: rgba(0, 0, 0, 0.3); color: var(--text); width: 100%; box-sizing: border-box;
+}
+.welcome-name:focus { border-color: var(--accent); outline: none; }
+.welcome-note { margin: 0; font-size: 13px; line-height: 1.4; color: var(--muted); }
+.welcome-note .ft-link { color: var(--accent); font-weight: 800; }
+.welcome-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.welcome-actions .btn.big { width: auto; flex: 1 1 200px; margin-top: 0; }
+
+.welcome-look { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 12px; align-items: start; }
+.welcome-preview, .welcome-preview-wait {
+  height: 240px; border-radius: 14px; background: radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.14), rgba(0, 0, 0, 0.3));
+  overflow: hidden;
+}
+.welcome-preview { display: grid; place-items: center; }
+.welcome-preview .char-preview-canvas { width: 100% !important; height: 100% !important; }
+.welcome-preview .char-preview-emoji { width: 120px; height: 120px; font-size: 64px; }
+.welcome-pick { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.welcome-pick .color-grid { margin-top: 0; }
+
+.welcome-games { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.welcome-game {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left;
+  padding: 14px; border-radius: 14px; border: 2px solid var(--line); background: rgba(0, 0, 0, 0.28);
+  color: var(--text); cursor: pointer; font: inherit; min-height: 96px;
+}
+.welcome-game:hover, .welcome-game:focus-visible { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, rgba(0, 0, 0, 0.28)); }
+.welcome-game span { font-size: 28px; line-height: 1; margin-bottom: 4px; }
+.welcome-game b { font: 400 20px/1.1 var(--display, var(--font)), sans-serif; }
+.welcome-game small { font-size: 12.5px; color: var(--muted); font-weight: 700; }
+
+@media (max-width: 560px) {
+  .welcome-steps li { font-size: 0; gap: 0; justify-content: center; }
+  .welcome-steps li span { font-size: 12px; }
+  .welcome-steps li.on { font-size: 12px; gap: 6px; }
+  .welcome-look { grid-template-columns: minmax(0, 1fr); }
+  .welcome-preview, .welcome-preview-wait { height: 190px; }
+  .welcome-games { grid-template-columns: minmax(0, 1fr); }
+  .welcome-game { min-height: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-game { transition: none; }
+}

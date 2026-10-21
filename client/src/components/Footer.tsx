@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth.tsx';
 import { openPoker } from '../pokerLink.ts';
+import { WELCOME_EVENT } from './WelcomeHost.tsx';
 import { BRAND, GAMES, POKER_URL } from '../../../shared/brand.ts';
 import { OPENSEA_URL } from '../../../shared/seo.ts';
 import '../styles/footer.css';
@@ -44,6 +45,7 @@ export default function Footer() {
               </li>
               <li><Link to="/tournaments">Tournaments</Link></li>
               <li><button type="button" className="ft-link" onClick={() => setHowTo(true)}>How to play</button></li>
+              {profile && <li><button type="button" className="ft-link" onClick={() => window.dispatchEvent(new Event(WELCOME_EVENT))}>Replay the welcome tour</button></li>}
             </ul>
           </div>
           <div className="ft-col">

@@ -37,6 +37,20 @@ export function saveOutfitPref(o: Outfit, character: CharacterId) {
   } catch { /* private mode */ }
 }
 
+/** The colour picked in the welcome tour: worn at the next table when it is free there. */
+export const COLOR_PREF_KEY = 'yot:color';
+
+export function loadColorPref(): string | null {
+  try {
+    const c = localStorage.getItem(COLOR_PREF_KEY);
+    return c && /^#[0-9a-f]{6}$/i.test(c) ? c : null;
+  } catch { return null; }
+}
+
+export function saveColorPref(c: string) {
+  try { localStorage.setItem(COLOR_PREF_KEY, c); } catch { /* private mode */ }
+}
+
 export const sameOutfit = (a: Outfit | undefined, b: Outfit | undefined) =>
   OUTFIT_SLOTS.every(s => (a?.[s.id] ?? '') === (b?.[s.id] ?? ''));
 

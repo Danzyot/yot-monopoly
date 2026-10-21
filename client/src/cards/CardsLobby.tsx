@@ -30,7 +30,7 @@ import { askConfirm } from '../components/Modal.tsx';
 import { CardBack, CardFace } from './CardFace.tsx';
 import { CardsBackdrop } from './CardsBackdrop.tsx';
 import ChogPicker, { ChogArt, saveChogTokenPref } from '../components/ChogPicker.tsx';
-import { WornItems, loadOutfitPref, sameOutfit, saveOutfitPref } from '../components/outfitBits.tsx';
+import { WornItems, loadColorPref, loadOutfitPref, sameOutfit, saveColorPref, saveOutfitPref } from '../components/outfitBits.tsx';
 
 // The 3D character preview and the outfit picker's fit check bring three.js: only when someone opens the picker.
 const CharacterPreview = lazy(() => import('../three/characters/CharacterPreview.tsx'));
@@ -211,7 +211,7 @@ function CharacterPicker({ room, me, seat, onWear }: { room: CardsRoomView; me: 
             return (
               <button key={c} disabled={taken} aria-label={`Colour ${c}${taken ? ' (taken)' : ''}`} aria-pressed={seat.color === c}
                 className={`color-pick ${seat.color === c ? 'on' : ''}`} style={{ background: c }}
-                onClick={() => cardsCall('cards:seat', { color: c }).catch(toastError)} />
+                onClick={() => { saveColorPref(c); cardsCall('cards:seat', { color: c }).catch(toastError); }} />
             );
           })}
         </div>
@@ -348,6 +348,15 @@ export default function CardsLobby({ room, me, spectating, chat }: {
     const pref = loadOutfitPref(mySeat.character);
     if (!sameOutfit(pref, mySeat.outfit)) cardsCall('cards:seat', { outfit: pref }).catch(() => {});
   }, [mySeat, room.code]);
+  // The colour picked in the welcome tour (or last picked at a table), when this table has it free.
+  const tinted = useRef<string | null>(null);
+  useEffect(() => {
+    if (!mySeat || tinted.current === room.code) return;
+    tinted.current = room.code;
+    const pref = loadColorPref();
+    if (!pref || pref === mySeat.color || !CARDS_SEAT_COLORS.includes(pref) || room.seats.some(s => s.color === pref && s.id !== me)) return;
+    cardsCall('cards:seat', { color: pref }).catch(() => {});
+  }, [mySeat, room.code, room.seats, me]);
   const wear = (o: Outfit) => {
     if (mySeat) saveOutfitPref(o, mySeat.character);
     cardsCall('cards:seat', { outfit: o }).catch(toastError);

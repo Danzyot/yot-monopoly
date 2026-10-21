@@ -10,7 +10,12 @@ import { authorizeUrl, completeOAuth, discordEnabled, redirectUriFor } from '../
 import { handleInteraction, interactionsConfigured, validSignature } from '../interactions.ts';
 import { answerLiveCommand, type CommandInteraction } from '../discordCommands.ts';
 import { codeStatus, startCode } from '../verifycode.ts';
-import { authed, fail, requestBase } from '../http.ts';
+import { getAccount } from '../connections.ts';
+import { setChosenName, withChosenName } from '../displayNames.ts';
+import { authed, fail, rateLimit, requestBase } from '../http.ts';
+
+/** An account first seen this recently (or not yet at all) gets the welcome tour. */
+export const NEW_PLAYER_MS = 3 * 24 * 3_600_000;
 
 /** Must be mounted BEFORE express.json(): Discord signs the raw body. */
 export function mountInteractions(app: express.Express) {
@@ -122,7 +127,7 @@ export function authRoutes(): express.Router {
       if (!state) throw new Error('That sign-in link expired — press Sign in again');
       if (req.query.error) throw new Error('Discord sign-in was cancelled');
       const d = await completeOAuth(String(req.query.code ?? ''), redirectUriFor(requestBase(req)));
-      const profile = makeDiscordProfile(d);
+      const profile = withChosenName(makeDiscordProfile(d));
       const ban = findBan({ id: profile.id, discordId: d.id, ip: req.ip });
       if (ban) throw new Error(banMessage(ban));
       res.redirect(`${ret}#dtoken=${encodeURIComponent(signToken(profile))}`);
@@ -138,7 +143,7 @@ export function authRoutes(): express.Router {
   r.get('/code/status', (req, res) => {
     const { pending, resolution } = codeStatus(String(req.query.code ?? ''));
     if (!resolution) { res.json({ pending }); return; }
-    const profile = makeDiscordProfile(resolution);
+    const profile = withChosenName(makeDiscordProfile(resolution));
     const ban = findBan({ id: profile.id, discordId: resolution.id, ip: req.ip });
     if (ban) { res.status(403).json({ error: banMessage(ban) }); return; }
     res.json({ pending: false, token: signToken(profile), profile });
@@ -159,8 +164,23 @@ export function authRoutes(): express.Router {
     if (!p) { res.status(401).json({ error: 'Not signed in' }); return; }
     const ban = findBan({ id: p.id, discordId: p.discord?.id, ip: req.ip });
     if (ban) { res.status(403).json({ error: banMessage(ban) }); return; }
-    // Whether this player may host on Poker (operator, Chog holder or approved host).
-    res.json({ profile: p, canHost: canHost(p.id) });
+    // Whether this player may host on Poker (operator, Chog holder or approved host),
+    // and whether they are new here (the client shows the welcome tour once).
+    const seen = getAccount(p.id)?.firstSeen;
+    res.json({ profile: p, canHost: canHost(p.id), newPlayer: seen === undefined || Date.now() - seen < NEW_PLAYER_MS });
+  });
+
+  // Choose the name to play under (the welcome tour). Answers a fresh session
+  // token carrying it; the next Discord sign-in keeps it too.
+  r.post('/name', rateLimit(10, 60 * 60_000), (req, res) => {
+    const p = authed(req);
+    if (!p) { res.status(401).json({ error: 'Sign in first' }); return; }
+    const ban = findBan({ id: p.id, discordId: p.discord?.id, ip: req.ip });
+    if (ban) { res.status(403).json({ error: banMessage(ban) }); return; }
+    try {
+      const profile = { ...p, name: setChosenName(p.id, req.body?.name) };
+      res.json({ token: signToken(profile), profile });
+    } catch (e) { fail(res, e); }
   });
 
   return r;

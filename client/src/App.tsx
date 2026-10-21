@@ -10,6 +10,7 @@ import { DialogHost } from './components/Modal.tsx';
 import { TextEditHost } from './textEdit.tsx';
 import ErrorBoundary from './components/ErrorBoundary.tsx';
 import { useRouteMeta } from './routeMeta.ts';
+import WelcomeHost from './components/WelcomeHost.tsx';
 import './styles/site.css';
 
 // Only the home page ships in the first download; every other page (and
@@ -86,6 +87,7 @@ function Shell() {
       {/* Every page but the game screens; its own boundary so it never holds a page up. */}
       {!inRoom && <Suspense fallback={null}><ErrorBoundary resetKey={path}><Footer /></ErrorBoundary></Suspense>}
       <AuthModalHost />
+      <WelcomeHost />
       <BanScreen />
       <ToastHost />
       <DialogHost />
