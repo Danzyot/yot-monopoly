@@ -195,7 +195,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
           <span className="tb-meta">{tableLabel(getMap(game.mapId).name, theme.name)}</span>
           {daily
             ? <span className="tb-turn tb-daily" title={`Daily Challenge #${daily.number}${daily.practice ? ' (practice)' : ''}: your turn ${daily.turns} of ${daily.maxTurns}`}>
-                📅 Daily #{daily.number}{daily.practice ? ' · practice' : ''} · Your turn {daily.turns}/{daily.maxTurns}
+                📅<span className="hide-sm"> Daily #{daily.number}{daily.practice ? ' · practice' : ''} ·</span> Turn {daily.turns}/{daily.maxTurns}
               </span>
             : <span className="tb-turn">Turn {game.turnNumber}</span>}
           {!connected && <span className="tag warn">reconnecting…</span>}
