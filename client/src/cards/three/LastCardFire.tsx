@@ -1,14 +1,15 @@
 // Last card, on fire: a Chog down to one card burns. Tongues of flame lick up
 // round the figure, white-hot at the root, orange, then red as they rise and
-// thin; embers flick up off the top, and a hot-seat glow spreads on the felt
-// under them. Once they have called "Last card!" the fire burns taller and
+// thin; embers flick up off the top, a hot-seat glow spreads on the felt
+// under them, and an aura glows round the figure (behind it: the figure's own
+// depth keeps it a halo round the silhouette). Once they have called "Last card!" the fire burns taller and
 // brighter, with a Monad-purple heart. The match's winner, about to dance, is
 // spared.
 //
 // Two instanced meshes for the whole table, whatever the number of fires:
-// the flames (upright teardrop sprites turned to the camera, nudged toward it
-// so the figure does not hide them) and the glows (the hot seat lying on the
-// felt, and the embers). Both add their light to the scene; no real light
+// the flames (upright teardrop sprites turned to the camera, all round the
+// figure) and the glows (the hot seat lying on the felt, the aura, and the
+// embers). Both add their light to the scene; no real light
 // (a light would cost every material a recompile). Low quality burns fewer
 // tongues; reduced motion keeps the glow and a still fire, nothing rising.
 
@@ -64,7 +65,7 @@ function dispose(im: InstancedMesh) {
 }
 
 export function LastCardFire({ state, lite }: { state: RefObject<SceneState | null>; lite: boolean }) {
-  const per = lite ? 14 : 28;
+  const per = lite ? 18 : 32;
   // A tongue of flame: a teardrop, hot and solid at its round root, soft at its tip.
   const flameTex = useCanvasTexture(64, 128, g => {
     g.filter = 'blur(3px)';
@@ -90,7 +91,7 @@ export function LastCardFire({ state, lite }: { state: RefObject<SceneState | nu
     g.fillRect(0, 0, 128, 128);
   }, []);
   const flames = useMemo(() => sprites(flameTex, MAX_SEATS * per, 6), [flameTex, per]);
-  const glows = useMemo(() => sprites(glowTex, MAX_SEATS * (EMBERS + 1), 5), [glowTex]);
+  const glows = useMemo(() => sprites(glowTex, MAX_SEATS * (EMBERS + 2), 5), [glowTex]);
   useEffect(() => () => { dispose(flames); dispose(glows); }, [flames, glows]);
   /** Each player's fire, 0 (out) to 1 (called), eased so it flares up and dies down. */
   const heat = useRef(new Map<string, number>());
@@ -138,27 +139,33 @@ export function LastCardFire({ state, lite }: { state: RefObject<SceneState | nu
       dummy.scale.set(4.2 * h, 4.2 * h, 1);
       putGlow(col.copy(GLOW).lerp(MONAD, called ? 0.3 : 0).multiplyScalar(0.9 * h * pulse));
 
+      // The aura: a tall glow just behind the figure, facing the camera.
+      dummy.position.set(base.x - toCam.x * 0.6, FELT_Y + 1.25, base.z - toCam.z * 0.6);
+      dummy.quaternion.copy(camera.quaternion);
+      dummy.scale.set(3.2 * h, 3.9 * h, 1);
+      putGlow(col.copy(ORANGE).lerp(MONAD, called ? 0.35 : 0).multiplyScalar(0.45 * h * pulse));
+
       // Tongues of flame: each licks up from the feet, narrowing and cooling as it goes.
-      const tall = 1.8 + 0.9 * h;
+      const tall = 2.1 + 1.1 * h;
       for (let i = 0; i < per; i++) {
         const r1 = hash01(seat * 97 + i * 13), r2 = hash01(seat * 31 + i * 7 + 5);
         const t = reduced ? 0.1 + 0.55 * r2 : (time * (0.8 + 0.6 * r1) + r2) % 1;
-        // Round the figure, more of them on the camera's side.
-        const a = yaw + (r1 - 0.5) * Math.PI * 1.7 + (reduced ? 0 : Math.sin(time * 0.7 + i) * 0.2);
-        const rad = (0.5 + 0.35 * r2) * (1 - 0.45 * t);
+        // All round the figure (those behind it show round its silhouette; the face stays clear).
+        const a = yaw + Math.PI + (r1 - 0.5) * Math.PI * 2 + (reduced ? 0 : Math.sin(time * 0.7 + i) * 0.2);
+        const rad = (0.55 + 0.4 * r2) * (1 - 0.45 * t);
         const sway = reduced ? 0 : Math.sin(time * 8 + i * 1.7) * 0.08 * t;
         dummy.position.set(
-          base.x + Math.sin(a) * rad + toCam.x * 0.25 + sway * toCam.z,
+          base.x + Math.sin(a) * rad + toCam.x * 0.1 + sway * toCam.z,
           FELT_Y + 0.05 + t * tall * (0.75 + 0.35 * r1),
-          base.z + Math.cos(a) * rad + toCam.z * 0.25 - sway * toCam.x,
+          base.z + Math.cos(a) * rad + toCam.z * 0.1 - sway * toCam.x,
         );
         dummy.rotation.set(0, yaw, reduced ? 0 : Math.sin(time * 5 + i) * 0.12);
-        const size = (1.25 - 0.85 * t) * (0.7 + 0.3 * h) * (0.8 + 0.4 * r1);
-        dummy.scale.set(size * 0.6, size * 1.25, 1);
+        const size = (1.55 - 0.95 * t) * (0.7 + 0.3 * h) * (0.8 + 0.4 * r1);
+        dummy.scale.set(size * 0.7, size * 1.45, 1);
         flameColor(t, col);
         // Called: some tongues burn Monad purple at the root.
         if (called && i % 3 === 0 && t < 0.5) col.lerp(MONAD, 0.75 * (1 - t * 2));
-        putFlame(col.multiplyScalar(1.5 * h * (1 - t) ** 1.1));
+        putFlame(col.multiplyScalar(1.6 * h * (1 - t) ** 0.9));
       }
 
       // Embers, flicking up off the top.
