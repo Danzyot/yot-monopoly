@@ -16,6 +16,9 @@ import { authed, rateLimit } from './http.ts';
 import { trustedProxyHops } from './ip.ts';
 import { armPersistence, restoreLive } from './persist.ts';
 import { adminRoutes } from './routes/admin.ts';
+import { analyticsRoutes, onlinePlayers } from './routes/analytics.ts';
+import { createLiveSampler } from './liveSamples.ts';
+import { createVisitCounter } from './visits.ts';
 import { authRoutes, mountInteractions, pokerOrigins } from './routes/auth.ts';
 import { mountMusic } from './routes/music.ts';
 import { mountGraphics } from './routes/graphics.ts';
@@ -142,6 +145,12 @@ const restoredTourneys = tourneys.manager.restore();
 if (restoredTourneys) console.log(`Restored ${restoredTourneys} live tournament(s)`);
 tourneys.manager.armPersistence();
 
+// The Analytics tab's two aggregate counters (counts only, 90 days): peak
+// connections sampled every few minutes, and page loads per page per day.
+const liveSamples = createLiveSampler({ read: () => ({ sockets: sockets.connectedCount(), players: onlinePlayers(sockets) }) });
+liveSamples.start();
+const visits = createVisitCounter();
+
 let loopLagMs = 0;
 {
   let last = Date.now();
@@ -168,6 +177,7 @@ app.get('/api/config', (_req, res) => {
 });
 
 app.use('/api/auth', authRoutes());
+app.use('/api/admin/analytics', analyticsRoutes({ sockets, cards, tournaments: tourneys.manager, samples: liveSamples, visits }));
 app.use('/api/admin', adminRoutes(sockets, () => loopLagMs));
 app.use('/api/wallet', walletRoutes());
 // Chog Poker asks which Chogs a player holds (signed, server to server).
@@ -269,7 +279,8 @@ if (existsSync(dist)) {
   // Every page is index.html, with that page's title, description and share
   // tags written in (seo.ts), and status 404 where no page answers.
   // A profile's preview is the player's own card (playerCard.ts).
-  app.get(/^\/(?!api|socket\.io).*/, spaHandler(join(dist, 'index.html'), profileMeta));
+  // Page loads are counted on the way (visits.ts: counts only, no cookies).
+  app.get(/^\/(?!api|socket\.io).*/, visits.middleware(), spaHandler(join(dist, 'index.html'), profileMeta));
 }
 
 // Failing to listen (port taken) is fatal: without this it would only be logged above.

@@ -1,6 +1,6 @@
 // The dashboard's tabs, in order. Data-driven so adding a module is one entry
 // here: the page, the tab strip and the /admin/<id> routes all come from this.
-import type { ComponentType } from 'react';
+import { Suspense, lazy, type ComponentType } from 'react';
 import AltsTab from './AltsTab.tsx';
 import BansTab from './BansTab.tsx';
 import ContentTab from './ContentTab.tsx';
@@ -15,6 +15,16 @@ import PlayersTab from './PlayersTab.tsx';
 import RoomsTab from './RoomsTab.tsx';
 import MusicManager from './MusicManager.tsx';
 
+// The charts load only when the tab is opened.
+const AnalyticsBody = lazy(() => import('./AnalyticsTab.tsx'));
+function AnalyticsTab() {
+  return (
+    <Suspense fallback={<div className="adm-stats" aria-busy="true">{Array.from({ length: 8 }, (_, i) => <div key={i} className="sk sk-tile" />)}</div>}>
+      <AnalyticsBody />
+    </Suspense>
+  );
+}
+
 export interface AdminTab {
   id: string;
   label: string;
@@ -24,6 +34,7 @@ export interface AdminTab {
 
 export const ADMIN_TABS: AdminTab[] = [
   { id: 'overview', label: 'Overview', icon: '📊', Component: OverviewTab },
+  { id: 'analytics', label: 'Analytics', icon: '📈', Component: AnalyticsTab },
   { id: 'rooms', label: 'Rooms', icon: '🎲', Component: RoomsTab },
   { id: 'players', label: 'Players', icon: '👤', Component: PlayersTab },
   { id: 'hosts', label: 'Hosts', icon: '🏆', Component: HostsTab },
