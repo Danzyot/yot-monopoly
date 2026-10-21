@@ -14,6 +14,10 @@ import {
 } from '../../../shared/cards/daily.ts';
 import { playCardsDaily, shareDaily, untilNext, useCardsDaily, useCardsDailyHistory } from './daily.ts';
 import './daily.css';
+import { CARDS_DEFAULT_TABLE, getCardsTable } from '../../../shared/cards/tables.ts';
+
+/** A daily table has no lobby to pick a setting in: it is dealt in the default one. */
+const DAILY_TABLE = getCardsTable(CARDS_DEFAULT_TABLE);
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -136,7 +140,7 @@ export default function DailyCard() {
         <CalendarTile date={info.date} />
         <div className="cd-titles">
           <h2 id="cd-title">Daily Challenge <span className="cd-num">#{info.number}</span></h2>
-          <p className="muted small">Everyone gets the same cards today. Beat {bots} in as few turns as you can: the fastest wins top the board. New deal in {untilNext(info.endsAt)}.</p>
+          <p className="muted small">Everyone gets the same cards today, at the {DAILY_TABLE.name} table. Beat {bots} in as few turns as you can: the fastest wins top the board. New deal in {untilNext(info.endsAt)}.</p>
         </div>
         {streak > 0 && (
           <span className="cd-streak" title={`${streak} day${streak === 1 ? '' : 's'} in a row (best ${you!.streaks.best})${you!.streaks.winStreak ? ` · ${you!.streaks.winStreak} won in a row` : ''}`}>

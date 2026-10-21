@@ -8,6 +8,7 @@ import { modeLabel, type CardsRules } from './rules.ts';
 import type { CardsAction, CardsBotLevel, CardsView } from './types.ts';
 import type { TournamentTableInfo } from '../tournaments.ts';
 import type { CardsDailyTableInfo } from './daily.ts';
+import type { CardsTableId } from './tables.ts';
 
 export type CardsRoomStatus = 'lobby' | 'playing' | 'finished';
 
@@ -59,6 +60,8 @@ export interface CardsRoomView {
   spectators: number;
   maxPlayers: number;
   rules: CardsRules;
+  /** Where the table is played (shared/cards/tables.ts); the host's pick in the lobby. */
+  table: CardsTableId;
   status: CardsRoomStatus;
   seats: CardsSeatView[];
   /** This viewer's view of the match (their own hand only). */
@@ -97,6 +100,7 @@ export interface CardsConfigure {
   rules?: Partial<CardsRules>;
   maxPlayers?: number;
   private?: boolean;
+  table?: CardsTableId;
 }
 
 /** Socket events, client → server. Every one answers with an ack: { ok: true, ... } or { ok: false, error }. */

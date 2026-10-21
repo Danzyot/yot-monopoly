@@ -279,6 +279,7 @@ export function attachCardsSockets(io: Server, opts: CardsSocketOptions = {}): C
         rules: p.rules && typeof p.rules === 'object' && !Array.isArray(p.rules) ? p.rules : undefined,
         maxPlayers: typeof p.maxPlayers === 'number' ? p.maxPlayers : undefined,
         private: typeof p.private === 'boolean' ? p.private : undefined,
+        table: typeof p.table === 'string' ? p.table : undefined,
       });
       broadcast(r);
       lobbyChanged();
