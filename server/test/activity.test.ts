@@ -112,9 +112,10 @@ test('activity: nothing from private tables, bots, banned players, stale or gate
   }
 });
 
-test('activity: with the leaderboard switched off, nobody is named for a win', () => {
+test('activity: with the leaderboard switched off, nobody is named for a win or a title', () => {
   const items = buildActivity(sources({ resultsPublic: () => false }));
   assert.equal(items.filter(i => i.kind === 'win').length, 0);
+  assert.equal(items.filter(i => i.kind === 'champion').length, 0, 'no tournament champion named either');
   assert.ok(items.some(i => i.kind === 'started'), 'live tables still show');
 });
 

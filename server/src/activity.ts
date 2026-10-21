@@ -7,7 +7,7 @@
 // public profile link the leaderboard already gives), no addresses, nothing
 // from a private table (results remember whether their table was private), no
 // tournament table (those are private), and nobody under a site ban. Winners'
-// names ride on the leaderboard switch, like public profiles.
+// and champions' names ride on the leaderboard switch, like public profiles.
 //
 // The list is rebuilt at most every TTL_MS however many people poll it.
 import type { ActivityGame, ActivityItem } from '../../shared/activity.ts';
@@ -133,7 +133,8 @@ export function buildActivity(src: ActivitySources): ActivityItem[] {
     const game: ActivityGame = 'tournament';
     const href = `/tournaments/${encodeURIComponent(t.id)}`;
     if (t.status === 'finished' && t.champion && t.finishedAt !== null && now - t.finishedAt <= RESULTS_WINDOW_MS) {
-      if (champs >= PER_SOURCE || src.banned(t.champion.id)) continue;
+      // A champion is a winner's name: published only while results are.
+      if (!src.resultsPublic() || champs >= PER_SOURCE || src.banned(t.champion.id)) continue;
       champs++;
       out.push({ id: `champion:${t.id}`, kind: 'champion', game, at: t.finishedAt, href, text: `${clip(t.champion.name)} took 1st in ${clip(t.name)}` });
     } else if (t.status === 'running' && t.startedAt !== null && running < PER_SOURCE) {
