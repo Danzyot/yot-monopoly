@@ -78,6 +78,8 @@ const PRIVACY = `This page explains what Chog Games stores about you, why, and w
 ## What we store
 - **Your Discord basics.** When you sign in with Discord we keep your Discord user id, username, display name and avatar. We never see your Discord password or email address.
 - **Your Discord servers and roles.** Some tables are only open to members of a server or role. To check, we ask Discord which servers you are in and your roles there. We keep the list of servers while you're signed in, not your messages.
+- **The name you choose.** If you pick a name to play under (the welcome tour), we keep it with your account so it stays when you sign in again.
+- **Friends.** Who you are friends with and the friend requests you send and receive, until you or they remove them.
 - **Your games.** Results of finished games (who played, placings, scores, the board, your character) and tournament sign-ups and results. They power the leaderboard and your public profile.
 - **Chat.** What you write at a table is shown to that table and kept with the game while it runs, so admins can deal with abuse.
 - **Linked wallets.** The wallet addresses you link and which Chog Genesis tokens they hold, read from the public blockchain.
@@ -95,6 +97,7 @@ We don't use tracking cookies. Your browser's local storage keeps your sign-in a
 ## Who sees what
 - **Everyone:** your name, avatar, results, profile, badges and leaderboard place. A badge shows that you have linked a wallet, never which one.
 - **Players at your table:** your name, avatar, character and chat.
+- **Your friends:** whether you are online and which game you are in. They see your table's code only when it is public with a seat free.
 - **Admins:** all of the above plus IP addresses, countries and linked wallets, for moderation only.
 - **Services we use:** Discord (sign-in), our hosting provider (it runs the servers that hold this data), a Monad blockchain node (we ask it which tokens a linked address holds) and Google Fonts (your browser fetches two fonts from Google, which sees your IP address).
 
@@ -103,6 +106,7 @@ We keep game results for the leaderboard and history for as long as the site run
 
 ## Your choices
 - Unlink a wallet any time on the [wallet page](/wallet).
+- Remove a friend, or decline or cancel a request, any time on the [friends page](/friends).
 - Sign out and clear this site's data to remove what's stored in your browser.
 - To see what we hold about you, or to have it deleted, ask an admin in [our Discord](discord:). We may keep the minimum needed to keep a ban in place.
 
