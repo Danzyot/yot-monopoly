@@ -5,7 +5,7 @@
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useRef } from 'react';
 import { CylinderGeometry, InstancedMesh, MeshStandardMaterial, Object3D } from 'three';
-import { tile } from './layout.ts';
+import { ringOf, tile } from './layout.ts';
 
 const MAX = 60;
 const COIN_H = 0.022;
@@ -23,7 +23,7 @@ const PILES: [number, number][] = [[0.3, 0.42], [0.47, 0.22], [0.5, 0.48]];
 const coinsFor = (pot: number) => Math.min(MAX, Math.ceil(pot / 25));
 
 export function ParkingPot({ pot, n }: { pot: number; n: number }) {
-  const g = tile(n / 2, n);
+  const g = tile(ringOf(n) / 2, n);
   // The parking corner is top-left: the board side is +x, +z.
   const mesh = useRef<InstancedMesh>(null);
   const born = useRef<number[]>([]);

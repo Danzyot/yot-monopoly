@@ -16,6 +16,9 @@ import type { CharacterId } from '../../../../shared/characters.ts';
 import { CUTSCENE_MS, cutsceneSnap, pickCutscenes, type CutsceneCue, type CutsceneKind, type CutsceneSnap } from '../../../../shared/cutscenes.ts';
 import { CARD_MS, diceSettleAt, holdUntil, stageView } from '../sequence.ts';
 import { pieceObjects, setDirectorActive } from '../camera.ts';
+import { routeBetween } from '../layout.ts';
+import { shapeOf } from '../../../../shared/maps.ts';
+import { walk } from '../../../../shared/route.ts';
 import { poseRig } from '../characters/Figure.tsx';
 import {
   askSkip, holdPiece, jailDoor, overlayLeaving, releasePiece, setCutsceneOwnsCamera, setOverlay, takeSkip, type OverlayBeat,
@@ -101,7 +104,8 @@ function arrestTile(before: GameView, after: GameView, was: PlayerState, n: numb
   // Third doubles in a row: arrested on the spot, no move.
   if (a === b && before.doublesCount >= 2) return was.position;
   const extra = typeof after.speed === 'number' ? after.speed : 0;
-  return (was.position + a + b + extra) % n;
+  // Round the loop, and on a board with a lane the way the points sent it.
+  return walk(shapeOf(n), was.position, a + b + extra, after.points === 'lane').at(-1) ?? was.position;
 }
 
 /**
@@ -172,7 +176,7 @@ export function Cutscenes({ game, n, enabled, low, currency, houseColor, hotelCo
     const byCard = cue.kind === 'jail' ? cardArrest(before, after, p.id) : null;
     const early = spec.early && !byCard;
     // Taken over early (jail, bankrupt): no walk to wait for. Otherwise let it walk there first.
-    const steps = (p.position - was.position + n) % n;
+    const steps = routeBetween(was.position, p.position, n).length;
     const walk = early || steps === 0 ? 0 : steps <= 12 ? steps * HOP_MS + 350 : 900;
     const real = pieceObjects.get(p.id);
     const offset = low ? spec.lowOffset : 0;

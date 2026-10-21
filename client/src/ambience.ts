@@ -13,7 +13,7 @@ import { getMap } from '../../shared/maps.ts';
 import type { GameView } from '../../shared/types.ts';
 import { audioContext, hasGestured, noise, onFirstGesture, onSfxChange, readPref, sfxOutput, sfxState, writePref } from './sound.ts';
 
-export type AmbienceScene = 'classic' | 'chog' | 'tptv' | 'speedway' | 'skyline';
+export type AmbienceScene = 'classic' | 'chog' | 'tptv' | 'speedway' | 'skyline' | 'arcade' | 'garden';
 
 /** Bed level relative to the music bus (which already carries the music volume). */
 const LEVEL = 0.22;
@@ -349,7 +349,56 @@ function skyline(bed: Bed) {
   });
 }
 
-const BUILD: Record<AmbienceScene, (bed: Bed) => void> = { classic, chog, tptv, speedway, skyline };
+/** Blitz's arcade hall: the machines' hum, attract-mode bleeps across the room, a coin dropping now and then. */
+function arcade(bed: Bed) {
+  const hum = hiss(bed, 'lowpass', 180, 0.7, 0.16, brown(bed.ac));
+  lfo(bed, 0.07, 0.03, hum.g.gain);
+  // A machine somewhere plays its jingle: three or four quick square-wave notes.
+  every(bed, 3, 9, now => {
+    const base = rnd(520, 880);
+    const steps = [1, 1.25, 1.5, 2].slice(0, 3 + Math.floor(Math.random() * 2));
+    steps.forEach((k, i) => ping(bed, now + i * 0.09, 0.08, 0.012, base * k, 'square', undefined, 0.005));
+  });
+  // A token rattling into a tray: a few bright metallic ticks.
+  every(bed, 12, 30, now => {
+    for (let i = 0; i < 4; i++) burst(bed, now + i * rnd(0.05, 0.11), 0.03, 0.05 - i * 0.008, 'bandpass', rnd(4200, 6200), 6);
+  });
+}
+
+/** Crossroads garden: a breeze in the hedges, the fountain, birdsong, a bee going by. */
+function garden(bed: Bed) {
+  const breeze = hiss(bed, 'bandpass', 700, 0.5, 0.06);
+  lfo(bed, 0.06, 0.03, breeze.g.gain);
+  lfo(bed, 0.11, 260, breeze.bq.frequency);
+  const water = hiss(bed, 'highpass', 2600, 0.4, 0.025);
+  lfo(bed, 0.9, 0.006, water.g.gain);
+  // A bird: two to five quick chirps, each a fast upward sine sweep.
+  every(bed, 2.5, 7, now => {
+    const n = 2 + Math.floor(Math.random() * 4);
+    const f0 = rnd(2600, 4200);
+    for (let i = 0; i < n; i++) ping(bed, now + i * rnd(0.09, 0.16), 0.08, 0.009, f0 * rnd(0.85, 1), 'sine', f0 * rnd(1.15, 1.45));
+  });
+  // A bee drifting past: a buzzing saw that swells and fades.
+  every(bed, 25, 60, now => {
+    const { ac } = bed;
+    const dur = rnd(1.8, 3);
+    const osc = ac.createOscillator();
+    const lp = ac.createBiquadFilter();
+    const g = ac.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(rnd(190, 230), now);
+    osc.frequency.linearRampToValueAtTime(rnd(200, 250), now + dur);
+    lp.type = 'lowpass';
+    lp.frequency.value = 900;
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(0.006, now + dur * 0.5);
+    g.gain.linearRampToValueAtTime(0.0001, now + dur);
+    osc.connect(lp).connect(g).connect(bed.out);
+    oneShot(bed, osc, [lp, g], now, now + dur + 0.05);
+  });
+}
+
+const BUILD: Record<AmbienceScene, (bed: Bed) => void> = { classic, chog, tptv, speedway, skyline, arcade, garden };
 
 // ---- start / stop ----
 
@@ -427,6 +476,8 @@ export function sceneFor(game: Pick<GameView, 'mapId' | 'themeId'>): AmbienceSce
   const env = getMap(game.mapId).environment;
   if (env === 'speedway') return 'speedway';
   if (env === 'skyline') return 'skyline';
+  if (env === 'arcade') return 'arcade';
+  if (env === 'garden') return 'garden';
   if (game.themeId === 'chog') return 'chog';
   if (game.themeId === 'tptv') return 'tptv';
   return 'classic';

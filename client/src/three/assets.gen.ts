@@ -2,6 +2,15 @@
 // URLs carry a content hash so a rebuilt asset is never served stale.
 
 export const ASSETS = {
+  "arcadeEnv": {
+    "url": "/models/arcade/set-env.webp?v=af376bb869"
+  },
+  "arcadeSet": {
+    "lightmap": "/models/arcade/set-light.webp?v=528b161086",
+    "lightmapIntensity": 5.2466,
+    "lightmapLow": "/models/arcade/set-light-1k.webp?v=fb462a2b25",
+    "url": "/models/arcade/set.glb?v=502330cd5b"
+  },
   "buildings": {
     "url": "/models/buildings.glb?v=94108fccdf"
   },
@@ -59,6 +68,15 @@ export const ASSETS = {
   },
   "cops": {
     "url": "/models/cops.glb?v=e3093d8ef5"
+  },
+  "gardenEnv": {
+    "url": "/models/garden/set-env.webp?v=ff12a14878"
+  },
+  "gardenSet": {
+    "lightmap": "/models/garden/set-light.webp?v=d27b785338",
+    "lightmapIntensity": 5.0655,
+    "lightmapLow": "/models/garden/set-light-1k.webp?v=cffd6e2169",
+    "url": "/models/garden/set.glb?v=4b761102bf"
   },
   "outfits": {
     "apron": "/outfits/apron.webp?v=5a9b625c78",

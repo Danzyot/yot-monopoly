@@ -45,7 +45,7 @@ usual cast, looks and blue skin back.
   the game reads it the same way everywhere: "Classic board · Original look". In code a board
   is a *map* (`mapId`, `shared/maps.ts`) and a look a *theme* or *edition* (`themeId`,
   `shared/themes.ts`). Each look card in the lobby shows that look painted on the chosen board.
-- **Three boards**, each with its own 3D surroundings and its own printed look:
+- **Five boards**, each with its own 3D surroundings and its own printed look:
   - **Classic** — 40 spaces, the standard game, in a room that suits the look, each one
     modelled and light-baked: a study for Original (fireplace, moonlit window, bookshelf,
     Chesterfield), a purple Chog Poker lounge (bar, slots, poker tables, pink neon, the
@@ -60,6 +60,17 @@ usual cast, looks and blue skin back.
   - **Metropolis** — 48 spaces, ten colour sets, two arcades; built for 5–8 players, on a
     modelled, light-baked penthouse roof (string lights, fire pit, a lit city all around).
     Its Original look (*Night City* in code): navy and gold, neon tubes, a moonlit skyline in the middle.
+  - **Blitz** — 24 spaces, six cheap two-street sets and more card squares, for 2–4 players and
+    ~15-minute games. Every lap pays more (GO starts at $100, +$20 a lap up to $220) and double
+    1s or double 6s scoop the Free Parking jackpot. Played in a modelled, light-baked retro
+    arcade (rows of lit cabinets, claw machines, a BLITZ sign in glowing pixels). Its Original
+    look (*Pixel Arcade* in code): an attract screen, black glass, scanlines, an 8-bit title.
+  - **Crossroads** — a 48-space loop with an eleven-space Express lane straight up the middle,
+    a lap twelve spaces shorter that skips the west side. The points at Junction send every piece
+    walking past one way or the other, and whoever stops on Junction throws them for everyone.
+    Ten sets for 4–8 players and long games, in a modelled, light-baked walled garden on a summer
+    afternoon (crossing gravel paths, hedges, a fountain, a Chog flowerbed). Its Original look
+    (*Atlas* in code): a road atlas, the lane printed as a motorway.
 - **Looks** that work on any board: **Original** (each board's own look above), **Chog**
   (built from the Chog Poker design system: purple room, Chog pink, Outfit font, the Chog
   character on the board) and **Takeprofit TV** (from the takeprofit-tv site's design system:
@@ -250,14 +261,19 @@ The engine never branches on the look.
 ## Adding a map
 
 Maps live in [`shared/maps.ts`](shared/maps.ts): a square board (multiple of 4 spaces;
-GO, jail, Free Parking and Go To Jail on the corners), its spaces (prices/rents can use
+GO, jail, Free Parking and Go To Jail on the corners, every map its own size), optionally a
+`lane` across the middle (its spaces listed last; [`shared/route.ts`](shared/route.ts) walks
+it for the engine and the renderer alike), its spaces (prices/rents can use
 the helpers that scale the classic curve), decks (`standardDecks()` builds sensible
 Chance/Community Chest cards for any layout) and an `environment` for the 3D scene
 (`client/src/three/environments/`), plus a `look` — the printed face the Original look gets
 on it (set colours, palette, and an `art` id painted by `client/src/three/boardTexture.ts`).
 `validateMap()` and the test suite check every board × look combination, and bots play complete
 games on every map in the tests. Lobby pictures of each board's 3D setting are
-`client/public/maps/<id>.webp` (480 × 300 captures of the lobby's board).
+`client/public/maps/<id>.webp` (480 × 300 captures of the lobby's board), and
+`client/public/home/chog-<id>.webp` the same in the Chog look for the Chog season. A map's own
+rules (`goSalary`, `rules`, `salaryRise`, `jackpotDoubles`) apply when the host picks it, and
+`special` explains them in How to play.
 
 ## Architecture
 

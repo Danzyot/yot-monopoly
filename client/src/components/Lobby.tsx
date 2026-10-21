@@ -243,7 +243,7 @@ function MemberLobby({ room, me, spectating, chat, onLeave, onWear }: {
           <div className="row lm-actions">
             <MusicPlayer />
             <button className="btn small ghost" onClick={() => { void navigator.clipboard?.writeText(link); toast('Invite link copied!'); }}>Copy link</button>
-            <HowToPlayButton rules={r} label="❓ Rules" />
+            <HowToPlayButton rules={r} mapId={room.mapId} label="❓ Rules" />
             <button className="btn small danger" onClick={onLeave} aria-label="Leave the room">Leave</button>
           </div>
         </header>
@@ -431,7 +431,7 @@ export default function Lobby({ room, me, spectating, chat }: {
             </>
           )}
 
-          <div className="lobby-howto"><HowToPlayButton rules={room.rules} /></div>
+          <div className="lobby-howto"><HowToPlayButton rules={room.rules} mapId={room.mapId} /></div>
           <div className="start-row">
             <button className="btn primary big" disabled={room.seats.length < 2 || starting} onClick={() => call('room:start').catch(toastError)}>
               {room.seats.length < 2 ? 'Need 2+ players' : 'Start Game!'}

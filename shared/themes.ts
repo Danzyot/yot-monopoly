@@ -269,6 +269,28 @@ export const CHOG: Edition = edition(CLASSIC, {
     29: 'Straight Flush', 30: 'Busted!', 31: 'High Roller Heights', 32: 'VIP Lounge',
     34: 'Final Table', 35: 'Magenta Line', 37: 'Chog Tower', 38: 'Buy-In Fee', 39: 'Chog Palace',
   },
+  // The two newest boards in Chog's world: Blitz is the Chog arcade, Crossroads
+  // the roads of Monad town (the Express lane is the fast chain).
+  mapNames: {
+    blitz: {
+      0: 'START', 1: 'Nad Alley', 3: 'Gmonad Lane', 4: 'Testnet Express', 6: 'Chog Cage',
+      7: 'Spiky Street', 8: 'Quill Court', 10: 'Molandak Mews', 11: 'Moyaki Market', 12: 'Chog Jackpot',
+      13: 'Salmonad Shore', 14: 'Mouch Meadow', 16: 'Block Party Blvd', 17: 'Parallel Plaza', 18: 'Rugged!',
+      19: 'Mainnet Express', 20: 'Chog Arcade', 21: 'Validator Heights', 22: 'Gas Fee', 23: 'Monad Mansion',
+    },
+    crossroads: {
+      0: 'START', 1: 'Nad Nook', 3: 'Gm Gardens', 4: 'Gas Fee', 6: 'Chog Junction',
+      7: 'Spike Street', 9: 'Quill Way', 10: 'Hedgehog Walk', 11: 'RPC Node',
+      12: 'Chog Cage', 13: 'Molandak Market', 15: 'Moyaki Row', 16: 'Mouch Square', 17: 'Chog Arcade',
+      18: 'Testnet Halt', 19: 'Salmonad Harbour', 21: 'Purple Pier', 22: 'Nadside Point',
+      24: 'Chog’s Couch', 25: 'Block Hill', 27: 'Parallel Way', 28: 'Pipeline Gate', 29: 'Chog Arcade',
+      30: 'Mainnet Terminus', 31: 'Cream Row', 32: 'Validator Road', 33: 'Node Farm', 34: 'Consensus Mile',
+      36: 'Busted!', 37: 'Mempool Road', 38: 'Finality Street', 40: 'Throughput Court',
+      42: 'Devnet Halt', 44: 'Monad Heights', 46: 'Priority Fee', 47: 'Chog Palace',
+      48: '10K TPS Way', 49: 'Pipeline Lane', 51: 'Parallel Pass', 52: 'Bridge Toll', 53: 'Chog Arcade',
+      54: 'Purple Overpass', 56: 'Chog Flyover', 57: 'Spiky Skyway',
+    },
+  },
   // Eight sets, all pulled toward the brand: tan, cream, pink, amber, red,
   // magenta, blue and the deep purple the felt is cut from.
   groupColors: {

@@ -1,11 +1,12 @@
 // The middle of the board, one design per look. Everything is painted in the
 // centre's 45° frame (see inCentre) and keeps clear of the two printed card
 // spots CardDecks.tsx puts the piles on: (0, ±430) on printed boards,
-// (±580, -60) on boards with a logo. Spots are 460 × 240.
+// (±580, -60) on boards with a logo or a lane. Spots are 460 × 240.
 
 import type { Theme } from '../../../shared/themes.ts';
-import { getMap } from '../../../shared/maps.ts';
-import { CENTRE_REACH, fitFont, IN, inCentre, PX, seeded, spacedText } from './boardPaint.ts';
+import { getMap, shapeOf } from '../../../shared/maps.ts';
+import { C } from './layout.ts';
+import { CENTRE_REACH, fitFont, IN, inCentre, PX, S, seeded, spacedText } from './boardPaint.ts';
 import { oklch } from './oklch.ts';
 
 type Ctx = CanvasRenderingContext2D;
@@ -425,7 +426,31 @@ export function centreNight(ctx: Ctx, theme: Theme, face: string, logo: HTMLImag
 /** Artwork editions and room logos: the picture in a glowing disc, the name on a pill, the piles either side. */
 function logoDisc(ctx: Ctx, theme: Theme, logo: HTMLImageElement, face: string) {
   const pal = theme.palette;
-  const r = 270, cy = -60;
+  disc(ctx, theme, logo, 0, -60, 270);
+  // Name pill.
+  const title = theme.centerTitle;
+  const size = fitFont(ctx, title, 700, 150, 700, face);
+  const tw = ctx.measureText(title).width;
+  const h2 = size * 1.25, y = 330;
+  const pill = ctx.createLinearGradient(0, y - h2 / 2, 0, y + h2 / 2);
+  pill.addColorStop(0, shade(pal.accent, 1.15));
+  pill.addColorStop(1, shade(pal.accent, 0.85));
+  ctx.fillStyle = pill;
+  ctx.beginPath(); ctx.roundRect(-tw / 2 - 40, y - h2 / 2, tw + 80, h2, h2 / 2); ctx.fill();
+  ctx.strokeStyle = pal.boardLine;
+  ctx.lineWidth = 8;
+  ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(title, 0, y + size * 0.05);
+  spot(ctx, theme.deckNames.chest, -580, -60, pal.boardText, face);
+  spot(ctx, theme.deckNames.chance, 580, -60, pal.accent, face);
+}
+
+/** The picture in its glowing disc, centred on (0, cy), radius r. */
+function disc(ctx: Ctx, theme: Theme, logo: HTMLImageElement, cx: number, cy: number, r: number) {
+  const pal = theme.palette;
+  ctx.save();
+  ctx.translate(cx, 0);
   const glow = ctx.createRadialGradient(0, cy, r * 0.4, 0, cy, r * 1.3);
   glow.addColorStop(0, pal.accent + '70');
   glow.addColorStop(1, pal.accent + '00');
@@ -450,23 +475,7 @@ function logoDisc(ctx: Ctx, theme: Theme, logo: HTMLImageElement, face: string) 
   ctx.strokeStyle = pal.boardLine;
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(0, cy, r + 18, 0, Math.PI * 2); ctx.stroke();
-  // Name pill.
-  const title = theme.centerTitle;
-  const size = fitFont(ctx, title, 700, 150, 700, face);
-  const tw = ctx.measureText(title).width;
-  const h2 = size * 1.25, y = 330;
-  const pill = ctx.createLinearGradient(0, y - h2 / 2, 0, y + h2 / 2);
-  pill.addColorStop(0, shade(pal.accent, 1.15));
-  pill.addColorStop(1, shade(pal.accent, 0.85));
-  ctx.fillStyle = pill;
-  ctx.beginPath(); ctx.roundRect(-tw / 2 - 40, y - h2 / 2, tw + 80, h2, h2 / 2); ctx.fill();
-  ctx.strokeStyle = pal.boardLine;
-  ctx.lineWidth = 8;
-  ctx.stroke();
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText(title, 0, y + size * 0.05);
-  spot(ctx, theme.deckNames.chest, -580, -60, pal.boardText, face);
-  spot(ctx, theme.deckNames.chance, 580, -60, pal.accent, face);
+  ctx.restore();
 }
 
 /** Chog and any room logo on a printed board. */
@@ -651,4 +660,274 @@ export function centreTptv(ctx: Ctx, theme: Theme, roomLogo: HTMLImageElement | 
     spot(ctx, theme.deckNames.chest, -580, -60, TPTV.bone, TPTV.display, 'brackets');
     spot(ctx, theme.deckNames.chance, 580, -60, TPTV.amber, TPTV.display, 'brackets');
   });
+}
+
+// ---- Pixel Arcade (Blitz) ----------------------------------------------------
+
+/** A 5×7 arcade font: each glyph is seven rows of five bits, the left pixel the high bit. */
+const PIXEL_FONT: Record<string, number[]> = {
+  A: [14, 17, 17, 31, 17, 17, 17], B: [30, 17, 17, 30, 17, 17, 30], C: [14, 17, 16, 16, 16, 17, 14],
+  D: [28, 18, 17, 17, 17, 18, 28], E: [31, 16, 16, 30, 16, 16, 31], F: [31, 16, 16, 30, 16, 16, 16],
+  G: [14, 17, 16, 23, 17, 17, 15], H: [17, 17, 17, 31, 17, 17, 17], I: [14, 4, 4, 4, 4, 4, 14],
+  J: [7, 2, 2, 2, 2, 18, 12], K: [17, 18, 20, 24, 20, 18, 17], L: [16, 16, 16, 16, 16, 16, 31],
+  M: [17, 27, 21, 21, 17, 17, 17], N: [17, 17, 25, 21, 19, 17, 17], O: [14, 17, 17, 17, 17, 17, 14],
+  P: [30, 17, 17, 30, 16, 16, 16], Q: [14, 17, 17, 17, 21, 18, 13], R: [30, 17, 17, 30, 20, 18, 17],
+  S: [15, 16, 16, 14, 1, 1, 30], T: [31, 4, 4, 4, 4, 4, 4], U: [17, 17, 17, 17, 17, 17, 14],
+  V: [17, 17, 17, 17, 17, 10, 4], W: [17, 17, 17, 21, 21, 21, 10], X: [17, 17, 10, 4, 10, 17, 17],
+  Y: [17, 17, 10, 4, 4, 4, 4], Z: [31, 1, 2, 4, 8, 16, 31],
+  0: [14, 17, 19, 21, 25, 17, 14], 1: [4, 12, 4, 4, 4, 4, 14], 2: [14, 17, 1, 2, 4, 8, 31],
+  3: [31, 2, 4, 2, 1, 17, 14], 4: [2, 6, 10, 18, 31, 2, 2], 5: [31, 16, 30, 1, 1, 17, 14],
+  6: [6, 8, 16, 30, 17, 17, 14], 7: [31, 1, 2, 4, 8, 8, 8], 8: [14, 17, 17, 14, 17, 17, 14],
+  9: [14, 17, 17, 15, 1, 2, 12], '!': [4, 4, 4, 4, 4, 0, 4], '-': [0, 0, 0, 31, 0, 0, 0], '.': [0, 0, 0, 0, 0, 12, 12],
+};
+
+/** Text in the arcade font, centred on (x, y), `cell` px a pixel; `ink(row)` colours each of the seven rows. */
+function pixelText(ctx: Ctx, text: string, x: number, y: number, cell: number, ink: (row: number) => string) {
+  const chars = [...text.toUpperCase()];
+  const w = chars.length * 6 - 1;
+  const x0 = x - (w * cell) / 2, y0 = y - (7 * cell) / 2;
+  chars.forEach((ch, k) => {
+    const rows = PIXEL_FONT[ch];
+    if (!rows) return;
+    rows.forEach((bits, r) => {
+      ctx.fillStyle = ink(r);
+      for (let c = 0; c < 5; c++) {
+        if (bits & (16 >> c)) ctx.fillRect(x0 + (k * 6 + c) * cell, y0 + r * cell, cell - 2, cell - 2);
+      }
+    });
+  });
+}
+
+/** A little space invader, `cell` px a pixel, centred on (x, y). */
+function invader(ctx: Ctx, x: number, y: number, cell: number, color: string) {
+  const rows = [0b00100000100, 0b00010001000, 0b00111111100, 0b01101110110, 0b11111111111, 0b10111111101, 0b10100000101, 0b00011011000];
+  ctx.fillStyle = color;
+  rows.forEach((bits, r) => {
+    for (let c = 0; c < 11; c++) if (bits & (1024 >> c)) ctx.fillRect(x + (c - 5.5) * cell, y + (r - 4) * cell, cell - 1, cell - 1);
+  });
+}
+
+/** Pixel Arcade: black glass, a violet bloom, the title in an 8-bit font and a row of invaders. */
+export function centrePixel(ctx: Ctx, theme: Theme, face: string, logo: HTMLImageElement | null) {
+  const pal = theme.palette;
+  const bloom = ctx.createRadialGradient(PX / 2, PX / 2, 80, PX / 2, PX / 2, PX * 0.5);
+  bloom.addColorStop(0, 'rgba(110, 60, 255, 0.3)');
+  bloom.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = bloom;
+  ctx.fillRect(IN, IN, PX - 2 * IN, PX - 2 * IN);
+  ctx.fillStyle = 'rgba(120, 100, 255, 0.07)';
+  for (let x = IN; x < PX - IN; x += 32) ctx.fillRect(x, IN, 2, PX - 2 * IN);
+  for (let y = IN; y < PX - IN; y += 32) ctx.fillRect(IN, y, PX - 2 * IN, 2);
+  inCentre(ctx, () => {
+    // Pixel stars.
+    const rnd = seeded(0xb117);
+    for (let k = 0; k < 140; k++) {
+      const x = (rnd() * 2 - 1) * CENTRE_REACH, y = (rnd() * 2 - 1) * CENTRE_REACH;
+      if (Math.abs(x) + Math.abs(y) > CENTRE_REACH - 20) continue;
+      ctx.fillStyle = ['#41e0ff', '#ff4fd8', '#ffe14d', '#ffffff'][k % 4] + (rnd() < 0.5 ? '55' : 'aa');
+      const s = rnd() < 0.15 ? 8 : 4;
+      ctx.fillRect(Math.round(x / 4) * 4, Math.round(y / 4) * 4, s, s);
+    }
+    if (logo) { logoDisc(ctx, theme, logo, face); return; }
+    const rowInk = ['#fff6a8', '#ffe14d', '#ffc23d', '#ff9a3d', '#ff6b6b', '#ff4fa8', '#ff4fd8'];
+    for (const [k, c] of ['#41e0ff', '#3ce86f', '#ff4fd8'].entries()) invader(ctx, (k - 1) * 170, -235, 9, c);
+    const title = theme.centerTitle.toUpperCase();
+    const cell = Math.min(26, Math.floor(1150 / (title.length * 6)));
+    ctx.save();
+    ctx.shadowColor = '#ff4fd8';
+    ctx.shadowBlur = 30;
+    pixelText(ctx, title, 0, -40, cell, r => rowInk[r]);
+    ctx.restore();
+    pixelText(ctx, getMap(theme.mapId).name, 0, 130, 11, () => '#41e0ff');
+    pixelText(ctx, 'INSERT COIN', 0, 222, 6, () => '#ffe14d');
+    spot(ctx, theme.deckNames.chest, 0, -430, '#41e0ff', face, 'neon');
+    spot(ctx, theme.deckNames.chance, 0, 430, pal.accent, face, 'neon');
+  });
+}
+
+// ---- Boards with a lane (Crossroads) ---------------------------------------
+
+/** A compass rose, `r` px from centre to the north point. */
+function compass(ctx: Ctx, x: number, y: number, r: number, ink: string, paper: string, accent: string) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 3;
+  for (const rr of [r * 0.72, r * 0.62]) { ctx.beginPath(); ctx.arc(0, 0, rr, 0, Math.PI * 2); ctx.stroke(); }
+  for (let k = 0; k < 8; k++) {
+    const a = (k * Math.PI) / 4, long = k % 2 === 0, len = long ? r : r * 0.55, wid = long ? r * 0.16 : r * 0.1;
+    for (const side of [-1, 1]) {
+      ctx.fillStyle = side < 0 ? ink : paper;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.sin(a) * len, -Math.cos(a) * len);
+      ctx.lineTo(Math.sin(a + side * 0.5) * wid, -Math.cos(a + side * 0.5) * wid);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+  ctx.fillStyle = accent;
+  ctx.beginPath(); ctx.arc(0, 0, r * 0.08, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = ink;
+  ctx.font = `700 ${Math.round(r * 0.3)}px Oswald, Impact, sans-serif`;
+  ctx.fillText('N', 0, -r - r * 0.22);
+  ctx.restore();
+}
+
+/** Atlas ground: contour lines, a river and a few roads over the map paper. */
+function atlasGround(ctx: Ctx) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(IN, IN, PX - 2 * IN, PX - 2 * IN);
+  ctx.clip();
+  const rnd = seeded(0xa71a5);
+  // Two hills of contour rings, one each side.
+  for (const [hx, hy, k0] of [[620, 640, 7], [1440, 1500, 6]] as const) {
+    for (let k = 1; k <= k0; k++) {
+      ctx.strokeStyle = k % 4 === 0 ? 'rgba(160, 112, 58, 0.42)' : 'rgba(176, 130, 70, 0.22)';
+      ctx.lineWidth = k % 4 === 0 ? 3 : 2;
+      ctx.beginPath();
+      for (let t = 0; t <= 64; t++) {
+        const a = (t / 64) * Math.PI * 2;
+        const r = k * 52 * (1 + 0.16 * Math.sin(3 * a + k) + 0.08 * Math.sin(5 * a - k * 0.7));
+        const x = hx + Math.cos(a) * r * 1.2, y = hy + Math.sin(a) * r;
+        if (t) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+      }
+      ctx.stroke();
+    }
+  }
+  // A river winding across.
+  ctx.strokeStyle = 'rgba(95, 160, 210, 0.55)';
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 22;
+  ctx.beginPath();
+  ctx.moveTo(IN, 1180);
+  ctx.bezierCurveTo(600, 1020, 900, 1400, 1150, 1180);
+  ctx.bezierCurveTo(1400, 960, 1600, 1100, PX - IN, 900);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(200, 225, 240, 0.6)';
+  ctx.lineWidth = 6;
+  ctx.stroke();
+  // Minor roads: thin double lines.
+  for (let k = 0; k < 6; k++) {
+    const y = IN + 120 + rnd() * (PX - 2 * IN - 240);
+    ctx.strokeStyle = 'rgba(120, 110, 96, 0.35)';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.moveTo(IN, y);
+    ctx.bezierCurveTo(700, y + (rnd() - 0.5) * 300, 1300, y + (rnd() - 0.5) * 300, PX - IN, y + (rnd() - 0.5) * 200);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(250, 244, 226, 0.9)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * The centre of a board with a lane up the middle: the lane splits it in two.
+ * West: the look's emblem (its logo in a disc, else a compass rose) over the
+ * chest pile; east: the chance pile, the title, and a key to the points.
+ * The piles keep the logo layout (±580, -60), which falls either side of the lane.
+ */
+export function centreLane(ctx: Ctx, theme: Theme, face: string, logo: HTMLImageElement | null) {
+  const pal = theme.palette;
+  const sh = shapeOf(theme.spaces.length);
+  const half = (C / 2) * S;
+  const wx = (IN + PX / 2 - half) / 2, ex = (PX / 2 + half + PX - IN) / 2;
+  const atlas = theme.art === 'atlas';
+  if (atlas) atlasGround(ctx);
+  else if (theme.art === 'pixel' || theme.art === 'tptv' || theme.art === 'night' || theme.art === 'rainbow') {
+    const glow = ctx.createRadialGradient(PX / 2, PX / 2, 80, PX / 2, PX / 2, PX * 0.55);
+    glow.addColorStop(0, pal.accent + '30');
+    glow.addColorStop(1, pal.accent + '00');
+    ctx.fillStyle = glow;
+    ctx.fillRect(IN, IN, PX - 2 * IN, PX - 2 * IN);
+  }
+  // West: the emblem.
+  if (logo) {
+    ctx.save();
+    ctx.translate(0, 0);
+    disc(ctx, theme, logo, wx, 740, 225);
+    ctx.restore();
+  } else {
+    compass(ctx, wx, 740, 200, pal.boardLine, pal.board, pal.accent);
+  }
+  // East: the title on a pill (a cartouche on the atlas), the map's name under it.
+  const title = theme.centerTitle;
+  const size = fitFont(ctx, title, 500, 120, 700, face);
+  const tw = ctx.measureText(title).width;
+  const ty = 1010, th = size * 1.3;
+  ctx.save();
+  if (atlas) {
+    ctx.fillStyle = pal.board;
+    ctx.fillRect(ex - tw / 2 - 40, ty - th / 2, tw + 80, th);
+    ctx.strokeStyle = pal.boardLine;
+    ctx.lineWidth = 6;
+    ctx.strokeRect(ex - tw / 2 - 40, ty - th / 2, tw + 80, th);
+    ctx.lineWidth = 2;
+    ctx.strokeRect(ex - tw / 2 - 28, ty - th / 2 + 12, tw + 56, th - 24);
+    ctx.fillStyle = pal.boardText;
+  } else {
+    const pill = ctx.createLinearGradient(0, ty - th / 2, 0, ty + th / 2);
+    pill.addColorStop(0, shade(pal.accent, 1.15));
+    pill.addColorStop(1, shade(pal.accent, 0.85));
+    ctx.fillStyle = pill;
+    ctx.beginPath(); ctx.roundRect(ex - tw / 2 - 36, ty - th / 2, tw + 72, th, th / 2); ctx.fill();
+    ctx.strokeStyle = pal.boardLine;
+    ctx.lineWidth = 8;
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+  }
+  ctx.fillText(title, ex, ty + size * 0.05);
+  ctx.restore();
+  ctx.fillStyle = pal.boardText;
+  ctx.font = `600 40px ${face}`;
+  spacedText(ctx, getMap(theme.mapId).name.toUpperCase(), ex, ty + th / 2 + 48, 10);
+  // The key to the points, near Junction (bottom middle).
+  if (sh.lane) {
+    const junction = theme.spaces[sh.lane.from].name.toUpperCase();
+    const ky = 1530;
+    ctx.save();
+    ctx.strokeStyle = atlas ? pal.boardLine : pal.accent;
+    ctx.lineWidth = 4;
+    ctx.setLineDash([14, 10]);
+    ctx.beginPath(); ctx.roundRect(ex - 270, ky - 150, 540, 300, 24); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = atlas ? pal.accent : pal.accent;
+    fitFont(ctx, 'THE POINTS', 460, 52, 700, face);
+    ctx.fillText('THE POINTS', ex, ky - 95);
+    ctx.fillStyle = pal.boardText;
+    const lines = [`STOP ON ${junction}`, 'TO THROW THEM.', 'EVERYONE GOES THE', 'WAY THEY POINT.'];
+    lines.forEach((l, k) => {
+      fitFont(ctx, l, 470, 36, 600, face);
+      ctx.fillText(l, ex, ky - 30 + k * 46);
+    });
+    ctx.restore();
+  }
+  inCentre(ctx, () => {
+    spot(ctx, theme.deckNames.chest, -580, -60, atlas ? pal.boardLine : pal.boardText, face);
+    spot(ctx, theme.deckNames.chance, 580, -60, pal.accent, face);
+  });
+}
+
+/** Kerbs along both sides of the lane, chevrons pointing the way it runs (north). */
+export function laneMarks(ctx: Ctx, theme: Theme, n: number) {
+  const sh = shapeOf(n);
+  if (!sh.lane) return;
+  const half = (C / 2) * S;
+  ctx.save();
+  for (const x of [PX / 2 - half - 22, PX / 2 + half + 4]) {
+    ctx.fillStyle = theme.art === 'atlas' ? '#2f5ea8' : theme.palette.accent;
+    ctx.globalAlpha = 0.85;
+    ctx.fillRect(x, IN + 6, 18, PX - 2 * IN - 12);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 3;
+    for (let y = PX - IN - 40; y > IN + 30; y -= 64) {
+      ctx.beginPath(); ctx.moveTo(x + 2, y + 6); ctx.lineTo(x + 9, y - 4); ctx.lineTo(x + 16, y + 6); ctx.stroke();
+    }
+  }
+  ctx.restore();
 }

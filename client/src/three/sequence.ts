@@ -17,6 +17,7 @@ import {
   CARD_FLIGHT_MS, CARD_MS, DICE_MS, HOP_MS, MAX_HOPS, RESULT_HOLD_MS, RESULT_IN_MS, RESULT_MS, SETTLE_MS, WALK_DELAY_MS, legWalkMs,
 } from '../../../shared/pacing.ts';
 import type { CardShown, GameView, MoveLeg } from '../../../shared/types.ts';
+import { legTiles } from './layout.ts';
 
 /** CARD_FLIGHT_MS: how long a drawn card takes to fly from its pile to the camera (CardDecks). */
 export { CARD_FLIGHT_MS, CARD_MS, DICE_MS, RESULT_MS };
@@ -372,10 +373,10 @@ export function goPassTimes(seq: number, n: number): number[] {
   const out: number[] = [];
   for (const l of p.legs) {
     if (l.kind === 'jail' || l.kind === 'teleport' || !l.steps || l.steps <= 0) continue;
-    const origin = ((l.to - l.steps) % n + n) % n;
-    if (origin + l.steps < n) continue;
+    const hops = legTiles(l, n).indexOf(0) + 1;
+    if (hops === 0) continue;
     // Pieces.tsx addLeg: one hop per space, the first one twice as long when it is a leap out of the cell.
-    out.push(l.steps <= MAX_HOPS ? l.t0 + (n - origin) * HOP_MS + (l.leap ? HOP_MS : 0) : l.t0 + l.walkMs);
+    out.push(l.steps <= MAX_HOPS ? l.t0 + hops * HOP_MS + (l.leap ? HOP_MS : 0) : l.t0 + l.walkMs);
   }
   return out;
 }

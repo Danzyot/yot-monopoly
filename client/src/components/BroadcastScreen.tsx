@@ -159,7 +159,7 @@ function doing(game: GameView, theme: Theme): string {
   if (p.bankrupt) return 'is out';
   if (game.phase === 'auction') return 'is at auction';
   if (game.phase === 'minigame') return `is in the arcade`;
-  if (game.phase === 'choose') return 'is picking a move';
+  if (game.phase === 'choose') return game.choice?.kind === 'points' ? 'is throwing the points' : 'is picking a move';
   if (game.phase === 'buy') return `is eyeing ${theme.spaces[p.position]?.name ?? 'a property'}`;
   if (game.phase === 'done') return game.debts.some(d => d.from === p.id) ? 'is raising cash' : 'is wheeling and dealing';
   if (p.inJail) return `is in jail · try ${p.jailTurns + 1} of 3`;

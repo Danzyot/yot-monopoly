@@ -10,6 +10,7 @@ import { createPortal } from 'react-dom';
 import { GAMES } from '../../../shared/brand.ts';
 import type { RuleConfig } from '../../../shared/themes.ts';
 import { MINIGAME_INFO, MINIGAME_KINDS } from '../../../shared/minigames.ts';
+import { MAPS } from '../../../shared/maps.ts';
 import { CAMERA_MODES } from '../three/camera.ts';
 import { CloseX, Modal } from './Modal.tsx';
 import { SHORTCUTS } from './Shortcuts.tsx';
@@ -79,8 +80,10 @@ function Steps({ steps }: { steps: Step[] }) {
   );
 }
 
-/** Arcades, house rules and the camera: what the first page leaves out. */
-function Extras({ rules }: { rules?: Partial<RuleConfig> }) {
+/** Arcades, house rules, the boards' own rules and the camera: what the first page leaves out. */
+function Extras({ rules, mapId, cur }: { rules?: Partial<RuleConfig>; mapId?: string; cur: string }) {
+  // At a table, its own board's rules; elsewhere, every board that has some.
+  const boards = MAPS.filter(m => m.special && (!mapId || m.id === mapId));
   const arcades = rules?.minigames !== false;
   // At a table, what Free Parking does there; on the home page, what it can do.
   const jackpot = !!rules?.freeParkingPot, parkArcade = !!rules?.arcadeParking && arcades;
@@ -102,9 +105,15 @@ function Extras({ rules }: { rules?: Partial<RuleConfig> }) {
           <ul className="howto-games">
             {MINIGAME_KINDS.map(k => <li key={k}><b>{MINIGAME_INFO[k].icon} {MINIGAME_INFO[k].title}</b> {MINIGAME_INFO[k].blurb}</li>)}
           </ul>
-          <p className="muted">The Speedway and Metropolis boards have arcade squares. On the Classic board the host can turn Free Parking into one.</p>
+          <p className="muted">The Speedway, Metropolis, Blitz and Crossroads boards have arcade squares. On the Classic board the host can turn Free Parking into one.</p>
         </section>
       )}
+      {boards.map(m => (
+        <section key={m.id}>
+          <h3>🗺️ The {m.name} board</h3>
+          <p>{m.special!.replaceAll('$', cur)}</p>
+        </section>
+      ))}
       <section>
         <h3>🏠 House rules{rules ? ' at this table' : ''}</h3>
         <p className="muted">The host picks these in the lobby. Auctions, even building and limited houses are covered on the first page.</p>
@@ -140,7 +149,7 @@ type Tab = 'rules' | 'extras' | 'keys';
 const hasKeyboard = () => typeof window !== 'undefined' && !window.matchMedia?.('(hover: none) and (pointer: coarse)').matches;
 
 /** How to play (and, in a game with a keyboard, the shortcuts) in a dialog. */
-export default function HowToPlay({ onClose, game = 'monopoly', pickGame = false, rules, shortcuts = false, startOn = 'rules', currency = '$' }: {
+export default function HowToPlay({ onClose, game = 'monopoly', pickGame = false, rules, mapId, shortcuts = false, startOn = 'rules', currency = '$' }: {
   onClose: () => void;
   /** Which game's tutorial to show (first, with pickGame). */
   game?: HowToGame;
@@ -148,6 +157,8 @@ export default function HowToPlay({ onClose, game = 'monopoly', pickGame = false
   pickGame?: boolean;
   /** Monopoly: the table's rules, to word the steps (auctions, game clock). */
   rules?: Partial<RuleConfig>;
+  /** Monopoly: the table's board, for its own rules (Blitz, Crossroads); absent: every board's. */
+  mapId?: string;
   /** Monopoly: offer the keyboard-shortcuts tab (in a game, on devices with a keyboard). */
   shortcuts?: boolean;
   startOn?: Tab;
@@ -184,7 +195,7 @@ export default function HowToPlay({ onClose, game = 'monopoly', pickGame = false
             ))}
           </div>
           {tab === 'rules' && <Steps steps={howToSteps(rules, currency)} />}
-          {tab === 'extras' && <Extras rules={rules} />}
+          {tab === 'extras' && <Extras rules={rules} mapId={mapId} cur={currency} />}
           {tab === 'keys' && (
             <table className="howto-keys">
               <tbody>{SHORTCUTS.map(([k, what]) => <tr key={k}><td><kbd>{k}</kbd></td><td>{what}</td></tr>)}</tbody>
@@ -212,14 +223,14 @@ export function markHowToSeen(): void {
  * goes to <body>: inside the home page's hero it sat in the hero's stacking
  * layer, under the character cards below it.
  */
-export function HowToPlayButton({ rules, game, className = 'btn small ghost', label = '❓ How to play' }: {
-  rules?: Partial<RuleConfig>; game?: HowToGame; className?: string; label?: string;
+export function HowToPlayButton({ rules, mapId, game, className = 'btn small ghost', label = '❓ How to play' }: {
+  rules?: Partial<RuleConfig>; mapId?: string; game?: HowToGame; className?: string; label?: string;
 }) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <button type="button" className={className} onClick={() => { setOpen(true); if (!game || game === 'monopoly') markHowToSeen(); }}>{label}</button>
-      {open && createPortal(<HowToPlay game={game} rules={rules} onClose={() => setOpen(false)} />, document.body)}
+      {open && createPortal(<HowToPlay game={game} rules={rules} mapId={mapId} onClose={() => setOpen(false)} />, document.body)}
     </>
   );
 }

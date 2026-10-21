@@ -22,6 +22,8 @@ import {
   type Trade, type TradeSide, type TurnPhase,
 } from '../../../shared/types.ts';
 import { MINIGAMES, MinigameError, hash } from './minigames/index.ts';
+import { getMap, mapShape, salaryFor, type MapDef } from '../../../shared/maps.ts';
+import { ahead, branch, isFork, passesGo, routeTo, stepFrom, walk, type Shape } from '../../../shared/route.ts';
 import type { Ctx as MinigameCtx, Names } from './minigames/types.ts';
 
 export class EngineError extends Error {}
@@ -164,6 +166,8 @@ export interface GameSnapshot {
   choice?: MoveChoice | null;
   speedPending?: 'mr' | null;
   endAfter?: boolean;
+  /** Optional: a board with a lane (absent in older snapshots: the Express). */
+  points?: 'lane' | 'loop';
   estateQueue?: number[];
   resumePhase?: TurnPhase | null;
   /** Optional: snapshots written before the end-of-game summary existed lack these. */
@@ -201,6 +205,11 @@ export class Game {
   /** Board length and jail position: every map is a square, sizes vary. */
   readonly size: number;
   readonly jailIndex: number;
+  /** The board's map (its own rules: lap salary, jackpot) and its topology (a lane, if any). */
+  readonly map: MapDef;
+  readonly shape: Shape;
+  /** A board with a lane: which way the points at Junction send everyone walking past. */
+  points: 'lane' | 'loop' = 'lane';
   players: PlayerState[];
   owned: Record<number, OwnedSpace> = {};
   currentIdx = 0;
@@ -280,6 +289,10 @@ export class Game {
     this.rules = init.rules;
     this.spaces = init.theme.spaces;
     this.size = this.spaces.length;
+    const map = getMap(init.theme.mapId);
+    // (A board that is not the map's own size is a test fixture: a plain loop with no map rules.)
+    this.map = map.spaces.length === this.size ? map : { ...map, lane: undefined, salaryRise: undefined, jackpotDoubles: undefined };
+    this.shape = mapShape(this.map);
     this.jailIndex = this.spaces.findIndex(s => s.kind === 'jail');
     if (this.jailIndex < 0) fail('Board has no jail');
     this.rng = init.rng ?? (n => Math.floor(Math.random() * n));
@@ -431,29 +444,52 @@ export class Game {
     this.moveOpen = true;
   }
 
-  /** Record that `p` just moved to where it now stands. */
-  private leg(p: PlayerState, kind: MoveLegKind, steps?: number, leap = false) {
+  /**
+   * Record that `p` just moved to where it now stands. `via`: the spaces
+   * walked, kept on a board with a lane, where the steps alone do not say
+   * which way the piece went.
+   */
+  private leg(p: PlayerState, kind: MoveLegKind, steps?: number, leap = false, via?: number[]) {
     if (!this.moveOpen || this.lastMove?.player !== p.id) this.beginMove(p, false);
-    this.lastMove!.legs.push({ to: p.position, kind, ...(steps !== undefined && { steps }), ...(leap && { leap: true }) });
+    this.lastMove!.legs.push({
+      to: p.position, kind, ...(steps !== undefined && { steps }), ...(leap && { leap: true }),
+      ...(via && this.shape.lane && kind !== 'teleport' && { via: [...via] }),
+    });
   }
 
+  /** Walk `p` forward `steps` spaces (the dice, a Bus choice); past the fork, the way the points are set. */
   private moveBy(p: PlayerState, steps: number, kind: MoveLegKind = 'roll', leap = false) {
-    const target = p.position + steps;
-    p.position = target % this.size;
-    this.leg(p, kind, kind === 'teleport' ? undefined : steps, leap);
-    if (target >= this.size) {
-      const landedOnGo = target % this.size === 0;
-      const pay = this.rules.goSalary * (landedOnGo && this.rules.doubleOnGo ? 2 : 1);
-      this.bankPays(p, pay, 'salary');
-      p.passedGo = true;
-      this.say(`${p.name} ${landedOnGo ? 'landed on' : 'passed'} ${this.spaces[0].name} and collected ${this.money(pay)}.`, p.id,
-        { amount: pay, to: p.id, reason: 'salary' });
-    }
+    this.walkRoute(p, walk(this.shape, p.position, steps, this.points === 'lane'), kind, leap);
   }
 
+  /** Step `p` along `route` (the spaces in order) as one leg, collecting salary on passing GO. */
+  private walkRoute(p: PlayerState, route: number[], kind: MoveLegKind, leap = false) {
+    if (!route.length) return;
+    p.position = route.at(-1)!;
+    this.leg(p, kind, kind === 'teleport' ? undefined : route.length, leap, route);
+    if (!passesGo(route)) return;
+    const landedOnGo = p.position === 0;
+    // Blitz: every lap pays more (MapDef.salaryRise), counted per player.
+    const laps = p.laps ?? 0;
+    const salary = salaryFor(this.map, this.rules.goSalary, laps);
+    const pay = salary * (landedOnGo && this.rules.doubleOnGo ? 2 : 1);
+    if (this.map.salaryRise) p.laps = laps + 1;
+    this.bankPays(p, pay, 'salary');
+    p.passedGo = true;
+    this.say(`${p.name} ${landedOnGo ? 'landed on' : 'passed'} ${this.spaces[0].name} and collected ${this.money(pay)}.`, p.id,
+      { amount: pay, to: p.id, reason: 'salary' });
+  }
+
+  /**
+   * Move forward to `to` (a full lap when already there): cards, Mr.
+   * Monopoly, triples. Past the fork the points decide, unless only the
+   * other way gets there (a card naming a space on the lane).
+   */
   private advanceTo(p: PlayerState, to: number, kind: MoveLegKind = 'roll') {
-    const steps = (to - p.position + this.size) % this.size;
-    this.moveBy(p, steps === 0 ? this.size : steps, kind);
+    const sh = this.shape;
+    const way = walk(sh, p.position, sh.size, this.points === 'lane');
+    const k = way.indexOf(to);
+    this.walkRoute(p, k >= 0 ? way.slice(0, k + 1) : routeTo(sh, p.position, to), kind);
   }
 
   private sendToJail(p: PlayerState) {
@@ -467,10 +503,18 @@ export class Game {
     this.say(`${p.name} was sent to ${this.spaces[this.jailIndex].name}!`, p.id);
   }
 
-  private resolveLanding(p: PlayerState, opts: LandingOpts = {}) {
+  /** `thrown`: the points were just thrown here (see choose()), so on to the space itself. */
+  private resolveLanding(p: PlayerState, opts: LandingOpts = {}, thrown = false) {
     const i = p.position;
     const s = this.spaces[i];
-    this.say(`${p.name} landed on ${s.name}.`, p.id);
+    if (!thrown) this.say(`${p.name} landed on ${s.name}.`, p.id);
+    // Junction (a board with a lane): whoever stops here throws the points for everyone, first.
+    if (!thrown && isFork(this.shape, i)) {
+      const sh = this.shape;
+      this.choice = { kind: 'points', lane: stepFrom(sh, i, true), loop: stepFrom(sh, i), ...(opts.railroadMultiplier && { double: true }) };
+      this.phase = 'choose';
+      return;
+    }
     if (isOwnable(s)) {
       const o = this.owned[i];
       if (!o) {
@@ -509,11 +553,7 @@ export class Game {
         this.sendToJail(p);
         break;
       case 'parking':
-        if (this.rules.freeParkingPot && this.pot > 0) {
-          this.say(`${p.name} scooped the ${s.name} pot of ${this.money(this.pot)}!`, p.id, { amount: this.pot, to: p.id, reason: 'pot' });
-          p.cash += this.pot;
-          this.pot = 0;
-        }
+        this.scoopPot(p);
         if (this.rules.arcadeParking && this.minigamesOn()) this.startMinigame(p);
         break;
       case 'arcade':
@@ -523,6 +563,15 @@ export class Game {
       default:
         break;
     }
+  }
+
+  /** `p` takes the Free Parking pot (house rule), if there is one. */
+  private scoopPot(p: PlayerState, lead = '') {
+    if (!this.rules.freeParkingPot || this.pot <= 0) return;
+    const park = this.spaces.find(s => s.kind === 'parking')?.name ?? 'Free Parking';
+    this.say(`${lead}${p.name} scooped the ${park} pot of ${this.money(this.pot)}!`, p.id, { amount: this.pot, to: p.id, reason: 'pot' });
+    p.cash += this.pot;
+    this.pot = 0;
   }
 
   private drawCard(p: PlayerState, deck: DeckId) {
@@ -550,17 +599,19 @@ export class Game {
         break;
       case 'nearest': {
         if (!this.spaces.some(s => s.kind === e.kind)) break; // this map has none
-        let i = p.position;
-        do i = (i + 1) % this.size; while (this.spaces[i].kind !== e.kind);
+        // The nearest ahead (on a board with a lane, whichever way is shorter).
+        const i = ahead(this.shape, p.position).find(x => this.spaces[x.i].kind === e.kind)?.i ?? p.position;
         this.advanceTo(p, i, 'card');
         this.resolveLanding(p, e.kind === 'railroad' ? { railroadMultiplier: 2 } : { utilityTenX: true });
         break;
       }
-      case 'back':
-        p.position = (p.position - e.steps + this.size) % this.size;
-        this.leg(p, 'card', -e.steps);
+      case 'back': {
+        const route = walk(this.shape, p.position, -e.steps);
+        p.position = route.at(-1) ?? p.position;
+        this.leg(p, 'card', -e.steps, false, route);
         this.resolveLanding(p);
         break;
+      }
       case 'jail':
         this.sendToJail(p);
         break;
@@ -761,6 +812,8 @@ export class Game {
     const face = speed === null ? '' : ` + ${speedName(speed)}`;
     this.say(`${p.name} rolled ${d[0]} + ${d[1]}${face}${triples ? ' (triples!)' : doubles ? ' (doubles)' : ''}.`, p.id);
     this.extraRoll = false;
+    // Jackpot doubles (Blitz): double 1s or double 6s scoop the Free Parking pot, wherever the roll goes.
+    if (this.map.jackpotDoubles && doubles && (d[0] === 1 || d[0] === 6)) this.scoopPot(p, `🎰 Double ${d[0]}s! `);
 
     if (triples) {
       // Official Speed Die rule: triples go anywhere, and that ends the turn's rolling.
@@ -810,7 +863,7 @@ export class Game {
     if (this.phase === 'done') this.afterResolution();
   }
 
-  /** Phase 'choose': the Bus move (steps) or the triples jump (a space). */
+  /** Phase 'choose': the Bus move (steps), the triples jump (a space) or the points at Junction (the way's first space). */
   private choose(p: PlayerState, value: number) {
     this.requireTurn(p, 'choose');
     const c = this.choice ?? fail('Nothing to choose');
@@ -821,6 +874,19 @@ export class Game {
       this.phase = 'done';
       this.say(`${p.name} took the bus ${value} space${value === 1 ? '' : 's'}.`, p.id);
       this.moveBy(p, value);
+    } else if (c.kind === 'points') {
+      if (value !== c.lane && value !== c.loop) fail('Pick the lane or the long way');
+      this.choice = null;
+      this.phase = 'done';
+      const way = value === c.lane ? 'lane' : 'loop';
+      const where = way === 'lane' ? `along ${this.spaces[c.lane].name}` : 'the long way round';
+      this.say(way === this.points
+        ? `${p.name} left the points as they were: everyone keeps going ${where}.`
+        : `🔀 ${p.name} threw the points: everyone now goes ${where}.`, p.id);
+      this.points = way;
+      this.resolveLanding(p, c.double ? { railroadMultiplier: 2 } : {}, true);
+      if (this.phase === 'done') this.afterResolution();
+      return;
     } else {
       if (value < 0 || value >= this.size) fail('No such space');
       this.choice = null;
@@ -833,11 +899,36 @@ export class Game {
     if (this.phase === 'done') this.afterResolution();
   }
 
-  /** The default choice (timeouts, bots, autopilot): the dice sum, or the best free deed. */
+  /** The default choice (timeouts, bots, autopilot): the dice sum, the points that pay best, or the best free deed. */
   defaultChoice(id: string): number {
     const c = this.choice;
     if (c?.kind === 'bus') return Math.max(...c.options);
+    if (c?.kind === 'points') return this.bestPoints(id) === 'lane' ? c.lane : c.loop;
     return this.bestTriplesTarget(id);
+  }
+
+  /**
+   * Which way player `id` is best off setting the points: everyone walking
+   * past the fork goes that way, so it is worth the rent `id` would collect
+   * there from each opponent, less the rent `id` would pay there (each space
+   * landed on about one walk in seven), plus a little for deeds still to buy.
+   */
+  bestPoints(id: string): 'lane' | 'loop' {
+    const sh = this.shape;
+    const me = this.player(id);
+    const rivals = this.active().filter(o => o !== me).length;
+    const worth = (i: number) => {
+      const s = this.spaces[i];
+      const o = this.owned[i];
+      if (!isOwnable(s)) return s.kind === 'tax' ? -(s.tax ?? 0) : 0;
+      if (!o) return (s.price ?? 0) <= me.cash ? 30 : 0;
+      if (o.mortgaged) return 0;
+      const rent = this.rentFor(i, {}, 7);
+      if (o.owner === id) return rent * rivals;
+      return this.rentDue(i, me) ? -rent : 0;
+    };
+    const value = (lane: boolean) => branch(sh, lane).reduce((n, i) => n + worth(i) / 7, 0);
+    return value(true) >= value(false) ? 'lane' : 'loop';
   }
 
   /** Where a triples jump helps most: an unowned deed, preferring ones toward a set; else GO. */
@@ -856,9 +947,8 @@ export class Game {
 
   /** Speed Die Mr. Monopoly: on to the next unowned deed, else the next one you owe rent on. */
   private mrMonopoly(p: PlayerState) {
-    const ahead = Array.from({ length: this.size - 1 }, (_, k) => (p.position + k + 1) % this.size)
-      .filter(i => isOwnable(this.spaces[i]));
-    const target = ahead.find(i => !this.owned[i]) ?? ahead.find(i => this.rentDue(i, p));
+    const next = ahead(this.shape, p.position).map(x => x.i).filter(i => isOwnable(this.spaces[i]));
+    const target = next.find(i => !this.owned[i]) ?? next.find(i => this.rentDue(i, p));
     if (target === undefined) {
       this.say(`Mr. Monopoly has nowhere to send ${p.name}.`, p.id);
       return;
@@ -1952,7 +2042,7 @@ export class Game {
       minigame: this.minigame, minigameSeq: this.minigameSeq, savedAt: this.now(),
       turnEndsAt: this.turnEndsAt, turnKey: this.turnKey, debtEndsAt: this.debtEndsAt,
       timeoutStreak: this.timeoutStreak, paused: this.paused, endsAt: this.endsAt, timeUp: this.timeUp,
-      speed: this.speed, choice: this.choice, speedPending: this.speedPending, endAfter: this.endAfter,
+      speed: this.speed, choice: this.choice, speedPending: this.speedPending, endAfter: this.endAfter, points: this.points,
       estateQueue: this.estateQueue, resumePhase: this.resumePhase,
       stats: this.stats, startedAt: this.startedAt, endedAt: this.endedAt,
     });
@@ -1979,6 +2069,7 @@ export class Game {
     g.rollTurn = snap.rollTurn ?? (g.dice && g.phase !== 'roll' ? g.turnNumber : 0);
     g.rollBy = snap.rollBy ?? '';
     g.choice = snap.choice ?? null;
+    g.points = snap.points ?? 'lane';
     g.speedPending = snap.speedPending ?? null;
     g.lastMove = snap.lastMove ?? null;
     g.lastTrade = snap.lastTrade ?? null;
@@ -2078,6 +2169,7 @@ export class Game {
       timeUp: this.timeUp,
       speed: this.speed,
       choice: this.choice,
+      ...(this.shape.lane && { points: this.points }),
       netWorth: Object.fromEntries(this.players.map(p => [p.id, this.netWorth(p.id)])),
       // Every player gets a row, even one nothing has happened to yet.
       stats: Object.fromEntries(this.players.map(p => [p.id, { ...NO_STATS, ...this.stats[p.id] }])),

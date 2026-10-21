@@ -36,6 +36,12 @@ export function envLook(kind: EnvironmentId, theme: Theme): EnvLook {
     case 'skyline':
       // The haze the far towers fade into; the night sky's dome starts from the same colour.
       return { background: skylineHaze(theme), fogNear: 70, fogFar: 620, keyColor: '#ffeeda', keyIntensity: 1.8 };
+    case 'arcade':
+      // The dark hall the machines glow in; the fog only softens the far wall.
+      return { background: '#0b0918', fogNear: 46, fogFar: 110, keyColor: '#ffe9f4', keyIntensity: 1.9 };
+    case 'garden':
+      // Summer afternoon: the pale haze on the horizon the hills fade into, bright sun.
+      return { background: '#cfe2ef', fogNear: 80, fogFar: 430, keyColor: '#fff1dc', keyIntensity: 2.5 };
     case 'lounge':
     default:
       return { background: mix(sky, '#1d130c', 0.5), fogNear: 34, fogFar: 80, keyColor: '#fff2df', keyIntensity: 2.0 };
@@ -60,6 +66,22 @@ export function Environment({ kind, theme, lite = false }: { kind: EnvironmentId
         <WithModel fallback={<Skyline theme={theme} ownLights={false} />} failed={<Skyline theme={theme} />} lights={<SkylineLights />}>
           <BakedScene asset={ASSETS.skylineSet} lite={lite} />
           <NightSky horizon={skylineHaze(theme)} />
+        </WithModel>
+      );
+    case 'arcade':
+      // Blitz: the arcade hall (tools/blender/arcade_set.py) for every edition;
+      // the drawn lounge in the edition's palette stands in while it loads.
+      return (
+        <WithModel fallback={<Lounge theme={theme} ownLights={false} />} failed={<Lounge theme={theme} />} lights={<ArcadeLights />}>
+          <BakedScene asset={ASSETS.arcadeSet} lite={lite} />
+        </WithModel>
+      );
+    case 'garden':
+      // Crossroads: the walled garden (tools/blender/garden_set.py) for every
+      // edition; a plain lawn under the sky stands in while it loads.
+      return (
+        <WithModel fallback={<Lawn />} lights={<GardenLights />}>
+          <BakedScene asset={ASSETS.gardenSet} lite={lite} />
         </WithModel>
       );
     case 'lounge':
@@ -160,6 +182,38 @@ function SkylineLights() {
   );
 }
 
+/**
+ * Live light matching the baked arcade (tools/blender/arcade_set.py): a violet
+ * wash, the warm pool over the table, the BLITZ sign behind it and the
+ * machines' screens down both sides.
+ */
+function ArcadeLights() {
+  return (
+    <>
+      <hemisphereLight args={['#b9a6ff', '#1a1036', 0.5]} />
+      <LiveLight position={[0, FLOOR + 12, -15]} color="#ff7ad8" intensity={150} mode="pulse" amount={0.2} speed={1.6} />
+      <pointLight position={[-16, FLOOR + 6, -2]} color="#6fd8ff" intensity={120} decay={2} />
+      <pointLight position={[16, FLOOR + 6, -2]} color="#c68cff" intensity={120} decay={2} />
+      <pointLight position={[0, FLOOR + 14, 2]} color="#ffe2c8" intensity={110} decay={2} />
+    </>
+  );
+}
+
+/** Live light matching the baked garden: blue sky above, sunlit lawn below (the key light is the sun). */
+function GardenLights() {
+  return <hemisphereLight args={['#bcd8f4', '#6f9a4a', 0.75]} />;
+}
+
+/** The garden's stand-in while its model loads: a mown lawn to the horizon. */
+function Lawn() {
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR, 0]} receiveShadow>
+      <circleGeometry args={[200, 48]} />
+      <meshStandardMaterial color="#6aa547" roughness={1} />
+    </mesh>
+  );
+}
+
 /** Live light matching the baked track: dusk sky above, grass below, the floodlights from behind. */
 function SpeedwayLights() {
   return (
@@ -183,6 +237,8 @@ export function reflectionsFor(env: EnvironmentId, themeId: string): { url?: str
   if (env === 'lounge' && themeId === 'chog') return baked(ASSETS.chogEnv.url, 0.6);
   if (env === 'skyline') return baked(ASSETS.skylineEnv.url, 0.7);
   if (env === 'speedway') return baked(ASSETS.speedwayEnv.url, 0.55);
+  if (env === 'arcade') return baked(ASSETS.arcadeEnv.url, 0.65);
+  if (env === 'garden') return baked(ASSETS.gardenEnv.url, 0.6);
   return STUDIO;
 }
 
@@ -190,6 +246,8 @@ export function reflectionsFor(env: EnvironmentId, themeId: string): { url?: str
 function bakedFor(kind: EnvironmentId, themeId: string): BakedAsset | null {
   if (kind === 'speedway') return ASSETS.speedwaySet;
   if (kind === 'skyline') return ASSETS.skylineSet;
+  if (kind === 'arcade') return ASSETS.arcadeSet;
+  if (kind === 'garden') return ASSETS.gardenSet;
   if (themeId === 'classic') return ASSETS.classicRoom;
   if (themeId === 'tptv') return ASSETS.tptvRoom;
   if (themeId === 'chog') return ASSETS.chogRoom;

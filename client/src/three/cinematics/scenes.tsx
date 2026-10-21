@@ -17,7 +17,7 @@ import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, type MutableRefO
 import { BoxGeometry, ConeGeometry, DoubleSide, Mesh, MeshStandardMaterial, PlaneGeometry, Vector3, type Group } from 'three';
 import type { CutsceneCue } from '../../../../shared/cutscenes.ts';
 import type { CharacterId } from '../../../../shared/characters.ts';
-import { C, tile, tokenSpot } from '../layout.ts';
+import { C, jailOf, tile, tokenSpot } from '../layout.ts';
 import { pieceObjects } from '../camera.ts';
 import { poseRig } from '../characters/Figure.tsx';
 import { jailDoor } from './store.ts';
@@ -130,7 +130,7 @@ export function JailScene({ ctx }: { ctx: SceneCtx }) {
   const plan = useMemo(() => {
     const [ax, az] = tokenSpot(run.tile, 0, 1, false, run.n);
     const g = tile(run.tile, run.n);
-    const J = tile(run.n / 4, run.n);
+    const J = tile(jailOf(run.n), run.n);
     const cell = { x: J.x + STRIP / 2, z: J.z - STRIP / 2 };
     const doorZ = cell.z - SIDE / 2;
     return { A: { x: ax, z: az }, along: g.along, out: g.out, cell, door: { x: cell.x, z: doorZ }, z0: doorZ - 2.1, z1: doorZ - 0.62 };

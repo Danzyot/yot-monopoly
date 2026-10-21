@@ -7,7 +7,7 @@ import { useEffect, useRef } from 'react';
 import { BoxGeometry, CylinderGeometry, Euler, Matrix4, MeshStandardMaterial, Quaternion, Vector3, type BufferGeometry, type Group } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { GameView } from '../../../shared/types.ts';
-import { C, tile } from './layout.ts';
+import { C, jailOf, tile } from './layout.ts';
 import { jailDoor } from './cinematics/store.ts';
 
 const STRIP = 0.42; // the "Just visiting" L (boardTexture drawJail)
@@ -62,7 +62,7 @@ const DOOR = merged([
 ]);
 
 export function JailCell({ game, n }: { game: GameView | null; n: number }) {
-  const g = tile(n / 4, n);
+  const g = tile(jailOf(n), n);
   // The cell's centre; the corner's inner quadrant (toward +x, -z).
   const cx = g.x + STRIP / 2, cz = g.z - STRIP / 2;
   const door = useRef<Group>(null);

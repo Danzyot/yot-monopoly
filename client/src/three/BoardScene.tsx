@@ -10,7 +10,8 @@ import { getMap } from '../../../shared/maps.ts';
 import type { GameView } from '../../../shared/types.ts';
 import { cleanAssetUrl, getTablePreset, type TableStyle } from '../../../shared/tableStyles.ts';
 import { boardTexture } from './boardTexture.ts';
-import { C, W, buildingSpots, tile, tileAt, tileWidth } from './layout.ts';
+import { C, W, buildingSpots, jailOf, ringOf, tile, tileAt, tileWidth } from './layout.ts';
+import { JunctionPoints } from './JunctionPoints.tsx';
 import { Pieces, type PieceReaction } from './characters/Pieces.tsx';
 import { Environment, FLOOR, STUDIO, TABLE_R, envLook, reflectionsFor } from './environments/index.tsx';
 import { Dice } from './Dice.tsx';
@@ -461,6 +462,10 @@ function BoardScene({ themeId, mapId, game, selected, onSelect, spin, ambient = 
   const customLogo = cleanAssetUrl(tableStyle?.boardLogoUrl);
   const env = getMap(mapId).environment;
   const look = envLook(env, theme);
+  // A board with a lane up the middle (Crossroads): the dice roll in its east half,
+  // the piles sit either side of it, and Junction shows which way its points are set.
+  const lane = !!getMap(mapId).lane;
+  const diceAt: [number, number, number] = lane ? [2.35, 0, -0.2] : [0, 0, 0];
   const [hover, setHover] = useState<number | null>(null);
   const liveMode = useAutoMode(cameraMode, !!game && game.phase !== 'over', game?.rollSeq ?? 0);
   // Adaptive resolution: start sharp, drop to 1× device pixels as soon as the
@@ -529,30 +534,33 @@ function BoardScene({ themeId, mapId, game, selected, onSelect, spin, ambient = 
         <Table theme={theme} presetId={tableStyle?.table} />
         <Board theme={theme} customLogo={customLogo} onPick={onSelect} onHover={onSelect ? setHover : undefined} />
         <BoardRim theme={theme} />
-        {theme.spaces[theme.spaces.length / 4]?.kind === 'jail' && <JailCell game={game} n={theme.spaces.length} />}
-        <CardDecks theme={theme} withLogo={!!(customLogo || theme.logoUrl)} lastCard={game?.lastCard ?? null} />
+        {theme.spaces[jailOf(theme.spaces.length)]?.kind === 'jail' && <JailCell game={game} n={theme.spaces.length} />}
+        <CardDecks theme={theme} withLogo={!!(customLogo || theme.logoUrl) || lane} lastCard={game?.lastCard ?? null} />
+        {lane && <JunctionPoints points={game?.points ?? 'lane'} color={theme.palette.accent} />}
         <TileHighlight index={hover} color="#ffffff" n={theme.spaces.length} />
         <TileHighlight index={selected ?? null} color={theme.palette.accent} pulse n={theme.spaces.length} />
         {game && (
           <>
             <Ownership game={game} theme={theme} me={me} />
-            {game.rules.freeParkingPot && theme.spaces[theme.spaces.length / 2]?.kind === 'parking' &&
+            {game.rules.freeParkingPot && theme.spaces[ringOf(theme.spaces.length) / 2]?.kind === 'parking' &&
               <ParkingPot pot={game.pot} n={theme.spaces.length} />}
             <Pieces game={game} n={theme.spaces.length} reactions={reactions} me={me} />
             {!spin && (
               <Suspense fallback={null}>
                 <Cutscenes game={game} n={theme.spaces.length} enabled={cinematic} low={lowPower} currency={theme.currency}
                   houseColor={theme.palette.house ?? '#1f9d49'} hotelColor={theme.palette.hotel ?? '#d2202f'}
-                  jailCell={theme.spaces[theme.spaces.length / 4]?.kind === 'jail'} />
+                  jailCell={theme.spaces[jailOf(theme.spaces.length)]?.kind === 'jail'} />
               </Suspense>
             )}
             <MoneyFX game={game} n={theme.spaces.length} currency={theme.currency} />
             <GoConfetti n={theme.spaces.length} />
             <DeedPop game={game} theme={theme} />
-            <Dice dice={game.dice} seq={game.rollSeq} speed={game.speed ?? null} body={theme.palette.die} pip={theme.palette.pip} />
+            <group position={diceAt}>
+              <Dice dice={game.dice} seq={game.rollSeq} speed={game.speed ?? null} body={theme.palette.die} pip={theme.palette.pip} />
+            </group>
           </>
         )}
-        {!game && <Dice dice={[6, 6]} seq={0} body={theme.palette.die} pip={theme.palette.pip} />}
+        {!game && <group position={diceAt}><Dice dice={[6, 6]} seq={0} body={theme.palette.die} pip={theme.palette.pip} /></group>}
       </Spinner>
 
       {/* Auto backs off once frames run past ~24 ms (under 42 fps) for most of 1.5 s. */}
