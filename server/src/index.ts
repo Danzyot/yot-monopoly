@@ -31,7 +31,7 @@ import { mountContent } from './routes/content.ts';
 import { mountCardsProfile } from './routes/cardsProfile.ts';
 import { mountCardsDaily } from './routes/cardsDaily.ts';
 import { mountMonopolyDaily } from './routes/monopolyDaily.ts';
-import { loadMonopolyDaily, monopolyDailyProfile, reconcileMonopolyDaily } from './monopolyDaily.ts';
+import { loadMonopolyDaily, monopolyDailyAttempt, monopolyDailyProfile, reconcileMonopolyDaily } from './monopolyDaily.ts';
 import { mountPokerDaily } from './routes/pokerDaily.ts';
 import { mountPlayerCard } from './routes/playerCard.ts';
 import { cardPath, configurePlayerCards, playerBanned, playerSnapshot, profileMeta } from './playerCard.ts';
@@ -48,7 +48,7 @@ import { attachTournaments } from './tournament/sockets.ts';
 import { allCardsResults, cardsLeaderboard, loadCardsResults, recentCardsResults } from './cards/stats.ts';
 import { cardsDailyAttempt, cardsDailyInfo, cardsDailyProfile, loadCardsDaily, reconcileCardsDaily } from './cards/daily.ts';
 import { dailyDate } from '../../shared/cards/daily.ts';
-import { loadPokerDaily } from './poker/daily.ts';
+import { loadPokerDaily, pokerDailyProfile, pokerDailyRun } from './poker/daily.ts';
 import { staticClient } from './staticFiles.ts';
 import { mountCrawlerFiles, siteOrigin, spaHandler } from './seo.ts';
 import { mountSite } from './routes/site.ts';
@@ -250,6 +250,24 @@ mountEmail(app);
     status: (id, t) => {
       const streak = cardsDailyProfile(id, t)?.streaks.streak;
       return streak === undefined ? null : { streak, playedToday: !!cardsDailyAttempt(dailyDate(t), id) };
+    },
+  });
+  registerDailySource({
+    id: 'monopoly',
+    label: GAMES.monopoly.name,
+    path: `${GAMES.monopoly.path}#daily`,
+    status: (id, t) => {
+      const streak = monopolyDailyProfile(id, t)?.streaks.streak;
+      return streak === undefined ? null : { streak, playedToday: !!monopolyDailyAttempt(dailyDate(t), id) };
+    },
+  });
+  registerDailySource({
+    id: 'poker',
+    label: GAMES.poker.name,
+    path: '/poker/daily',
+    status: (id, t) => {
+      const streak = pokerDailyProfile(id, t)?.streaks.streak;
+      return streak === undefined ? null : { streak, playedToday: !!pokerDailyRun(dailyDate(t), id) };
     },
   });
   const weekAhead = (now: number) => [

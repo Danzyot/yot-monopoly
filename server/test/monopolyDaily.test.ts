@@ -263,8 +263,14 @@ test('going idle (three turn steps run out in a row) ends the attempt as a loss'
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const room = r as any;
   assert.equal(room.automated(r.seat('md_idle'), Date.now() + 3_600_000), null);
-  for (let k = 0; k < 6 && r.status === 'playing'; k++) {
-    if (g.current.id !== 'md_idle') break;
+  // Their steps run out; the bots play their own turns in between (the dice
+  // decide whether three steps fit in one turn of theirs).
+  for (let k = 0; k < 500 && r.status === 'playing'; k++) {
+    if (g.current.id !== 'md_idle') {
+      const a = botAction(g, g.current.id);
+      if (a) r.act(g.current.id, a.type === 'proposeTrade' ? { type: 'endTurn' } : a, true);
+      continue;
+    }
     g.turnEndsAt = 0;
     if (g.clockTimeout()) room.afterChange();
   }
