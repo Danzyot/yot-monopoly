@@ -328,7 +328,8 @@ How it behaves:
   the dashboard.
 - `/stats` and `/leaderboard` follow the **leaderboard** feature switch: with
   it off they are refused and removed from Discord.
-- `/daily` is only offered while the site has a Cards Daily Challenge.
+- `/daily` shows today's Cards Daily Challenge (its number, time to the next
+  deal, the top 5 while the leaderboard switch is on, and a Play link).
 - Replies show only what the public site shows (names, results, badges,
   public table codes): never wallet addresses, IPs or linked accounts. Banned
   players get no stats, no leaderboard row and no answers. Results are public

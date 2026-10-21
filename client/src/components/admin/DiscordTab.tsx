@@ -86,7 +86,7 @@ function SlashCommands() {
     <section className="adm-card adm-stack">
       <h3>Slash commands</h3>
       <p className="muted small">
-        /play, /stats, /leaderboard, /tables, /chog (and /daily when the site has one), registered in the Chog server.
+        /play, /stats, /leaderboard, /tables, /daily and /chog, registered in the Chog server.
         They register by themselves on startup and when the leaderboard switch changes; press the button after
         re-inviting the bot or if they are missing in Discord.
       </p>

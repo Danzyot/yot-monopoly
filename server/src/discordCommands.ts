@@ -23,6 +23,7 @@ import { BACKGROUND_COLORS, CHOG_SUPPLY, chogName, traitsOf, type ChogTraits } f
 import { openSeaUrl } from '../../shared/chogs/meta.ts';
 import type { Achievement } from '../../shared/achievements.ts';
 import type { CardsProfile, PublicProfile } from '../../shared/types.ts';
+import { CARDS_DAILY_BOTS, DAILY_RANKING_HELP, dailyOutcome, dailyTitle, type CardsDailyInfo, type CardsDailyRow } from '../../shared/cards/daily.ts';
 import type { ActivityTable } from './activity.ts';
 
 const API = 'https://discord.com/api/v10';
@@ -96,14 +97,10 @@ export interface StatsSnapshot {
   games: number;
 }
 
-/** Today's Cards Daily Challenge, as /daily shows it. */
-export interface DailyInfo {
-  title: string;
-  description: string;
-  /** Where to play it (site-relative or absolute). */
-  path: string;
-  fields?: { name: string; value: string; inline?: boolean }[];
-}
+/** Today's Cards Daily Challenge (GET /api/cards/daily's answer), as much as /daily reads. */
+export type DailyInfo = Pick<CardsDailyInfo, 'date' | 'number' | 'endsAt' | 'players' | 'wins'> & {
+  leaders: readonly Pick<CardsDailyRow, 'id' | 'name' | 'rank' | 'won' | 'turns' | 'points' | 'handPoints' | 'cards' | 'oppCards' | 'left'>[];
+};
 
 export interface SlashDeps {
   /** The site's canonical origin (PUBLIC_URL, else choggames.com). */
@@ -401,11 +398,40 @@ async function daily(deps: SlashDeps): Promise<Reply> {
   if (!deps.daily) return oops(`There is no Daily Challenge on ${BRAND.name} yet.`);
   const d = await deps.daily();
   if (!d) return oops("Today's Daily Challenge is not ready yet. Try again in a little while.");
-  const url = absolute(deps.origin(), d.path);
+  const url = `${deps.origin()}${GAMES.cards.path}`;
+  const fields: NonNullable<Embed['fields']> = [
+    { name: 'Played today', value: `${plural(d.players, 'player')} · ${plural(d.wins, 'win')}`, inline: true },
+    { name: 'Next deal', value: `in ${untilText(d.endsAt - deps.now())} (00:00 UTC)`, inline: true },
+  ];
+  // The day's top, on the leaderboard switch like every published result; banned players left out.
+  if (deps.statsPublic()) {
+    const medal = ['🥇', '🥈', '🥉'];
+    const top = d.leaders.filter(r => !deps.banned(r.id)).slice(0, 5);
+    fields.push({
+      name: 'Top 5',
+      value: top.length
+        ? top.map((r, n) => `${medal[n] ?? `**${n + 1}.**`} ${safeName(r.name, 24)}: ${dailyOutcome(r)}${r.won ? ` · +${r.points} pts` : ''}`).join('\n')
+        : 'Nobody has finished today\'s deal yet. Be the first!',
+    });
+  }
   return {
-    embeds: [{ title: `📅 ${plainName(d.title, 80)}`, url, color: PINK, description: d.description.slice(0, 2000), ...(d.fields?.length && { fields: d.fields }) }],
+    embeds: [{
+      title: `📅 ${dailyTitle(d.date)}`,
+      url,
+      color: PINK,
+      description: `One deal, the same for everyone today: you against ${CARDS_DAILY_BOTS} bots.`,
+      fields,
+      footer: { text: DAILY_RANKING_HELP },
+    }],
     components: [{ type: 1, components: [button("Play today's challenge", url, '🃏')] }],
   };
+}
+
+/** "5h 12m" / "8m" until a moment. */
+export function untilText(ms: number): string {
+  const min = Math.max(1, Math.ceil(ms / 60_000));
+  const h = Math.floor(min / 60), m = min % 60;
+  return h ? `${h}h ${m}m` : `${m}m`;
 }
 
 const TRAIT_ORDER: (keyof ChogTraits)[] = ['Tier', 'Base', 'Form', 'Skin', 'Eyes', 'Mouth', 'Head', 'Body', 'Accessory', 'Aura', 'Background', 'Side'];

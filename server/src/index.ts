@@ -36,7 +36,8 @@ import { attachCardsSockets } from './cards/sockets.ts';
 import { armCardsPersistence, restoreCardsLive } from './cards/persist.ts';
 import { attachTournaments } from './tournament/sockets.ts';
 import { cardsLeaderboard, loadCardsResults, recentCardsResults } from './cards/stats.ts';
-import { loadCardsDaily, reconcileCardsDaily } from './cards/daily.ts';
+import { cardsDailyInfo, loadCardsDaily, reconcileCardsDaily } from './cards/daily.ts';
+import { dailyDate } from '../../shared/cards/daily.ts';
 import { staticClient } from './staticFiles.ts';
 import { mountCrawlerFiles, siteOrigin, spaHandler } from './seo.ts';
 import { mountSite } from './routes/site.ts';
@@ -221,6 +222,12 @@ mountPlayerCard(app);
     cardPath,
     leaders: (game, n) => (game === 'cards' ? cardsLeaderboard(n) : leaderboard(n)),
     tables: game => [...(game === 'cards' ? live.cardsTables() : live.monopolyTables())],
+    // Today's Cards Daily Challenge, as GET /api/cards/daily reads it (settled first, like there).
+    daily: () => {
+      const t = Date.now();
+      reconcileCardsDaily(cards.registry, t);
+      return cardsDailyInfo(dailyDate(t), { leaders: isOn('leaderboard'), now: t });
+    },
     now: () => Date.now(),
   });
   configureCommandDefinitions(() => commandDefinitions({ statsPublic: isOn('leaderboard'), daily: dailyAvailable() }));

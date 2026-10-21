@@ -204,12 +204,44 @@ test('/chog: a token by id, the Chog of the Day without one, and a bad id', asyn
   assert.ok(bad.ephemeral);
 });
 
-test('/daily: refused cleanly without the feature, shown with it', async () => {
+const dailyRow = (rank: number, id: string, won: boolean) => ({
+  id, name: `daily-${id}`, rank, won, turns: won ? 10 + rank : 20, points: won ? 50 - rank : 0,
+  handPoints: won ? 0 : 30 + rank, cards: won ? 0 : 4, oppCards: 9,
+});
+const DAILY: import('../src/discordCommands.ts').DailyInfo = {
+  date: '2026-10-25', number: 5, endsAt: NOW + (5 * 60 + 12) * 60_000 - 30_000, players: 9, wins: 4,
+  leaders: [
+    dailyRow(1, 'a', true), dailyRow(2, `dc_${BANNED}`, true), dailyRow(3, 'b', true), dailyRow(4, 'c', true),
+    dailyRow(5, 'd', false), dailyRow(6, 'e', false), dailyRow(7, 'f', false),
+  ],
+};
+
+test('/daily: today\'s number, the next deal, the top 5 (banned left out) and a Play link', async () => {
   const none = await cmd.handleCommand(ix('daily'), deps());
-  assert.ok(none.ephemeral);
-  const r = await cmd.handleCommand(ix('daily'), deps({ daily: async () => ({ title: 'Daily Challenge', description: 'Win in 5 rounds', path: '/cards/daily' }) }));
+  assert.ok(none.ephemeral, 'no feature: a clean refusal');
+
+  const r = await cmd.handleCommand(ix('daily'), deps({ daily: () => DAILY }));
   assert.ok(!r.ephemeral);
-  assert.equal(r.components![0].components[0].url, `${ORIGIN}/cards/daily`);
+  const e = r.embeds![0];
+  assert.match(e.title!, /Cards Daily #5$/);
+  assert.equal(r.components![0].components[0].url, `${ORIGIN}/cards`);
+  const field = (name: string) => e.fields!.find(f => f.name === name)!.value;
+  assert.equal(field('Played today'), '9 players · 4 wins');
+  assert.equal(field('Next deal'), 'in 5h 12m (00:00 UTC)');
+  const top = field('Top 5').split('\n');
+  assert.equal(top.length, 5);
+  assert.ok(!field('Top 5').includes(BANNED));
+  assert.match(top[0], /^🥇 daily-a: won in 11 turns · \+49 pts$/);
+  assert.match(top[4], /^\*\*5\.\*\* daily-e: lost with 36 points in hand$/);
+
+  // The day's leaderboard rides on the leaderboard switch; the challenge itself does not.
+  statsOn = false;
+  const off = await cmd.handleCommand(ix('daily'), deps({ daily: () => DAILY }));
+  assert.ok(!off.ephemeral);
+  assert.ok(!off.embeds![0].fields!.some(f => f.name === 'Top 5'));
+
+  const empty = await cmd.handleCommand(ix('daily'), deps({ daily: () => ({ ...DAILY, leaders: [] }), statsPublic: () => true }));
+  assert.match(empty.embeds![0].fields!.find(f => f.name === 'Top 5')!.value, /Be the first/);
 });
 
 test('an unknown command is answered, ephemerally', async () => {
@@ -251,7 +283,7 @@ test('slow commands are deferred, then the reply edits the original message', as
   }) as unknown as typeof fetch;
   let release!: () => void;
   const slow = new Promise<void>(r => { release = r; });
-  const d = deps({ daily: async () => { await slow; return { title: 'Today', description: 'Go', path: '/cards' }; } });
+  const d = deps({ daily: async () => { await slow; return DAILY; } });
 
   const first = await cmd.answerCommand(ix('daily'), d, { deferAfterMs: 20, fetchImpl });
   assert.deepEqual(first, { type: 5 });
@@ -260,7 +292,7 @@ test('slow commands are deferred, then the reply edits the original message', as
   assert.equal(calls.length, 1);
   assert.equal(calls[0].method, 'PATCH');
   assert.equal(calls[0].url, 'https://discord.com/api/v10/webhooks/app1/tok/messages/@original');
-  assert.match(calls[0].body!, /Today/);
+  assert.match(calls[0].body!, /Cards Daily #5/);
 
   // A fast one goes straight back.
   const fast = await cmd.answerCommand(ix('play'), deps(), { deferAfterMs: 1000, fetchImpl });
