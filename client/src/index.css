@@ -530,6 +530,9 @@ button.edition:disabled { cursor: default; }
 .adm-switch:disabled { opacity: 0.5; }
 
 .adm-diag { border-top: 1px solid var(--line); padding-top: 10px; }
+/* Dashboard → Email: a template or announcement shown as the email itself. */
+.adm-email-frame { width: 100%; height: 640px; border: 1px solid var(--line); border-radius: 10px; background: #0f1420; }
+@media (max-width: 600px) { .adm-email-frame { height: 520px; } }
 .adm-pre { background: rgba(0,0,0,0.35); border-radius: 8px; padding: 10px; font-size: 12px; overflow-x: auto; margin: 8px 0 0; white-space: pre-wrap; word-break: break-all; }
 
 .adm-drop { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; border: 2px dashed var(--line); border-radius: var(--radius); background: var(--panel); }

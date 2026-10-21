@@ -258,7 +258,7 @@ export const CHOG: Edition = edition(CLASSIC, {
   currency: '$',
   logoUrl: '/editions/chog/logo.png',
   art: 'chog',
-  deckNames: { chance: 'Chog Luck', chest: 'Chog Stash' },
+  deckNames: { chance: 'Mon Fortune', chest: 'Chog Stash' },
   names: {
     0: 'START', 1: 'Cream Alley', 3: 'Blush Lane', 4: 'Rake', 5: 'Pink Line',
     6: 'Spade Street', 8: 'Club Court', 9: 'Diamond Drive', 10: 'Chog Cage',

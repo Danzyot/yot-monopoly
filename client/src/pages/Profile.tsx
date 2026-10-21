@@ -264,6 +264,7 @@ export default function Profile() {
                 <Link className="btn primary chunky" to={GAMES.monopoly.path}>Play {GAMES.monopoly.name}</Link>
                 <Link className="btn primary chunky" to={GAMES.cards.path}>Play {GAMES.cards.name}</Link>
                 <Link className="btn chunky" to="/daily">Daily puzzles</Link>
+                <Link className="btn chunky ghost" to="/settings"><span aria-hidden>🔔</span> Notification settings</Link>
               </>
             ) : (
               <>
@@ -308,6 +309,7 @@ export default function Profile() {
           </div>
           <ShareProfile id={id} name={hero!.name} mine={mine} />
           {!mine && <div className="pf-friend"><FriendButton id={id} name={hero!.name} /></div>}
+          {mine && <div className="pf-friend"><Link className="btn small ghost" to="/settings"><span aria-hidden>🔔</span> Notification settings</Link></div>}
         </div>
       </section>
 
