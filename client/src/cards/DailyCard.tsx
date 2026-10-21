@@ -136,7 +136,7 @@ export default function DailyCard() {
         <CalendarTile date={info.date} />
         <div className="cd-titles">
           <h2 id="cd-title">Daily Challenge <span className="cd-num">#{info.number}</span></h2>
-          <p className="muted small">One deal, the same for everyone today: you against {bots}. Classic, one round, {info.rules.turnSeconds} s turns. New deal in {untilNext(info.endsAt)}.</p>
+          <p className="muted small">Everyone gets the same cards today. Beat {bots} in as few turns as you can: the fastest wins top the board. New deal in {untilNext(info.endsAt)}.</p>
         </div>
         {streak > 0 && (
           <span className="cd-streak" title={`${streak} day${streak === 1 ? '' : 's'} in a row (best ${you!.streaks.best})${you!.streaks.winStreak ? ` · ${you!.streaks.winStreak} won in a row` : ''}`}>
@@ -162,7 +162,7 @@ export default function DailyCard() {
             </span>
           </div>
         ) : (
-          <p>One official try today — <b>leaving counts as a loss</b>. Fewest turns to win tops the board.</p>
+          <p>You get <b>one try</b> a day, and leaving counts as a loss.</p>
         )}
       </div>
 

@@ -35,7 +35,7 @@ const SHOWCASE: Card[] = [
 const MID = (SHOWCASE.length - 1) / 2;
 
 const STEPS = [
-  { icon: '🃏', title: 'Open a table', body: 'Classic, or Chog Chaos: Purge, Blitz, Gas Spike +6, Rug Pull +10, Chog Roulette and no mercy at 25 cards. Pick the house rules and the timer; bots fill empty seats.' },
+  { icon: '🃏', title: 'Open a table', body: 'Play Classic, or Chog Chaos for a wilder deck with bigger draw cards. Bots fill any empty seats.' },
   { icon: '🔗', title: 'Share the code', body: 'Friends join with the five-letter code or the invite link, on a phone or a laptop.' },
   { icon: '🏁', title: 'Shed your hand', body: `Match colour, number or symbol. Down to one card? Hit "${LAST_CARD_CALL}" before someone catches you.` },
 ];
