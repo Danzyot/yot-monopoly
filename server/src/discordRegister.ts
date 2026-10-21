@@ -71,11 +71,18 @@ export function commandSyncStatus(): CommandSyncStatus {
   return { ...status };
 }
 
-/** Register the commands unless Discord already has these exact ones. Never throws; one sync at a time. */
+/**
+ * Register the commands unless Discord already has these exact ones. Never
+ * throws; one sync at a time. One asked for while another runs goes after it
+ * (the switch may have changed the list meanwhile); an unchanged list costs no request.
+ */
 export function syncCommands(opts: SyncOptions = {}): Promise<CommandSyncStatus> {
-  if (inflight) return inflight;
-  inflight = doSync(opts).finally(() => { inflight = null; });
-  return inflight;
+  const mine: Promise<CommandSyncStatus> = (inflight ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(() => doSync(opts))
+    .finally(() => { if (inflight === mine) inflight = null; });
+  inflight = mine;
+  return mine;
 }
 
 async function doSync(opts: SyncOptions): Promise<CommandSyncStatus> {

@@ -457,6 +457,29 @@ test('sync: a bulk overwrite of the guild commands, then skipped while unchanged
   assert.deepEqual(fewer.commands, ['/play', '/tables', '/chog']);
 });
 
+test('sync: a change asked for while a sync is running goes out after it, not dropped', async () => {
+  reg.resetCommandSync();
+  const store = memoryStore();
+  const sent: string[][] = [];
+  let release!: () => void;
+  const gate = new Promise<void>(r => { release = r; });
+  const fetchImpl = (async (_url: string, init: RequestInit) => {
+    sent.push((JSON.parse(String(init.body)) as { name: string }[]).map(d => d.name));
+    if (sent.length === 1) await gate;
+    return new Response('[]', { status: 200 });
+  }) as unknown as typeof fetch;
+  const opts = { env: ENV, store, fetchImpl, sleep: async () => {} };
+  const first = reg.syncCommands({ ...opts, defs: cmd.commandDefinitions({ statsPublic: true, daily: false }) });
+  // The leaderboard switch goes off while the first list is still on its way.
+  const second = reg.syncCommands({ ...opts, defs: cmd.commandDefinitions({ statsPublic: false, daily: false }) });
+  release();
+  await first;
+  const s = await second;
+  assert.equal(sent.length, 2, 'the newer list was sent too');
+  assert.deepEqual(sent[1], ['play', 'tables', 'chog']);
+  assert.deepEqual(s.commands, ['/play', '/tables', '/chog']);
+});
+
 test('sync: failures are reported, not thrown, and not remembered as done', async () => {
   reg.resetCommandSync();
   const store = memoryStore();
