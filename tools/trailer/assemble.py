@@ -59,7 +59,7 @@ CAPTIONS = {
     'poker': [(0.2, 1.9, 'Chog Poker', 'lower'), (2.4, 3.95, 'Read the table. Take the pot.', 'lower')],
     'poker-web': [(0.15, 2.9, 'Pull up a seat.', 'top')],
     'nft': [(0.15, 1.9, 'Hold a Chog?', 'top'), (2.0, 3.9, 'Play as it.', 'top')],
-    'nft-run': [(0.5, 3.8, 'Your Chog. In the game.', 'big')],
+    'nft-run': [(0.5, 3.8, 'Your Chog. In the game.', 'top')],
     'dailies': [(0.15, 2.9, 'Dailies, streaks and leaderboards.', 'top')],
 }
 
