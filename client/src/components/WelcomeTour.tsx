@@ -1,9 +1,8 @@
 // The first-visit welcome: shown once to a new player after they sign in
 // (WelcomeHost.tsx), and again from the footer's "Replay the welcome
-// tour". Four short steps: the name to play under (POST /api/auth/name),
+// tour". Three short steps: the name to play under (POST /api/auth/name),
 // the Chog's colour and outfit with a live 3D preview (saved like the lobby's
-// picks, so the next table puts them on), which emails to get (all off until
-// ticked; NotificationSettings.tsx), and big buttons into a game.
+// picks, so the next table puts them on), and big buttons into a game.
 // Loaded only when it opens: the preview brings three.js.
 import { Suspense, lazy, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -17,7 +16,6 @@ import { PLAYER_COLORS } from '../../../shared/types.ts';
 import type { Outfit } from '../../../shared/outfits.ts';
 import { CloseX, Modal } from './Modal.tsx';
 import OutfitPicker from './OutfitPicker.tsx';
-import NotificationSettings from './NotificationSettings.tsx';
 import { loadColorPref, loadOutfitPref, saveColorPref, saveOutfitPref } from './outfitBits.tsx';
 import '../styles/welcome.css';
 
@@ -36,7 +34,7 @@ function prefCharacter(): CharacterId {
 const CHARACTER_PREF_KEY = 'yot:character';
 const NAME_MAX = 20;
 
-const STEPS = ['Your name', 'Your Chog', 'Emails', "Let's play"] as const;
+const STEPS = ['Your name', 'Your Chog', "Let's play"] as const;
 
 export default function WelcomeTour({ onClose }: { onClose: () => void }) {
   const { profile, rename } = useAuth();
@@ -124,18 +122,6 @@ export default function WelcomeTour({ onClose }: { onClose: () => void }) {
 
       {step === 2 && (
         <div className="welcome-body">
-          <p className="welcome-q">Want a heads-up by email?</p>
-          <p className="welcome-note">Pick what you'd like to hear about, or skip: nothing is sent unless you tick it. Change it any time under “Email notifications” at the bottom of the page.</p>
-          <NotificationSettings compact />
-          <div className="welcome-actions">
-            <button type="button" className="btn ghost" onClick={() => setStep(1)}>Back</button>
-            <button type="button" className="btn primary big" onClick={() => setStep(3)} data-autofocus>Next</button>
-          </div>
-        </div>
-      )}
-
-      {step === 3 && (
-        <div className="welcome-body">
           <p className="welcome-q">You're all set{profile ? `, ${profile.name}` : ''}. What first?</p>
           <div className="welcome-games">
             <button type="button" className="welcome-game" onClick={() => go(GAMES.monopoly.path)} data-autofocus>
@@ -152,7 +138,7 @@ export default function WelcomeTour({ onClose }: { onClose: () => void }) {
             </button>
           </div>
           <div className="welcome-actions">
-            <button type="button" className="btn ghost" onClick={() => setStep(2)}>Back</button>
+            <button type="button" className="btn ghost" onClick={() => setStep(1)}>Back</button>
             <button type="button" className="btn ghost" onClick={onClose}>Just look around</button>
           </div>
         </div>

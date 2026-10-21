@@ -43,7 +43,6 @@ const Footer = lazy(() => import('./components/Footer.tsx'));
 const LegalPage = lazy(() => import('./pages/LegalPage.tsx'));
 const NotFound = lazy(() => import('./pages/NotFound.tsx'));
 const Friends = lazy(() => import('./pages/Friends.tsx'));
-const Settings = lazy(() => import('./pages/Settings.tsx'));
 
 /** Shown for the moment a page's code is still on its way: the page's shape, not a blank. */
 const PageLoading = () => (
@@ -75,7 +74,6 @@ function Shell() {
         <Route path="/characters" element={<Gallery />} />
         <Route path="/u/:id" element={<Profile />} />
         <Route path="/friends" element={<Friends />} />
-        <Route path="/settings" element={<Settings />} />
         <Route path="/admin/*" element={<AdminPage />} />
         <Route path="/wallet" element={<WalletPage />} />
         <Route path="/sso" element={<Sso />} />

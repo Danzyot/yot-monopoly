@@ -5,7 +5,6 @@ import AltsTab from './AltsTab.tsx';
 import BansTab from './BansTab.tsx';
 import ContentTab from './ContentTab.tsx';
 import DiscordTab from './DiscordTab.tsx';
-import EmailTab from './EmailTab.tsx';
 import FeaturesTab from './FeaturesTab.tsx';
 import HostsTab from './HostsTab.tsx';
 import GraphicsManager from './GraphicsManager.tsx';
@@ -46,7 +45,6 @@ export const ADMIN_TABS: AdminTab[] = [
   { id: 'content', label: 'Content', icon: '✏️', Component: ContentTab },
   { id: 'pages', label: 'Pages', icon: '📄', Component: PagesTab },
   { id: 'discord', label: 'Discord', icon: '💬', Component: DiscordTab },
-  { id: 'email', label: 'Email', icon: '✉️', Component: EmailTab },
   { id: 'graphics', label: 'Graphics', icon: '🖼', Component: GraphicsManager },
   { id: 'music', label: 'Music', icon: '🎵', Component: MusicManager },
 ];

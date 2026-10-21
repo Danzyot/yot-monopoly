@@ -47,7 +47,6 @@ export default function Footer() {
               <li><Link to="/tournaments">Tournaments</Link></li>
               <li><button type="button" className="ft-link" onClick={() => setHowTo(true)}>How to play</button></li>
               {profile && <li><button type="button" className="ft-link" onClick={() => window.dispatchEvent(new Event(WELCOME_EVENT))}>Replay the welcome tour</button></li>}
-              {profile && <li><Link to="/settings">Email notifications</Link></li>}
             </ul>
           </div>
           <div className="ft-col">

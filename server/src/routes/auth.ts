@@ -1,8 +1,5 @@
 // Sign-in: "Sign in with Discord" (OAuth), "Verify with a code" (the bot's
 // Verify button or a verify channel), and demo sign-in when DEMO_MODE=1.
-// Only the OAuth path learns the player's email address (the `email` scope);
-// a code or the Verify button gets none from Discord, so those players add it
-// by signing in with Discord once.
 import express from 'express';
 import {
   demoMode, makeDemoProfile, makeDiscordProfile, signState, signToken, verifyState,
@@ -13,7 +10,6 @@ import { authorizeUrl, completeOAuth, discordEnabled, redirectUriFor } from '../
 import { handleInteraction, interactionsConfigured, validSignature } from '../interactions.ts';
 import { answerLiveCommand, type CommandInteraction } from '../discordCommands.ts';
 import { codeStatus, startCode } from '../verifycode.ts';
-import { recordDiscordEmail } from '../email/store.ts';
 import { getAccount } from '../connections.ts';
 import { setChosenName, withChosenName } from '../displayNames.ts';
 import { authed, fail, rateLimit, requestBase } from '../http.ts';
@@ -134,8 +130,6 @@ export function authRoutes(): express.Router {
       const profile = withChosenName(makeDiscordProfile(d));
       const ban = findBan({ id: profile.id, discordId: d.id, ip: req.ip });
       if (ban) throw new Error(banMessage(ban));
-      // The address stays here (email/store.ts): never in the token, the profile or a log.
-      recordDiscordEmail(profile.id, d.email, d.verified);
       res.redirect(`${ret}#dtoken=${encodeURIComponent(signToken(profile))}`);
     } catch (e) {
       res.redirect(`${ret}#derror=${encodeURIComponent(e instanceof Error ? e.message : 'Discord sign-in failed')}`);

@@ -23,7 +23,6 @@ const { approveHost, isApprovedHost, resetHostsForTest } = await import('../src/
 const { linkWallet, walletsOf, resetWalletsForTest } = await import('../src/wallet/store.ts');
 const { addBan, isBanned } = await import('../src/bans.ts');
 const { FriendStore } = await import('../src/friends.ts');
-const { emailRecord, recordDiscordEmail, setTopics } = await import('../src/email/store.ts');
 type Deps = import('../src/erase.ts').EraseDeps;
 
 const ME = 'dc_4242424242';
@@ -63,9 +62,6 @@ function seed() {
   approveHost(ME, 'Gone Soon', 'op');
   resetWalletsForTest();
   linkWallet('0x000000000000000000000000000000000000dEaD', ME);
-  recordDiscordEmail(ME, 'gone@example.com', true);
-  setTopics(ME, { digest: true });
-  recordDiscordEmail(PAL, 'pal@example.com', true);
 }
 
 function friendStore() {
@@ -102,7 +98,7 @@ test('deleting a player removes what is theirs and anonymises shared games', () 
     { ...r, placeholder: 'x' },
     {
       id: ME, placeholder: 'x', name: 'Gone Soon', account: true, monopolyGames: 1, cardsGames: 1, dailyAttempts: 1,
-      tournaments: 1, wallets: 1, friends: 1, chosenName: true, host: true, email: true,
+      tournaments: 1, wallets: 1, friends: 1, chosenName: true, host: true,
     },
   );
   assert.deepEqual(d.forgotten, [[ME, r.placeholder, DELETED_NAME]]);
@@ -119,8 +115,6 @@ test('deleting a player removes what is theirs and anonymises shared games', () 
   assert.equal(cardsDailyAttempt(DAY, ME), undefined);
   assert.ok(cardsDailyAttempt(DAY, PAL));
   assert.ok(isBanned({ id: ME }), 'bans survive');
-  assert.equal(emailRecord(ME), null, 'the email address and choices go');
-  assert.equal(emailRecord(PAL)?.email, 'pal@example.com');
 
   // Shared games: their place is the placeholder; Pal's is untouched.
   const mono = allResults()[0].places;

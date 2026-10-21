@@ -106,8 +106,6 @@ export function robotsTxt(origin = siteOrigin()): string {
     'Disallow: /u/',
     'Disallow: /wallet',
     'Disallow: /sso',
-    'Disallow: /settings',
-    'Disallow: /unsubscribe',
     '',
     `Sitemap: ${origin}/sitemap.xml`,
     '',

@@ -103,7 +103,6 @@ export const ROUTES: Entry[] = [
   { pattern: '/cards/r/:code', name: 'Join the table', description: 'You are invited to a Cards table. Open the link to take a seat.', noindex: true },
   { pattern: '/u/:id', name: 'Player profile', description: 'A Chog Games player: their results, favourite characters and recent games.', noindex: true },
   { pattern: '/wallet', name: 'Link your wallet', description: 'Link a wallet to show you hold a Chog Genesis.', noindex: true },
-  { pattern: '/settings', name: 'Settings', description: 'Your Chog Games settings: which emails you get.', noindex: true },
   { pattern: '/friends', name: 'Friends', description: 'Your friends on Chog Games: who is online and where.', noindex: true },
   { pattern: '/sso', name: 'Sign in', description: 'Sign in to Chog Games.', noindex: true },
   { pattern: '/admin/*', name: 'Dashboard', description: 'Chog Games operator dashboard.', noindex: true },

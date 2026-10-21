@@ -87,25 +87,12 @@ export function redirectUriFor(base: string): string {
   return `${b.replace(/\/$/, '')}/api/auth/discord/callback`;
 }
 
-/** What sign-in asks Discord for. Scopes are requested per sign-in, so adding one needs no portal change. */
-export const OAUTH_SCOPES = ['identify', 'email', 'guilds', 'guilds.members.read'] as const;
-
-/** A Discord sign-in: who, plus the address Discord holds and whether Discord verified it (null when it has none). */
-export interface OAuthIdentity {
-  id: string;
-  username: string;
-  avatarUrl: string | null;
-  email: string | null;
-  verified: boolean;
-}
-
 export function authorizeUrl(state: string, redirectUri: string): string {
   const params = new URLSearchParams({
     client_id: process.env.DISCORD_CLIENT_ID!,
     redirect_uri: redirectUri,
     response_type: 'code',
-    // `email`: the address for notifications the player turns on (email/store.ts); kept server-side only.
-    scope: OAUTH_SCOPES.join(' '),
+    scope: 'identify guilds guilds.members.read',
     state,
     prompt: 'consent',
   });
@@ -121,11 +108,11 @@ export function authorizeUrl(state: string, redirectUri: string): string {
 // in; the second used to reach Discord with a spent code and put "token
 // exchange failed" on the screen of somebody who was, at that moment,
 // successfully signed in.
-const recentCodes = new Map<string, OAuthIdentity>();
+const recentCodes = new Map<string, { id: string; username: string; avatarUrl: string | null }>();
 const CODE_CACHE_MS = 5 * 60_000;
 
 // Exchange the OAuth code and snapshot the user's identity + guild list.
-export async function completeOAuth(code: string, redirectUri: string): Promise<OAuthIdentity> {
+export async function completeOAuth(code: string, redirectUri: string): Promise<{ id: string; username: string; avatarUrl: string | null }> {
   const replay = recentCodes.get(code);
   if (replay) return replay;
 
@@ -185,7 +172,7 @@ export async function completeOAuth(code: string, redirectUri: string): Promise<
   const auth = { Authorization: `Bearer ${token.access_token}` };
   const userRes = await fetch(`${API}/users/@me`, { headers: auth });
   if (!userRes.ok) throw new Error('Could not fetch Discord profile');
-  const user = await userRes.json() as { id: string; username: string; global_name?: string; avatar?: string | null; email?: string | null; verified?: boolean };
+  const user = await userRes.json() as { id: string; username: string; global_name?: string; avatar?: string | null };
   const avatarUrl = user.avatar
     ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128`
     : null;
@@ -204,10 +191,7 @@ export async function completeOAuth(code: string, redirectUri: string): Promise<
     accessToken: token.access_token,
     linkedAt: Date.now(),
   });
-  const result: OAuthIdentity = {
-    id: user.id, username: user.global_name || user.username, avatarUrl,
-    email: typeof user.email === 'string' ? user.email : null, verified: user.verified === true,
-  };
+  const result = { id: user.id, username: user.global_name || user.username, avatarUrl };
   recentCodes.set(code, result);
   setTimeout(() => recentCodes.delete(code), CODE_CACHE_MS).unref?.();
   return result;

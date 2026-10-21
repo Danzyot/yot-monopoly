@@ -15,7 +15,7 @@ import {
 const PAGE = 50;
 
 /** What DELETE /api/admin/players/:id did (server/src/erase.ts EraseReport). */
-interface ErasedReport { monopolyGames: number; cardsGames: number; tournaments: number; email?: boolean }
+interface ErasedReport { monopolyGames: number; cardsGames: number; tournaments: number }
 
 export default function PlayersTab() {
   // The open account lives in the address so it survives a refresh and can be linked to.
@@ -251,9 +251,9 @@ function AccountView({ id, onOpen, onClose, onErased }: {
                   let summary = '';
                   void act(async () => {
                     const r = await del(`/api/admin/players/${encodeURIComponent(a.id)}`) as ErasedReport;
-                    summary = `Deleted ${a.name}'s data — ${r.monopolyGames} Monopoly and ${r.cardsGames} Cards games, ${r.tournaments} tournaments now show "Deleted player"${r.email ? '; email address and notification settings erased' : ''}`;
+                    summary = `Deleted ${a.name}'s data — ${r.monopolyGames} Monopoly and ${r.cardsGames} Cards games, ${r.tournaments} tournaments now show "Deleted player"`;
                   }, {
-                    confirm: `Delete all of ${a.name}'s data? Their connection history, linked wallets, friends, chosen name, Daily Challenge attempts, host approval, email address and notification settings go. In finished games and tournaments they become "Deleted player", so other people's results stay. Bans and logs are kept. This cannot be undone.`,
+                    confirm: `Delete all of ${a.name}'s data? Their connection history, linked wallets, friends, chosen name, Daily Challenge attempts and host approval go. In finished games and tournaments they become "Deleted player", so other people's results stay. Bans and logs are kept. This cannot be undone.`,
                     after: () => { toast(summary); onErased(); },
                   });
                 }}>Delete player data</button>

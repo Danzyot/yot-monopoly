@@ -5,7 +5,6 @@
 //   POST /api/friends/accept {id}
 //   POST /api/friends/remove {id}  unfriend, decline or cancel
 //   socket friends:invite {id}     from your table: the friend gets friends:invited with its code
-//                                  (offline: an email, if they turned on invite emails)
 // Whenever a list changes, both people's tabs hear friends:changed and fetch it again.
 import express from 'express';
 import type { Server, Socket } from 'socket.io';
@@ -13,8 +12,6 @@ import { getAccount } from '../connections.ts';
 import { FriendError, FriendStore, type FriendGame } from '../friends.ts';
 import { authed, fail, rateLimit } from '../http.ts';
 import { playerBanned } from '../playerCard.ts';
-import { emailTriggers } from '../email/triggers.ts';
-import { GAMES } from '../../../shared/brand.ts';
 import type { Registry } from '../rooms.ts';
 import type { CardsRegistry } from '../cards/rooms.ts';
 import type { PlayerProfile } from '../../../shared/types.ts';
@@ -120,13 +117,7 @@ export function mountFriends(
       const now = Date.now();
       if (now - (lastInvite.get(key) ?? 0) < INVITE_EVERY_MS) return reply({ ok: false, error: 'You just invited them — give them a moment' });
       const targets = socketsOf(to);
-      if (!targets.length) {
-        // Offline: an email if they turned on invite emails (email/triggers.ts). The reply is the same
-        // either way, so the inviter never learns whether they have an address or that setting.
-        emailTriggers()?.friendInviteOffline({ id: p.id, name: p.name }, to,
-          game === 'monopoly' ? GAMES.monopoly.name : GAMES.cards.name, game === 'monopoly' ? `/r/${code}` : `/cards/r/${code}`);
-        return reply({ ok: false, error: 'They are not online right now. If they turned on invite emails, we let them know.' });
-      }
+      if (!targets.length) return reply({ ok: false, error: 'They are not online right now' });
       if (lastInvite.size > 20_000) lastInvite.clear();
       lastInvite.set(key, now);
       for (const s of targets) s.emit('friends:invited', { from: { id: p.id, name: p.name, avatar: p.avatar }, game, code });
