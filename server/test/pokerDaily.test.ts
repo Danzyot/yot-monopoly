@@ -214,7 +214,8 @@ test('leaving locks in the answers so far and scores the rest 0; so does the day
   assert.deepEqual(v.result!.grid, [10, 10, 10, -1, -1, -1, -1, -1, -1, -1], 'the hand left open scores 0, shown as not answered');
   assert.equal(v.result!.points, 30);
   assert.equal(v.result!.left, true);
-  assert.equal(v.result!.timeMs, 10_000, 'the open hand\'s time still counts');
+  // (Less the few real milliseconds each deal took: the clock starts once the hand is dealt.)
+  assert.ok(v.result!.timeMs > 9_900 && v.result!.timeMs <= 10_000, `the open hand's time still counts (${v.result!.timeMs})`);
   assert.deepEqual(daily.leavePokerDaily(me, 'official', clock.t), { left: false }, 'already over');
 
   // Started, never finished, and the day ended: left, as at midnight.
