@@ -2,7 +2,7 @@
 // same for everyone and every reload. Days step through the collection by a
 // stride coprime with the supply (1,969 = 11 × 179), so neighbouring days show
 // unrelated Chogs and every token gets its day once in 1,969 days.
-import { CHOG_SUPPLY } from './traits.ts';
+import { CHOG_SUPPLY } from './meta.ts';
 
 const STRIDE = 997;
 const OFFSET = 409;

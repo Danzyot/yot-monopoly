@@ -7,6 +7,8 @@
 // list the public pages.
 import type express from 'express';
 import { readFileSync } from 'node:fs';
+import { brotliCompressSync, constants, gzipSync } from 'node:zlib';
+import { pickEncoding } from './staticFiles.ts';
 import { SHARE_IMAGE, SHARE_IMAGE_SIZE, SITE_NAME, SITE_URL, routeMeta, sitemapPaths, type RouteMeta } from '../../shared/seo.ts';
 
 /** The site's canonical origin: PUBLIC_URL when it is a plain http(s) origin, else choggames.com. */
@@ -119,14 +121,32 @@ export function mountCrawlerFiles(app: express.Express): void {
   });
 }
 
-/** The app's page for every other GET: index.html with that route's meta, 404 for unknown paths. */
+/**
+ * The app's page for every other GET: index.html with that route's meta, 404 for unknown paths.
+ * Sent Brotli- or gzip-compressed to browsers that take it (it is the first thing a visit waits
+ * for); each page's compressed copies are kept, as the same few pages are asked for again and again.
+ */
 export function spaHandler(indexFile: string): express.RequestHandler {
   let template: string | null = null;
+  const packed = new Map<string, { br?: Buffer; gzip?: Buffer }>();
   return (req, res) => {
     template ??= readFileSync(indexFile, 'utf8');
     const { html, status } = renderIndex(template, req.path);
     // Always revalidated (it names the current hashed bundles); Express's ETag makes that a 304.
     res.status(status).type('html').setHeader('Cache-Control', 'no-cache');
-    res.send(html);
+    res.vary('Accept-Encoding');
+    const enc = pickEncoding(req.headers['accept-encoding'], () => html.length >= 1024);
+    if (!enc) { res.send(html); return; }
+    let copies = packed.get(html);
+    if (!copies) {
+      // Profiles and rooms make every address its own page: keep the latest few hundred.
+      if (packed.size >= 300) packed.clear();
+      packed.set(html, copies = {});
+    }
+    const body = copies[enc] ??= enc === 'br'
+      ? brotliCompressSync(html, { params: { [constants.BROTLI_PARAM_QUALITY]: 9, [constants.BROTLI_PARAM_MODE]: constants.BROTLI_MODE_TEXT } })
+      : gzipSync(html, { level: 9 });
+    res.setHeader('Content-Encoding', enc);
+    res.send(body);
   };
 }
