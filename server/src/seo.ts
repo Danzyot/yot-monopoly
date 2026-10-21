@@ -115,7 +115,7 @@ export function robotsTxt(origin = siteOrigin()): string {
 }
 
 export function sitemapXml(origin = siteOrigin()): string {
-  const urls = sitemapPaths().map(p => `  <url><loc>${esc(origin + p)}</loc><changefreq>${p === '/' || p === '/tournaments' || p === '/leaderboard' ? 'daily' : 'weekly'}</changefreq><priority>${p === '/' ? '1.0' : '0.7'}</priority></url>`);
+  const urls = sitemapPaths().map(p => `  <url><loc>${esc(origin + p)}</loc><changefreq>${p === '/' || p === '/tournaments' || p === '/leaderboard' || p === '/daily' || p === '/poker/daily' ? 'daily' : 'weekly'}</changefreq><priority>${p === '/' ? '1.0' : '0.7'}</priority></url>`);
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>\n`;
 }
 

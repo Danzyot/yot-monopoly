@@ -10,6 +10,7 @@ import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { GAMES } from '../../../shared/brand.ts';
 import { goToPoker, openPoker, pokerHref, pokerTarget, POKER_BASE } from '../pokerLink.ts';
+import DailyPokerCard from './daily/DailyPokerCard.tsx';
 import './poker.css';
 
 // The hub's per-game tutorial (components/HowToPlay.tsx with game="poker"),
@@ -177,6 +178,8 @@ export default function PokerHome() {
       </section>
 
       <div className="ph-body">
+        {/* The Poker Daily: ten hands a day, played here on the hub (no table needed). */}
+        <DailyPokerCard />
         {failed && !lists && <p className="panel ph-note" role="status">Couldn’t reach {GAMES.poker.name} just now. Play still takes you there.</p>}
         {!lists && !failed && <p className="ph-note muted" role="status">Loading tournaments…</p>}
         {empty && <p className="panel ph-note" role="status">No tournaments right now. Check back soon{mayHost ? ', or host one' : ''}!</p>}

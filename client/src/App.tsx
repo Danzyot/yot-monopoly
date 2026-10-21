@@ -31,6 +31,9 @@ const CardsHome = lazy(() => import('./cards/CardsHome.tsx'));
 const CardsRoomPage = lazy(() => import('./cards/CardsRoomPage.tsx'));
 // Chog Poker's home here: its tournaments, Play and Host (the tables are on poker's own site).
 const PokerHome = lazy(() => import('./poker/PokerHome.tsx'));
+// The Poker Daily (ten poker decisions a day) and the page with all three games' dailies.
+const PokerDaily = lazy(() => import('./poker/daily/PokerDaily.tsx'));
+const DailyPage = lazy(() => import('./pages/DailyPage.tsx'));
 // Tournaments for both games: the list, the create form, one event.
 const TournamentsPage = lazy(() => import('./tournaments/TournamentsPage.tsx'));
 const CreateTournament = lazy(() => import('./tournaments/CreateTournament.tsx'));
@@ -79,6 +82,8 @@ function Shell() {
         <Route path="/cards" element={<CardsHome />} />
         <Route path="/cards/r/:code" element={<CardsRoomPage />} />
         <Route path="/poker" element={<PokerHome />} />
+        <Route path="/poker/daily" element={<PokerDaily />} />
+        <Route path="/daily" element={<DailyPage />} />
         <Route path="/tournaments" element={<TournamentsPage />} />
         <Route path="/tournaments/new" element={<CreateTournament />} />
         <Route path="/tournaments/:id" element={<TournamentPage />} />

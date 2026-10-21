@@ -32,6 +32,7 @@ import { mountCardsProfile } from './routes/cardsProfile.ts';
 import { mountCardsDaily } from './routes/cardsDaily.ts';
 import { mountMonopolyDaily } from './routes/monopolyDaily.ts';
 import { loadMonopolyDaily, monopolyDailyProfile, reconcileMonopolyDaily } from './monopolyDaily.ts';
+import { mountPokerDaily } from './routes/pokerDaily.ts';
 import { mountPlayerCard } from './routes/playerCard.ts';
 import { cardPath, configurePlayerCards, playerBanned, playerSnapshot, profileMeta } from './playerCard.ts';
 import { commandDefinitions, configureSlashCommands, dailyAvailable } from './discordCommands.ts';
@@ -47,6 +48,7 @@ import { attachTournaments } from './tournament/sockets.ts';
 import { allCardsResults, cardsLeaderboard, loadCardsResults, recentCardsResults } from './cards/stats.ts';
 import { cardsDailyAttempt, cardsDailyInfo, cardsDailyProfile, loadCardsDaily, reconcileCardsDaily } from './cards/daily.ts';
 import { dailyDate } from '../../shared/cards/daily.ts';
+import { loadPokerDaily } from './poker/daily.ts';
 import { staticClient } from './staticFiles.ts';
 import { mountCrawlerFiles, siteOrigin, spaHandler } from './seo.ts';
 import { mountSite } from './routes/site.ts';
@@ -83,6 +85,7 @@ loadResults();
 loadCardsResults();
 loadCardsDaily();
 loadMonopolyDaily();
+loadPokerDaily();
 loadGraphics();
 loadEmailStore();
 void primeVerifyChannel();
@@ -319,6 +322,8 @@ mountCardsProfile(app);
 mountCardsDaily(app, cards.registry);
 // The Monopoly Daily Challenge: the same shape, at /api/monopoly/daily.
 mountMonopolyDaily(app, sockets.registry);
+// The Poker Daily: ten poker decisions a day, dealt and graded here (poker/ itself has no part in it).
+mountPokerDaily(app);
 // Badges (/api/players/:id/achievements) and the share card (/api/players/:id/card.png).
 configurePlayerCards({ tournamentsOf: id => tourneys.manager.resultsOf(id, 1000) });
 mountPlayerCard(app);

@@ -18,6 +18,7 @@ import { BRAND, GAMES } from '../../../shared/brand.ts';
 import ProfileTournaments from '../tournaments/ProfileTournaments.tsx';
 import ProfileDaily from '../cards/ProfileDaily.tsx';
 import ProfileMonopolyDaily from '../monopolyDaily/ProfileMonopolyDaily.tsx';
+import ProfilePokerDaily from '../poker/daily/ProfilePokerDaily.tsx';
 import { BadgeGrid, ShareProfile } from '../achievements.tsx';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
@@ -264,7 +265,7 @@ export default function Profile() {
               <>
                 <Link className="btn primary chunky" to={GAMES.monopoly.path}>Play {GAMES.monopoly.name}</Link>
                 <Link className="btn primary chunky" to={GAMES.cards.path}>Play {GAMES.cards.name}</Link>
-                <Link className="btn chunky" to={`${GAMES.cards.path}#daily`}>Daily Challenge</Link>
+                <Link className="btn chunky" to="/daily">Daily puzzles</Link>
                 <Link className="btn chunky ghost" to="/settings"><span aria-hidden>🔔</span> Notification settings</Link>
               </>
             ) : (
@@ -277,6 +278,7 @@ export default function Profile() {
           </div>
         </section>
         {!off && <ProfileTournaments id={id} />}
+        {!off && <ProfilePokerDaily id={id} />}
       </div>
     );
   }
@@ -317,6 +319,7 @@ export default function Profile() {
 
       {p && <MonopolySection p={p} titled={both} />}
       <CardsSection c={c} id={id} titled={both || !p} />
+      <ProfilePokerDaily id={id} />
     </div>
   );
 }
