@@ -41,6 +41,7 @@ function sources(over: Partial<Sources> = {}): Sources {
       result('BOTWN', { id: 'bot-1', name: 'Botty', isBot: true }, { endedAt: NOW - 3 * MIN }),
       result('BANNE', { id: 'p-cheat', name: 'Cheater' }, { endedAt: NOW - 4 * MIN }),
       result('OLDIE', { id: 'p-old', name: 'Ancient' }, { endedAt: NOW - 10 * 24 * 60 * MIN }),
+      result('ERASD', { id: 'deleted-abc123', name: 'Deleted player' }, { endedAt: NOW - 5 * MIN }),
     ],
     cardsResults: () => [
       { code: 'CCCCC', endedAt: NOW - 6 * MIN, places: [
@@ -67,6 +68,7 @@ function sources(over: Partial<Sources> = {}): Sources {
       tourney({ id: 't2', name: 'Live Cup', status: 'running', round: 2, finishedAt: null, startedAt: NOW - 8 * MIN }),
       tourney({ id: 't3', name: 'Banned Cup', champion: { id: 'p-cheat', name: 'Cheater' } }),
       tourney({ id: 't4', name: 'Called Off', status: 'cancelled' }),
+      tourney({ id: 't5', name: 'Erased Cup', champion: { id: 'deleted-abc123', name: 'Deleted player' } }),
     ],
     newAccounts: since => [
       { id: 'n1', firstSeen: NOW - 20 * MIN }, { id: 'n2', firstSeen: NOW - 40 * MIN }, { id: 'p-cheat', firstSeen: NOW - 5 * MIN },
@@ -100,10 +102,10 @@ test('activity: wins, fresh tables, open lobbies, champions and sign-ups, newest
   assert.equal(items.find(i => i.kind === 'joined')!.href, undefined);
 });
 
-test('activity: nothing from private tables, bots, banned players, stale or gated tables', () => {
+test('activity: nothing from private tables, bots, banned or deleted players, stale or gated tables', () => {
   const json = JSON.stringify(buildActivity(sources()));
   for (const hidden of ['HIDDN', 'PRIVA', 'Secret Sam', 'TTTTT', 'Table Winner', 'TOURN', 'Botty', 'Cheater', 'Banned Cup',
-    'STALE', 'GATED', 'EMPTY', 'FULL1', 'Ancient', 'Called Off', 'p-cheat', 'n1']) {
+    'STALE', 'GATED', 'EMPTY', 'FULL1', 'Ancient', 'Called Off', 'p-cheat', 'n1', 'Deleted player', 'Erased Cup']) {
     assert.ok(!json.includes(hidden), `${hidden} must not appear`);
   }
   // Only the public fields go out.

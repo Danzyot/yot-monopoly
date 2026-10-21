@@ -41,6 +41,14 @@ export function withChosenName(p: PlayerProfile): PlayerProfile {
   return name ? { ...p, name } : p;
 }
 
+/** A deleted player (erase.ts). */
+export function forgetChosenName(id: string): boolean {
+  if (!names[id]) return false;
+  delete names[id];
+  save();
+  return true;
+}
+
 /** For tests. */
 export function resetDisplayNames(): void {
   names = {};

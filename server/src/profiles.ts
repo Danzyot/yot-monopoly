@@ -1,6 +1,7 @@
 // Public player profiles, built only from finished-game results (results.json).
 // Deliberately nothing from the accounts audit (connections.ts): a profile is
 // public, and IPs, linked accounts and Discord ids must never leak through it.
+import { isDeletedId } from './deleted.ts';
 import { isRanked, placePoints, type GameRecord } from './stats.ts';
 import type { ProfileGame, PublicProfile } from '../../shared/types.ts';
 
@@ -8,7 +9,7 @@ const RECENT_GAMES = 20;
 
 /** Ids are `dc_<snowflake>`, `demo_…` and the like; anything else is not a player. */
 export function validPlayerId(id: string): boolean {
-  return /^[\w-]{1,64}$/.test(id);
+  return /^[\w-]{1,64}$/.test(id) && !isDeletedId(id);
 }
 
 /** The most-played value, ties going to whichever was played most recently. */

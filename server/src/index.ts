@@ -23,6 +23,7 @@ import { createLiveSampler } from './liveSamples.ts';
 import { createVisitCounter } from './visits.ts';
 import { authRoutes, mountInteractions, pokerOrigins } from './routes/auth.ts';
 import { mountFriends } from './routes/friends.ts';
+import { configureErase } from './erase.ts';
 import { mountMusic } from './routes/music.ts';
 import { mountGraphics } from './routes/graphics.ts';
 import { mountTextOverrides } from './routes/textOverrides.ts';
@@ -219,7 +220,17 @@ mountActivity(app, { monopoly: sockets.registry, cards: cards.registry, tourname
 // One token's traits for the home page's Chog of the Day (the page does not ship the trait table).
 mountChogs(app);
 // Friends: requests, who is online and where, invites to your table.
-mountFriends(app, io, { monopoly: sockets.registry, cards: cards.registry });
+const friends = mountFriends(app, io, { monopoly: sockets.registry, cards: cards.registry });
+// Deleting a player's data from the dashboard (erase.ts) reaches every store above.
+configureErase({
+  seatedAt: id => [
+    ...sockets.registry.roomsOf(id).filter(r => r.status !== 'finished').map(r => `Monopoly ${r.code}`),
+    ...[...cards.registry.rooms.values()].filter(r => r.status !== 'finished' && r.seats.some(s => s.id === id)).map(r => `Cards ${r.code}`),
+  ],
+  tournaments: tourneys.manager,
+  friends: friends.store,
+  friendsChanged: ids => friends.changed(...ids),
+});
 
 app.get('/api/leaderboard', (_req, res) => {
   if (!isOn('leaderboard')) { res.status(404).json({ error: 'The leaderboard is switched off' }); return; }

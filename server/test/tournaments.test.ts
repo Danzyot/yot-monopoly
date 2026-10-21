@@ -379,6 +379,26 @@ test('operators can remove a player: off the list, or out of a running event', (
   assert.equal(t2.d.entrants.length, 0);
 });
 
+test('deleting a player: refused mid-event, dropped from sign-ups, a placeholder in finished brackets', () => {
+  const h = harness();
+  const t = running(h, 4, { tableSize: 4, advance: 2 });
+  assert.throws(() => h.m.forgetPlayer('p0', 'deleted-x', 'Deleted player'), /remove them from it first/);
+  playRound(h, t, players => [...players].reverse());
+  assert.equal(t.d.status, 'finished');
+  const open = h.m.create(ADMIN, { game: 'cards', name: 'Next Cup' });
+  h.m.register(open.id, p(0));
+  h.m.register(open.id, p(1));
+
+  assert.equal(h.m.forgetPlayer('p0', 'deleted-x', 'Deleted player'), 2);
+  assert.deepEqual(open.d.entrants.map(e => e.id), ['p1'], 'their sign-up is gone');
+  assert.ok(!JSON.stringify(t.d).includes('"p0"'), 'no trace of the id in the finished event');
+  assert.equal(t.d.places.length, 4, 'everyone else keeps their place');
+  assert.ok(t.d.places.includes('deleted-x'));
+  assert.equal(t.d.entrants.find(e => e.id === 'deleted-x')?.name, 'Deleted player');
+  assert.deepEqual(h.m.resultsOf('p0'), []);
+  assert.equal(h.m.resultsOf('p1').length, 1);
+});
+
 test('who may create: operators only; holders and approved hosts still host on Poker', () => {
   // canHost stays as it was: Poker asks it before a player opens a table or a poker tournament.
   assert.equal(canHost(ADMIN.id), true);
