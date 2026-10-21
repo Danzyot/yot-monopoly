@@ -13,8 +13,9 @@ import { defaultInviteUrl, discordEnabled } from './discord.ts';
 import { loadEvents } from './eventlog.ts';
 import { getFeatures, isOn, loadFeatures } from './features.ts';
 import { loadGraphics } from './graphics.ts';
-import { authed, rateLimit } from './http.ts';
-import { trustedProxyHops } from './ip.ts';
+import { authed, rateLimit, requireAdmin } from './http.ts';
+import { clientIp, trustedProxyHops } from './ip.ts';
+import { hopCountHealth, ipSamples } from './ipdebug.ts';
 import { armPersistence, restoreLive } from './persist.ts';
 import { adminRoutes } from './routes/admin.ts';
 import { analyticsRoutes, onlinePlayers } from './routes/analytics.ts';
@@ -184,6 +185,24 @@ app.get('/api/config', (_req, res) => {
 
 app.use('/api/auth', authRoutes());
 app.use('/api/admin/analytics', analyticsRoutes({ sockets, cards, tournaments: tourneys.manager, samples: liveSamples, visits }));
+// What the proxies in front actually send, and whether TRUSTED_PROXY_HOPS reads it right (operators only).
+app.get('/api/admin/ipdebug', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  res.json({
+    you: {
+      forwardedFor: req.headers['x-forwarded-for'] ?? null,
+      realIp: req.headers['x-real-ip'] ?? null,
+      envoyExternal: req.headers['x-envoy-external-address'] ?? null,
+      cfConnecting: req.headers['cf-connecting-ip'] ?? null,
+      expressIp: req.ip ?? null,
+      resolved: clientIp(req.headers['x-forwarded-for'], req.socket.remoteAddress ?? null, req.headers),
+      socketPeer: req.socket.remoteAddress ?? null,
+    },
+    trustedProxyHops: trustedProxyHops(),
+    hopCount: hopCountHealth(),
+    recent: ipSamples(),
+  });
+});
 app.use('/api/admin', adminRoutes(sockets, () => loopLagMs));
 app.use('/api/wallet', walletRoutes());
 // Chog Poker asks which Chogs a player holds (signed, server to server).

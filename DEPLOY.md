@@ -73,7 +73,7 @@ Discord Developer Portal → **New Application**.
 | `DISCORD_INVITE_URL` | optional | shows a Discord link in the header |
 | `DISCORD_ANNOUNCE_CHANNEL_ID` | optional | the bot posts winners here (switch on "announceResults" in the dashboard) |
 | `APP_SECRET` | optional | signs login tokens; if unset a random one is created on the volume |
-| `TRUSTED_PROXY_HOPS` | if behind Cloudflare | `1` for Railway alone, `2` with Cloudflare in front |
+| `TRUSTED_PROXY_HOPS` | optional | default `2`: a custom domain's edge plus Railway. Check it at `/api/admin/ipdebug` |
 | `DEMO_MODE` | never in production | `1` lets anyone sign in with just a name (for local dev and demos) |
 | `DEV_FAKE_DISCORD` | local dev only | `1` (only with `DEMO_MODE=1`, ignored when `NODE_ENV=production`) fakes a Discord server for trying seat requirements: demo names starting "member" are members, "vip" have the VIP role, "unknown" can't be verified |
 | `MAX_SOCKETS_PER_IP` | optional | default 24 |
@@ -93,10 +93,13 @@ Railway → Settings → Networking → **Custom Domain**, then add the CNAME it
 you at your DNS provider. Register the new domain's redirect in Discord
 (step 3.2) and set `PUBLIC_URL`.
 
-If you put **Cloudflare** in front (recommended against floods: proxied DNS,
-"Under Attack" mode when needed), set `TRUSTED_PROXY_HOPS=2` — otherwise the
-site sees Cloudflare's address instead of the player's, and IP bans hit the
-wrong people.
+With a custom domain (and with **Cloudflare** in front, recommended against
+floods: proxied DNS, "Under Attack" mode when needed) the default
+`TRUSTED_PROXY_HOPS=2` is right. Signed in as an operator, open
+`/api/admin/ipdebug`: `hopCount.healthy` should be true and `you.resolved`
+should be your own address. If it shows a proxy's address instead, the count
+is wrong for your setup — every player is then recorded as that proxy, in a
+different country each time, and IP bans hit the wrong people.
 
 ## 6. First run checklist
 

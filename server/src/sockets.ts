@@ -14,6 +14,7 @@ import { logGameEvent } from './eventlog.ts';
 import { isOn } from './features.ts';
 import { isLibraryFile } from './graphics.ts';
 import { clientIp } from './ip.ts';
+import { noteIpSample } from './ipdebug.ts';
 import { Registry, Room, RoomError, type Member } from './rooms.ts';
 import { recordResult } from './stats.ts';
 import { resolveRequirements } from './requirements.ts';
@@ -159,6 +160,8 @@ export function attachSockets(io: Server): SocketLayer {
     const data = socket.data as SocketData;
     data.ip = clientIp(socket.handshake.headers['x-forwarded-for'], socket.handshake.address || null, socket.handshake.headers);
     data.profile = verifyToken(socket.handshake.auth?.token);
+    // The raw chain next to what was made of it, for /api/admin/ipdebug (memory only).
+    noteIpSample(socket.handshake.headers, socket.handshake.address || null, data.ip, data.profile?.name ?? null);
     data.room = null;
     data.tokens = ACTION_BURST;
     data.refilledAt = Date.now();

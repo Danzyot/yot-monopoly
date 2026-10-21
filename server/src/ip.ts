@@ -6,10 +6,14 @@ import { isInfraPeer, normalisePeer } from './net.ts';
 // How many proxies sit in front of this server, each appending one entry to
 // X-Forwarded-For.
 export function trustedProxyHops(): number {
-  // Default 1 (Railway alone). Put Cloudflare or another edge in front and
-  // raise it to 2, or the address recorded is the edge's, not the player's.
-  const raw = Number(process.env.TRUSTED_PROXY_HOPS ?? 1);
-  if (!Number.isFinite(raw)) return 1;
+  // Default 2, as poker learned on live traffic: a custom domain on Railway
+  // puts a public edge in front of Railway's own proxy, and at 1 every visit
+  // was recorded as whichever edge carried it (a different country each time).
+  // Direct *.up.railway.app access still resolves at 2: the short chain falls
+  // through to the proxy's own statement of the caller. Check the count at
+  // /api/admin/ipdebug (ipdebug.ts) rather than guessing.
+  const raw = Number(process.env.TRUSTED_PROXY_HOPS ?? 2);
+  if (!Number.isFinite(raw)) return 2;
   return Math.min(5, Math.max(1, Math.trunc(raw)));
 }
 
