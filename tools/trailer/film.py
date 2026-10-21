@@ -125,7 +125,7 @@ def principled(name, color, rough=0.4, coat=0.0, metal=0.0, emit=None, emit_stre
 
 # ---- render settings ------------------------------------------------------------------
 
-def setup_render(sc, res=(1920, 1080), spp=12):
+def setup_render(sc, res=(1600, 900), spp=8):
     sc.render.engine = 'CYCLES'
     sc.cycles.device = 'CPU'
     if DRAFT:
@@ -146,9 +146,9 @@ def setup_render(sc, res=(1920, 1080), spp=12):
         cy.denoiser = 'OPENIMAGEDENOISE'
     except Exception:
         pass
-    cy.max_bounces = 5
-    cy.diffuse_bounces = 2
-    cy.glossy_bounces = 3
+    cy.max_bounces = 4
+    cy.diffuse_bounces = 1
+    cy.glossy_bounces = 2
     cy.transmission_bounces = 2
     cy.transparent_max_bounces = 6
     cy.caustics_reflective = False

@@ -258,7 +258,7 @@ def vignette():
 def load(path, draft=False):
     im = Image.open(path).convert('RGB')
     if im.size != (W, H):
-        im = im.resize((W, H), Image.BICUBIC)
+        im = im.resize((W, H), Image.LANCZOS)
     if draft:
         d = ImageDraw.Draw(im)
         d.text((W - 24, 24), 'DRAFT', fill=(255, 210, 80), font=font(H // 22), anchor='ra')
