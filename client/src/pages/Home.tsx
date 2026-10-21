@@ -179,10 +179,6 @@ export default function Home() {
 
           <li className="hub-game hub-cards">
             <img className="hub-thumb" src="/home/cards-640.webp" alt="" width={640} height={400} loading="lazy" decoding="async" />
-            {/* Today's Cards Daily Challenge (shared/cards/daily.ts): the number is worked out here, nothing is fetched. */}
-            <Link className="hub-daily-chip" to="/cards#daily" aria-label={`${GAMES.cards.name} Daily Challenge #${dailyNumber(dailyDate())}: play today's deal`}>
-              <span aria-hidden>📅</span> Daily #{dailyNumber(dailyDate())}
-            </Link>
             <div className="hub-text">
               <HubTitle game="cards" />
               <p>{BLURBS.cards}</p>
@@ -220,6 +216,10 @@ export default function Home() {
             </div>
           </li>
         </ul>
+        {/* Today's dailies, all three games on one page (/daily). The number is worked out here, nothing is fetched. */}
+        <Link className="hub-dailies" to="/daily">
+          <span aria-hidden>📅</span> <b>Daily #{dailyNumber(dailyDate())}</b> <span className="hub-dailies-text">A puzzle for each game, one try each</span> <span aria-hidden>→</span>
+        </Link>
       </section>
 
       {/* The cast: the stars up front, everyone else a tap away on /characters. */}

@@ -62,6 +62,7 @@ export default function Header() {
         <NavLink className="navlink nav-chars nav-game nav-cards" to={GAMES.cards.path} aria-label={GAMES.cards.name} title={GAMES.cards.name}><span className="nav-ico" aria-hidden="true">🃏</span><span className="nav-label">{GAMES.cards.name}</span></NavLink>
         {/* Poker's home here (/poker) lists its tournaments; the games themselves are on poker's own site. */}
         <NavLink className="navlink nav-chars nav-game nav-poker" to="/poker" aria-label={GAMES.poker.name} title={GAMES.poker.name}><span className="nav-ico" aria-hidden="true">♠️</span><span className="nav-label">{GAMES.poker.name}</span></NavLink>
+        <NavLink className="navlink nav-chars" to="/daily" aria-label="Daily puzzles" title="Daily puzzles"><span className="nav-ico" aria-hidden="true">📅</span><span className="nav-label">Daily</span></NavLink>
         <NavLink className="navlink nav-chars" to="/tournaments" aria-label="Tournaments" title="Tournaments"><span className="nav-ico" aria-hidden="true">🏟️</span><span className="nav-label">Tournaments</span></NavLink>
         <NavLink className="navlink nav-chars" to="/characters" aria-label="Characters" title="Characters"><span className="nav-ico" aria-hidden="true">🎭</span><span className="nav-label">Characters</span></NavLink>
         {config.features.leaderboard && <NavLink className="navlink nav-chars" to="/leaderboard" aria-label="Leaderboard" title="Leaderboard"><span className="nav-ico" aria-hidden="true">🏆</span><span className="nav-label">Leaderboard</span></NavLink>}

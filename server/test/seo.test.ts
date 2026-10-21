@@ -53,7 +53,7 @@ const meta = (html: string, attr: string) => new RegExp(`<meta (?:name|property)
 
 test('every public page has its own title and description', () => {
   const seen = new Set<string>();
-  for (const p of ['/', '/cards', '/poker', '/monopoly', '/characters', '/leaderboard', '/tournaments', '/terms', '/privacy', '/fair-play']) {
+  for (const p of ['/', '/cards', '/poker', '/monopoly', '/daily', '/poker/daily', '/characters', '/leaderboard', '/tournaments', '/terms', '/privacy', '/fair-play']) {
     const m = routeMeta(p);
     assert.equal(m.status, 200, p);
     assert.ok(!m.noindex, `${p} is indexable`);

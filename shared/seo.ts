@@ -85,6 +85,11 @@ export const ROUTES: Entry[] = [
     description: 'Texas Hold\'em tournaments with the Chog crew. Play chips only: no real money, nothing to buy.',
     game: { name: 'Poker', genre: ['Card game', 'Poker'] },
   },
+  { pattern: '/daily', name: 'Daily puzzles', sitemap: true, description: 'Today\'s daily puzzles for Monopoly, Cards and Poker: the same for everyone, one try each, with streaks and a leaderboard.' },
+  {
+    pattern: '/poker/daily', name: 'Poker Daily', sitemap: true,
+    description: 'Ten poker hands a day, the same for everyone. Pick the best move in each and see the maths behind it. One try a day.',
+  },
   { pattern: '/tournaments', name: 'Tournaments', sitemap: true, description: 'Upcoming and finished Chog Games tournaments. Sign up, play your table and climb the bracket.' },
   { pattern: '/characters', name: 'Characters', sitemap: true, description: 'Meet the Chog crew: every character you can play as in Chog Games, with their outfits.' },
   { pattern: '/leaderboard', name: 'Leaderboard', sitemap: true, description: 'The top Chog Games players: wins, games played and recent results for Monopoly and Chog Cards.' },
