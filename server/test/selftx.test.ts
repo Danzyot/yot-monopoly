@@ -384,3 +384,22 @@ test('selftx: challenges and spent hashes survive a restart', async () => {
   assert.equal(disk.challenges.u_restart.amountWei, c.amountWei);
   assert.ok(Object.keys(disk.used).length >= 3, 'spent hashes are on disk');
 });
+
+test('selftx: pending checks are capped per network, so a few addresses cannot fill the global limit', async () => {
+  selftx.resetSelfTxForTest();
+  const wallet = () => privateKeyToAccount(generatePrivateKey()).address;
+  const ip = '203.0.113.7';
+  for (let i = 0; i < selftx.MAX_PENDING_PER_IP; i++) await selftx.issueSelfTx(`u_net${i}`, wallet(), ip);
+  await assert.rejects(selftx.issueSelfTx('u_net_extra', wallet(), ip), /Too many pending checks from your network/);
+  // Someone elsewhere is not held up, and the same account asking again gets its pending one back.
+  await selftx.issueSelfTx('u_elsewhere', wallet(), '198.51.100.9');
+  const mine = selftx._challengeOf('u_net0')!;
+  assert.equal((await selftx.issueSelfTx('u_net0', mine.address, ip)).amountWei, mine.amountWei);
+  // A cancelled check frees its place.
+  selftx.cancelSelfTx('u_net1');
+  await selftx.issueSelfTx('u_net_extra', wallet(), ip);
+  // Addresses stay in memory only: nothing about them reaches selftx.json.
+  const { readJson } = await import('../src/jsonstore.ts');
+  assert.ok(!JSON.stringify(readJson('selftx.json', {})).includes(ip));
+  selftx.resetSelfTxForTest();
+});

@@ -81,7 +81,7 @@ export function walletRoutes(): express.Router {
     const p = requireUser(req, res);
     if (!p) return;
     try {
-      res.json({ challenge: view(await issueSelfTx(p.id, req.body?.address)) });
+      res.json({ challenge: view(await issueSelfTx(p.id, req.body?.address, req.ip)) });
     } catch (e) { failChain(res, e); }
   });
 

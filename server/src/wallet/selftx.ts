@@ -37,6 +37,12 @@ const MAX_AUTO_TXS = 8;
 /** A spent hash is remembered this long; anything older predates every live challenge's floor anyway. */
 const USED_TTL_MS = 24 * 60 * 60_000;
 const MAX_PENDING = 10_000;
+/**
+ * Pending challenges from one network address at once, so a handful of
+ * addresses with many accounts cannot fill MAX_PENDING for everyone else.
+ * Generous for a shared connection (a café, a school, mobile carrier NAT).
+ */
+export const MAX_PENDING_PER_IP = 20;
 const HASH = /^0x[0-9a-fA-F]{64}$/;
 
 export interface SelfTxChallenge {
@@ -88,6 +94,8 @@ let data: Data = { challenges: {}, used: {} };
 let loaded = false;
 const issued = new Map<string, number[]>();
 const lastAuto = new Map<string, number>();
+/** Account → the address its pending challenge was asked from. Memory only: never written to selftx.json. */
+const ipOf = new Map<string, string>();
 
 function ready() {
   if (loaded) return;
@@ -108,6 +116,7 @@ function sweep(now: number) {
   for (const [k, u] of Object.entries(data.used)) if (now - u.at > USED_TTL_MS) delete data.used[k];
   if (issued.size > 20_000) issued.clear();
   if (lastAuto.size > 20_000) lastAuto.clear();
+  for (const owner of ipOf.keys()) if (!data.challenges[owner]) ipOf.delete(owner);
 }
 
 /** Any failure to talk to the chain, as one clear message. */
@@ -169,7 +178,7 @@ function freshAmount(): bigint {
  * hands back the pending one (so a reload loses nothing); a different wallet
  * replaces it, within the per-account limit.
  */
-export async function issueSelfTx(owner: string, address: unknown): Promise<SelfTxChallenge> {
+export async function issueSelfTx(owner: string, address: unknown, ip?: string | null): Promise<SelfTxChallenge> {
   ready();
   const addr = normalizeAddress(address);
   const held = walletOwner(addr);
@@ -203,6 +212,11 @@ export async function issueSelfTx(owner: string, address: unknown): Promise<Self
   }
 
   sweep(now);
+  if (ip) {
+    let fromHere = 0;
+    for (const [other, at] of ipOf) if (at === ip && other !== owner && data.challenges[other]) fromHere++;
+    if (fromHere >= MAX_PENDING_PER_IP) throw new Error('Too many pending checks from your network right now — try again in a few minutes');
+  }
   if (Object.keys(data.challenges).length >= MAX_PENDING) throw new Error('Too many pending checks right now — try again in a few minutes');
   recent.push(now);
   issued.set(owner, recent);
@@ -213,6 +227,8 @@ export async function issueSelfTx(owner: string, address: unknown): Promise<Self
   };
   c.scanNonce = c.startNonce;
   data.challenges[owner] = c;
+  if (ip) ipOf.set(owner, ip);
+  else ipOf.delete(owner);
   save();
   return c;
 }
@@ -366,6 +382,7 @@ export function resetSelfTxForTest(): void {
   loaded = true;
   issued.clear();
   lastAuto.clear();
+  ipOf.clear();
 }
 
 /** For tests: a challenge whose fields are known. */
