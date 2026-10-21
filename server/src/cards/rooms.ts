@@ -498,6 +498,8 @@ export class CardsRoom {
     this.requireHost(byId, isAdmin);
     if (target === byId) fail('Use leave instead');
     const s = this.seat(target) ?? fail('Not at this table');
+    // Out of the match a bot's cards go back: kicking the day's bots would be a win in no turns.
+    if (this.daily && s.isBot) fail('The Daily Challenge is played against all of the day\'s bots');
     this.hooks.onEvent(this, `${s.name} was removed by ${this.seat(byId)?.name ?? 'an operator'}`);
     if (!s.isBot) this.kicked.add(target);
     this.remove(target);

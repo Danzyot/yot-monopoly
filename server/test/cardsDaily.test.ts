@@ -182,6 +182,17 @@ test('leaving the official attempt is a loss, and it cannot be dealt again', () 
   assert.ok(rows.filter(x => !x.left).every(x => x.rank < quit.rank), 'walk-outs rank below every finished attempt');
 });
 
+test('the daily player cannot kick the day\'s bots out of the deal (an instant win)', () => {
+  const r = start('dc_kicker').room;
+  const bots = r.game!.players.filter(p => p.isBot).map(p => p.id);
+  assert.equal(bots.length, CARDS_DAILY_BOTS);
+  for (const b of bots) assert.throws(() => r.kick('dc_kicker', b, false), /Daily Challenge/);
+  assert.equal(r.status, 'playing');
+  assert.ok(r.game!.players.every(p => !p.left), 'every bot still in the match');
+  assert.equal(daily.cardsDailyAttempt(DAY1, 'dc_kicker')!.result, undefined);
+  r.leave('dc_kicker');
+});
+
 test('a table that is lost or swept while the attempt runs counts as a walk-out', () => {
   const lost = start('dc_lost').room;
   reg.delete(lost.code); // a restart that did not bring it back
