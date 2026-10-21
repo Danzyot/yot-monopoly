@@ -1,7 +1,8 @@
-// Public player profile (/u/:id): a hero card, then one section per game the
-// player has finished: Monopoly (headline stats, favourites, recent games) and
-// Cards (headline stats, tournament record, recent matches), all from
-// finished-game results. Unknown players get a friendly page, not an error.
+// Public player profile (/u/:id): a hero card with Share buttons, the badges,
+// then one section per game the player has finished: Monopoly (headline stats,
+// favourites, recent games) and Cards (headline stats, tournament record,
+// recent matches), all from finished-game results. Unknown players get a
+// friendly page, not an error. A shared link previews as the player's card.
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api.ts';
@@ -14,6 +15,7 @@ import { getCharacter, isCharacterId } from '../../../shared/characters.ts';
 import type { CardsProfile, CardsProfileGame, PublicProfile } from '../../../shared/types.ts';
 import { BRAND, GAMES } from '../../../shared/brand.ts';
 import ProfileTournaments from '../tournaments/ProfileTournaments.tsx';
+import { BadgeGrid, ShareProfile } from '../achievements.tsx';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
@@ -288,8 +290,11 @@ export default function Profile() {
             {totalWins > 0 && <span className="chip chip-win">{plural(totalWins, 'win')}</span>}
             {p?.favouriteMap && <span className="chip">Favourite map · {getMap(p.favouriteMap.id).name}</span>}
           </div>
+          <ShareProfile id={id} name={hero!.name} mine={mine} />
         </div>
       </section>
+
+      <BadgeGrid id={id} />
 
       {p && <MonopolySection p={p} titled={both} />}
       <CardsSection c={c} id={id} titled={both || !p} />

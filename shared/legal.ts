@@ -92,7 +92,7 @@ We don't use tracking cookies. Your browser's local storage keeps your sign-in a
 - No payments, so we never ask for card or bank details.
 
 ## Who sees what
-- **Everyone:** your name, avatar, results, profile and leaderboard place.
+- **Everyone:** your name, avatar, results, profile, badges and leaderboard place. A badge shows that you have linked a wallet, never which one.
 - **Players at your table:** your name, avatar, character and chat.
 - **Admins:** all of the above plus IP addresses, countries and linked wallets, for moderation only.
 - **Services we use:** Discord (sign-in), our hosting provider (it runs the servers that hold this data), a Monad blockchain node (we ask it which tokens a linked address holds) and Google Fonts (your browser fetches two fonts from Google, which sees your IP address).

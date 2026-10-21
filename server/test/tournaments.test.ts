@@ -187,7 +187,7 @@ test('a full tournament: rounds, advancement, the final, places 1..N', () => {
   const view = h.m.view(t);
   assert.equal(view.entrants.find(e => e.state === 'champion')?.id, places[0]);
   assert.equal(view.places[0].place, 1);
-  assert.deepEqual(h.m.resultsOf(places[0]), [{ id: t.id, game: 'cards', name: 'Test Cup', place: 1, of: 10, endedAt: h.now() }]);
+  assert.deepEqual(h.m.resultsOf(places[0]), [{ id: t.id, game: 'cards', name: 'Test Cup', place: 1, of: 10, endedAt: h.now(), finalTable: true }]);
 });
 
 test('byes: the odd players out go straight through, a different one each time', () => {

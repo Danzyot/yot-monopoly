@@ -166,6 +166,8 @@ export interface CardsRoundResult {
   blocked?: boolean;
   /** Each loser's hand value at the end of the round. */
   hands: Record<string, number>;
+  /** Each loser's number of cards at the end of the round (achievements); absent in older games. */
+  cards?: Record<string, number>;
 }
 
 export interface CardsView {

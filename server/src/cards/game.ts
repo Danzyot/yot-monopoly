@@ -415,14 +415,16 @@ export class CardsGame {
   /** A round's end: the winner scores everyone else's cards; the match may be over. */
   private endRound(w: CardsPlayerState, blocked: boolean | 'time' = false) {
     const hands: Record<string, number> = {};
+    const cards: Record<string, number> = {};
     let points = 0;
     for (const q of this.active()) {
       if (q === w) continue;
       hands[q.id] = handPoints(q.hand);
+      cards[q.id] = q.hand.length;
       points += hands[q.id];
     }
     w.score += points;
-    this.history.push({ round: this.round, winner: w.id, points, ...(blocked && { blocked: true }), hands });
+    this.history.push({ round: this.round, winner: w.id, points, ...(blocked && { blocked: true }), hands, cards });
     const matchOver = this.rules.match === 'single' || w.score >= this.rules.targetScore;
     this.step({ type: 'roundEnd', winner: w.id, points, ...(blocked && { blocked: true }), matchOver });
     const total = this.rules.match === 'points' ? ` (${w.score} in all)` : '';
@@ -1150,7 +1152,7 @@ export class CardsGame {
       })),
       round: this.round,
       turn: this.turn,
-      history: this.history.map(h => ({ ...h, hands: { ...h.hands } })),
+      history: this.history.map(h => ({ ...h, hands: { ...h.hands }, ...(h.cards && { cards: { ...h.cards } }) })),
       winner: this.winner,
       lastPlay: this.lastPlay && {
         seq: this.lastPlay.seq,

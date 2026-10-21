@@ -128,8 +128,15 @@ export function attachSockets(io: Server): SocketLayer {
       places: standings.map(s => {
         const p = g.player(s.id);
         // Character and avatar feed public profiles (older records lack them).
-        const avatar = p.isBot ? undefined : room.seat(p.id)?.avatar;
-        return { id: p.id, name: p.name, isBot: p.isBot, netWorth: s.netWorth, character: p.character, ...(avatar ? { avatar } : {}) };
+        const seat = p.isBot ? undefined : room.seat(p.id);
+        const avatar = seat?.avatar;
+        // Achievements: their own NFT Chog (a human seat keeps one only while the wallet holds it) and whole colour sets.
+        const chogToken = seat?.chogToken;
+        const sets = g.stats[p.id]?.sets?.length ?? 0;
+        return {
+          id: p.id, name: p.name, isBot: p.isBot, netWorth: s.netWorth, character: p.character, ...(avatar ? { avatar } : {}),
+          ...(chogToken !== undefined ? { chogToken } : {}), ...(sets ? { sets } : {}),
+        };
       }),
     });
     lobbyChanged();

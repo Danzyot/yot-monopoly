@@ -32,6 +32,23 @@ export interface RouteMeta {
   status: 200 | 404;
   /** A game page: the server adds VideoGame structured data. */
   game?: { name: string; genre: string[] };
+  /** This page's own share image (a player's card) in place of SHARE_IMAGE. */
+  image?: ShareImage;
+}
+
+export interface ShareImage {
+  /** Site-relative, e.g. "/api/players/dc_1/card.png?v=a". */
+  path: string;
+  width: number;
+  height: number;
+  alt: string;
+}
+
+/** The player id in a profile path ("/u/:id"), or null for any other page. */
+export function profileIdOf(path: string): string | null {
+  const m = /^\/u\/([^/]+)$/.exec(cleanPath(path));
+  if (!m) return null;
+  try { return decodeURIComponent(m[1]); } catch { return null; }
 }
 
 interface Entry {

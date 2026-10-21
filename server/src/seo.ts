@@ -9,6 +9,9 @@ import type express from 'express';
 import { readFileSync } from 'node:fs';
 import { SHARE_IMAGE, SHARE_IMAGE_SIZE, SITE_NAME, SITE_URL, routeMeta, sitemapPaths, type RouteMeta } from '../../shared/seo.ts';
 
+/** Fills in what only the server knows for a page (a profile's name, numbers and card); returns the meta as it is otherwise. */
+export type MetaEnricher = (meta: RouteMeta) => RouteMeta;
+
 /** The site's canonical origin: PUBLIC_URL when it is a plain http(s) origin, else choggames.com. */
 export function siteOrigin(env: string | undefined = process.env.PUBLIC_URL): string {
   const v = env?.trim().replace(/\/+$/, '');
@@ -43,7 +46,9 @@ function structuredData(meta: RouteMeta, origin: string): unknown[] {
 /** The <head> tags for one route. */
 export function headTags(meta: RouteMeta, origin = siteOrigin()): string {
   const url = origin + meta.path;
-  const image = origin + SHARE_IMAGE;
+  const image = origin + (meta.image?.path ?? SHARE_IMAGE);
+  const size = meta.image ?? SHARE_IMAGE_SIZE;
+  const alt = meta.image?.alt ?? `${SITE_NAME}: Monopoly, Cards and Poker`;
   const tags = [
     `<title>${esc(meta.title)}</title>`,
     `<meta name="description" content="${esc(meta.description)}" />`,
@@ -55,13 +60,14 @@ export function headTags(meta: RouteMeta, origin = siteOrigin()): string {
     `<meta property="og:description" content="${esc(meta.description)}" />`,
     `<meta property="og:url" content="${esc(url)}" />`,
     `<meta property="og:image" content="${esc(image)}" />`,
-    `<meta property="og:image:width" content="${SHARE_IMAGE_SIZE.width}" />`,
-    `<meta property="og:image:height" content="${SHARE_IMAGE_SIZE.height}" />`,
-    `<meta property="og:image:alt" content="${esc(`${SITE_NAME}: Monopoly, Cards and Poker`)}" />`,
+    `<meta property="og:image:width" content="${size.width}" />`,
+    `<meta property="og:image:height" content="${size.height}" />`,
+    `<meta property="og:image:alt" content="${esc(alt)}" />`,
     '<meta name="twitter:card" content="summary_large_image" />',
     `<meta name="twitter:title" content="${esc(meta.title)}" />`,
     `<meta name="twitter:description" content="${esc(meta.description)}" />`,
     `<meta name="twitter:image" content="${esc(image)}" />`,
+    `<meta name="twitter:image:alt" content="${esc(alt)}" />`,
     ...structuredData(meta, origin).map(jsonLd),
   ];
   return tags.filter(Boolean).join('\n    ');
@@ -74,8 +80,10 @@ const END = '<!--/seo-->';
  * index.html with one route's tags in place of the default block between
  * <!--seo--> and <!--/seo--> (index.html). Without the markers only the title is swapped.
  */
-export function renderIndex(template: string, path: string, origin = siteOrigin()): { html: string; status: number } {
-  const meta = routeMeta(path);
+export function renderIndex(template: string, path: string, origin = siteOrigin(), enrich?: MetaEnricher): { html: string; status: number } {
+  const base = routeMeta(path);
+  let meta = base;
+  try { if (enrich) meta = enrich(base); } catch (e) { console.error('[seo] could not enrich', path, e); }
   const tags = headTags(meta, origin);
   const a = template.indexOf(START);
   const b = template.indexOf(END);
@@ -120,11 +128,11 @@ export function mountCrawlerFiles(app: express.Express): void {
 }
 
 /** The app's page for every other GET: index.html with that route's meta, 404 for unknown paths. */
-export function spaHandler(indexFile: string): express.RequestHandler {
+export function spaHandler(indexFile: string, enrich?: MetaEnricher): express.RequestHandler {
   let template: string | null = null;
   return (req, res) => {
     template ??= readFileSync(indexFile, 'utf8');
-    const { html, status } = renderIndex(template, req.path);
+    const { html, status } = renderIndex(template, req.path, siteOrigin(), enrich);
     // Always revalidated (it names the current hashed bundles); Express's ETag makes that a 304.
     res.status(status).type('html').setHeader('Cache-Control', 'no-cache');
     res.send(html);

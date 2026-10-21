@@ -33,6 +33,7 @@ import { useMusicScene } from '../music.ts';
 import { useAmbience } from '../ambience.ts';
 import { QUALITY_LEVELS, useQuality } from '../three/quality.ts';
 import { useCinematicPref } from '../three/cinematic.ts';
+import { useAchievementToasts } from '../achievements.tsx';
 import { useCardsSounds } from './useCardsSounds.ts';
 
 // The 3D table brings three.js: fetched when a table is first seen (the 2D felt stands in while it loads).
@@ -558,6 +559,8 @@ export default function CardsTable({ room, me, chat, skew, fromLobby }: {
   const live = view.phase !== 'over' && view.phase !== 'roundOver' && room.status === 'playing';
   useTicker(live || view.phase === 'roundOver', 400);
   const now = Date.now() + skew;
+  // "Achievement unlocked!" for badges the match earned you (seated players only).
+  useAchievementToasts(view.phase === 'over', myId);
 
   // The 3D table and what it needs from the DOM: our hand (cards fly from
   // and to it), the chips pinned over the figures, the effects layer.

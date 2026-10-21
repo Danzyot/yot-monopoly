@@ -222,6 +222,8 @@ export interface TournamentResult {
   place: number;
   of: number;
   endedAt: number;
+  /** Sat at the final table (achievements). */
+  finalTable?: boolean;
 }
 
 /** Socket events, client to server. Every one answers with an ack: { ok: true, ... } or { ok: false, error }. */

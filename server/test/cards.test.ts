@@ -402,7 +402,7 @@ test('scoring: going out wins the round; the winner scores everyone else\'s card
   assert.equal(g.phase, 'over');
   assert.equal(g.winner, 'p0');
   assert.equal(g.player('p0').score, 175);
-  assert.deepEqual(g.history, [{ round: 1, winner: 'p0', points: 175, hands: { p1: 154, p2: 21 } }]);
+  assert.deepEqual(g.history, [{ round: 1, winner: 'p0', points: 175, hands: { p1: 154, p2: 21 }, cards: { p1: 7, p2: 2 } }]);
   const end = g.lastPlay!.steps.at(-1)!;
   assert.deepEqual(end, { type: 'roundEnd', winner: 'p0', points: 175, matchOver: true });
   assert.ok(g.log.some(l => /P0 is out of cards and wins round 1, scoring 175 points\./.test(l.text) && l.amount === 175));

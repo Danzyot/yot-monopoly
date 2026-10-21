@@ -61,6 +61,51 @@ function SocialChips() {
   );
 }
 
+// ---- "Achievement unlocked!": a badge a game just earned (achievements.tsx) ----
+
+export interface AchievementToast {
+  /** The badge id: the same badge never shows twice at once. */
+  key: string;
+  emoji: string;
+  name: string;
+  blurb: string;
+}
+const achievementListeners = new Set<(t: AchievementToast) => void>();
+export const ACHIEVEMENT_TOAST_MS = 5_000;
+
+export function toastAchievement(t: AchievementToast) {
+  achievementListeners.forEach(f => f(t));
+}
+
+function AchievementToasts() {
+  const [items, setItems] = useState<AchievementToast[]>([]);
+  useEffect(() => {
+    const timers = new Set<ReturnType<typeof setTimeout>>();
+    const add = (t: AchievementToast) => {
+      setItems(i => (i.some(x => x.key === t.key) ? i : [...i.slice(-2), t]));
+      const h = setTimeout(() => { timers.delete(h); setItems(i => i.filter(x => x.key !== t.key)); }, ACHIEVEMENT_TOAST_MS);
+      timers.add(h);
+    };
+    achievementListeners.add(add);
+    return () => { achievementListeners.delete(add); timers.forEach(clearTimeout); };
+  }, []);
+  if (!items.length) return null;
+  return (
+    <div className="ach-toasts" aria-live="polite">
+      {items.map(t => (
+        <div key={t.key} className="ach-toast" role="status">
+          <span className="ach-toast-face" aria-hidden>{t.emoji}</span>
+          <span className="ach-toast-text">
+            <small>Achievement unlocked!</small>
+            <b>{t.name}</b>
+            <span>{t.blurb}</span>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ToastHost() {
   const [items, setItems] = useState<Toast[]>([]);
   useEffect(() => {
@@ -77,6 +122,7 @@ export function ToastHost() {
         {items.map(t => <div key={t.id} className={`toast ${t.kind}`}>{t.text}</div>)}
       </div>
       <SocialChips />
+      <AchievementToasts />
     </>
   );
 }

@@ -1,0 +1,5 @@
+The badge pictures in this folder are Twemoji graphics
+(https://github.com/jdecked/twemoji, from the @twemoji/svg package),
+Copyright 2019 Twitter, Inc and other contributors, licensed under
+CC-BY 4.0: https://creativecommons.org/licenses/by/4.0/
+Each file is named after the achievement it stands for (shared/achievements.ts).

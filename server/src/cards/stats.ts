@@ -22,7 +22,28 @@ export interface CardsRecord {
   /** A private table's (tournament tables are private): kept off public feeds like the home ticker. */
   private?: true;
   /** Winner first, then by match score, then by fewest points left in hand; players who left last. */
-  places: { id: string; name: string; isBot: boolean; score: number; left?: boolean; character?: string; avatar?: string }[];
+  places: CardsPlace[];
+}
+
+export interface CardsPlace {
+  id: string; name: string; isBot: boolean; score: number; left?: boolean; character?: string; avatar?: string;
+  /** Humans only: the NFT Chog they played as (their own, checked against their wallet). Absent in older records. */
+  chogToken?: number;
+  /** Their best round won (achievements), absent when they won none and in older records: the most points it scored... */
+  bestRound?: number;
+  /** ...and the most cards left in the others' hands when they went out (absent before card counts were kept). */
+  roundCards?: number;
+}
+
+/** A player's best round won, from the match's round history. */
+export function bestRounds(history: CardsGame['history'], id: string): { bestRound?: number; roundCards?: number } {
+  let bestRound = 0, roundCards = 0;
+  for (const h of history) {
+    if (h.winner !== id) continue;
+    bestRound = Math.max(bestRound, h.points);
+    if (h.cards) roundCards = Math.max(roundCards, Object.values(h.cards).reduce((a, b) => a + b, 0));
+  }
+  return { ...(bestRound && { bestRound }), ...(roundCards && { roundCards }) };
 }
 
 export interface CardsLeaderRow {
@@ -64,9 +85,12 @@ export function recordCardsResult(room: CardsRoom): CardsRecord | null {
     rounds: g.round, match: g.rules.match, targetScore: g.rules.targetScore, ...(room.private && { private: true as const }),
     places: cardsStandings(g).map(p => {
       const seat = room.seat(p.id);
+      const human = !!seat && !seat.isBot;
       return {
         id: p.id, name: p.name, isBot: p.isBot, score: p.score, ...(p.left && { left: true }),
-        ...(seat && { character: seat.character }), ...(seat && !seat.isBot && { avatar: seat.avatar }),
+        ...(seat && { character: seat.character }), ...(human && { avatar: seat.avatar }),
+        ...(human && seat.chogToken !== undefined && { chogToken: seat.chogToken }),
+        ...(!p.isBot && bestRounds(g.history, p.id)),
       };
     }),
   };

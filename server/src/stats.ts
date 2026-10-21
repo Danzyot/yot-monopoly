@@ -17,6 +17,10 @@ export interface GameRecord {
     character?: string;
     /** Humans only; absent in older records. */
     avatar?: string;
+    /** Humans only: the NFT Chog they played as (their own, checked against their wallet). Absent in older records. */
+    chogToken?: number;
+    /** Colour sets they held whole at some point in the game (achievements); absent when none and in older records. */
+    sets?: number;
   }[];
 }
 

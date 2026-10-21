@@ -1,0 +1,65 @@
+/* Achievements: the profile's badge grid, its Share buttons and the
+   "Achievement unlocked!" toast (achievements.tsx, toast.tsx). Colours come
+   from the site's variables, so the Chog season's purple, pink and cream
+   (season.css) carry through; the tiers are lilac, pink and cream. */
+
+.ach-panel { display: flex; flex-direction: column; gap: 10px; }
+.ach-grid {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px;
+}
+.ach-badge {
+  --ring: #b9a3f2; --fill: rgba(67, 32, 154, 0.9);
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 10px 6px 9px; border-radius: 14px; text-align: center; cursor: default;
+  background: rgba(0, 0, 0, 0.22); border: 1px solid var(--line);
+}
+.ach-badge.tier-2 { --ring: #ff8ec2; --fill: rgba(122, 31, 85, 0.95); }
+.ach-badge.tier-3 { --ring: #fdf6cd; --fill: rgba(138, 90, 18, 0.95); }
+.ach-badge:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ach-face {
+  width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; font-size: 28px; line-height: 1;
+  background: var(--fill); border: 3px solid #0e0526; box-shadow: inset 0 0 0 3px var(--ring), 0 4px 0 #0e0526;
+}
+.ach-name { font-size: 12.5px; font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; }
+.ach-badge.earned { border-color: color-mix(in srgb, var(--ring) 55%, transparent); }
+.ach-badge.locked .ach-face { filter: grayscale(1) brightness(0.55); box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.15), 0 4px 0 #0e0526; }
+.ach-badge.locked .ach-name { color: var(--muted); }
+.ach-bar { width: 70%; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.ach-bar i { display: block; height: 100%; border-radius: 3px; background: var(--chog-pink-hi, var(--accent)); }
+.ach-more { align-self: center; }
+
+/* ---- Share ---- */
+.pf-share { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.pf-share .btn { text-decoration: none; }
+
+/* ---- "Achievement unlocked!" ---- */
+/* Top centre, under the header or the table's top bar: clear of the end screen's buttons. */
+.ach-toasts {
+  position: fixed; left: 50%; top: 64px; transform: translateX(-50%); z-index: 60;
+  display: flex; flex-direction: column; gap: 8px; pointer-events: none; width: max-content; max-width: calc(100vw - 32px);
+}
+.ach-toast {
+  display: flex; align-items: center; gap: 12px; padding: 10px 18px 10px 10px; border-radius: 18px;
+  background: linear-gradient(180deg, #5a32c0, #2b1764); color: #fff;
+  border: 3px solid #0e0526; box-shadow: inset 0 0 0 2px var(--chog-pink-hi, #ff8ec2), 0 5px 0 #0e0526, 0 14px 30px rgba(0, 0, 0, 0.45);
+  animation: ach-in 420ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.ach-toast-face {
+  flex: none; width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center; font-size: 28px;
+  background: linear-gradient(180deg, #fffbe8, #f3d9a6); border: 3px solid #0e0526;
+}
+.ach-toast-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.ach-toast-text small { font-size: 11px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; color: var(--chog-pink-hi, #ff8ec2); }
+.ach-toast-text b { font-family: var(--display); font-weight: 400; font-size: 20px; color: var(--chog-cream, #fdf6cd); }
+.ach-toast-text span { font-size: 13px; color: var(--muted); }
+@keyframes ach-in { from { opacity: 0; transform: translateY(-24px) scale(0.9); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .ach-toast { animation: none; } }
+
+@media (max-width: 560px) {
+  .ach-grid { grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 6px; }
+  .ach-badge { padding: 8px 4px 7px; gap: 5px; border-radius: 12px; }
+  .ach-face { width: 42px; height: 42px; font-size: 22px; }
+  .ach-name { font-size: 11px; }
+  .ach-toasts { top: 56px; }
+}
