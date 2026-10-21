@@ -2,13 +2,16 @@
 // in its io.use): every event is `tourney:*`. A page following one event
 // joins `tourney:<id>`; the list page joins `tourney:lobby`. The manager
 // (manager.ts) is built here with the Cards adapter, restored from the data
-// volume, and driven once a second. Nothing here is announced on Discord:
-// not the events, not their tables' results.
+// volume, and driven once a second. Recurring schedules (schedules.ts) are
+// operators' only: their channel is `tourney:admin`; everyone on the list
+// gets the scheduled events (`tourney:scheduled`). Nothing here is announced
+// on Discord: not the events, not their tables' results, not the schedules.
 
 import type { Server, Socket } from 'socket.io';
 import { banMessage, findBan } from '../bans.ts';
 import { cardsAdapter } from './adapters.ts';
 import { TournamentManager, TournamentError, type Requester } from './manager.ts';
+import { TournamentScheduler } from './schedules.ts';
 import type { Tournament } from './engine.ts';
 import type { SocketLayer } from '../sockets.ts';
 import type { CardsSocketLayer } from '../cards/sockets.ts';
@@ -32,25 +35,43 @@ const channel = (id: string) => `tourney:${id}`;
 
 export interface TournamentLayer {
   manager: TournamentManager;
+  scheduler: TournamentScheduler;
 }
+
+const ADMIN_CHANNEL = 'tourney:admin';
+/** Schedules are checked this often (an occurrence is created within seconds of its lead time). */
+const SCHEDULE_TICK_MS = 5_000;
 
 /** `games.monopoly` is only asked which room codes are taken, so a Cards table never shares one. */
 export function attachTournaments(io: Server, games: { monopoly: SocketLayer; cards: CardsSocketLayer }, opts: { tickMs?: number } = {}): TournamentLayer {
   // Coalesced like the rooms': everything that changes an event in one tick goes out once.
   const pending = new Set<Tournament>();
   let listQueued = false;
+  let schedulesQueued = false;
   const flush = () => {
     const ts = [...pending];
     pending.clear();
     for (const t of ts) io.to(channel(t.id)).emit('tourney:state', manager.view(t));
+    if (schedulesQueued) {
+      schedulesQueued = false;
+      io.to('tourney:lobby').emit('tourney:scheduled', scheduler.upcoming());
+    }
     if (listQueued) {
       listQueued = false;
       io.to('tourney:lobby').emit('tourney:list', manager.list());
+      // A schedule's page shows its current event, so operators following schedules hear of every change.
+      if (io.sockets.adapter.rooms.get(ADMIN_CHANNEL)?.size) io.to(ADMIN_CHANNEL).emit('tourney:schedules', scheduler.views());
     }
   };
+  const queued = () => pending.size > 0 || listQueued || schedulesQueued;
   const changed = (t: Tournament) => {
-    if (!pending.size && !listQueued) setImmediate(flush);
+    if (!queued()) setImmediate(flush);
     pending.add(t);
+    listQueued = true;
+  };
+  const schedulesChanged = () => {
+    if (!queued()) setImmediate(flush);
+    schedulesQueued = true;
     listQueued = true;
   };
 
@@ -66,6 +87,7 @@ export function attachTournaments(io: Server, games: { monopoly: SocketLayer; ca
       }
     },
   }, { tickMs: opts.tickMs ?? 1_000 });
+  const scheduler = new TournamentScheduler(manager, { onChange: schedulesChanged }, { tickMs: opts.tickMs === 0 ? 0 : SCHEDULE_TICK_MS });
 
   io.on('connection', (socket: Socket) => {
     const data = socket.data as TourneySocketData;
@@ -100,7 +122,7 @@ export function attachTournaments(io: Server, games: { monopoly: SocketLayer; ca
 
     on<{ subscribe?: boolean }>('tourney:list', p => {
       if (p.subscribe) socket.join('tourney:lobby');
-      return { tournaments: manager.list(), me: manager.me(data.profile) };
+      return { tournaments: manager.list(), scheduled: scheduler.upcoming(), me: manager.me(data.profile) };
     }, false);
 
     on<{ id: string }>('tourney:sub', p => {
@@ -131,9 +153,22 @@ export function attachTournaments(io: Server, games: { monopoly: SocketLayer; ca
     on<{ id: string; reason?: string }>('tourney:cancel', p => { manager.cancel(p.id, who(), p.reason); });
     on<{ id: string; prize: string }>('tourney:prize', p => { manager.setPrize(p.id, who(), p.prize); });
     on<{ id: string; playerId: string }>('tourney:remove', p => { manager.remove(p.id, who(), p.playerId); });
+
+    // Recurring schedules: operators only (the scheduler checks every call).
+    on<{ subscribe?: boolean }>('tourney:sched:list', p => {
+      const schedules = scheduler.list(who());
+      if (p.subscribe) socket.join(ADMIN_CHANNEL);
+      return { schedules };
+    }, false);
+    on<unknown>('tourney:sched:save', p => {
+      const d = scheduler.save(who(), p);
+      return { schedule: scheduler.view(d) };
+    });
+    on<{ id: string; enabled: boolean }>('tourney:sched:enable', p => { scheduler.setEnabled(who(), p.id, p.enabled === true); });
+    on<{ id: string }>('tourney:sched:delete', p => { scheduler.remove(who(), p.id); });
   });
 
-  return { manager };
+  return { manager, scheduler };
 }
 
 function plain(p: unknown): boolean {

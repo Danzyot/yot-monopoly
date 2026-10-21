@@ -16,6 +16,7 @@ import QuickPlay from '../components/QuickPlay.tsx';
 import ActivityTicker from '../components/ActivityTicker.tsx';
 import ChogOfTheDay from '../components/ChogOfTheDay.tsx';
 import ChogRoamer from '../components/roamer/ChogRoamer.tsx';
+import { NextTournamentLink } from '../tournaments/NextTournament.tsx';
 
 // The home page has no WebGL at all: the board behind the hero is a still
 // (client/public/home/, drifted by styles/home.css), so the page is up at once
@@ -185,7 +186,7 @@ export default function Home() {
             <div className="hub-text">
               <HubTitle game="cards" />
               <p>{BLURBS.cards}</p>
-              <span className="hub-meta">{CARDS_MIN_PLAYERS}–{CARDS_MAX_PLAYERS} players · 15 min · <Link to="/tournaments">Tournaments</Link></span>
+              <span className="hub-meta">{CARDS_MIN_PLAYERS}–{CARDS_MAX_PLAYERS} players · 15 min · <NextTournamentLink /></span>
               <span className="hub-live" role="status">{liveLine(connected, cardTables.length, cardsLive)}</span>
             </div>
             <div className="hub-actions">

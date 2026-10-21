@@ -95,6 +95,8 @@ export interface TournamentData {
   /** Between rounds: when the next one is seated. */
   nextRoundAt: number | null;
   cancelReason: string | null;
+  /** Created by a recurring schedule: which one, the occurrence's start, and its number (schedules.ts). */
+  schedule?: { id: string; slot: number; n: number };
 }
 
 /**

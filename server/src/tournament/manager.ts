@@ -150,7 +150,7 @@ export class TournamentManager {
     if (!TOURNEY_GAMES.includes(game)) fail(`Tournaments are for ${GAMES.cards.name} only`);
     const name = cleanName(raw.name, TOURNEY_NAME_MAX) || fail('Give the tournament a name (2 characters or more)');
     const prize = clean(raw.prize, TOURNEY_PRIZE_MAX);
-    const settings = this.settings(raw.settings);
+    const settings = this.checkSettings(raw.settings);
 
     const d: TournamentData = {
       id: randomUUID().replace(/-/g, '').slice(0, 10), game, name, prize, hostId: by.id, hostName: by.name,
@@ -163,8 +163,38 @@ export class TournamentManager {
     return t;
   }
 
+  /**
+   * One occurrence of a recurring schedule (schedules.ts), as an ordinary
+   * operator's tournament hosted by whoever set the schedule up. The schedule
+   * was checked when it was saved, and its start is the occurrence's own, so
+   * only the server's limit applies here.
+   */
+  createScheduled(input: {
+    host: Member; name: string; prize: string; settings: TournamentSettings; schedule: { id: string; slot: number; n: number };
+  }): Tournament {
+    if ([...this.tournaments.values()].filter(t => t.live).length >= MAX_LIVE_TOURNAMENTS) {
+      throw new TournamentError('The server is at its tournament limit — try again later');
+    }
+    const d: TournamentData = {
+      id: randomUUID().replace(/-/g, '').slice(0, 10), game: 'cards', name: input.name, prize: input.prize,
+      hostId: input.host.id, hostName: input.host.name, createdAt: this.now(), status: 'registering', paused: null,
+      settings: { ...input.settings, startAt: input.schedule.slot }, entrants: [], rounds: [], places: [],
+      startedAt: null, finishedAt: null, nextRoundAt: null, cancelReason: null, schedule: { ...input.schedule },
+    };
+    const t = new Tournament(d, this.now, this.rng);
+    this.tournaments.set(d.id, t);
+    this.changed(t);
+    return t;
+  }
+
+  /** The events a schedule created, newest occurrence first. */
+  fromSchedule(scheduleId: string): Tournament[] {
+    return [...this.tournaments.values()].filter(t => t.d.schedule?.id === scheduleId)
+      .sort((a, b) => b.d.schedule!.slot - a.d.schedule!.slot);
+  }
+
   /** The operator's settings: defaults for anything missing, refused when out of range. */
-  private settings(raw: unknown): TournamentSettings {
+  checkSettings(raw: unknown): TournamentSettings {
     const fail = (msg: string): never => { throw new TournamentError(msg); };
     const s = (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Partial<Record<keyof TournamentSettings, unknown>>;
     const d = defaultTournamentSettings();
@@ -434,6 +464,8 @@ export class TournamentManager {
       startAt: d.settings.startAt, startedAt: d.startedAt, finishedAt: d.finishedAt,
       round: d.status === 'running' ? d.rounds.length || null : null,
       champion: champ ? { id: champ, name: t.entrant(champ)?.name ?? '?' } : null,
+      cardsMode: d.settings.cardsMode ?? 'classic',
+      ...(d.schedule ? { scheduleId: d.schedule.id } : {}),
     };
   }
 

@@ -140,6 +140,9 @@ reconcileCardsDaily(cards.registry);
 const tourneys = attachTournaments(io, { monopoly: sockets, cards });
 const restoredTourneys = tourneys.manager.restore();
 if (restoredTourneys) console.log(`Restored ${restoredTourneys} live tournament(s)`);
+// Recurring schedules after the events they made, so none is made twice.
+const restoredSchedules = tourneys.scheduler.restore();
+if (restoredSchedules) console.log(`Restored ${restoredSchedules} running tournament schedule(s)`);
 tourneys.manager.armPersistence();
 
 let loopLagMs = 0;
@@ -244,6 +247,12 @@ app.get('/api/community/discord', async (req, res) => {
 app.get('/api/tournaments/player/:id', (req, res) => {
   if (!isOn('leaderboard')) { res.status(404).json({ error: 'Player profiles are switched off' }); return; }
   res.json({ results: tourneys.manager.resultsOf(String(req.params.id)) });
+});
+
+// The soonest tournament to look forward to (the Cards page and the hub's Cards card).
+app.get('/api/tournaments/next', (_req, res) => {
+  res.set('Cache-Control', 'public, max-age=30');
+  res.json({ next: tourneys.scheduler.next() });
 });
 
 app.get('/api/health', (_req, res) => {

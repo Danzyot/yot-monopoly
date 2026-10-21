@@ -8,6 +8,7 @@
 // is the only game on offer: Monopoly games are too long for brackets.
 
 import type { CardsGameMode } from './cards/rules.ts';
+import type { TournamentScheduleInput } from './tournamentSchedules.ts';
 
 export type TournamentGame = 'cards';
 export type TournamentStatus = 'registering' | 'running' | 'finished' | 'cancelled';
@@ -212,6 +213,9 @@ export interface TournamentSummary {
   /** The round being played (running only). */
   round: number | null;
   champion: { id: string; name: string } | null;
+  cardsMode?: CardsGameMode;
+  /** Created by a recurring schedule (shared/tournamentSchedules.ts). */
+  scheduleId?: string;
 }
 
 /** Who is asking, with the list (tourney:list): only operators create and run tournaments. */
@@ -247,6 +251,11 @@ export interface TournamentClientEvents {
   'tourney:prize': { id: string; prize: string };
   /** Operators only. */
   'tourney:remove': { id: string; playerId: string };
+  /** Recurring schedules (shared/tournamentSchedules.ts), operators only. `subscribe` follows changes (tourney:schedules). */
+  'tourney:sched:list': { subscribe?: boolean };
+  'tourney:sched:save': TournamentScheduleInput;
+  'tourney:sched:enable': { id: string; enabled: boolean };
+  'tourney:sched:delete': { id: string };
 }
 
 /** Sent to a player's sockets when they are given a table. */

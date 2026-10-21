@@ -13,6 +13,7 @@ import type { Card } from '../../../shared/cards/deck.ts';
 import { cardsCall, chogPref, useCardsRoomList } from './net.ts';
 import { CardBack, CardFace } from './CardFace.tsx';
 import DailyCard from './DailyCard.tsx';
+import { NextTournamentChip } from '../tournaments/NextTournament.tsx';
 // Not from CardsLobby: that would bring the trait table with the page (see CardsBackdrop.tsx).
 import { CardsBackdrop } from './CardsBackdrop.tsx';
 import './cards.css';
@@ -107,6 +108,7 @@ export default function CardsHome() {
             <button className="btn gold small" type="submit">Join</button>
           </form>
         </div>
+        <NextTournamentChip />
         <p className="muted small" role="status">
           {!connected ? 'Connecting…' : rooms.length === 0 ? 'No open tables yet — open one and invite your friends!' : `${rooms.length} open table${rooms.length === 1 ? '' : 's'}`}
         </p>

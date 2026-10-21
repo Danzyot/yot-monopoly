@@ -34,6 +34,15 @@
 .ch-fan-card:hover { z-index: 2; }
 .ch-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; align-items: center; margin-bottom: 10px; }
 .ch-actions .btn.big { width: auto; margin: 0; }
+/* The next tournament (tournaments/NextTournament.tsx). */
+.tn-next-chip {
+  display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: 100%; margin: 2px auto 8px;
+  padding: 6px 14px; border-radius: 99px; text-decoration: none; color: #fff; font-size: 14px;
+  background: rgba(20, 8, 60, 0.6); border: 2px solid #ffd23f; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.5);
+}
+.tn-next-chip:hover { color: #fff; background: rgba(42, 19, 107, 0.8); }
+.tn-next-chip small { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #ffd23f; }
+.tn-next-when { font-weight: 700; color: #ffe680; white-space: nowrap; }
 /* The join box wears the hub's look (styles/hub.css .hub-join); a little wider here, where it stands alone. */
 .ch-join { flex: 0 1 200px; }
 .ch-join .code-input { width: 110px; font-size: 18px; }
