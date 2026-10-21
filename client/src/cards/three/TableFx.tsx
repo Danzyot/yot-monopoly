@@ -1,6 +1,7 @@
-// The felt and what glows on it: the round purple felt with its gold rings
-// and padded rim, the direction-of-play ring turning slowly round the middle
-// (and whipping round the other way on a Reverse), the colour in play
+// The felt and what glows on it: the round felt in the setting's colours
+// (shared/cards/tables.ts) with its rings and padded rim, the direction-of-play
+// ring turning slowly round the middle (and whipping round the other way on a
+// Reverse), the colour in play
 // glowing under the discard pile (a burst that settles on the colour a Wild
 // names; a gold shockwave for a stack, a Blitz and the round's last card),
 // and the confetti for the round and match wins. Each is one draw.
@@ -12,20 +13,24 @@ import {
 } from 'three';
 import { CARD_HEX } from '../CardFace.tsx';
 import { rng, useCanvasTexture } from '../../three/environments/common.tsx';
+import type { CardsTableLook } from '../../../../shared/cards/tables.ts';
 import { CENTRE, DISCARD, FELT_R, FELT_Y, TABLE_TOP } from './layout.ts';
 import { seg, type SceneState } from './state.ts';
 
 const NONE = '#6f7fd8';
 const GOLD = '#ffd23f';
 
-/** The felt: a purple pool with a fine nap, a gold double ring near the edge and a dashed ring inside it. */
-export function Felt() {
+/** The felt: a pool of the setting's colour with a fine nap, a double ring near the edge and a dashed ring inside it. */
+export function Felt({ look }: { look: CardsTableLook }) {
+  const [inner, mid, outer] = look.felt;
+  const ring = new Color(look.ring);
+  const ringRgb = `${Math.round(ring.r * 255)}, ${Math.round(ring.g * 255)}, ${Math.round(ring.b * 255)}`;
   const tex = useCanvasTexture(1024, 1024, g => {
     const c = 512;
     const grad = g.createRadialGradient(c, c * 0.9, 40, c, c, 520);
-    grad.addColorStop(0, '#7a4ee0');
-    grad.addColorStop(0.5, '#4c27a6');
-    grad.addColorStop(1, '#2a1570');
+    grad.addColorStop(0, inner);
+    grad.addColorStop(0.5, mid);
+    grad.addColorStop(1, outer);
     g.fillStyle = grad;
     g.fillRect(0, 0, 1024, 1024);
     const r = rng(7);
@@ -33,7 +38,7 @@ export function Felt() {
       g.fillStyle = r() > 0.5 ? `rgba(255,255,255,${r() * 0.05})` : `rgba(0,0,0,${r() * 0.1})`;
       g.fillRect(r() * 1024, r() * 1024, 1 + r() * 2, 1 + r() * 2);
     }
-    g.strokeStyle = 'rgba(255, 210, 63, 0.75)';
+    g.strokeStyle = `rgba(${ringRgb}, 0.75)`;
     g.lineWidth = 7;
     g.beginPath(); g.arc(c, c, 488, 0, Math.PI * 2); g.stroke();
     g.lineWidth = 3;
@@ -42,7 +47,7 @@ export function Felt() {
     g.lineWidth = 3;
     g.setLineDash([14, 12]);
     g.beginPath(); g.arc(c, c, 400, 0, Math.PI * 2); g.stroke();
-  }, []);
+  }, [inner, mid, outer, ringRgb]);
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FELT_Y, 0]} receiveShadow>
@@ -52,7 +57,7 @@ export function Felt() {
       {/* The padded leather rim. */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, TABLE_TOP + 0.08, 0]} receiveShadow castShadow>
         <torusGeometry args={[FELT_R + 0.14, 0.3, 10, 80]} />
-        <meshStandardMaterial color="#1c0e46" roughness={0.7} />
+        <meshStandardMaterial color={look.rim} roughness={0.7} />
       </mesh>
     </group>
   );

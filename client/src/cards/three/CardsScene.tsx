@@ -1,6 +1,7 @@
-// The 3D card table: the Chog room (its light-baked set, lights and
-// reflections, as the Monopoly board uses them), the modelled table with a
-// purple felt, the players' characters at the rim, every card in one
+// The 3D card table: the room's setting (one of Monopoly's light-baked sets
+// with its lights and reflections, as the board uses them; the host's pick
+// from shared/cards/tables.ts), the modelled table with a felt in the
+// setting's colours, the players' characters at the rim, every card in one
 // instanced draw (Cards3D), the direction ring and colour glow (TableFx), the
 // fire round anyone on their last card (LastCardFire), the camera and its
 // cuts (CardsCamera). The React side (CardsTable) hands over
@@ -19,6 +20,7 @@ import { Vector3, type DirectionalLight } from 'three';
 import { resolveTheme } from '../../../../shared/themes.ts';
 import type { CardsView } from '../../../../shared/cards/types.ts';
 import type { CardsSeatView } from '../../../../shared/cards/room.ts';
+import { getCardsTable, type CardsTableId } from '../../../../shared/cards/tables.ts';
 import type { CardsFrame } from '../sequence.ts';
 import { Environment, envLook, reflectionsFor } from '../../three/environments/index.tsx';
 import { SceneEnv } from '../../three/SceneEnv.tsx';
@@ -37,12 +39,10 @@ import type { SceneState } from './state.ts';
 
 preloadModels(false);
 
-const CHOG = resolveTheme('chog', 'classic');
-const LOOK = envLook('lounge', CHOG);
-const REFLECT = reflectionsFor('lounge', 'chog');
-
 export interface CardsSceneProps {
   view: CardsView;
+  /** Where the table is played: the room's setting. */
+  table: CardsTableId;
   frame: CardsFrame;
   seats: Record<string, CardsSeatView>;
   me: string | null;
@@ -74,16 +74,16 @@ function useCardAtlas(): CardAtlas | null {
 }
 
 /** The code-drawn table while the modelled one loads (or if it cannot). */
-function DrawnTable() {
+function DrawnTable({ color }: { color: string }) {
   return (
     <group>
       <mesh receiveShadow position={[0, TABLE_TOP - 0.25, 0]}>
         <cylinderGeometry args={[8.6, 8.9, 0.5, 96]} />
-        <meshStandardMaterial color="#2b1764" roughness={0.55} metalness={0.05} />
+        <meshStandardMaterial color={color} roughness={0.55} metalness={0.05} />
       </mesh>
       <mesh position={[0, -2.6, 0]}>
         <cylinderGeometry args={[1.2, 2.2, 4, 32]} />
-        <meshStandardMaterial color="#2b1764" roughness={0.6} />
+        <meshStandardMaterial color={color} roughness={0.6} />
       </mesh>
     </group>
   );
@@ -149,7 +149,12 @@ function useShadowPause(light: RefObject<DirectionalLight | null>, paused: boole
 }
 
 function CardsScene(props: CardsSceneProps) {
-  const { view, frame, seats, me, myTurn, compact, quality, reduced, cinematic, canDraw, onDraw, podium, onPodiumDone, handEl, handRects, chipEls, fxEl } = props;
+  const { view, table, frame, seats, me, myTurn, compact, quality, reduced, cinematic, canDraw, onDraw, podium, onPodiumDone, handEl, handRects, chipEls, fxEl } = props;
+  // The setting's room, in the edition whose room it is; the felt and table finish in its colours.
+  const setting = getCardsTable(table);
+  const theme = useMemo(() => resolveTheme(setting.themeId, 'classic'), [setting.themeId]);
+  const look = useMemo(() => envLook(setting.environment, theme), [setting.environment, theme]);
+  const reflect = useMemo(() => reflectionsFor(setting.environment, setting.themeId), [setting.environment, setting.themeId]);
   const angles = useMemo(() => seatAngles(view.players, me, compact), [view.players, me, compact]);
   const state = useRef<SceneState | null>(null);
   // Written during render, so this very frame reads the newest view.
@@ -186,17 +191,17 @@ function CardsScene(props: CardsSceneProps) {
           setStrong(strongDevice());
           if (location.search.includes('perf')) Object.assign(window, { __yotGl: gl, __yotScene: scene, __yotCards: state });
         }}>
-        <color attach="background" args={[LOOK.background]} />
-        <fog attach="fog" args={[LOOK.background, LOOK.fogNear, LOOK.fogFar]} />
-        <Environment kind="lounge" theme={CHOG} lite={lite} />
-        <SceneEnv {...REFLECT} />
-        <directionalLight ref={keyLight} castShadow={castShadow} position={[5, 12, 6]} intensity={LOOK.keyIntensity} color={LOOK.keyColor}
+        <color attach="background" args={[look.background]} />
+        <fog attach="fog" args={[look.background, look.fogNear, look.fogFar]} />
+        <Environment kind={setting.environment} theme={theme} lite={lite} />
+        <SceneEnv {...reflect} />
+        <directionalLight ref={keyLight} castShadow={castShadow} position={[5, 12, 6]} intensity={look.keyIntensity} color={look.keyColor}
           shadow-mapSize={quality === 'high' ? [2048, 2048] : [1024, 1024]} shadow-camera-left={-9} shadow-camera-right={9}
           shadow-camera-top={9} shadow-camera-bottom={-9} shadow-bias={-0.0004} />
-        <WithModel fallback={<DrawnTable />}>
-          <ModelTable color="#2b1764" roughness={0.5} metalness={0.08} />
+        <WithModel fallback={<DrawnTable color={setting.look.wood} />}>
+          <ModelTable color={setting.look.wood} roughness={0.5} metalness={0.08} />
         </WithModel>
-        <Felt />
+        <Felt look={setting.look} />
         <DirectionRing state={state} />
         <ColourGlow state={state} />
         {atlas && <CardsLayer atlas={atlas} state={state} castShadow={castShadow && !lowPower} />}

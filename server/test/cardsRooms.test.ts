@@ -17,6 +17,8 @@ const { CardsRegistry, CardsRoom, CARDS_AUTOPILOT_GRACE_MS } = await import('../
 const { saveCardsIfDirty, restoreCardsLive, CARDS_LIVE_FILE } = await import('../src/cards/persist.ts');
 const { seeded, setHand, setTop, specs } = await import('./cardsHelpers.ts');
 const { SEASON_CHARACTERS, SEASON_BOT_NAMES } = await import('../../shared/season.ts');
+const { CARDS_TABLES, CARDS_DEFAULT_TABLE } = await import('../../shared/cards/tables.ts');
+type CardsTableId = import('../../shared/cards/tables.ts').CardsTableId;
 type Room = InstanceType<typeof CardsRoom>;
 
 const m = (id: string, name = id.toUpperCase()) => ({ id, name, avatar: '🙂' });
@@ -280,6 +282,50 @@ test('a full bot match runs to the end on its own and is recorded as finished', 
   }
 });
 
+test('table setting: the host picks a known one in the lobby; it reaches every view and survives a snapshot', () => {
+  const h = harness();
+  try {
+    const r = h.reg.create('a');
+    r.join(m('a'));
+    r.join(m('b'));
+    assert.equal(r.view('a').table, CARDS_DEFAULT_TABLE, 'a new table is played in the default setting');
+    assert.throws(() => r.configure('b', false, { table: 'garden' }), /host/);
+    assert.throws(() => r.configure('a', false, { table: 'speedway' as CardsTableId }), /Unknown table/);
+    assert.throws(() => r.configure('a', false, { table: 42 as unknown as CardsTableId }), /Unknown table/);
+    assert.equal(r.table, CARDS_DEFAULT_TABLE, 'nothing changed by a bad pick');
+    for (const t of CARDS_TABLES) {
+      r.configure('a', false, { table: t.id });
+      assert.equal(r.view('b').table, t.id);
+    }
+    r.configure('a', false, { table: 'skyline' });
+    r.configure('x', true, { table: 'garden' });
+    assert.equal(r.table, 'garden', 'an operator may change it too');
+    r.configure('a', false, { table: 'skyline', rules: { turnSeconds: 0 } });
+
+    const snap = JSON.parse(JSON.stringify(h.reg.snapshot()));
+    assert.equal(snap[0].table, 'skyline');
+    const reg2 = new CardsRegistry({ onChange() {}, onEvent() {}, onFinished() {} }, 1e9, { now: h.now });
+    assert.equal(reg2.restore(snap), 1);
+    assert.equal(reg2.get(r.code)!.table, 'skyline');
+    assert.equal(reg2.get(r.code)!.view('a').table, 'skyline');
+    for (const code of [...reg2.rooms.keys()]) reg2.delete(code);
+    // A snapshot from before settings, or a hand-edited one, falls back to the default.
+    const reg3 = new CardsRegistry({ onChange() {}, onEvent() {}, onFinished() {} }, 1e9, { now: h.now });
+    const { table: _dropped, ...older } = snap[0];
+    assert.equal(reg3.restore([older, { ...snap[0], code: 'ZZZZZ', table: 'moon' }]), 2);
+    assert.equal(reg3.get(r.code)!.table, CARDS_DEFAULT_TABLE);
+    assert.equal(reg3.get('ZZZZZ')!.table, CARDS_DEFAULT_TABLE);
+    for (const code of [...reg3.rooms.keys()]) reg3.delete(code);
+
+    r.start('a', false);
+    assert.throws(() => r.configure('a', false, { table: 'arcade' }), /lobby|started|under way/i);
+    assert.equal(r.table, 'skyline', 'fixed once the match is on');
+    assert.equal(r.view('a').table, 'skyline');
+  } finally {
+    h.done();
+  }
+});
+
 test('modes: picking Chog Chaos brings its house rules (still the host\'s to change); back to Classic restores the standard set', () => {
   const h = harness();
   try {
@@ -429,12 +475,16 @@ test('sockets: create, join by code, bots, start; each player gets their own han
     assert.equal((await w.call('cards:join', { code })).spectating, true, 'not signed in: watching');
     assert.equal((await a.call('cards:addBot', { level: 'hard' })).ok, true);
     assert.equal((await a.call('cards:configure', { rules: { jumpIn: true }, private: true })).ok, true);
+    assert.equal((await a.call('cards:configure', { table: 'nowhere' })).ok, false);
+    assert.equal((await a.call('cards:configure', { table: 'garden' })).ok, true);
     assert.deepEqual(await a.call('cards:act', 'play'), { ok: false, error: 'Bad request' });
     assert.equal((await a.call('cards:start')).ok, true);
     await settle();
 
     const sa = a.state()!, sb = b.state()!, sw = w.state()!;
     assert.equal(sa.status, 'playing');
+    assert.equal(sb.table, 'garden', 'the setting reaches every client');
+    assert.equal(sw.table, 'garden');
     assert.equal(sa.game!.you!.id, a.id);
     assert.equal(sb.game!.you!.id, b.id);
     assert.equal(sw.game!.you, null);

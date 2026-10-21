@@ -17,6 +17,7 @@ import {
   CARDS_DAILY_BOTS, CARDS_DAILY_BOT_LEVEL, CARDS_DAILY_RULES, dailyNumber, type CardsDailyResult, type CardsDailyTableInfo,
 } from '../../../shared/cards/daily.ts';
 import { CARDS_MODES, DEFAULT_CARDS_RULES, normalizeCardsRules, type CardsRules } from '../../../shared/cards/rules.ts';
+import { CARDS_DEFAULT_TABLE, getCardsTable, isCardsTableId, type CardsTableId } from '../../../shared/cards/tables.ts';
 import type { CardsAction, CardsBotLevel } from '../../../shared/cards/types.ts';
 import { cardsPlayMs, CARDS_MAX_QUEUE_MS } from '../../../shared/cards/pacing.ts';
 import {
@@ -151,6 +152,7 @@ export interface CardsRoomSnapshot {
   rules: CardsRules;
   maxPlayers: number;
   private: boolean;
+  table?: CardsTableId;
   status: CardsRoomStatus;
   seats: Seat[];
   game: CardsSnapshot | null;
@@ -166,6 +168,8 @@ export class CardsRoom {
   rules: CardsRules = { ...CARDS_LOBBY_RULES };
   maxPlayers = CARDS_DEFAULT_MAX_PLAYERS;
   private = false;
+  /** Where the table is played (shared/cards/tables.ts). Kept across rematches like the rules. */
+  table: CardsTableId = CARDS_DEFAULT_TABLE;
   createdAt: number;
   startedAt: number | null = null;
   finishedAt: number | null = null;
@@ -417,6 +421,10 @@ export class CardsRoom {
       if (this.seats.length > this.maxPlayers) this.maxPlayers = this.seats.length;
     }
     if (typeof p.private === 'boolean') this.private = p.private;
+    if (p.table !== undefined) {
+      if (!isCardsTableId(p.table)) fail('Unknown table setting');
+      this.table = p.table;
+    }
   }
 
   /**
@@ -970,6 +978,7 @@ export class CardsRoom {
       spectators: this.spectators,
       maxPlayers: this.maxPlayers,
       rules: { ...this.rules },
+      table: this.table,
       status: this.status,
       seats: this.seats.map(({ disconnectedAt, ...s }) => ({ ...s, ...(disconnectedAt !== null && { awayAt: disconnectedAt }) })),
       game: this.game?.view(forId) ?? null,
@@ -992,7 +1001,7 @@ export class CardsRoom {
   snapshot(): CardsRoomSnapshot {
     return {
       code: this.code, hostId: this.hostId, createdAt: this.createdAt, startedAt: this.startedAt,
-      rules: { ...this.rules }, maxPlayers: this.maxPlayers, private: this.private, status: this.status,
+      rules: { ...this.rules }, maxPlayers: this.maxPlayers, private: this.private, table: this.table, status: this.status,
       seats: structuredClone(this.seats), game: this.game?.snapshot() ?? null,
       departed: [...this.departed], kicked: [...this.kicked],
       ...(this.daily && { daily: { ...this.daily } }),
@@ -1006,6 +1015,8 @@ export class CardsRoom {
     r.rules = normalizeCardsRules(s.rules);
     r.maxPlayers = Math.min(CARDS_MAX_PLAYERS, Math.max(CARDS_MIN_PLAYERS, Math.round(Number(s.maxPlayers) || CARDS_DEFAULT_MAX_PLAYERS)));
     r.private = !!s.private;
+    // Snapshots from before settings carry none, and a hand-edited one may carry nonsense: the default then.
+    r.table = getCardsTable(s.table).id;
     r.status = s.status;
     if (Array.isArray(s.departed)) r.departed = new Set(s.departed.filter(x => typeof x === 'string'));
     if (Array.isArray(s.kicked)) r.kicked = new Set(s.kicked.filter(x => typeof x === 'string'));

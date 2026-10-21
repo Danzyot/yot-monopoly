@@ -1,7 +1,8 @@
 // The card table's lobby, in the Monopoly lobby's design language
 // (components/Lobby.tsx, styles/lobby.css): the host gets the set-up panels
 // (players and bots, the mode, match, timer, house rules with their help
-// text); everyone else gets the clean member view: a live summary, a big chat
+// text, and where the table is played: one of Monopoly's rooms, picked like a
+// board); everyone else gets the clean member view: a live summary, a big chat
 // and the players, with their own character folded underneath. Everyone picks
 // the same base looks as at Monopoly: character (as the season allows), outfit
 // and colour, or their own NFT Chog.
@@ -15,6 +16,7 @@ import {
   type CardsRoomView, type CardsSeatView,
 } from '../../../shared/cards/room.ts';
 import type { CardsBotLevel } from '../../../shared/cards/types.ts';
+import { CARDS_TABLES, cardsTableThumbUrl, getCardsTable, type CardsTableDef } from '../../../shared/cards/tables.ts';
 import { CHAOS_CARD_HELP, KIND_LABEL, type Card } from '../../../shared/cards/deck.ts';
 import { getCharacter, type CharacterId } from '../../../shared/characters.ts';
 import type { Outfit } from '../../../shared/outfits.ts';
@@ -40,16 +42,16 @@ const OutfitPicker = lazy(() => import('../components/OutfitPicker.tsx'));
 
 /**
  * Start downloading what the 3D table needs while people are still in the
- * lobby: the Chog room and its reflections, the characters at the table, and
- * the card atlas, so the deal is seen from the first card.
+ * lobby: the setting's room and its reflections, the characters at the table,
+ * and the card atlas, so the deal is seen from the first card.
  */
-function preloadTable(characters: string, tokens: boolean) {
+function preloadTable(characters: string, tokens: boolean, setting: CardsTableDef) {
   void Promise.all([
     import('../three/environments/index.tsx'),
     import('../three/characters/Figure.tsx'),
     import('./three/cardAtlas.ts'),
   ]).then(([env, fig, atlas]) => {
-    env.preloadEnvironment('lounge', 'chog');
+    env.preloadEnvironment(setting.environment, setting.themeId);
     fig.preloadCharacters(characters.split(',') as CharacterId[]);
     // Holders' own Chogs are built from one shared file of trait parts.
     if (tokens) fig.preloadChogTraits();
@@ -75,6 +77,30 @@ const MODE_FAN: Record<CardsGameMode, Card[]> = {
 
 function ModeFan({ mode }: { mode: CardsGameMode }) {
   return <div className="cl-fan" aria-hidden>{MODE_FAN[mode].map(c => <CardFace key={c.id} card={c} />)}</div>;
+}
+
+/** Where the table is played: a picture of the table in each room, like Monopoly's board cards. */
+function TablePicker({ current }: { current: CardsTableDef }) {
+  return (
+    <>
+      <h3 className="cl-head">Table</h3>
+      <p className="pick-hint muted small">Where you play: a room from the Monopoly side, with a felt to suit it.</p>
+      <div className="edition-pick cl-tables" role="group" aria-label="Table setting">
+        {CARDS_TABLES.map(t => {
+          const on = t.id === current.id;
+          return (
+            <button key={t.id} className={`edition small map-card ${on ? 'on' : ''}`} aria-pressed={on}
+              onClick={() => !on && cardsConfigure({ table: t.id }).catch(toastError)}>
+              {on && <span className="pick-selected">✓ Selected</span>}
+              <img className="map-thumb" src={cardsTableThumbUrl(t.id)} alt="" loading="lazy" />
+              <b>{t.name}</b>
+              <span className="small muted">{t.blurb}</span>
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
 }
 
 /** What the Chog Chaos cards do, under the picker and in the summary. */
@@ -251,6 +277,7 @@ function MemberLobby({ room, me, spectating, chat, onLeave, onWear }: {
   const mySeat = room.seats.find(s => s.id === me);
   const host = room.seats.find(s => s.id === room.hostId);
   const r = room.rules;
+  const setting = getCardsTable(room.table);
   const on = CARDS_HOUSE_RULES.filter(h => r[h.key]);
   return (
     <div className={`lobby lobby-member cards-lobby ${config.features.chat ? '' : 'no-chat'}`}>
@@ -277,8 +304,13 @@ function MemberLobby({ room, me, spectating, chat, onLeave, onWear }: {
 
         <aside className="panel lm-summary" aria-label="Table settings">
           <h3>{CARDS_GAME_NAME}</h3>
+          <figure className="ls-table" key={setting.id}>
+            <img src={cardsTableThumbUrl(setting.id)} alt="" />
+            <figcaption><b>{setting.name}</b> <span className="muted small">{setting.blurb}</span></figcaption>
+          </figure>
           <ModeFan mode={r.mode} />
           <dl className="ls-facts">
+            <div><dt>Table</dt><dd><Live value={setting.id}>{setting.name}</Live></dd></div>
             <div><dt>Mode</dt><dd><Live value={r.mode}>{CARDS_MODES.find(m => m.id === r.mode)?.label}</Live></dd></div>
             <div><dt>Match</dt><dd><Live value={`${r.match}${r.targetScore}`}>{matchLabel(r)}</Live></dd></div>
             <div><dt>Turn timer</dt><dd><Live value={r.turnSeconds}>{r.turnSeconds ? `${r.turnSeconds} s` : 'Off'}</Live></dd></div>
@@ -336,7 +368,8 @@ export default function CardsLobby({ room, me, spectating, chat }: {
   const [starting, setStarting] = useState(false);
   const seatChars = room.seats.map(s => s.character).join(',');
   const tokensAtTable = room.seats.some(s => s.chogToken);
-  useEffect(() => { if (seatChars) preloadTable(seatChars, tokensAtTable); }, [seatChars, tokensAtTable]);
+  const setting = getCardsTable(room.table);
+  useEffect(() => { if (seatChars) preloadTable(seatChars, tokensAtTable, setting); }, [seatChars, tokensAtTable, setting]);
   const r = room.rules;
   const rules = (p: Partial<CardsRules>) => cardsConfigure({ rules: p }).catch(toastError);
   const leave = async () => { await cardsCall('cards:leave').catch(() => {}); nav('/cards'); };
@@ -430,6 +463,7 @@ export default function CardsLobby({ room, me, spectating, chat }: {
         </section>
 
         <section className="panel cl-settings">
+          <TablePicker current={setting} />
           <h3 className="cl-head">Mode</h3>
           <div className="cl-seg cl-modes" role="radiogroup" aria-label="Game mode">
             {CARDS_MODES.map(mo => (

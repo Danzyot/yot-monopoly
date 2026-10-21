@@ -16,6 +16,7 @@ import { CARDS_HOUSE_RULES, CARDS_MODES } from '../../../shared/cards/rules.ts';
 import { LAST_CARD_CALL, CARDS_GAME_NAME } from '../../../shared/cards/meta.ts';
 import type { CardsAction, CardsLogEntry, CardsPlayerView, CardsStep, CardsView } from '../../../shared/cards/types.ts';
 import { CARDS_AUTOPLAY_GRACE_MS, tableLabel, type CardsRoomView, type CardsSeatView } from '../../../shared/cards/room.ts';
+import { getCardsTable, type CardsTableId } from '../../../shared/cards/tables.ts';
 import { CARDS_PODIUM_MS } from '../../../shared/cards/pacing.ts';
 import { getCharacter } from '../../../shared/characters.ts';
 import { SEASON_CHARACTERS } from '../../../shared/season.ts';
@@ -580,9 +581,10 @@ function MatchOver({ room, view, me, isHost }: { room: CardsRoomView; view: Card
   );
 }
 
-function RulesModal({ view, onClose }: { view: CardsView; onClose: () => void }) {
+function RulesModal({ view, table, onClose }: { view: CardsView; table: CardsTableId; onClose: () => void }) {
   const r = view.rules;
   const mode = CARDS_MODES.find(m => m.id === r.mode) ?? CARDS_MODES[0];
+  const setting = getCardsTable(table);
   return (
     <Modal onClose={onClose} label="Table rules" className="ct-rules-modal">
       <CloseX onClick={onClose} />
@@ -608,7 +610,7 @@ function RulesModal({ view, onClose }: { view: CardsView; onClose: () => void })
         <p className="small muted">A Draw card stacks on any of equal or lower value when mixed stacking is on. Purge and Blitz score 30, the Chaos Wilds 60.</p>
       </>}
       <h3>This table</h3>
-      <p>{mode.label} · {tableLabel({ ...r, mode: 'classic' })} · {r.turnSeconds ? `${r.turnSeconds} s turns` : 'no turn timer'}</p>
+      <p>{setting.name} · {mode.label} · {tableLabel({ ...r, mode: 'classic' })} · {r.turnSeconds ? `${r.turnSeconds} s turns` : 'no turn timer'}</p>
       <ul className="ct-howto">
         {CARDS_HOUSE_RULES.filter(h => r[h.key]).map(h => <li key={h.key}><b>{h.label}:</b> {h.help}</li>)}
         {!CARDS_HOUSE_RULES.some(h => r[h.key]) && <li className="muted">No house rules: the standard game.</li>}
@@ -789,7 +791,7 @@ export default function CardsTable({ room, me, chat, skew, fromLobby }: {
           <span className="ct-code mono" title="Table code">{room.code}</span>
           {room.daily
             ? <span className="ct-meta"><span className="ct-daily">📅 Daily #{room.daily.number}{room.daily.practice ? ' · Practice' : ''}</span> · {room.daily.turns} turn{room.daily.turns === 1 ? '' : 's'}</span>
-            : <span className="ct-meta">Round {view.round} · {tableLabel(view.rules)}{room.spectators ? ` · ${room.spectators} watching` : ''}</span>}
+            : <span className="ct-meta">Round {view.round} · {tableLabel(view.rules)} · {getCardsTable(room.table).name}{room.spectators ? ` · ${room.spectators} watching` : ''}</span>}
         </div>
         <div className="ct-top-r">
           <MusicPlayer />
@@ -821,7 +823,7 @@ export default function CardsTable({ room, me, chat, skew, fromLobby }: {
         <div className={`ct-stage ${shake ? 'shake' : ''}`}>
           {three ? (
             <Suspense fallback={<div className="ct-felt" aria-hidden />}>
-              <CardsScene view={view} frame={frame} seats={seats} me={myId} myTurn={myTurn && !held} compact={compact} quality={quality}
+              <CardsScene view={view} table={room.table} frame={frame} seats={seats} me={myId} myTurn={myTurn && !held} compact={compact} quality={quality}
                 reduced={reduced} cinematic={cinematic} canDraw={myTurn && !held && !!you?.canDraw} onDraw={() => void act({ type: 'draw' })}
                 podium={podium} onPodiumDone={() => setPodiumDone(true)} handEl={handRef} handRects={handRects} chipEls={chipEls} fxEl={fxRef} />
             </Suspense>
@@ -933,7 +935,7 @@ export default function CardsTable({ room, me, chat, skew, fromLobby }: {
       {!you && <div className="ct-watching">You're watching this match.</div>}
 
       {room.status === 'finished' && !held && !podium && <MatchOver room={room} view={view} me={me} isHost={isHost} />}
-      {rulesOpen && <RulesModal view={view} onClose={() => setRulesOpen(false)} />}
+      {rulesOpen && <RulesModal view={view} table={room.table} onClose={() => setRulesOpen(false)} />}
     </div>
   );
 }

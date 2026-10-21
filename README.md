@@ -13,9 +13,11 @@ where poker lives).
 - **Chog Cards** (`/cards`) — a fast shedding card game for 2–10: match colour, number or
   symbol, empty your hand first, call "Last card!" (and catch fire doing it). Two modes:
   Classic, and Chog Chaos (Purge, Blitz, Gas Spike +6, Rug Pull +10, Chog Roulette, stacking
-  by size and the Mercy rule: 25 cards and you are out). Shares the server, the socket, the
-  sign-in and the leaderboard page (its own tab) with Monopoly; code in
-  `client/src/cards/`, `server/src/cards/` and `shared/cards/`.
+  by size and the Mercy rule: 25 cards and you are out). Played in one of five settings the
+  host picks in the lobby (`shared/cards/tables.ts`: Monopoly's rooms with a felt to suit each;
+  their lobby pictures are `client/public/cards/tables/<id>.webp`, 480 × 300 stills of the
+  table in each). Shares the server, the socket, the sign-in and the leaderboard page (its own
+  tab) with Monopoly; code in `client/src/cards/`, `server/src/cards/` and `shared/cards/`.
 - **Chog Poker** (`poker.choggames.com`) — No-Limit Hold'em cash tables and multi-table
   tournaments. It is a **separate app** in `poker/` with its own Railway service and its
   own persistent disk; this server does not serve it. Read `poker/HANDOVER.md` first and

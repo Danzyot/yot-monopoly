@@ -81,6 +81,17 @@
 .cl-seg button small { color: var(--muted); font-size: 12px; }
 .cl-seg button.on { border-color: var(--gold); box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold) 40%, transparent); background: color-mix(in srgb, var(--gold) 14%, rgba(0, 20, 70, 0.45)); }
 .rule.toggle.off { opacity: 0.5; }
+/* The setting picker: a picture of the table in each room, laid out like Monopoly's board cards. */
+.cl-settings .cl-tables { grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr)); gap: 10px; margin-bottom: 16px; }
+.cl-tables .edition { min-width: 0; overflow-wrap: break-word; }
+.cl-tables .map-thumb { aspect-ratio: 16 / 10; }
+.ls-table { margin: 10px 0 0; }
+.ls-table img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 10px; }
+.ls-table figcaption { margin-top: 6px; font-size: 13px; line-height: 1.3; }
+@media (max-width: 600px) {
+  .cl-settings .cl-tables { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .cl-tables .map-thumb { max-height: 110px; }
+}
 .cl-fan { display: flex; justify-content: center; margin: 4px 0 8px; }
 .cl-fan > .card-svg { width: 64px; margin: 0 -10px; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.35)); }
 .cl-fan > .card-svg:nth-child(1) { transform: rotate(-12deg) translateY(6px); }
