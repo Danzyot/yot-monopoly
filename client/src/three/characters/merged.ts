@@ -8,7 +8,7 @@
 //   main  - the player's colour (its own material, tinted per player)
 //   skin  - skin (its own material)
 //   cloth - clothes (their own material)
-//   atlas - every other material (hair, ink, white, denim, metal, gold, glow, c1–c3…)
+//   atlas - every other material (hair, ink, white, denim, metal, gold, glow, c1–c3, outfit accents…)
 //           as one material whose colour, roughness, metalness and glow come from a
 //           tiny per-figure texture, one texel per material key
 //   paint - a token Chog's hat and outfit (material `paint`), coloured by its own
@@ -35,8 +35,11 @@ export type RigBone = (typeof RIG_BONES)[number];
 type Group = 'main' | 'skin' | 'cloth' | 'atlas' | 'paint';
 const OWN: Partial<Record<MatKey, Group>> = { main: 'main', skin: 'skin', cloth: 'cloth' };
 /** Materials drawn from the atlas, one texel each. */
-const ATLAS_KEYS: MatKey[] = ['accent', 'white', 'ink', 'metal', 'gold', 'glow', 'glass', 'wood', 'hair', 'denim', 'c1', 'c2', 'c3'];
-const ATLAS_W = 16;
+const ATLAS_KEYS: MatKey[] = [
+  'accent', 'white', 'ink', 'metal', 'gold', 'glow', 'glass', 'wood', 'hair', 'denim', 'c1', 'c2', 'c3',
+  'red', 'pink', 'purple', 'leaf', 'sky',
+];
+const ATLAS_W = 32;
 
 /** Merged geometry, one per material group present. */
 export type MergedGeos = { group: Group; geo: BufferGeometry }[];

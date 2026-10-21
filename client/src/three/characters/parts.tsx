@@ -36,7 +36,9 @@ export const GEO = {
 export type MatKey =
   | 'main' | 'skin' | 'accent' | 'white' | 'ink' | 'metal' | 'gold' | 'glow' | 'glass' | 'wood'
   // Detailed characters: hair, clothes and three free colours of their own.
-  | 'hair' | 'cloth' | 'denim' | 'c1' | 'c2' | 'c3';
+  | 'hair' | 'cloth' | 'denim' | 'c1' | 'c2' | 'c3'
+  // Fixed accent colours for outfit items (tools/blender/outfits.py COLORS): the same on every figure.
+  | 'red' | 'pink' | 'purple' | 'leaf' | 'sky';
 
 export type Mats = Record<MatKey, MeshStandardMaterial>;
 
@@ -84,6 +86,11 @@ export function makeMaterials(color: string, c: LookColors = {}): Mats {
     c1: std(c.c1 ?? '#3fa34d', 0.5),
     c2: std(c.c2 ?? '#5a1a1a', 0.6),
     c3: std(c.c3 ?? '#4a2e1c', 0.4),
+    red: std('#e5383b', 0.45),
+    pink: std('#ff8fb8', 0.45),
+    purple: std('#836ef9', 0.4),
+    leaf: std('#46a35a', 0.55),
+    sky: std('#3fd0f0', 0.35),
   };
 }
 

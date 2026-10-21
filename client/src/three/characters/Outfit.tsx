@@ -4,8 +4,9 @@
 // character, or hides it where the character's own hat or helmet is in the way.
 //
 // Cheap on purpose: a figure's worn items are merged into a few skinned meshes
-// (one per material group, merged.ts) on two bones, one riding the head and one
-// the body, so a whole outfit costs two or three draw calls. The items use the
+// (one per material group, merged.ts) on three bones, riding the head, the body
+// and the right hand (a held prop), so a whole outfit costs two or three draw
+// calls. Low graphics loads models/outfits-low.glb, the same items simplified. The items use the
 // wearing figure's own materials (its `main` is the player's colour), so they
 // grey / fade with the figure in jail or bankruptcy.
 
@@ -26,7 +27,8 @@ type V3 = [number, number, number];
 interface Anchor { p: V3; s: V3 }
 interface Fit {
   canonical: Record<OutfitSlot, Anchor>;
-  chars: Partial<Record<string, Record<OutfitSlot, Anchor>>>;
+  /** Per character, where each slot's anchor goes (the canonical one for a slot it doesn't list). */
+  chars: Partial<Record<string, Partial<Record<OutfitSlot, Anchor>>>>;
   hide: Partial<Record<string, string[]>>;
   items: Partial<Record<string, Partial<Record<string, { p?: V3; s?: number | V3 }>>>>;
   neckOverBody: V3;
@@ -68,13 +70,16 @@ export function outfitPlacement(character: CharacterId, item: string, outfit: Ou
   return { p, s };
 }
 
-const ATTACH: Record<OutfitSlot, 'head' | 'pose'> = { head: 'head', eyes: 'head', neck: 'pose', body: 'pose' };
+const ATTACH: Record<OutfitSlot, 'head' | 'pose' | 'handR'> = { head: 'head', eyes: 'head', neck: 'pose', body: 'pose', held: 'handR' };
 /** Bones of the merged outfit, by the rig group each rides. */
-const BONES = ['head', 'pose'] as const;
+const BONES = ['head', 'pose', 'handR'] as const;
+
+/** The items file: the simplified copy on Low graphics. */
+const outfitsUrl = (lite: boolean) => (lite && ASSETS.outfits.low) || ASSETS.outfits.url;
 const NO_TURN = new Quaternion();
 
 /** Dress a figure: hangs each worn item on the rig's head or body group. Draws nothing until outfits.glb loads. */
-export function OutfitLayer(props: { id: CharacterId; outfit?: Outfit; mats: Mats; rig: Rig }) {
+export function OutfitLayer(props: { id: CharacterId; outfit?: Outfit; mats: Mats; rig: Rig; lite: boolean }) {
   if (!props.outfit || !Object.keys(props.outfit).length) return null;
   return (
     <WithModel fallback={null}>
@@ -83,8 +88,8 @@ export function OutfitLayer(props: { id: CharacterId; outfit?: Outfit; mats: Mat
   );
 }
 
-function WornItems({ id, outfit, mats, rig }: { id: CharacterId; outfit: Outfit; mats: Mats; rig: Rig }) {
-  const gltf = useGLTF(ASSETS.outfits.url);
+function WornItems({ id, outfit, mats, rig, lite }: { id: CharacterId; outfit: Outfit; mats: Mats; rig: Rig; lite: boolean }) {
+  const gltf = useGLTF(outfitsUrl(lite));
   const key = OUTFIT_SLOTS.map(s => outfit[s.id] ?? '').join('|');
   const worn = useMemo(() => {
     const chunks = newChunks();
@@ -121,4 +126,7 @@ function WornItems({ id, outfit, mats, rig }: { id: CharacterId; outfit: Outfit;
   return null;
 }
 
-useGLTF.preload(ASSETS.outfits.url);
+/** Start downloading the items (a scene with dressed figures in it). */
+export function preloadOutfits(lite: boolean) {
+  useGLTF.preload(outfitsUrl(lite));
+}

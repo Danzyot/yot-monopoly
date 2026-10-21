@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { Registry, Room, type RoomHooks } from '../src/rooms.ts';
 import {
-  OUTFIT_ITEMS, OUTFIT_SLOTS, defaultOutfit, outfitForCharacter, parseOutfit, randomOutfit, sanitizeOutfit,
+  OUTFIT_ITEMS, OUTFIT_SLOTS, defaultOutfit, getOutfitItem, outfitForCharacter, parseOutfit, randomOutfit, sanitizeOutfit,
 } from '../../shared/outfits.ts';
 import { CHARACTERS } from '../../shared/characters.ts';
 import { CHOG_SEASON } from '../../shared/season.ts';
@@ -148,4 +149,107 @@ test('outfits: seats wear their character\'s own clothes, and only that characte
   reg2.restore(snap);
   assert.deepEqual(reg2.get(r.code)!.seat('a')!.outfit, { head: 'cap' });
   reg2.get(r.code)!.dispose();
+});
+
+// ---- the catalogue against its 3D models (tools/blender/outfits.py) and their fit (outfitFit.json) ----
+
+const REPO = new URL('../../', import.meta.url);
+const read = (path: string) => readFileSync(new URL(path, REPO), 'utf8');
+const FIT = JSON.parse(read('client/src/three/characters/outfitFit.json')) as {
+  canonical: Record<string, unknown>; chars: Record<string, Record<string, unknown>>;
+  hide: Record<string, string[]>; items: Record<string, Record<string, unknown>>; mane: Record<string, Record<string, string>>;
+};
+const SHARED = OUTFIT_ITEMS.filter(i => !i.only);
+
+test('outfits: every item is well formed, and every slot has plenty to pick from', () => {
+  for (const i of OUTFIT_ITEMS) {
+    assert.match(i.id, /^[a-z0-9_]+$/, `${i.id}: a plain id`);
+    assert.ok(i.name.trim().length > 1 && i.name.length <= 18, `${i.id}: a short name for the picker`);
+    assert.ok(OUTFIT_SLOTS.some(s => s.id === i.slot), `${i.id}: a known slot`);
+  }
+  assert.equal(new Set(OUTFIT_ITEMS.map(i => i.name)).size, OUTFIT_ITEMS.length, 'names are unique');
+  for (const s of OUTFIT_SLOTS) assert.ok(SHARED.filter(i => i.slot === s.id).length >= 6, `${s.id} has at least six shared items`);
+  assert.ok(SHARED.length >= 42, 'the catalogue is three times what it was');
+});
+
+test('outfits: every item round-trips through parseOutfit and sanitizeOutfit', () => {
+  for (const i of OUTFIT_ITEMS) {
+    const one = { [i.slot]: i.id };
+    assert.deepEqual(parseOutfit(one, i.only), { ok: true, outfit: one }, i.id);
+    assert.deepEqual(sanitizeOutfit(JSON.parse(JSON.stringify(one)), i.only), one, i.id);
+    for (const s of OUTFIT_SLOTS) {
+      if (s.id !== i.slot) assert.equal(parseOutfit({ [s.id]: i.id }).ok, false, `${i.id} is refused in ${s.id}`);
+    }
+  }
+  // Whole looks, an item in every slot.
+  for (let k = 0; k < 12; k++) {
+    const look = Object.fromEntries(OUTFIT_SLOTS.map(s => {
+      const items = SHARED.filter(i => i.slot === s.id);
+      return [s.id, items[k % items.length].id];
+    }));
+    const parsed = parseOutfit(look, 'chog');
+    assert.deepEqual(parsed, { ok: true, outfit: look });
+    assert.deepEqual(parseOutfit(JSON.parse(JSON.stringify(parsed.ok && parsed.outfit))), { ok: true, outfit: look }, 'round-trips');
+    assert.deepEqual(sanitizeOutfit(look, 'chog'), look);
+    assert.deepEqual(outfitForCharacter(look, 'chog'), look);
+  }
+});
+
+test('outfits: every shared item has a model and a thumbnail, in the slot the catalogue says', () => {
+  // outfits.py SLOTS: 'id': 'slot' pairs, one per modelled item.
+  const py = read('tools/blender/outfits.py');
+  const start = py.indexOf('SLOTS = {');
+  const modelled = new Map([...py.slice(start, py.indexOf('}', start)).matchAll(/'([a-z0-9_]+)': '([a-z]+)'/g)].map(m => [m[1], m[2]]));
+  const manifest = JSON.parse(read('tools/blender/manifest.json')).outfits as Record<string, string>;
+  for (const i of SHARED) {
+    assert.equal(modelled.get(i.id), i.slot, `${i.id} is built by outfits.py for ${i.slot}`);
+    assert.ok(manifest[i.id]?.startsWith(`/outfits/${i.id}.webp?v=`), `${i.id} has a thumbnail`);
+  }
+  for (const id of modelled.keys()) assert.ok(getOutfitItem(id) && !getOutfitItem(id)!.only, `${id} is in the catalogue`);
+  for (const i of OUTFIT_ITEMS.filter(x => x.only)) assert.ok(manifest[i.id], `${i.id} (signature) has a thumbnail`);
+  assert.ok(manifest.url && manifest.low, 'the items file and its Low-graphics copy');
+});
+
+test('outfits: every head item says which cut of the Chog’s mane goes under it', () => {
+  // The cuts the base Chog's model has: the whole mane and tools/blender/characters.py MANES.
+  const manes = /MANES = \{'chog': \(([^)]*)\)\}/.exec(read('tools/blender/characters.py'));
+  const cuts = ['full', ...(manes?.[1].match(/[a-z]+/g) ?? [])];
+  assert.deepEqual(cuts, ['full', 'fringe', 'crown']);
+  for (const i of SHARED.filter(x => x.slot === 'head')) {
+    const cut = FIT.mane.chog[i.id];
+    assert.ok(cut, `${i.id} picks a mane for the Chog`);
+    assert.ok(cuts.includes(cut), `${i.id}: '${cut}' is a cut the Chog has`);
+  }
+  for (const id of Object.keys(FIT.mane.chog)) assert.equal(getOutfitItem(id)?.slot, 'head', `mane entry ${id} is a head item`);
+});
+
+test('outfits: the fit file only names known items, characters and slots', () => {
+  for (const s of OUTFIT_SLOTS) assert.ok(FIT.canonical[s.id], `a canonical ${s.id} anchor`);
+  for (const [cid, anchors] of Object.entries(FIT.chars)) {
+    assert.ok(CHARACTERS.includes(cid as never), cid);
+    for (const slot of Object.keys(anchors)) assert.ok(OUTFIT_SLOTS.some(s => s.id === slot), `${cid}.${slot}`);
+  }
+  for (const [cid, ids] of Object.entries(FIT.hide)) {
+    assert.ok(CHARACTERS.includes(cid as never), cid);
+    for (const id of ids) assert.ok(getOutfitItem(id), `hide ${cid}: ${id}`);
+  }
+  for (const [id, per] of Object.entries(FIT.items)) {
+    assert.ok(getOutfitItem(id), `items: ${id}`);
+    for (const cid of Object.keys(per)) assert.ok(CHARACTERS.includes(cid as never), `items ${id}: ${cid}`);
+  }
+  assert.ok(!FIT.hide.chog?.length, 'the Chog can wear every item');
+});
+
+test('outfits: a random look only takes items the character can wear', () => {
+  const rand = (n: number) => Math.floor(Math.random() * n);
+  let held = 0;
+  for (let k = 0; k < 200; k++) {
+    const o = randomOutfit(rand, 'chog');
+    assert.deepEqual(sanitizeOutfit(o, 'chog'), o);
+    if (o.held) held++;
+    const picky = randomOutfit(rand, 'chog', { fill: 1, fits: i => i.slot !== 'eyes' && i.id !== 'cap' });
+    assert.ok(!picky.eyes && picky.head !== 'cap' && picky.head && picky.body && picky.neck && picky.held, JSON.stringify(picky));
+    assert.deepEqual(randomOutfit(rand, 'chog', { fill: 0 }), {});
+  }
+  assert.ok(held > 40 && held < 160, `bots hold something about half the time (${held}/200)`);
 });

@@ -1,10 +1,11 @@
 {
-  "_doc": "How outfit items (tools/blender/outfits.py) sit on each character. Items are modelled once on a canonical figure; per character, each anchor gives where that canonical frame goes (p) and how it stretches (s, per axis). head/eyes are in the head's frame (rig.head), neck/body in the body's (rig.pose). 'hide' lists items that cannot fit a character (its own hat, helmet or visor is in the way); 'items' nudges one item on one character on top of its anchor (p adds, s multiplies). 'neckOverBody' widens the neck item when a body item is also worn, so it sits over the collar. 'mane' picks, per character whose mane is a node of its own (the Chog: chog_Hair_<cut> in its model, tools/blender/characters.py MANES), the cut of it worn under each head item, so some spikes always show without poking through the hat (the whole mane otherwise).",
+  "_doc": "How outfit items (tools/blender/outfits.py) sit on each character. Items are modelled once on a canonical figure; per character, each anchor gives where that canonical frame goes (p) and how it stretches (s, per axis). head/eyes are in the head's frame (rig.head), neck/body in the body's (rig.pose), held in the right hand's (rig.handR); a character that lists no anchor for a slot uses the canonical one. 'hide' lists items that cannot fit a character (its own hat, helmet or visor is in the way); 'items' nudges one item on one character on top of its anchor (p adds, s multiplies). 'neckOverBody' widens the neck item when a body item is also worn, so it sits over the collar. 'mane' picks, per character whose mane is a node of its own (the Chog: chog_Hair_<cut> in its model, tools/blender/characters.py MANES), the cut of it worn under each head item, so some spikes always show without poking through the hat (the whole mane otherwise).",
   "canonical": {
     "head": { "p": [0, 0, 0], "s": [1, 1, 1], "note": "skull: sphere r 0.1 round the head pivot" },
     "eyes": { "p": [0, 0.015, 0.1], "s": [1, 1, 1], "note": "eyes 0.04 either side of centre, lenses r 0.03" },
     "neck": { "p": [0, 0.2, 0], "s": [1, 1, 1], "note": "collar ring r 0.055 where head meets body" },
-    "body": { "p": [0, 0.12, 0], "s": [1, 1, 1], "note": "egg body r (0.085, 0.095, 0.075)" }
+    "body": { "p": [0, 0.12, 0], "s": [1, 1, 1], "note": "egg body r (0.085, 0.095, 0.075)" },
+    "held": { "p": [0, 0, 0], "s": [1, 1, 1], "note": "right hand pivot (rig.handR), a fist r ~0.03" }
   },
   "chars": {
     "snacky": {
@@ -23,7 +24,8 @@
       "head": { "p": [0, 0.035, -0.035], "s": [1.25, 1.25, 1.25] },
       "eyes": { "p": [0, -0.02, 0.118], "s": [1.32, 1.25, 1] },
       "neck": { "p": [0, 0.19, 0], "s": [1.2, 1, 1.15] },
-      "body": { "p": [0, 0.12, 0], "s": [0.98, 0.95, 0.95] }
+      "body": { "p": [0, 0.12, 0], "s": [0.98, 0.95, 0.95] },
+      "held": { "p": [0, 0, 0], "s": [1.3, 1.3, 1.3] }
     },
     "spiky": {
       "head": { "p": [0, 0, 0], "s": [1.12, 1.12, 1.12] },
@@ -88,21 +90,39 @@
   },
   "neckOverBody": [1.14, 1.02, 1.16],
   "hide": {
-    "robot": ["cap", "beanie", "tophat", "specs"],
-    "cat": ["beanie", "tophat"],
-    "knight": ["cap", "beanie", "tophat", "headphones", "shades", "specs"],
-    "wizard": ["cap", "beanie", "tophat", "crown", "headphones"],
-    "astronaut": ["cap", "beanie", "tophat", "crown", "headphones", "shades", "specs"],
-    "pirate": ["cap", "beanie", "tophat", "crown", "headphones"],
-    "chef": ["cap", "beanie", "tophat", "crown", "headphones"],
-    "alien": ["beanie", "tophat"]
+    "robot": ["cap", "beanie", "tophat", "specs", "backcap", "bucket", "cowboy", "chef", "viking", "wizard", "propeller", "flowers", "headband",
+      "aviators", "hearts", "stars", "monocle", "eyepatch"],
+    "cat": ["beanie", "tophat", "backcap", "bucket", "cowboy", "chef", "viking", "wizard", "propeller", "bunny"],
+    "knight": ["cap", "beanie", "tophat", "headphones", "shades", "specs",
+      "backcap", "bucket", "party", "halo", "horns", "bunny", "cowboy", "chef", "viking", "wizard", "flowers", "propeller", "headband",
+      "aviators", "hearts", "stars", "monocle", "eyepatch", "visor", "glasses3d", "pixel",
+      "coffee", "flag", "balloon", "chip", "trophy", "dice", "cash", "lollipop"],
+    "wizard": ["cap", "beanie", "tophat", "crown", "headphones",
+      "backcap", "bucket", "party", "halo", "horns", "bunny", "cowboy", "chef", "viking", "wizard", "flowers", "propeller", "headband",
+      "coffee", "flag", "balloon", "chip", "trophy", "dice", "cash", "lollipop"],
+    "astronaut": ["cap", "beanie", "tophat", "crown", "headphones", "shades", "specs",
+      "backcap", "bucket", "party", "halo", "horns", "bunny", "cowboy", "chef", "viking", "wizard", "flowers", "propeller", "headband",
+      "aviators", "hearts", "stars", "monocle", "eyepatch", "visor", "glasses3d", "pixel"],
+    "pirate": ["cap", "beanie", "tophat", "crown", "headphones",
+      "backcap", "bucket", "party", "halo", "horns", "bunny", "cowboy", "chef", "viking", "wizard", "flowers", "propeller", "headband",
+      "coffee", "flag", "balloon", "chip", "trophy", "dice", "cash", "lollipop"],
+    "chef": ["cap", "beanie", "tophat", "crown", "headphones",
+      "backcap", "bucket", "party", "halo", "horns", "bunny", "cowboy", "chef", "viking", "wizard", "flowers", "propeller", "headband",
+      "coffee", "flag", "balloon", "chip", "trophy", "dice", "cash", "lollipop"],
+    "alien": ["beanie", "tophat", "backcap", "bucket", "cowboy", "chef", "viking", "wizard", "propeller"]
   },
   "items": {
     "cap": { "snacky": { "s": 1.16, "p": [0, 0.014, -0.004] } },
     "beanie": { "snacky": { "s": 1.16, "p": [0, 0.01, -0.004] } },
-    "tophat": { "chog": { "s": 0.9, "p": [0, -0.012, 0.004] } }
+    "tophat": { "chog": { "s": 0.9, "p": [0, -0.012, 0.004] } },
+    "balloon": { "chog": { "s": 0.85 } }
   },
   "mane": {
-    "chog": { "cap": "fringe", "beanie": "fringe", "tophat": "crown" }
+    "chog": {
+      "cap": "fringe", "beanie": "fringe", "tophat": "crown", "crown": "full", "headphones": "full",
+      "backcap": "fringe", "bucket": "fringe", "party": "crown", "halo": "crown", "horns": "full", "bunny": "crown",
+      "cowboy": "fringe", "chef": "fringe", "viking": "fringe", "wizard": "fringe", "flowers": "crown",
+      "propeller": "fringe", "headband": "full"
+    }
   }
 }
