@@ -87,7 +87,13 @@ export default function WalletPage() {
     try { await unlinkWallet(w.address); toast(`Unlinked ${shortAddress(w.address)}`); } catch (e) { toastError(e); }
   };
 
-  if (!ready) return <div className="page"><p className="muted">Loading…</p></div>;
+  if (!ready) {
+    return (
+      <div className="page wl-page lb-skeleton" aria-busy="true" aria-label="Loading your wallets">
+        <div className="sk sk-hero" /><div className="sk sk-card" /><div className="sk sk-card" />
+      </div>
+    );
+  }
 
   return (
     <div className="page wl-page">
@@ -161,7 +167,7 @@ export default function WalletPage() {
               </button>
             )}
           </div>
-          {loading && !status && <p className="muted">Loading…</p>}
+          {loading && !status && <div className="lb-skeleton" aria-busy="true" aria-label="Loading your wallets"><div className="sk sk-row" /></div>}
           {status && status.wallets.length === 0 && (
             <p className="muted">Nothing linked yet. Connect a wallet above and sign the message it shows you, or verify one with a self-transfer.</p>
           )}

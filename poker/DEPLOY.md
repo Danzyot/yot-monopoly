@@ -29,8 +29,8 @@ Railway is the path below (~$5/month Hobby). Any always-on VPS works too.
 >
 > | Variable | Value |
 > |---|---|
-> | `HUB_URL` | `https://choggames.com` (the default). Puts the "Chog Games" link in the header and "Sign in via Chog Games" in the sign-in box. `off` hides both. |
-> | `HUB_ORIGINS` | Extra origins, comma separated, allowed to read `/api/leaderboard` and `/api/results/:id` from a browser — the hub's `*.up.railway.app` domain during cutover. `HUB_URL` is always allowed. Nothing else on `/api` is reachable cross-origin in production. |
+> | `HUB_URL` | `https://choggames.com` (the default). The header's "Chog Games" brand and its Monopoly / Cards / Poker / Tournaments / Characters / Leaderboard / Wallet links lead there, and "Sign in via Chog Games" is in the sign-in box. `off` hides all of them (the header then has only this room's own pages). |
+> | `HUB_ORIGINS` | Extra origins, comma separated, allowed to read `/api/leaderboard`, `/api/lobby` and `/api/results/:id` from a browser — the hub's `*.up.railway.app` domain during cutover. `HUB_URL` is always allowed. Nothing else on `/api` is reachable cross-origin in production. |
 >
 > **Chog seat avatars ("Your Chog").** A player who holds Chog Genesis NFTs
 > (wallets linked on the hub's `/wallet` page) clicks their avatar in the
@@ -62,6 +62,29 @@ Railway is the path below (~$5/month Hobby). Any always-on VPS works too.
 >   service → Deploy) after the hub deploy that adds `/api/hosting/chogs` and
 >   the `/chogs/` thumbnails. If poker goes out first, the picker says it cannot
 >   reach Chog Games and no Chogs show; nothing else changes.
+
+> **The same site as the hub.** Poker now looks like the rest of Chog Games:
+> the hub's header (the Chog mark, "Chog Games", the same game and page links,
+> the avatar and Sign out), its fonts (Lilita One, Nunito, Titan One — copied
+> into `client/src/fonts`, nothing linked), its Chog-season purple and its
+> chunky panels and candy buttons (`client/src/season.css`, loaded after
+> `index.css`). The cards, chips and felt are drawn as before, and no game rule
+> changed. On the hub, the Poker link and the Poker card's Play button now open
+> the hub's own `/poker` page (Play, join by code, Host, and the live, upcoming
+> and just-finished tournaments); each tournament there opens here with the
+> sign-in carried over, and a click on the header's hub links carries it back.
+>
+> - **What the hub reads.** The `/poker` page reads `GET /api/lobby` (newly on
+>   the cross-origin list, next to `/api/leaderboard`) from the browser. Same
+>   `HUB_URL` / `HUB_ORIGINS` rules; no new variables.
+> - **Host a tournament** on the hub opens `/?host=1` here, which opens the
+>   create form once this room agrees the player may host.
+> - **Redeploy poker by hand.** This room does not redeploy when the hub does
+>   (auto-deploy is off): after merging, press Deploy on the poker service
+>   (Railway → the poker service → Deploy) as well as letting the hub deploy.
+>   Until poker is redeployed the hub's `/poker` page cannot read the
+>   tournament list (it says it couldn't reach Poker; Play and the code box
+>   still work), and the poker site keeps its old look.
 
 > **Tournaments only.** Cash tables are gone: the room runs multi-table
 > tournaments and nothing else. `POST /api/tables` answers **410 Gone**, the

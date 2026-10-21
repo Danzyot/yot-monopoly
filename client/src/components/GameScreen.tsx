@@ -169,7 +169,7 @@ export default function GameScreen({ room, game, me, chat, skew }: {
         body: 'Leaving forfeits the game — your property goes back to the bank. (Just closing the tab keeps your seat: auto-play plays until you are back.)',
       }))) return;
     await call('room:leave').catch(() => {});
-    nav('/');
+    nav(GAMES.monopoly.path);
   };
 
   return (

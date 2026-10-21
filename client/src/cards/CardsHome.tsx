@@ -50,7 +50,10 @@ export default function CardsHome() {
   const [howTo, setHowTo] = useState(false);
   const canCreate = !!profile && (config.features.publicRooms || profile.isAdmin);
 
-  useEffect(() => { document.title = `${CARDS_GAME_NAME} · ${BRAND.name}`; }, []);
+  useEffect(() => {
+    document.title = CARDS_GAME_NAME;
+    return () => { document.title = BRAND.name; };
+  }, []);
   useEffect(() => {
     if (!config.features.leaderboard) return;
     api<{ leaders: Leader[] }>('/api/cards/leaderboard').then(r => setLeaders(r.leaders.slice(0, 5))).catch(() => {});
@@ -154,7 +157,7 @@ export default function CardsHome() {
             </ol>
           </section>
         )}
-        <p className="ch-foot muted small"><Link to="/">← Back to {BRAND.name}</Link></p>
+        <p className="ch-foot muted small"><Link to="/">← All {BRAND.name}</Link></p>
       </div>
     </div>
   );

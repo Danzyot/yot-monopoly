@@ -22,6 +22,8 @@ interface AuthCtx {
   // The Chog Games hub this room is part of (null on a standalone deployment).
   // Signing in there signs you in here: same Discord app, same token secret.
   hubUrl: string | null;
+  // Whether /api/config has answered (until then hubUrl is not known yet).
+  configLoaded: boolean;
   signInViaHub: (returnPath?: string) => void;
   linkDiscord: (returnPath?: string) => void;
   // Accept a token minted by another flow (e.g. code verification).
@@ -57,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [codeVerifyButton, setCodeVerifyButton] = useState(false);
   const [discordInviteUrl, setDiscordInviteUrl] = useState<string | null>(null);
   const [hubUrl, setHubUrl] = useState<string | null>(null);
+  const [configLoaded, setConfigLoaded] = useState(false);
   const [chatEnabled, setChatEnabled] = useState(true);
   const [hostCheck, setHostCheck] = useState<{ id: string; canHost: boolean } | null>(null);
 
@@ -70,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setDiscordInviteUrl(c.discord?.inviteUrl ?? null);
       setHubUrl(c.hubUrl ?? null);
       setChatEnabled(c.chatEnabled !== false);
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => setConfigLoaded(true));
   }, []);
 
   // Catch the refreshed token after the Discord OAuth redirect (#dtoken=...).
@@ -163,8 +166,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ profile, canHost, chatEnabled, discordEnabled, demoMode, signInDemo, codeVerify, codeVerifyChannel, codeVerifyButton, discordInviteUrl, signInDiscord, hubUrl, signInViaHub, linkDiscord, acceptAuth, signOut }),
-    [profile, canHost, chatEnabled, discordEnabled, demoMode, signInDemo, codeVerify, codeVerifyChannel, codeVerifyButton, discordInviteUrl, signInDiscord, hubUrl, signInViaHub, linkDiscord, acceptAuth, signOut]);
+    () => ({ profile, canHost, chatEnabled, discordEnabled, demoMode, signInDemo, codeVerify, codeVerifyChannel, codeVerifyButton, discordInviteUrl, signInDiscord, hubUrl, configLoaded, signInViaHub, linkDiscord, acceptAuth, signOut }),
+    [profile, canHost, chatEnabled, discordEnabled, demoMode, signInDemo, codeVerify, codeVerifyChannel, codeVerifyButton, discordInviteUrl, signInDiscord, hubUrl, configLoaded, signInViaHub, linkDiscord, acceptAuth, signOut]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

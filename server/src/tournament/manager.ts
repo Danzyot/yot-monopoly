@@ -75,6 +75,22 @@ const SAVE_EVERY_MS = 3_000;
 const clean = (raw: unknown, max: number) =>
   Array.from(stripInvisible(String(raw ?? '').normalize('NFKC')).replace(/\s+/g, ' ').trim()).slice(0, max).join('').trim();
 
+const STATUSES: readonly unknown[] = ['registering', 'running', 'finished', 'cancelled'];
+const ids = (v: unknown) => Array.isArray(v) && v.every(x => typeof x === 'string');
+const obj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/**
+ * A saved event every reader can take (the list, its page, profiles, the clock).
+ * Anything else in the file is left out rather than breaking them all.
+ */
+function wellFormed(d: unknown): d is TournamentData {
+  if (!obj(d) || typeof d.id !== 'string' || !d.id || typeof d.name !== 'string' || typeof d.hostId !== 'string') return false;
+  if (!STATUSES.includes(d.status) || !obj(d.settings) || !ids(d.places) || !(d.paused === null || obj(d.paused))) return false;
+  if (!Array.isArray(d.entrants) || !d.entrants.every(e => obj(e) && typeof e.id === 'string')) return false;
+  return Array.isArray(d.rounds) && d.rounds.every(r => obj(r) && ids(r.byes) && Array.isArray(r.tables)
+    && r.tables.every(t => obj(t) && ids(t.players) && ids(t.arrived) && ids(t.noShows) && (t.order === null || ids(t.order))));
+}
+
 export class TournamentManager {
   tournaments = new Map<string, Tournament>();
   private locks = new Map<string, TableLock>();
@@ -557,7 +573,10 @@ export class TournamentManager {
     let live = 0;
     for (const d of list) {
       try {
-        if (!d || typeof d.id !== 'string') continue;
+        if (!wellFormed(d)) {
+          console.warn(`Skipping a saved tournament that cannot be read (${String((d as { id?: unknown } | null)?.id ?? '?')})`);
+          continue;
+        }
         // Monopoly tournaments were retired: an old one is left out (its tables are ordinary rooms the idle sweep clears).
         if (!TOURNEY_GAMES.includes(d.game)) {
           console.warn(`Skipping tournament ${d.id}: ${String(d.game)} tournaments are no longer run`);

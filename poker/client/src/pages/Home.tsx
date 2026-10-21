@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import type { LobbyTournament, LobbyView } from '../../../shared/types';
 import { useAuth } from '../auth';
 import AuthModal from '../components/AuthModal';
@@ -77,6 +77,17 @@ export default function Home() {
   const { profile, canHost } = useAuth();
   const [modal, setModal] = useState<'auth' | 'tournament' | null>(null);
   const isAdmin = !!profile?.isAdmin;
+
+  // The hub's "Host a tournament" lands here as /?host=1: open the create form
+  // once this room agrees they may host (that answer arrives a moment after
+  // the sign-in does), and drop the flag so a reload does not reopen it.
+  const [params, setParams] = useSearchParams();
+  const hostAsked = params.get('host') === '1';
+  useEffect(() => {
+    if (!hostAsked || !canHost) return;
+    setModal('tournament');
+    setParams(p => { p.delete('host'); return p; }, { replace: true });
+  }, [hostAsked, canHost, setParams]);
 
   return (
     <main className="page landing">

@@ -75,12 +75,15 @@ export default function Leaderboard() {
     <div className="page lb-page">
       <header className="lb-head">
         <h1 className="lb-title"><span aria-hidden>🏆</span> Leaderboard</h1>
-        <div className="tabs lb-tabs" role="tablist" aria-label="Game">
-          {TABS.map(t => (
-            <button key={t.id} type="button" role="tab" aria-selected={t.id === tab.id} className={t.id === tab.id ? 'on' : ''} onClick={() => pick(t.id)}>
-              <span aria-hidden>{t.icon}</span> {t.label}
-            </button>
-          ))}
+        <div className="tabs lb-tabs">
+          {/* Only the tabs are in the tablist (a link may not be); display: contents keeps the row as it was. */}
+          <div role="tablist" aria-label="Game" style={{ display: 'contents' }}>
+            {TABS.map(t => (
+              <button key={t.id} type="button" role="tab" aria-selected={t.id === tab.id} className={t.id === tab.id ? 'on' : ''} onClick={() => pick(t.id)}>
+                <span aria-hidden>{t.icon}</span> {t.label}
+              </button>
+            ))}
+          </div>
           <a className="lb-tab-link" href={POKER_URL} onClick={e => openPoker(e, !!me)} title={POKER_URL.replace(/^https?:\/\//, '')}>
             <span aria-hidden>♠️</span> {GAMES.poker.name} <span className="muted">→ its own site</span>
           </a>
@@ -107,7 +110,7 @@ export default function Leaderboard() {
               : 'Nobody has finished a game against another person yet. Gather a friend, bankrupt them, and be the first name up here.'}
           </p>
           <div className="row center wrap">
-            <Link className="btn primary chunky" to={tab.id === 'cards' ? GAMES.cards.path : '/'}>Play {tab.label}</Link>
+            <Link className="btn primary chunky" to={GAMES[tab.id].path}>Play {tab.label}</Link>
             <Link className="btn chunky" to="/characters">{CHOG_SEASON ? 'Meet Chog' : 'Meet the characters'}</Link>
           </div>
         </section>

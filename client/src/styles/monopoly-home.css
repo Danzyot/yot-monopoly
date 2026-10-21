@@ -1,0 +1,14 @@
+/* /monopoly (pages/MonopolyHome.tsx): the Monopoly home. It is the hub's page
+   shell (.home, the drifting board still, the Geometry Dash hero in gd.css)
+   with the game's own hero: Play and join by code side by side. */
+
+.mono-hero .home-tag { margin-bottom: 22px; }
+.mono-hero .hero-howto { margin-top: 18px; }
+.mono-hero .hero-status { margin-top: 12px; }
+.mono-leaders { margin: 0 0 10px; padding-left: 22px; display: flex; flex-direction: column; gap: 4px; }
+.mono-foot { position: relative; z-index: 1; text-align: center; margin: 0; }
+.mono-foot a { color: var(--text); font-weight: 800; }
+
+@media (max-width: 480px) {
+  .mono-hero .hero-cta { font-size: 21px; padding: 13px 20px 14px; }
+}

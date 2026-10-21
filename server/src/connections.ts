@@ -58,6 +58,11 @@ export function getAccount(id: string): AccountRow | null {
   return accounts[id] ?? null;
 }
 
+/** Accounts first seen at or after `since` (the home ticker counts them; it never names them). */
+export function newAccounts(since: number): { id: string; firstSeen: number }[] {
+  return Object.values(accounts).filter(a => a.firstSeen >= since).map(a => ({ id: a.id, firstSeen: a.firstSeen }));
+}
+
 /** Newest first, optionally filtered by name / id / Discord / IP substring. */
 export function searchAccounts(q: string, limit = 200): AccountRow[] {
   const needle = q.trim().toLowerCase();

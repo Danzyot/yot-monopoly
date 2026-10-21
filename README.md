@@ -7,7 +7,7 @@ where poker lives).
 
 ## The games
 
-- **Monopoly** (`/`) — the original Yot Monopoly: a 3D property-trading board game with
+- **Monopoly** (`/monopoly`, tables at `/r/<code>`) — the original Yot Monopoly: a 3D property-trading board game with
   three boards, custom looks, mini-games, music and a full operator dashboard. Everything
   under *Features* below is about it. Served by this server.
 - **Chog Cards** (`/cards`) — a fast shedding card game for 2–10: match colour, number or
@@ -23,9 +23,11 @@ where poker lives).
   site, so the hub hands a signed-in player over as `https://poker.choggames.com/#dtoken=…`
   (`client/src/pokerLink.ts`; the base URL is `POKER_URL` in `shared/brand.ts`).
 
-The home page is the hub: the three game cards with live "tables open now" counts for
-Monopoly and Cards, then the characters and how it works. It ships no WebGL — the 3D
-game loads when a table is opened.
+The home page (`/`) is the hub: the three game cards with live "tables open now" counts for
+Monopoly and Cards, then the characters and how it works. Each card's Play goes to that
+game's own home (`/monopoly`, `/cards`, poker's site) and its code box joins a table
+directly. Neither the hub nor `/monopoly` ships WebGL — the 3D game loads when a table is
+opened.
 
 **Chog season.** While `CHOG_SEASON` is on (`shared/season.ts`) the whole site is Chog:
 only the Chog character, every table in the Chog look, and the site's UI in the Chog
