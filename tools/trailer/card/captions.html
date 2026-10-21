@@ -1,0 +1,78 @@
+<!doctype html>
+<meta charset="utf-8">
+<!-- The trailer's captions on a transparent canvas, laid over the cut by assemble.py.
+     captions.json (written by assemble.py) lists {t0, t1, text, kind}: words arrive one
+     by one out of a blur and leave together the same way. Kinds: "game" a big game name,
+     "big" a centred line, "lower" a lower-third line with a purple bar. -->
+<style>
+  @font-face { font-family: 'Titan One'; src: url('titan-one-400.woff2') format('woff2'); }
+  @font-face { font-family: 'Nunito'; font-weight: 800; src: url('nunito-800.woff2') format('woff2'); }
+  html, body { margin: 0; background: transparent; }
+  canvas { display: block; }
+</style>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+const W = 1920, H = 1080;
+const c = document.getElementById('c');
+const g = c.getContext('2d');
+let CAPS = [];
+window.ready = (async () => {
+  CAPS = await (await fetch('captions.json')).json();
+  await document.fonts.load('100px "Titan One"');
+  await document.fonts.load('800 40px Nunito');
+})();
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const easeOut = x => 1 - Math.pow(1 - clamp(x), 3);
+
+const STYLE = {
+  game: { font: s => `${s}px "Titan One"`, size: 150, track: 0.06, y: H * 0.5, align: 'center', glow: 'rgba(160,110,255,0.75)' },
+  big: { font: s => `${s}px "Titan One"`, size: 92, track: 0.01, y: H * 0.5, align: 'center', glow: 'rgba(0,0,0,0.55)' },
+  top: { font: s => `${s}px "Titan One"`, size: 78, track: 0.01, y: 150, align: 'center', glow: 'rgba(0,0,0,0.5)' },
+  lower: { font: s => `800 ${s}px Nunito`, size: 58, track: 0, y: H - 130, align: 'left', glow: 'rgba(0,0,0,0.7)' },
+};
+
+function caption(cap, t) {
+  const st = STYLE[cap.kind];
+  const words = cap.text.split(' ');
+  g.font = st.font(st.size);
+  const space = g.measureText(' ').width;
+  const widths = words.map(w => g.measureText(w).width + st.track * st.size * (w.length - 1));
+  const total = widths.reduce((a, b) => a + b, 0) + space * (words.length - 1);
+  let x = st.align === 'center' ? (W - total) / 2 : 150;
+  const out = seg(t, cap.t1 - 0.28, cap.t1);
+  if (cap.kind === 'lower') {
+    // The purple bar grows in first.
+    const k = easeOut(seg(t, cap.t0, cap.t0 + 0.3)) * (1 - out);
+    g.save();
+    g.fillStyle = '#8b5cf6';
+    g.globalAlpha = k;
+    g.fillRect(118, st.y - st.size * 0.78, 10, st.size * 0.95 * k);
+    g.restore();
+  }
+  words.forEach((w, i) => {
+    const k = easeOut(seg(t, cap.t0 + 0.07 * i, cap.t0 + 0.07 * i + 0.4));
+    const a = k * (1 - out);
+    if (a > 0.003) {
+      const blur = 14 * (1 - k) + 18 * out;
+      g.save();
+      g.globalAlpha = a;
+      g.filter = blur > 0.2 ? `blur(${blur.toFixed(2)}px)` : 'none';
+      g.font = st.font(st.size);
+      g.letterSpacing = `${st.track * st.size}px`;
+      g.shadowColor = st.glow;
+      g.shadowBlur = cap.kind === 'game' ? 40 : 26;
+      g.fillStyle = '#ffffff';
+      g.textBaseline = 'alphabetic';
+      g.fillText(w, x, st.y + 26 * (1 - k) + st.size * 0.35);
+      g.restore();
+    }
+    x += widths[i] + space;
+  });
+}
+
+window.draw = t => {
+  g.clearRect(0, 0, W, H);
+  for (const cap of CAPS) if (t >= cap.t0 && t <= cap.t1) caption(cap, t);
+};
+</script>

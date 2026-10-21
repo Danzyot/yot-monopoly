@@ -1,0 +1,74 @@
+<!doctype html>
+<meta charset="utf-8">
+<!-- The site on screen: a capture sequence (screens/<name>/NNNN.png, made by the capture
+     step) playing inside a floating browser window or phone in a dark purple void, which
+     turns slowly in 3D. The sequence is named after the '#': screens.html#home.
+     screens/manifest.json gives each sequence's frame count and kind. -->
+<style>
+  @font-face { font-family: 'Nunito'; font-weight: 800; src: url('nunito-800.woff2') format('woff2'); }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #0b0614; }
+  #bg { position: absolute; inset: 0; background: radial-gradient(ellipse 60% 55% at 50% 58%, #3a1a72 0%, #1c0c38 45%, #0b0614 80%); }
+  #stage { position: absolute; inset: 0; perspective: 2200px; }
+  .win { position: absolute; left: 50%; top: 56%; transform-style: preserve-3d; border-radius: 22px; overflow: hidden;
+         background: #1a1030; box-shadow: 0 60px 140px rgba(0,0,0,0.6), 0 0 0 1.5px rgba(255,255,255,0.12), 0 0 120px rgba(139,92,246,0.35); }
+  .browser { width: 1500px; height: 905px; }
+  .bar { height: 62px; background: linear-gradient(#2a1b4a, #22163e); display: flex; align-items: center; gap: 12px; padding: 0 24px; }
+  .dot { width: 16px; height: 16px; border-radius: 50%; }
+  .url { margin-left: 28px; flex: 1; max-width: 560px; height: 36px; border-radius: 18px; background: rgba(255,255,255,0.08);
+         color: #d9ccff; font: 800 20px Nunito; display: flex; align-items: center; padding-left: 22px; letter-spacing: 0.02em; }
+  .browser img { display: block; width: 1500px; height: 843.75px; object-fit: cover; object-position: top; }
+  .phone { width: 430px; height: 930px; border-radius: 64px; padding: 16px; background: #120a22;
+           box-shadow: 0 60px 140px rgba(0,0,0,0.6), inset 0 0 0 3px #3b2a63, 0 0 120px rgba(139,92,246,0.4); }
+  .phone img { display: block; width: 398px; height: 862px; border-radius: 50px; object-fit: cover; object-position: top; }
+  .notch { position: absolute; left: 50%; top: 28px; width: 118px; height: 34px; margin-left: -59px; border-radius: 17px; background: #000; }
+  .glare { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(115deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 38%); }
+</style>
+<div id="bg"></div>
+<div id="stage"></div>
+<script>
+window.screenshot = true;
+const name = decodeURIComponent(location.hash.slice(1));
+const stage = document.getElementById('stage');
+let M = null, win = null, img = null, cache = {};
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const smooth = x => { x = clamp(x); return x * x * (3 - 2 * x); };
+const easeOut = x => 1 - Math.pow(1 - clamp(x), 3);
+
+window.ready = (async () => {
+  M = (await (await fetch('screens/manifest.json')).json())[name];
+  const phone = M.kind === 'phone';
+  win = document.createElement('div');
+  win.className = 'win ' + (phone ? 'phone' : 'browser');
+  if (phone) {
+    win.innerHTML = '<img><div class="notch"></div><div class="glare"></div>';
+  } else {
+    win.innerHTML = '<div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span>' +
+      '<span class="dot" style="background:#28c840"></span><span class="url">choggames.com' + (M.path || '') + '</span></div><img><div class="glare"></div>';
+  }
+  stage.appendChild(win);
+  img = win.querySelector('img');
+  await document.fonts.load('800 20px Nunito');
+})();
+
+async function frame(i) {
+  const src = `screens/${name}/${String(i).padStart(4, '0')}.png`;
+  if (img.getAttribute('src') !== src) {
+    img.src = src;
+    await img.decode().catch(() => {});
+  }
+}
+
+window.draw = async t => {
+  const i = Math.min(Math.floor(t * 24), M.frames - 1);
+  await frame(i);
+  const k = smooth(t / (M.dur || 3.5));
+  const enter = easeOut(t / 0.6);
+  const phone = M.kind === 'phone';
+  const s = (phone ? 0.92 : 0.98) * (0.9 + 0.1 * enter);
+  const ry = phone ? 14 - 22 * k : -11 + 16 * k;
+  const rx = 6 - 4 * k;
+  const ty = 60 * (1 - enter);
+  win.style.transform = `translate(-50%, -50%) translateY(${ty}px) rotateX(${rx}deg) rotateY(${ry}deg) scale(${s})`;
+  win.style.opacity = clamp(t / 0.25);
+};
+</script>
