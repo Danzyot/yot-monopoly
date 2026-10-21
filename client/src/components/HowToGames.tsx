@@ -1,12 +1,13 @@
 // The short tutorials for the hub's other two games, shown by HowToPlay when it
 // is opened for Cards or Poker (the "?" on their hub cards, the hero's game tabs,
-// the Cards home). Six steps each, quick to read. Keep them in step with:
-//   Cards: server/src/cards/game.ts, shared/cards/rules.ts and deck.ts (points);
+// the Cards home). Six steps each (Cards adds a seventh for its Chog Chaos
+// mode), quick to read. Keep them in step with:
+//   Cards: server/src/cards/game.ts, shared/cards/rules.ts and deck.ts (points, the Chaos cards);
 //   Poker: poker/README.md and poker/client (tournaments only, "Your Chog", sign-in).
 import type { ReactNode } from 'react';
 import type { Card } from '../../../shared/cards/deck.ts';
-import { CARDS_HAND_SIZE, LAST_CARD_CALL } from '../../../shared/cards/meta.ts';
-import { CARDS_HOUSE_RULES, DEFAULT_CARDS_RULES } from '../../../shared/cards/rules.ts';
+import { CARDS_CHAOS_DECK_SIZE, CARDS_HAND_SIZE, CARDS_MERCY_LIMIT, LAST_CARD_CALL } from '../../../shared/cards/meta.ts';
+import { CARDS_HOUSE_RULES, CARDS_MODES, DEFAULT_CARDS_RULES } from '../../../shared/cards/rules.ts';
 import { BRAND, GAMES } from '../../../shared/brand.ts';
 import { CardFace } from '../cards/CardFace.tsx';
 
@@ -30,6 +31,7 @@ const pcs = (s: string) => s.split(' ').map((c, i) => <Pc key={i} c={c} />);
 
 const target = DEFAULT_CARDS_RULES.targetScore;
 const houseNames = CARDS_HOUSE_RULES.filter(h => h.key !== 'stacking').map(h => h.label);
+const chaosName = CARDS_MODES.find(m => m.id === 'chaos')!.label;
 
 export function cardsSteps(): GuideStep[] {
   return [
@@ -68,6 +70,17 @@ export function cardsSteps(): GuideStep[] {
     {
       icon: '🏠', title: 'House rules',
       text: `The host can mix it up before the deal: ${houseNames.join(', ')}. The Rules button at the table shows what is on.`,
+    },
+    {
+      icon: '🌀', title: chaosName,
+      text: `Classic is the default; the host can pick ${chaosName} instead: ${CARDS_CHAOS_DECK_SIZE} cards. Purge drops every card of its colour with it; Blitz skips everyone, so you go again. Gas Spike +6 and Rug Pull +10 are Wilds that hit the next player hard, and any Draw card stacks on a smaller one. Chog Roulette: the next player turns up cards until your colour shows and keeps them all. 7s swap hands, 0s pass them on, you draw until you can play, and ${CARDS_MERCY_LIMIT} cards knocks you out of the round.`,
+      art: <Fan label="Purge, Blitz, Gas Spike +6, Rug Pull +10 and Chog Roulette" cards={[
+        { id: 21, kind: 'purge', color: 'green' },
+        { id: 22, kind: 'blitz', color: 'blue' },
+        { id: 23, kind: 'wild6', color: null },
+        { id: 24, kind: 'wild10', color: null },
+        { id: 25, kind: 'roulette', color: null },
+      ]} />,
     },
   ];
 }

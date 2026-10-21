@@ -4,14 +4,16 @@
 // rooms own pacing (they arm one timer at clockDeadline() and call
 // clockTimeout()), this file owns the rules.
 //
-// Official rules by default, house rules from CardsRules. Every public entry
-// point validates first and only then changes state, so a refused action
-// (CardsError) leaves the game exactly as it was.
+// Official rules by default, house rules from CardsRules, and the Chog Chaos
+// mode's deck and cards (Purge, Blitz, Gas Spike, Rug Pull, Chog Roulette)
+// with the Mercy rule. Every public entry point validates first and only then
+// changes state, so a refused action (CardsError) leaves the game exactly as
+// it was.
 
-import { CARDS_HAND_SIZE, CARDS_MAX_PLAYERS, CARDS_MIN_PLAYERS, LAST_CARD_CALL } from '../../../shared/cards/meta.ts';
+import { CARDS_HAND_SIZE, CARDS_MAX_PLAYERS, CARDS_MERCY_LIMIT, CARDS_MIN_PLAYERS, LAST_CARD_CALL } from '../../../shared/cards/meta.ts';
 import {
-  CARD_COLORS, COLOR_LABEL, bestColor, buildDeck, cardName, handPoints, isCardColor, isWild, matches, sameFace,
-  type Card, type CardColor,
+  CARD_COLORS, COLOR_LABEL, DRAW_VALUE, bestColor, buildDeck, cardName, deckSize, handPoints, isCardColor, isDrawCard, isWild,
+  matches, oneAway, sameFace, type Card, type CardColor, type CardKind, type DrawKind,
 } from '../../../shared/cards/deck.ts';
 import { DEFAULT_CARDS_RULES, normalizeCardsRules, type CardsRules } from '../../../shared/cards/rules.ts';
 import type {
@@ -34,6 +36,8 @@ export const ROUND_BREAK_MS = 8_000;
 export const LAST_CARD_GRACE_MS = 1_000;
 /** Phases that belong to the current player (the turn timer runs in these). */
 const STEP_PHASES: CardsPhase[] = ['play', 'drawn', 'color', 'swap'];
+/** Cards a round may start on; anything else turned up goes back and the pile is reshuffled. */
+const START_KINDS = new Set<CardKind>(['number', 'skip', 'reverse', 'draw2', 'wild']);
 const MAX_LOG = 250;
 const VIEW_LOG = 80;
 const MAX_ID_LEN = 64;
@@ -52,6 +56,9 @@ export interface CardsPlayerState extends CardsNewPlayer {
   score: number;
   afk?: boolean;
   left?: boolean;
+  /** Knocked out of this round by the Mercy rule; `outPoints` is what their hand was worth. */
+  out?: boolean;
+  outPoints?: number;
 }
 
 export interface CardsInit {
@@ -67,8 +74,10 @@ export interface CardsInit {
 /** A Draw penalty waiting on the current player. */
 interface PendingDraw {
   amount: number;
-  kind: 'draw2' | 'wild4';
+  kind: DrawKind;
   from: string;
+  /** Draw cards stacked so far (missing in snapshots from before stacks were counted: 1). */
+  chain?: number;
   /** A lone Wild Draw Four that may be challenged: was it legal, and what colour it was judged on. Secret. */
   check: { legal: boolean; prevColor: CardColor } | null;
 }
@@ -93,7 +102,7 @@ export interface CardsSnapshot {
   dealerIdx: number;
   phase: CardsPhase;
   pending: PendingDraw | null;
-  colorFor: 'start' | 'wild' | 'wild4' | null;
+  colorFor: ColorFor | null;
   drawnCard: number | null;
   oneCard: Record<string, OneCardState>;
   preCall: string[];
@@ -117,7 +126,12 @@ export interface CardsSnapshot {
   savedAt: number;
   /** A Wild Draw Four's legality while its colour is being picked. */
   wild4Check?: PendingDraw['check'];
+  /** Knocked out this round by the Mercy rule, in order. */
+  knocked?: string[];
 }
+
+/** What a colour is being named for (phase 'color'): the start card, or the Wild just played. */
+type ColorFor = 'start' | 'wild' | 'wild4' | 'wild6' | 'wild10' | 'roulette';
 
 function fail(msg: string): never {
   throw new CardsError(msg);
@@ -144,12 +158,14 @@ export class CardsGame {
   phase: CardsPhase = 'play';
   pending: PendingDraw | null = null;
   /** Phase 'color': what the colour is for. */
-  colorFor: 'start' | 'wild' | 'wild4' | null = null;
+  colorFor: ColorFor | null = null;
   /** Phase 'drawn': the id of the card just drawn. */
   drawnCard: number | null = null;
   oneCard: Record<string, OneCardState> = {};
-  /** Players who called "Last card!" while holding two (it counts for their next play). */
+  /** Players who called "Last card!" one play from one card (two cards, or a Purge that leaves one): it counts for that play. */
   preCall: string[] = [];
+  /** Knocked out this round by the Mercy rule, in order. */
+  knocked: string[] = [];
   round = 0;
   /** Bumps whenever the turn moves on (or a step restarts, like after a caught bluff). */
   turn = 0;
@@ -193,7 +209,7 @@ export class CardsGame {
     // The first dealer sits last, so the first seat plays first.
     this.dealerIdx = n - 1;
     // startRound() gathers and shuffles every card, this first deal included.
-    this.pile = buildDeck();
+    this.pile = buildDeck(this.rules.mode);
     this.startRound();
     this.settle();
   }
@@ -217,9 +233,19 @@ export class CardsGame {
     return this.players.find(p => p.id === id) ?? fail('Unknown player');
   }
 
+  /** Every card in this game (the mode's deck). */
+  get deckSize(): number {
+    return deckSize(this.rules.mode);
+  }
+
   /** Players still at the table. */
   active(): CardsPlayerState[] {
     return this.players.filter(p => !p.left);
+  }
+
+  /** Players still in this round: at the table and not knocked out by the Mercy rule. */
+  inRound(): CardsPlayerState[] {
+    return this.players.filter(p => !p.left && !p.out);
   }
 
   private livePlayer(id: string): CardsPlayerState {
@@ -228,16 +254,23 @@ export class CardsGame {
     return p;
   }
 
+  /** A player still in the round (a swap partner, someone to catch). */
+  private roundPlayer(id: string): CardsPlayerState {
+    const p = this.livePlayer(id);
+    if (p.out) fail(`${p.name} is out of this round`);
+    return p;
+  }
+
   private idx(p: CardsPlayerState): number {
     return this.players.indexOf(p);
   }
 
-  /** The next seat still at the table, `dir` steps around. */
+  /** The next seat still in the round, `dir` steps around. */
   private nextSeat(from: number, dir: CardsDirection): number {
     const n = this.players.length;
     let i = from;
     do i = (i + dir + n) % n;
-    while (this.players[i].left && i !== from);
+    while ((this.players[i].left || this.players[i].out) && i !== from);
     return i;
   }
 
@@ -343,7 +376,12 @@ export class CardsGame {
     if (this.round > 1) this.dealerIdx = this.nextSeat(this.dealerIdx, 1);
     if (this.players[this.dealerIdx].left) this.dealerIdx = this.nextSeat(this.dealerIdx, 1);
     const all = [...this.pile, ...this.discard, ...this.players.flatMap(p => p.hand)];
-    for (const p of this.players) p.hand = [];
+    for (const p of this.players) {
+      p.hand = [];
+      delete p.out;
+      delete p.outPoints;
+    }
+    this.knocked = [];
     this.discard = [];
     this.pile = this.shuffled(all);
     this.direction = 1;
@@ -367,11 +405,11 @@ export class CardsGame {
     for (let k = 0; k < CARDS_HAND_SIZE; k++) for (const p of order) p.hand.push(this.pile.pop()!);
     this.step({ type: 'deal', round: this.round, dealer: dealer.id, order: order.map(p => p.id), count: CARDS_HAND_SIZE });
 
-    // A Wild Draw Four may not start a round: back in, reshuffle, turn up another.
+    // A Wild Draw Four (or a Chog Chaos card) may not start a round: back in, reshuffle, turn up another.
     let top = this.pile.pop()!;
-    while (top.kind === 'wild4') {
+    while (!START_KINDS.has(top.kind)) {
       this.step({ type: 'flip', card: top, back: true });
-      this.say('A Wild Draw Four turned up — it goes back and the pile is reshuffled.');
+      this.say(`A ${cardName(top)} turned up — it goes back and the pile is reshuffled.`);
       this.pile.unshift(top);
       this.pile = this.shuffled(this.pile);
       top = this.pile.pop()!;
@@ -419,20 +457,28 @@ export class CardsGame {
     let points = 0;
     for (const q of this.active()) {
       if (q === w) continue;
-      hands[q.id] = handPoints(q.hand);
-      cards[q.id] = q.hand.length;
+      // A knocked-out hand went back under the pile: it still counts, as it was.
+      hands[q.id] = q.out ? q.outPoints ?? 0 : handPoints(q.hand);
+      // Cards still held (achievements); a knocked-out hand holds none.
+      cards[q.id] = q.out ? 0 : q.hand.length;
       points += hands[q.id];
     }
     w.score += points;
-    this.history.push({ round: this.round, winner: w.id, points, ...(blocked && { blocked: true }), hands, cards });
+    this.history.push({
+      round: this.round, winner: w.id, points, ...(blocked && { blocked: true }), hands, cards,
+      ...(this.knocked.length && { out: [...this.knocked] }),
+    });
     const matchOver = this.rules.match === 'single' || w.score >= this.rules.targetScore;
     this.step({ type: 'roundEnd', winner: w.id, points, ...(blocked && { blocked: true }), matchOver });
     const total = this.rules.match === 'points' ? ` (${w.score} in all)` : '';
+    const standing = !blocked && w.hand.length > 0;
     this.say(blocked === 'time'
       ? `⏰ Time is up in round ${this.round}. ${w.name} holds the fewest points and scores ${points}${total}.`
       : blocked
       ? `Nobody can play or draw — round ${this.round} is blocked. ${w.name} holds the fewest points and scores ${points}${total}.`
-      : `${w.name} is out of cards and wins round ${this.round}, scoring ${points} points${total}.`,
+      : standing
+        ? `${w.name} is the last one standing and wins round ${this.round}, scoring ${points} points${total}.`
+        : `${w.name} is out of cards and wins round ${this.round}, scoring ${points} points${total}.`,
     w.id, { amount: points, reason: 'score' });
     this.oneCard = {};
     this.preCall = [];
@@ -533,10 +579,20 @@ export class CardsGame {
     return true;
   }
 
+  /**
+   * May `c` answer the pending Draw? The same kind always (with stacking on).
+   * Mixed stacking: in Classic a Wild Draw Four on a Draw Two, or a Draw Two in
+   * the named colour on a Wild Draw Four; in Chog Chaos any Draw card worth at
+   * least the one on top.
+   */
   private stacksOn(c: Card): boolean {
     const pd = this.pending!;
-    if (pd.kind === 'draw2') return c.kind === 'draw2' || (this.rules.stackMixed && c.kind === 'wild4');
-    return c.kind === 'wild4' || (this.rules.stackMixed && c.kind === 'draw2' && c.color === this.color);
+    if (!isDrawCard(c)) return false;
+    if (c.kind === pd.kind) return true;
+    if (!this.rules.stackMixed) return false;
+    if (this.rules.mode === 'chaos') return DRAW_VALUE[c.kind]! >= DRAW_VALUE[pd.kind]!;
+    if (pd.kind === 'draw2') return c.kind === 'wild4';
+    return c.kind === 'draw2' && c.color === this.color;
   }
 
   /** Why `p` may not play `c` now (null: they may). Covers jump-ins out of turn. */
@@ -631,7 +687,7 @@ export class CardsGame {
     if (a.color !== undefined && !isCardColor(a.color)) fail('No such colour');
     let target: CardsPlayerState | undefined;
     if (a.target !== undefined) {
-      target = this.livePlayer(idArg(a.target));
+      target = this.roundPlayer(idArg(a.target));
       if (target === p) fail("You can't swap hands with yourself");
     }
 
@@ -641,12 +697,25 @@ export class CardsGame {
     this.begin(p);
     if (jumpIn) this.currentIdx = this.idx(p);
     p.hand.splice(at, 1);
+    // A Purge clears its colour out of the hand first: those go down, then the Purge lands on them.
+    const purged = card.kind === 'purge' ? p.hand.filter(c => c.color === card.color) : [];
+    if (purged.length) {
+      p.hand = p.hand.filter(c => !purged.includes(c));
+      this.discard.push(...purged);
+      this.step({ type: 'purge', player: p.id, cards: purged });
+    }
     this.discard.push(card);
     this.drawnCard = null;
     this.phase = 'play';
     this.stall = 0;
     this.step({ type: 'play', player: p.id, card, from: fromDrawn ? 'drawn' : 'hand', ...(jumpIn && { jumpIn: true }) });
     this.say(jumpIn ? `${p.name} jumps in with ${cardName(card)}!` : `${p.name} plays ${cardName(card)}.`, p.id);
+    if (card.kind === 'purge') {
+      const n = purged.length;
+      this.say(n
+        ? `🌀 Purge! ${n} more ${COLOR_LABEL[card.color!]} card${n === 1 ? ' goes' : 's go'} with it.`
+        : `🌀 Purge! ${p.name} had no other ${COLOR_LABEL[card.color!]} to clear.`, p.id);
+    }
     if (!isWild(card)) this.color = card.color;
 
     if (p.hand.length === 1) {
@@ -662,7 +731,7 @@ export class CardsGame {
     switch (card.kind) {
       case 'number':
         if (this.rules.sevenZero && card.value === 7) {
-          const others = this.active().filter(q => q !== p);
+          const others = this.inRound().filter(q => q !== p);
           const to = target ?? (others.length === 1 ? others[0] : undefined);
           if (to) {
             this.swapHands(p, to);
@@ -682,7 +751,7 @@ export class CardsGame {
       case 'reverse':
         this.direction = this.direction === 1 ? -1 : 1;
         this.step({ type: 'reverse', direction: this.direction });
-        if (this.active().length === 2) {
+        if (this.inRound().length === 2) {
           // Two players: a Reverse is a Skip, the same player goes again.
           this.say('Play reverses — with two players, that is a skip.');
           return this.advance(true);
@@ -691,8 +760,19 @@ export class CardsGame {
         return this.advance();
       case 'draw2':
         return this.addPending(p, 'draw2', null);
+      case 'purge':
+        return this.advance();
+      case 'blitz':
+        // Everyone else is skipped: a fresh turn for the same player.
+        this.step({ type: 'blitz', player: p.id });
+        this.say(`⚡ Blitz! Everyone else is skipped — ${p.name} goes again.`, p.id);
+        this.turn++;
+        return;
       case 'wild':
-      case 'wild4': {
+      case 'wild4':
+      case 'wild6':
+      case 'wild10':
+      case 'roulette': {
         const check = card.kind === 'wild4' && !this.pending && !this.rules.noBluff
           ? { legal: !p.hand.some(c => c.color === prevColor), prevColor }
           : null;
@@ -711,7 +791,7 @@ export class CardsGame {
   /** A Wild Draw Four's legality, kept while its player picks the colour (phase 'color'). */
   private wild4Check: PendingDraw['check'] = null;
 
-  private afterColor(p: CardsPlayerState, kind: 'start' | 'wild' | 'wild4', check: PendingDraw['check']) {
+  private afterColor(p: CardsPlayerState, kind: ColorFor, check: PendingDraw['check']) {
     this.colorFor = null;
     this.wild4Check = null;
     if (kind === 'start') {
@@ -721,22 +801,42 @@ export class CardsGame {
       return;
     }
     if (kind === 'wild') return this.advance();
-    this.addPending(p, 'wild4', check);
+    if (kind === 'roulette') return this.roulette();
+    this.addPending(p, kind, kind === 'wild4' ? check : null);
   }
 
   /** A Draw card was played: it lands on the next player, at once unless they have a choice to make. */
-  private addPending(p: CardsPlayerState, kind: 'draw2' | 'wild4', check: PendingDraw['check']) {
-    const amount = (this.pending?.amount ?? 0) + (kind === 'draw2' ? 2 : 4);
-    this.pending = { amount, kind, from: p.id, check };
+  private addPending(p: CardsPlayerState, kind: DrawKind, check: PendingDraw['check']) {
+    const amount = (this.pending?.amount ?? 0) + DRAW_VALUE[kind]!;
+    const chain = this.pending ? (this.pending.chain ?? 1) + 1 : 1;
+    this.pending = { amount, kind, from: p.id, check, chain };
+    if (chain > 1) {
+      this.step({ type: 'stack', player: p.id, amount, chain });
+      this.say(`🔥 Stacked! The penalty is up to ${amount}.`, p.id);
+    }
     this.advance();
     // No stacking and nothing to challenge: nothing to decide, so it simply happens.
     if (!this.rules.stacking && !check) this.takePending(this.current);
   }
 
+  /** Chog Roulette: the next player turns up cards until the named colour shows (Wilds don't count), keeps them all and misses their turn. */
+  private roulette() {
+    const t = this.players[this.nextIdx(this.currentIdx)];
+    const color = this.color!;
+    this.step({ type: 'roulette', player: t.id, color });
+    const got = this.drawCards(t, Infinity, 'roulette', c => c.color === color);
+    const hit = got.at(-1)?.color === color;
+    this.say(hit
+      ? `🎰 Chog Roulette! ${t.name} turns up ${this.plural(got.length)} before ${COLOR_LABEL[color]} shows, and keeps the lot.`
+      : `🎰 Chog Roulette! ${t.name} turns up ${this.plural(got.length)} and no ${COLOR_LABEL[color]} ever shows.`,
+    t.id, { amount: got.length, reason: 'roulette' });
+    this.advance(true);
+  }
+
   /** The player went out: the last card's Draw still lands, then the round is scored. */
   private goOut(p: CardsPlayerState, card: Card) {
-    if (card.kind === 'draw2' || card.kind === 'wild4') {
-      const amount = (this.pending?.amount ?? 0) + (card.kind === 'draw2' ? 2 : 4);
+    if (isDrawCard(card)) {
+      const amount = (this.pending?.amount ?? 0) + DRAW_VALUE[card.kind]!;
       const t = this.players[this.nextIdx(this.idx(p))];
       const got = this.drawCards(t, amount, 'penalty');
       this.say(`${t.name} draws ${got.length}.`, t.id, { amount: got.length, reason: 'penalty' });
@@ -763,7 +863,7 @@ export class CardsGame {
       this.step({ type: 'pass', player: p.id });
       this.say(`${p.name} has nothing to draw and passes.`, p.id);
       this.advance();
-      if (this.stall >= this.active().length) this.blockRound();
+      if (this.stall >= this.inRound().length) this.blockRound();
       return;
     }
     this.say(`${p.name} draws ${this.plural(got.length)}.`, p.id, { amount: got.length, reason: 'turn' });
@@ -778,7 +878,7 @@ export class CardsGame {
 
   /** Nobody can play or draw: the lowest hand takes the round. */
   private blockRound() {
-    const alive = this.active();
+    const alive = this.inRound();
     const w = alive.reduce((b, q) => (handPoints(q.hand) < handPoints(b.hand) ? q : b), alive[0]);
     this.endRound(w, true);
   }
@@ -802,7 +902,7 @@ export class CardsGame {
 
   private swapAction(p: CardsPlayerState, target: unknown) {
     this.requireTurn(p, 'swap');
-    const t = this.livePlayer(idArg(target));
+    const t = this.roundPlayer(idArg(target));
     if (t === p) fail("You can't swap hands with yourself");
     this.begin(p);
     this.swapHands(p, t);
@@ -817,7 +917,7 @@ export class CardsGame {
 
   /** 7-0: every hand moves one seat on in the direction of play. */
   private rotateHands() {
-    const alive = this.active();
+    const alive = this.inRound();
     const hands = new Map(alive.map(q => [q, q.hand]));
     for (const q of alive) this.players[this.nextIdx(this.idx(q))].hand = hands.get(q)!;
     this.step({ type: 'rotate', direction: this.direction });
@@ -861,7 +961,8 @@ export class CardsGame {
       this.begin(p, false);
       const t = this.now();
       this.oneCard[p.id] = { since: oc?.since ?? t, calledAt: t, closedAt: oc?.closedAt ?? null };
-    } else if (n === 2) {
+    } else if (oneAway(p.hand)) {
+      // Two cards, or a Purge that would leave one: the call counts for the play that does it.
       if (this.preCall.includes(p.id)) fail(`You already called "${LAST_CARD_CALL}"`);
       this.begin(p, false);
       this.preCall.push(p.id);
@@ -872,7 +973,7 @@ export class CardsGame {
   }
 
   private catchOut(p: CardsPlayerState, target: unknown) {
-    const t = this.livePlayer(idArg(target));
+    const t = this.roundPlayer(idArg(target));
     if (t === p) fail("You can't catch yourself");
     const oc = this.oneCard[t.id];
     if (!oc || t.hand.length !== 1) fail(`${t.name} is not down to one card`);
@@ -887,13 +988,52 @@ export class CardsGame {
       t.id, { amount: got.length, reason: 'caught' });
   }
 
-  /** Bookkeeping after every change: one-card states, deadlines, the change counter. */
+  /**
+   * The Mercy rule, after every change: anyone holding CARDS_MERCY_LIMIT or
+   * more is knocked out of the round. Their cards go under the draw pile (the
+   * points they were worth still count for the round's winner); a turn they
+   * owed moves on; the last one standing wins the round.
+   */
+  private mercySweep() {
+    if (!this.rules.mercy) return;
+    for (const p of this.inRound()) {
+      if (this.phase === 'over' || this.phase === 'roundOver') return;
+      if (p.hand.length < CARDS_MERCY_LIMIT) continue;
+      const count = p.hand.length;
+      const wasCurrent = p === this.current;
+      p.out = true;
+      p.outPoints = handPoints(p.hand);
+      this.knocked.push(p.id);
+      this.pile.unshift(...p.hand);
+      p.hand = [];
+      delete this.oneCard[p.id];
+      this.step({ type: 'mercy', player: p.id, count });
+      this.say(`💥 ${p.name} hits ${count} cards — no mercy! Out of round ${this.round}.`, p.id);
+      if (this.pending?.from === p.id) this.pending.check = null;
+      const still = this.inRound();
+      if (still.length === 1) {
+        this.pending = null;
+        this.endRound(still[0]);
+        return;
+      }
+      if (wasCurrent) {
+        // Whatever they owed goes with them.
+        if (this.color === null) this.color = CARD_COLORS[this.rng(CARD_COLORS.length)];
+        this.pending = null;
+        this.wild4Check = null;
+        this.advance();
+      }
+    }
+  }
+
+  /** Bookkeeping after every change: the Mercy rule, one-card states, deadlines, the change counter. */
   private settle() {
+    if (this.playOpen) this.mercySweep();
     this.playOpen = false;
     for (const id of Object.keys(this.oneCard)) {
       if (this.player(id).hand.length !== 1) delete this.oneCard[id];
     }
-    this.preCall = this.preCall.filter(id => this.player(id).hand.length === 2);
+    this.preCall = this.preCall.filter(id => oneAway(this.player(id).hand));
     this.syncClocks();
     this.seq++;
   }
@@ -1064,6 +1204,10 @@ export class CardsGame {
     if (alive.length === 1) {
       this.pending = null;
       this.finish(alive[0], `🏆 ${alive[0].name} wins — everyone else has left.`);
+    } else if (this.phase !== 'roundOver' && this.inRound().length === 1) {
+      // Everyone else in the round was knocked out: the last one standing takes it.
+      this.pending = null;
+      this.endRound(this.inRound()[0]);
     } else if (this.phase !== 'roundOver') {
       // A Draw Four from someone who has gone can no longer be challenged.
       if (this.pending?.from === p.id) this.pending.check = null;
@@ -1089,7 +1233,7 @@ export class CardsGame {
       winner: this.winner, lastPlay: this.lastPlay, playSeq: this.playSeq, seq: this.seq, log: this.log,
       turnEndsAt: this.turnEndsAt, turnKey: this.turnKey, timeoutStreak: this.timeoutStreak,
       nextRoundAt: this.nextRoundAt, paused: this.paused, startedAt: this.startedAt, endedAt: this.endedAt,
-      savedAt: this.now(), wild4Check: this.wild4Check,
+      savedAt: this.now(), wild4Check: this.wild4Check, knocked: this.knocked,
     });
   }
 
@@ -1130,7 +1274,7 @@ export class CardsGame {
       rules: { ...this.rules },
       players: this.players.map((p, seat) => ({
         id: p.id, name: p.name, isBot: p.isBot, seat, cards: p.hand.length, score: p.score,
-        ...(p.afk && { afk: true }), ...(p.left && { left: true }),
+        ...(p.afk && { afk: true }), ...(p.left && { left: true }), ...(p.out && { out: true }),
       })),
       you: me ? this.youView(me, now) : null,
       phase: this.phase,
@@ -1142,7 +1286,7 @@ export class CardsGame {
       discardCount: this.discard.length,
       drawCount: this.pile.length,
       pendingDraw: pd && live ? {
-        amount: pd.amount, kind: pd.kind, from: pd.from, challengeable: !!pd.check,
+        amount: pd.amount, kind: pd.kind, from: pd.from, chain: pd.chain ?? 1, challengeable: !!pd.check,
         ...(pd.check && { prevColor: pd.check.prevColor }),
       } : null,
       oneCard: Object.entries(this.oneCard).map(([player, oc]) => ({
@@ -1172,6 +1316,7 @@ export class CardsGame {
             case 'deal': return { ...s, order: [...s.order] };
             case 'flip':
             case 'play': return { ...s, card: copy(s.card) };
+            case 'purge': return { ...s, cards: s.cards.map(copy) };
             default: return { ...s };
           }
         }),
@@ -1200,7 +1345,7 @@ export class CardsGame {
       canPass: acting && mine && this.phase === 'drawn' && !this.rules.forcedPlay,
       canChallenge: acting && mine && this.phase === 'play' && !!this.pending?.check,
       // (A single card handed over by a 7-0 swap carries no call duty: no window, so no prompt.)
-      canCallLastCard: acting && ((n === 1 && !!oc && oc.calledAt == null) || (n === 2 && !this.preCall.includes(me.id))),
+      canCallLastCard: acting && ((n === 1 && !!oc && oc.calledAt == null) || (n >= 2 && oneAway(me.hand) && !this.preCall.includes(me.id))),
       canCatch: acting
         ? Object.entries(this.oneCard)
           .filter(([id, o]) => id !== me.id && o.calledAt === null && o.closedAt === null && now >= o.since + LAST_CARD_GRACE_MS)

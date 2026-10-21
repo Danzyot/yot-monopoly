@@ -40,6 +40,11 @@
     <link rel="preload" href="/src/fonts/lilita-one-400.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/src/fonts/nunito-700.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/src/fonts/nunito-800.woff2" as="font" type="font/woff2" crossorigin />
+    <!-- The operator's renames go in before the first render (src/content.ts bootContent): asked
+         for here, while the scripts download, rather than after they have run. -->
+    <script>
+      window.__yotContent = fetch('/api/content').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+    </script>
     <!-- The backdrop of the hub and of /monopoly, a still of the board (styles/home.css and, in
          the Chog season, styles/season.css: same files, same media queries). -->
     <script>

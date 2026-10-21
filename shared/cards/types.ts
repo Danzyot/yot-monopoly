@@ -2,7 +2,7 @@
 // viewer is shown. A view is built for one viewer and holds nothing that
 // viewer could not see at a real table (see CardsGame.view).
 
-import type { Card, CardColor, CardKind } from './deck.ts';
+import type { Card, CardColor, DrawKind } from './deck.ts';
 import type { CardsRules } from './rules.ts';
 
 export type CardsBotLevel = 'easy' | 'normal' | 'hard';
@@ -35,7 +35,7 @@ export type CardsAction =
   | { type: 'swap'; target: string }
   /** Challenge the Wild Draw Four just played on you. */
   | { type: 'challenge' }
-  /** "Last card!" — with one card left, or with two just before playing one. */
+  /** "Last card!" — with one card left, or one play away from it (two cards, or a Purge that would leave one). */
   | { type: 'callLastCard' }
   /** Catch a player who went down to one card without calling. */
   | { type: 'catch'; target: string };
@@ -46,7 +46,8 @@ export type CardsDrawReason =
   | 'start'      // a Draw Two turned up to start the round
   | 'bluff'      // a challenged Wild Draw Four was illegal: its player draws 4
   | 'challenge'  // a failed challenge: the challenger draws 6
-  | 'caught';    // caught without calling "Last card!": draw 2
+  | 'caught'     // caught without calling "Last card!": draw 2
+  | 'roulette';  // Chog Roulette: turned up until the named colour showed
 
 /**
  * One thing that happened, in order. A CardsPlay is a list of these; the
@@ -68,6 +69,16 @@ export type CardsStep =
   | { type: 'swap'; player: string; target: string }
   /** 7-0: every hand moved one seat on in `direction`. */
   | { type: 'rotate'; direction: CardsDirection }
+  /** Purge: the other cards of its colour, going onto the discard with it (face up: everyone sees them). */
+  | { type: 'purge'; player: string; cards: Card[] }
+  /** Blitz: everyone else skipped, `player` goes again. */
+  | { type: 'blitz'; player: string }
+  /** A Draw card stacked on a pending one: the penalty is now `amount`, `chain` Draw cards deep. */
+  | { type: 'stack'; player: string; amount: number; chain: number }
+  /** Chog Roulette: `player` turns up cards until `color` shows (the draw follows). */
+  | { type: 'roulette'; player: string; color: CardColor }
+  /** The Mercy rule: `player` reached `count` cards and is out of the round (their cards go under the pile). */
+  | { type: 'mercy'; player: string; count: number }
   /** `hand` (the challenged player's hand) is present only in the challenger's view. */
   | { type: 'challenge'; player: string; target: string; bluff: boolean; hand?: Card[] }
   | { type: 'call'; player: string }
@@ -102,7 +113,9 @@ export interface CardsLogEntry {
 export interface CardsPendingDraw {
   amount: number;
   /** The Draw card on top (what a stack must answer). */
-  kind: Extract<CardKind, 'draw2' | 'wild4'>;
+  kind: DrawKind;
+  /** Draw cards in the stack so far (1: not stacked). */
+  chain: number;
   /** Who played the top Draw card. */
   from: string;
   /** The current player may challenge it (an unstacked Wild Draw Four, bluffing allowed). */
@@ -139,6 +152,8 @@ export interface CardsPlayerView {
   afk?: boolean;
   /** Left the table: skipped from now on. */
   left?: boolean;
+  /** Knocked out of this round by the Mercy rule (back for the next deal). */
+  out?: boolean;
 }
 
 /** The viewer's own seat. Absent for spectators. */
@@ -164,10 +179,12 @@ export interface CardsRoundResult {
   winner: string;
   points: number;
   blocked?: boolean;
-  /** Each loser's hand value at the end of the round. */
+  /** Each loser's hand value at the end of the round (a knocked-out player's, as it was when they went out). */
   hands: Record<string, number>;
   /** Each loser's number of cards at the end of the round (achievements); absent in older games. */
   cards?: Record<string, number>;
+  /** Knocked out by the Mercy rule, in order. */
+  out?: string[];
 }
 
 export interface CardsView {

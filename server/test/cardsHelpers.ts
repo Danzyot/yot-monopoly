@@ -1,10 +1,12 @@
 // Helpers for the card game tests: stacked decks, a scripted clock, and card
 // specs. A spec names a card: 'r5' red 5, 'gS' green Skip, 'bR' blue Reverse,
-// 'y+2' yellow Draw Two, 'W' Wild, 'W4' Wild Draw Four.
+// 'y+2' yellow Draw Two, 'W' Wild, 'W4' Wild Draw Four; and the Chog Chaos
+// cards: 'rP' red Purge, 'bB' blue Blitz, 'W6' Gas Spike, 'W10' Rug Pull,
+// 'WR' Chog Roulette.
 import assert from 'node:assert/strict';
 import { CardsError, CardsGame, type CardsNewPlayer, type Rng } from '../src/cards/game.ts';
-import { CARDS_DECK_SIZE, CARDS_HAND_SIZE } from '../../shared/cards/meta.ts';
-import { buildDeck, type Card } from '../../shared/cards/deck.ts';
+import { CARDS_HAND_SIZE } from '../../shared/cards/meta.ts';
+import { buildDeck, deckSize, type Card } from '../../shared/cards/deck.ts';
 import type { CardsRules } from '../../shared/cards/rules.ts';
 import type { CardsAction, CardsBotLevel } from '../../shared/cards/types.ts';
 
@@ -13,12 +15,17 @@ const COLORS: Record<string, Card['color']> = { r: 'red', y: 'yellow', g: 'green
 export function matcher(spec: string): (c: Card) => boolean {
   if (spec === 'W') return c => c.kind === 'wild';
   if (spec === 'W4') return c => c.kind === 'wild4';
+  if (spec === 'W6') return c => c.kind === 'wild6';
+  if (spec === 'W10') return c => c.kind === 'wild10';
+  if (spec === 'WR') return c => c.kind === 'roulette';
   const color = COLORS[spec[0]];
   if (!color) throw new Error(`bad spec ${spec}`);
   const rest = spec.slice(1);
   if (rest === 'S') return c => c.kind === 'skip' && c.color === color;
   if (rest === 'R') return c => c.kind === 'reverse' && c.color === color;
   if (rest === '+2') return c => c.kind === 'draw2' && c.color === color;
+  if (rest === 'P') return c => c.kind === 'purge' && c.color === color;
+  if (rest === 'B') return c => c.kind === 'blitz' && c.color === color;
   const value = Number(rest);
   if (!Number.isInteger(value)) throw new Error(`bad spec ${spec}`);
   return c => c.kind === 'number' && c.color === color && c.value === value;
@@ -71,12 +78,14 @@ export interface TableOpts {
 
 /**
  * A game with a stacked deck, on the official rules (stacking off) unless
- * `rules` says otherwise. Seat i is player `p${i}`; the dealer is the last
- * seat, so p0 plays first unless the start card says otherwise.
+ * `rules` says otherwise (`mode: 'chaos'` deals from the Chog Chaos deck).
+ * Seat i is player `p${i}`; the dealer is the last seat, so p0 plays first
+ * unless the start card says otherwise.
  */
 export function table(n = 3, o: TableOpts = {}) {
   let clock = 1_000_000;
-  const pool = buildDeck();
+  const mode = o.rules?.mode ?? 'classic';
+  const pool = buildDeck(mode);
   const hands = Array.from({ length: n }, (_, s) => (o.hands?.[s] ?? []).map(sp => take(pool, sp)));
   // Fill with cards that rarely matter: yellow numbers (no 0, 7 or 9: no 7-0
   // effects, no match on the default green 9), then any such number. Tests
@@ -100,7 +109,7 @@ export function table(n = 3, o: TableOpts = {}) {
   for (const sp of o.draws ?? []) popOrder.push(take(pool, sp));
   popOrder.push(...pool);
   const order = popOrder.map(c => c.id).reverse();
-  assert.equal(order.length, CARDS_DECK_SIZE);
+  assert.equal(order.length, deckSize(mode));
   const players: CardsNewPlayer[] = Array.from({ length: n }, (_, i) => {
     const bot = o.bots?.[i];
     return { id: `p${i}`, name: `P${i}`, isBot: !!bot, ...(typeof bot === 'string' && { level: bot }) };
@@ -126,11 +135,11 @@ export function table(n = 3, o: TableOpts = {}) {
   };
 }
 
-/** Every one of the 108 cards is somewhere, exactly once. */
+/** Every card of the deck (108, or Chog Chaos's 135) is somewhere, exactly once. */
 export function assertConserved(g: CardsGame, where = '') {
   const ids = [...g.pile, ...g.discard, ...g.players.flatMap(p => p.hand)].map(c => c.id);
-  assert.equal(ids.length, CARDS_DECK_SIZE, `card count ${where}`);
-  assert.equal(new Set(ids).size, CARDS_DECK_SIZE, `duplicate card ${where}`);
+  assert.equal(ids.length, g.deckSize, `card count ${where}`);
+  assert.equal(new Set(ids).size, g.deckSize, `duplicate card ${where}`);
 }
 
 /** A refused action must leave the game exactly as it was. */
@@ -182,7 +191,11 @@ export function specs(g: CardsGame, id: string): string[] {
   return g.player(id).hand.map(c => {
     if (c.kind === 'wild') return 'W';
     if (c.kind === 'wild4') return 'W4';
-    const k = c.kind === 'number' ? String(c.value) : c.kind === 'skip' ? 'S' : c.kind === 'reverse' ? 'R' : '+2';
+    if (c.kind === 'wild6') return 'W6';
+    if (c.kind === 'wild10') return 'W10';
+    if (c.kind === 'roulette') return 'WR';
+    const k = c.kind === 'number' ? String(c.value)
+      : ({ skip: 'S', reverse: 'R', draw2: '+2', purge: 'P', blitz: 'B' } as Record<string, string>)[c.kind];
     return c.color![0] + k;
   });
 }

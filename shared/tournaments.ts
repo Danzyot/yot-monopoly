@@ -7,6 +7,8 @@
 // Every event keeps its `game`, so the engine stays game-agnostic, but Cards
 // is the only game on offer: Monopoly games are too long for brackets.
 
+import type { CardsGameMode } from './cards/rules.ts';
+
 export type TournamentGame = 'cards';
 export type TournamentStatus = 'registering' | 'running' | 'finished' | 'cancelled';
 /** What happens to a player who has not opened their table when the seating clock runs out. */
@@ -57,6 +59,8 @@ export interface TournamentSettings {
   /** One round, or first to `cardsTarget` points. */
   cardsMatch: 'single' | 'points';
   cardsTarget: number;
+  /** Classic, or Chog Chaos with its own house rules (events saved before modes: Classic). */
+  cardsMode: CardsGameMode;
 }
 
 /** What tourney:create takes. Anything missing gets the defaults; everything is checked on the server. */
@@ -80,6 +84,7 @@ export function defaultTournamentSettings(): TournamentSettings {
     startAt: null,
     cardsMatch: 'single',
     cardsTarget: 200,
+    cardsMode: 'classic',
   };
 }
 

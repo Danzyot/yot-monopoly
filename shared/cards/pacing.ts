@@ -36,6 +36,11 @@ export function cardsStepMs(s: CardsStep): number {
     case 'swap': return 900;
     case 'rotate': return 1_000;
     case 'challenge': return 1_500;
+    case 'purge': return 520 + Math.min(s.cards.length, 8) * 90;
+    case 'blitz': return 850;
+    case 'stack': return 700;
+    case 'roulette': return 1_100;
+    case 'mercy': return 1_600;
     case 'call': return 650;
     case 'catch': return 650;
     case 'pass': return 200;

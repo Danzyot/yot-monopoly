@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth.tsx';
 import { toastError } from '../toast.tsx';
 import { BRAND } from '../../../shared/brand.ts';
+import { CARDS_MODES } from '../../../shared/cards/rules.ts';
 import {
   PRIZE_NOTE, TOURNEY_AHEAD_DAYS, TOURNEY_CARDS_TARGETS, TOURNEY_MIN_PLAYERS, TOURNEY_NAME_MAX, TOURNEY_NO_SHOW_MINUTES,
   TOURNEY_PRIZE_MAX, TOURNEY_ROUND_MINUTES, TOURNEY_TABLE_RANGE, defaultTournamentSettings, tournamentUrl,
@@ -104,6 +105,12 @@ export default function CreateTournament() {
           <label className="field"><span>Fewest to start</span>
             <input type="number" min={TOURNEY_MIN_PLAYERS} max={capped ?? undefined} value={s.minPlayers}
               onChange={e => set('minPlayers', Number(e.target.value))} />
+          </label>
+          <label className="field"><span>Mode</span>
+            <select value={s.cardsMode} onChange={e => set('cardsMode', e.target.value as TournamentSettings['cardsMode'])}>
+              {CARDS_MODES.map(m => <option key={m.id} value={m.id}>{m.label} ({m.tag})</option>)}
+            </select>
+            <small className="muted">{CARDS_MODES.find(m => m.id === s.cardsMode)?.help}</small>
           </label>
           <label className="field"><span>Each table plays</span>
             <select value={s.cardsMatch === 'single' ? 'single' : String(s.cardsTarget)} onChange={e => {

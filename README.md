@@ -11,7 +11,9 @@ where poker lives).
   three boards, custom looks, mini-games, music and a full operator dashboard. Everything
   under *Features* below is about it. Served by this server.
 - **Chog Cards** (`/cards`) — a fast shedding card game for 2–10: match colour, number or
-  symbol, empty your hand first, call "Last card!". Shares the server, the socket, the
+  symbol, empty your hand first, call "Last card!" (and catch fire doing it). Two modes:
+  Classic, and Chog Chaos (Purge, Blitz, Gas Spike +6, Rug Pull +10, Chog Roulette, stacking
+  by size and the Mercy rule: 25 cards and you are out). Shares the server, the socket, the
   sign-in and the leaderboard page (its own tab) with Monopoly; code in
   `client/src/cards/`, `server/src/cards/` and `shared/cards/`.
 - **Chog Poker** (`poker.choggames.com`) — No-Limit Hold'em cash tables and multi-table

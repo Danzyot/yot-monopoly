@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { call, getSocket, onEveryConnect, type ChatMsg } from '../net.ts';
 import type { CardsAction } from '../../../shared/cards/types.ts';
 import type { CardsChatMsg, CardsConfigure, CardsRoomSummary, CardsRoomView } from '../../../shared/cards/room.ts';
-import { loadChogTokenPref } from '../components/ChogPicker.tsx';
+// Not from ChogPicker: that would put the trait table in the home page's first download.
+import { loadChogTokenPref } from '../chogTokenPref.ts';
 
 export const cardsCall = call;
 export const cardsAct = (a: CardsAction) => call('cards:act', a);

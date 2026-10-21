@@ -3,8 +3,10 @@
 // its own traits), standing at the rim behind their hand.
 // They breathe and glance at whoever is playing, lean in to play a card,
 // cheer when they call "Last card!", sulk when they are caught or hit with a
-// draw, and the match winner hops into the middle of the table for the
-// victory dance. Our own figure is kept out of sight (the camera is our eyes)
+// draw, pump a fist for a Purge or a Blitz, taunt as they stack a penalty on,
+// grey out when the Mercy rule knocks them out of the round (LastCardFire
+// sets anyone on one card alight), and the match winner hops into the middle
+// of the table for the victory dance. Our own figure is kept out of sight (the camera is our eyes)
 // until a cut or the podium calls for it.
 
 import { useFrame } from '@react-three/fiber';
@@ -35,6 +37,11 @@ function emoteFor(s: CardsStep, id: string): EmoteKind | null {
       return s.player === id ? 'taunt' : s.target === id ? 'sad' : null;
     case 'swap': return s.player === id || s.target === id ? 'shrug' : null;
     case 'roundEnd': return s.winner === id ? 'cheer' : null;
+    case 'purge':
+    case 'blitz': return s.player === id ? 'pump' : null;
+    case 'stack': return s.player === id ? 'taunt' : null;
+    case 'roulette': return s.player === id ? 'shrug' : null;
+    case 'mercy': return s.player === id ? 'sad' : null;
     default: return null;
   }
 }
@@ -100,6 +107,7 @@ function Seat({ p, seat, state, lite }: { p: CardsPlayerView; seat?: CardsSeatVi
     const now = performance.now();
     const time = clock.elapsedTime;
     const { frame, podium, me } = st;
+    const live = st.view.phase !== 'over' && st.view.phase !== 'roundOver';
     const angle = st.angles.get(p.id) ?? Math.PI * 1.5;
     const mine = p.id === me;
     const winner = podium === p.id;
@@ -183,14 +191,13 @@ function Seat({ p, seat, state, lite }: { p: CardsPlayerView; seat?: CardsSeatVi
     g.position.y = FELT_Y + lift * 1.6;
     yawRef.current.rotation.y = mo.yaw + spin;
 
-    // Left players fade to grey; our own figure shows only when wanted.
-    mo.grey = approach(mo.grey, p.left ? 0.85 : 0, 3, dt);
+    // Left players fade to grey (knocked-out ones half way: they are back next round); our own figure shows only when wanted.
+    mo.grey = approach(mo.grey, p.left ? 0.85 : p.out && live ? 0.6 : 0, 3, dt);
     mo.opacity = approach(mo.opacity, p.left ? 0.45 : 1, 3, dt);
     tinter.set(mo.grey, mo.opacity);
     g.visible = !mine || st.showMe;
 
     // Whose turn: a pulsing ring on the felt in the seat's colour.
-    const live = st.view.phase !== 'over' && st.view.phase !== 'roundOver';
     mo.ring = approach(mo.ring, frame.current === p.id && live && !winner ? 1 : 0, 8, dt);
     const r = ring.current;
     if (r) {

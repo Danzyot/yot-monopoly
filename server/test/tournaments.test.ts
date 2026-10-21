@@ -420,6 +420,8 @@ test('settings: no player cap unless the operator sets one, and every setting ch
   assert.throws(() => create({ roundMinutes: 17 }), /from the list/);
   assert.throws(() => create({ roundMinutes: 45 }), /from the list/);
   assert.throws(() => create({ cardsTarget: 150 }), /points target/);
+  assert.throws(() => create({ cardsMode: 'mayhem' }), /Unknown mode/);
+  assert.equal(create({}).d.settings.cardsMode, 'classic', 'Classic unless the operator picks Chog Chaos');
   assert.throws(() => create({ maxPlayers: 2 }), /at least 3/);
   assert.throws(() => create({ maxPlayers: 4, minPlayers: 5 }), /no more than the cap/);
   assert.throws(() => create({ maxPlayers: 'many' }), /Bad number/);

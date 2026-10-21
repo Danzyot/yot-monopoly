@@ -118,6 +118,20 @@ export function CardsCamera({ state, compact }: { state: RefObject<SceneState | 
             target: (_k, o) => o.copy(at).setY(FELT_Y + 1.1),
           };
           card('bankrupt', 'Challenge!', t.bluff ? `A bluff — ${name(t.player)} draws 4` : `It was legal — ${name(t.target)} draws 6`, colour(t.target), dur);
+        } else if (t.type === 'mercy' && t.player !== me) {
+          // No mercy: a quick push in on the knocked-out player as they grey, from
+          // off to one side and up, clear of their hand flying back to the pile.
+          const at = seatPos(angle(t.player), undefined, new Vector3());
+          const dir = at.clone().sub(CENTRE).setY(0).normalize();
+          const side = new Vector3(dir.z, 0, -dir.x);
+          const far = narrow ? 1.75 : 1;
+          cut.current = {
+            start: now, dur, fresh: true, me: false,
+            pos: (k, o) => o.copy(at).addScaledVector(dir, -(4.2 - 1.2 * smooth(k)) * far).addScaledVector(side, 2.4 * far)
+              .setY(FELT_Y + 3.1 * Math.sqrt(far) + 0.3 * k),
+            target: (_k, o) => o.copy(at).setY(FELT_Y + 1.0),
+          };
+          card('bankrupt', 'No mercy!', `${name(t.player)} hit ${t.count} cards — out of the round`, colour(t.player), dur);
         } else if (t.type === 'roundEnd') {
           // From the middle of the table, up at the winner, dollying in; a narrow
           // (portrait) frame stands further back so the whole figure stays in shot.

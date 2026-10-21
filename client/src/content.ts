@@ -18,8 +18,10 @@ export function setLiveContent(o: ContentOverrides): void {
 /** Load the server's overrides; gives up after `ms` so a slow server never blocks the page. */
 export async function bootContent(ms = 2500): Promise<void> {
   const timeout = new Promise<null>(r => setTimeout(() => r(null), ms));
+  // index.html asks for them as the page arrives; without that (an old page) ask now.
+  const early = (window as { __yotContent?: Promise<{ overrides?: ContentOverrides } | null> }).__yotContent;
   try {
-    const r = await Promise.race([api<{ overrides: ContentOverrides }>('/api/content'), timeout]);
+    const r = await Promise.race([early ?? api<{ overrides: ContentOverrides }>('/api/content'), timeout]);
     if (r?.overrides) setLiveContent(r.overrides);
   } catch { /* offline or an old server: the built-in names stand */ }
 }
