@@ -48,8 +48,12 @@ const start = (id: string, date = DAY1) => daily.startMonopolyDaily(reg, member(
 type Policy = (r: RoomT, id: string) => Action | null;
 /** The player plays like a bot (minus the deals there are none of at a daily table). */
 const asBot: Policy = (r, id) => {
-  const a = botAction(r.game!, id);
+  const g = r.game!;
+  const a = botAction(g, id);
   if (a?.type === 'proposeTrade') return { type: 'endTurn' };
+  // The bot sometimes jumps a bid by a few steps, seeded by its own id: the player
+  // (whose id differs from player to player) always bids one step, so two players play alike.
+  if (a?.type === 'bid' && g.auction) return { type: 'bid', amount: g.auction.highBid + Math.max(5, Math.round((g.spaces[g.auction.space].price ?? 100) * 0.05)) };
   return a;
 };
 /** A player who never buys or builds: same dice, different game. */
