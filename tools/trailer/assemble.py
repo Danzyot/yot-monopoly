@@ -57,9 +57,9 @@ EDL = [
 CAPTIONS = {
     'tour': [(0.5, 2.25, 'MONOPOLY', 'game'), (2.9, 4.75, 'CARDS', 'game'), (5.4, 7.3, 'POKER', 'game')],
     'site': [(0.15, 3.35, 'Play free in your browser.', 'top')],
-    'monopoly': [(0.3, 2.5, 'Roll the dice', 'lower'), (5.5, 7.9, 'Build up to a hotel', 'lower'), (8.1, 9.9, 'Mind the cops', 'lower'), (10.4, 12.8, 'Straight to jail', 'lower')],
-    'cards': [(1.7, 3.8, 'Stack the Draw Fours', 'lower'), (5.0, 6.9, 'Last card. On fire.', 'lower')],
-    'poker': [(0.2, 1.9, 'Chog Poker', 'lower'), (2.4, 3.95, 'Read the table. Take the pot.', 'lower')],
+    'monopoly': [(0.3, 2.6, 'Monopoly', 'lower')],
+    'cards': [(0.3, 2.6, 'Cards', 'lower')],
+    'poker': [(0.2, 2.5, 'Poker', 'lower')],
     'monopoly-web': [(0.15, 2.9, 'Friends or bots, any time.', 'top')],
     'poker-web': [(0.15, 2.9, 'Pull up a seat.', 'top')],
     'nft': [(0.15, 1.9, 'Hold a Chog?', 'top'), (2.0, 3.9, 'Play as your Chog NFT.', 'top')],
@@ -80,7 +80,7 @@ def effects():
     """(segment, local time, sound file in SFX_DIR, gain in dB)."""
     ev = []
     for i, t in enumerate(STEPS):
-        ev.append(('the-o', t, f'step-{1 + i % 5}', -22 - 2 * (i % 2) - 4 * (i in (12, 18))))
+        ev.append(('the-o', t, f'step-{1 + i % 5}', -30 - 2 * (i % 2) - 4 * (i in (12, 18))))
     for i, (up, down) in enumerate(zip([6.95, 7.5, 7.98, 8.46], [7.38, 7.86, 8.33, 8.84])):
         ev.append(('the-o', up - 0.02, 'hop', -8))
         ev.append(('the-o', down, 'flatten', -6 + 1.5 * i))
@@ -102,7 +102,7 @@ def effects():
     ev += [(m, 7.35, 'pop-1', -3), (m, 7.38, 'ding', -6),
            (m, 8.0, 'siren', -10), (m, 8.3, 'skid', -6), (m, 9.2, 'grab', -6), (m, 9.45, 'whoosh-2', -12),
            (m, 10.0, 'siren', -18), (m, 11.15, 'whoosh-2', -8), (m, 11.55, 'land', -4), (m, 11.62, 'jail-door', -3)]
-    ev += [(m, 12.2 + 0.1 * k, f'step-{1 + k % 5}', -26) for k in range(4)]
+    ev += [(m, 12.2 + 0.1 * k, f'step-{1 + k % 5}', -32) for k in range(4)]
     c = 'cards'
     for k, t in enumerate((2.0, 3.2, 4.15)):
         ev += [(c, t - 0.35, 'card-flick', -9), (c, t, f'card-slap-{1 + k % 3}', -2)]
@@ -347,7 +347,7 @@ def mix(starts, total):
         o = int(MUSIC_START * sr)
         m = m[:n - o]
         t = (np.arange(len(m)) / sr + MUSIC_START)[:, None]
-        duck = np.where(t < starts['title'], 0.45, 1.0)
+        duck = np.where(t < starts['title'], 0.7, 1.0)
         fade_in = np.clip((t - MUSIC_START) / 0.6, 0, 1)
         out[o:o + len(m)] += 0.9 * m * duck * fade_in
     cache = {}
