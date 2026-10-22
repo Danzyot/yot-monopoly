@@ -37,7 +37,7 @@ W, H = (960, 540) if HALF else (1920, 1080)
 # source: ('frames', dir, draft dir) or ('page', 'file.html#arg')
 EDL = [
     ('the-o', ('frames', 'shot01', 'shot01-draft'), 10.8, 0.0, {}),
-    ('title', ('page', 'title2d.html'), 3.4, 0.5, {}),
+    ('title', ('page', 'title2d.html'), 2.6, 0.5, {}),
     ('tour', ('frames', 'shot02', None), 7.5, 0.35, {'smear': [(2.32, 2.78), (4.82, 5.28)]}),
     ('site', ('page', 'screens.html#home'), 3.5, 0.0, {}),
     ('monopoly', ('frames', 'shot03', None), 10.0, 0.0, {}),
@@ -63,7 +63,7 @@ CAPTIONS = {
     'poker-web': [(0.15, 2.9, 'Pull up a seat.', 'top')],
     'nft': [(0.15, 1.9, 'Hold a Chog?', 'top'), (2.0, 3.9, 'Play as it.', 'top')],
     'nft-run': [(0.5, 3.8, 'Your Chog. In the game.', 'top')],
-    'dailies': [(0.15, 2.9, 'Dailies, streaks and leaderboards.', 'top')],
+    'dailies': [(0.15, 2.9, 'Daily challenges, streaks and leaderboards.', 'top')],
 }
 
 # Shot 1's footfalls (film.Walk.footfalls for walk_in and walk_up).

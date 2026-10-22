@@ -50,6 +50,7 @@ def build_title():
     cu.size = SIZE
     cu.extrude = EXTRUDE
     cu.bevel_depth = BEVEL
+    cu.offset = -BEVEL          # keep the bevel inside the glyph, so the A's counter and the M's notch stay open
     cu.bevel_resolution = 4
     cu.align_x = 'CENTER'
     cu.space_character = 1.04

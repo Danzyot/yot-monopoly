@@ -1,9 +1,9 @@
 <!doctype html>
 <meta charset="utf-8">
 <!-- Shot 1's end card: the 3D title turned 2D, drawn on a canvas at the exact letter
-     boxes Blender measured (title-layout.json), the Chog as a circle mark in the O's
-     place, the description revealed word by word and "Built by Yot". draw(t) paints
-     the card t seconds after it starts; render-canvas.mjs steps t frame by frame. -->
+     boxes Blender measured (title-layout.json), with the Chog as a circle mark in the O's
+     place. draw(t) paints the card t seconds after it starts; render-canvas.mjs steps t
+     frame by frame. -->
 <style>
   @font-face { font-family: 'Titan One'; src: url('titan-one-400.woff2') format('woff2'); }
   @font-face { font-family: 'Nunito'; font-weight: 800; src: url('nunito-800.woff2') format('woff2'); }
@@ -78,27 +78,6 @@ function mark(box, t) {
   g.restore();
 }
 
-function words(line, y, t, t0, font, color, size) {
-  g.font = font;
-  const parts = line.split(' ');
-  const space = g.measureText(' ').width;
-  const widths = parts.map(p => g.measureText(p).width);
-  let x = W / 2 - (widths.reduce((a, b) => a + b, 0) + space * (parts.length - 1)) / 2;
-  parts.forEach((p, i) => {
-    const k = easeOut(seg(t, t0 + i * 0.07, t0 + i * 0.07 + 0.38));
-    if (k > 0) {
-      g.save();
-      g.globalAlpha = k;
-      g.filter = `blur(${(1 - k) * 10}px)`;
-      g.fillStyle = color;
-      g.fillText(p, x, y + (1 - k) * 10);
-      g.restore();
-    }
-    x += widths[i] + space;
-  });
-  return t0 + parts.length * 0.07;
-}
-
 window.draw = (t) => {
   const bg = g.createRadialGradient(W / 2, H * 0.48, 40, W / 2, H * 0.5, W * 0.62);
   bg.addColorStop(0, '#f6f1ff');
@@ -108,17 +87,5 @@ window.draw = (t) => {
   g.textBaseline = 'alphabetic';
   L.letters.forEach((b, i) => { if (i !== 2) letter(b.char, b); });
   mark(L.letters[2], t);
-  const titleBottom = Math.max(...L.letters.map(b => b.y1)) * H;
-  g.textBaseline = 'alphabetic';
-  let t1 = words('A games hub featuring popular games such as Monopoly, Cards and Poker.', titleBottom + 110, t, 0.6, '800 40px Nunito', '#3e2c86');
-  words('Made for the Chog community.', titleBottom + 166, t, t1 + 0.05, '800 40px Nunito', '#3e2c86');
-  const k = easeOut(seg(t, 2.0, 2.6));
-  g.save();
-  g.globalAlpha = 0.75 * k;
-  g.font = '700 26px Nunito';
-  g.fillStyle = '#5a4a9a';
-  const s = 'Built by Yot';
-  g.fillText(s, W / 2 - g.measureText(s).width / 2, H - 64);
-  g.restore();
 };
 </script>

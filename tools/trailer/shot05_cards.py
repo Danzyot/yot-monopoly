@@ -148,31 +148,45 @@ mine = [card(f) for f in ('red-5', 'yellow-reverse', 'green-draw2', 'wild-wild4'
 flyers = {'d4a': card('wild-wild4'), 'd4b': card('wild-wild4'), 'rug': card('wild-wild10'), 'last': card('blue-9')}
 stream = [card('back') for _ in range(10)]
 
-# Fire round the last card: emissive tongues and an orange light.
-fire_mat = bpy.data.materials.new('Fire')
-fire_mat.use_nodes = True
-fnt = fire_mat.node_tree
-for n in list(fnt.nodes):
-    fnt.nodes.remove(n)
-fo = fnt.nodes.new('ShaderNodeOutputMaterial')
-fe = fnt.nodes.new('ShaderNodeEmission')
-fe.inputs['Color'].default_value = (1.0, 0.12, 0.0, 1)
-fe.inputs['Strength'].default_value = 2.6
-fnt.links.new(fe.outputs['Emission'], fo.inputs['Surface'])
-core_mat = fire_mat.copy()
-core_mat.node_tree.nodes['Emission'].inputs['Color'].default_value = (1.0, 0.42, 0.0, 1)
+# Fire round the last card: camera-facing sprites playing a looping flame animation
+# (flames.py renders the frames into tex/flames), and an orange light.
+FLAME_DIR = os.path.abspath(os.path.join(film.OUT_ROOT, '..', 'tex', 'flames'))
+flame_imgs = [bpy.data.images.load(os.path.join(FLAME_DIR, f'flame-{k:02d}.png'), check_existing=True) for k in range(24)]
+# (x across the card, root height from the card's centre, depth toward the camera, height, frame phase)
+FLAME_LAYOUT = [(-0.25, 0.1, -0.08, 2.3, 0), (0.27, 0.05, -0.1, 2.1, 11), (0.0, 0.3, -0.06, 2.5, 5),
+                (-0.36, 0.42, 0.04, 1.35, 17), (0.04, 0.48, 0.05, 1.5, 8), (0.38, 0.4, 0.04, 1.3, 20),
+                (-0.2, 0.62, 0.06, 1.0, 22), (0.22, 0.64, 0.06, 1.05, 2),
+                (-0.58, 0.0, 0.02, 0.95, 3), (0.59, 0.05, 0.02, 0.9, 14)]
 flames = []
-for k in range(9):
-    bpy.ops.mesh.primitive_cone_add(vertices=16, radius1=0.16, depth=0.7)
+for k, lay in enumerate(FLAME_LAYOUT):
+    bpy.ops.mesh.primitive_plane_add(size=1)
     f = bpy.context.active_object
-    f.data.materials.append(fire_mat if k % 3 else core_mat)
-    for p in f.data.polygons:
-        p.use_smooth = True
-    sub = f.modifiers.new('S', 'SUBSURF')
-    sub.levels = 1
-    sub.render_levels = 2
+    f.scale = (0.8, 1.0, 1.0)
+    bpy.ops.object.transform_apply(scale=True)
+    for v in f.data.vertices:
+        v.co.y += 0.5                      # root at the origin, the flame rising along +Y
+    m = bpy.data.materials.new(f'Flame{k}')
+    m.use_nodes = True
+    nt = m.node_tree
+    for n in list(nt.nodes):
+        nt.nodes.remove(n)
+    out = nt.nodes.new('ShaderNodeOutputMaterial')
+    tex = nt.nodes.new('ShaderNodeTexImage')
+    tex.image = flame_imgs[0]
+    tex.extension = 'CLIP'
+    em = nt.nodes.new('ShaderNodeEmission')
+    em.inputs['Strength'].default_value = 3.2
+    nt.links.new(tex.outputs['Color'], em.inputs['Color'])
+    tr = nt.nodes.new('ShaderNodeBsdfTransparent')
+    mix = nt.nodes.new('ShaderNodeMixShader')
+    nt.links.new(tex.outputs['Alpha'], mix.inputs['Fac'])
+    nt.links.new(tr.outputs['BSDF'], mix.inputs[1])
+    nt.links.new(em.outputs['Emission'], mix.inputs[2])
+    nt.links.new(mix.outputs['Shader'], out.inputs['Surface'])
+    f.data.materials.append(m)
     f.visible_shadow = False
-    flames.append(f)
+    f.visible_glossy = False
+    flames.append((f, tex, lay))
 fl = bpy.data.lights.new('FireLight', 'POINT')
 fl.energy = 0
 fl.color = (1.0, 0.55, 0.2)
@@ -182,6 +196,12 @@ film.blib.link(fire_light)
 
 cam = film.camera(lens=32)
 HIDE = (0, -30, 0)
+for f, tex, lay in flames:
+    c = f.constraints.new('TRACK_TO')
+    c.target = cam
+    c.track_axis = 'TRACK_Z'
+    c.up_axis = 'UP_Y'
+
 
 
 def seat_xyz(name, fwd=0.0, side=0.0, up=0.0):
@@ -291,18 +311,19 @@ def frame(t):
         hand = Vector(seat_xyz('far', fwd=0.55, side=-0.45, up=lerp(0.8, 1.7, ease_out(seg(t, 5.0, 5.35)))))
         put_card(flyers['last'], tuple(hand), (math.pi / 2 - 0.15, 0.0, 0.08 * math.sin(2 * math.pi * 1.5 * t)), 1.05)
         burn = ease_out(seg(t, 5.3, 5.7))
-        for k, f in enumerate(flames):
-            a = 2 * math.pi * k / len(flames)
-            r = 0.55 + 0.1 * math.sin(3 * t + k)
-            flick = 0.75 + 0.35 * math.sin(2 * math.pi * (2.3 + 0.37 * k) * t + k) + 0.15 * math.sin(2 * math.pi * 7.1 * t + 2 * k)
-            f.location = V(hand.x + math.cos(a) * r * 0.85, hand.y + 0.35 + 0.35 * flick * burn + 0.25 * abs(math.sin(a)), hand.z - 0.18 + math.sin(a) * 0.1)
-            f.scale = (burn * 0.8, burn * 0.8, burn * flick * 1.5)
-            f.rotation_euler = (0.25 * math.sin(4 * t + k), 0.25 * math.cos(3 * t + k), 0)
+        fi = int(round(t * 24))
+        for k, (f, tex, (x, y, z, hgt, ph)) in enumerate(flames):
+            grow = ease_out(seg(t, 5.3 + 0.04 * k, 5.75 + 0.04 * k))
+            flick = 1.0 + 0.08 * math.sin(2 * math.pi * (1.7 + 0.3 * k) * t + k)
+            f.location = V(hand.x + x * 1.05, hand.y + y * 1.05 - 0.15, hand.z + z)
+            sz = max(grow * hgt * 0.75 * flick, 0.001)
+            f.scale = (sz, sz, sz)
+            tex.image = flame_imgs[(fi + ph) % len(flame_imgs)]
         fire_light.location = V(hand.x, hand.y + 0.4, hand.z + 0.4)
-        fl.energy = 900 * burn * (0.85 + 0.15 * math.sin(2 * math.pi * 9 * t))
+        fl.energy = 1500 * burn * (0.85 + 0.15 * math.sin(2 * math.pi * 9 * t))
     else:
         put_card(flyers['last'], HIDE, (0, 0, 0))
-        for f in flames:
+        for f, tex, lay in flames:
             f.location = V(*HIDE)
         fl.energy = 0
 
