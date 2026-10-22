@@ -1,6 +1,6 @@
 // Before the hub (8611) starts on a fresh data dir: a fixed session secret (so the capture can sign
-// in as "Yot" with a stable id) and today's (and any earlier) daily results for a crowd of players,
-// Yot included, so the dailies page reads like a live site. Usage: node main-seed.mjs <dataDir>
+// in as "ChogFan" with a stable id) and today's (and any earlier) daily results for a crowd of players,
+// ChogFan included, so the dailies page reads like a live site. Usage: node main-seed.mjs <dataDir>
 // Prints nothing; token() is exported for the capture scripts.
 import { createHmac, randomBytes } from 'node:crypto';
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
@@ -11,7 +11,7 @@ export function token(id, name, avatar = '😎') {
   const payload = b64(JSON.stringify({ id, name, avatar, provider: 'demo', iat: Date.now() }));
   return `${payload}.${b64(createHmac('sha256', SECRET).update(payload).digest())}`;
 }
-export const YOT = { id: 'demo_yot_trailer', name: 'Yot', avatar: '😎' };
+export const YOT = { id: 'demo_yot_trailer', name: 'ChogFan', avatar: '😎' };
 const EPOCH = Date.parse('2026-10-21T00:00:00Z');
 function seed(dir) {
   mkdirSync(dir, { recursive: true });

@@ -27,6 +27,12 @@ export async function ctx(browser, { phone = false, storage } = {}) {
   // No external fonts/analytics hang ups: let them through but don't wait on them.
   await c.addInitScript(() => {
     try { if (location.port === '8611') localStorage.setItem('yot:hints', JSON.stringify(['welcome', 'raise', 'build', 'trade'])); } catch {}
+    // No player name beside the header avatar, and the home page without its own trailer and video loop.
+    document.addEventListener('DOMContentLoaded', () => {
+      const st = document.createElement('style');
+      st.textContent = 'header .me > .hide-sm, header .profile-name, .home-loop, section.trailer { display: none !important; }';
+      document.head.appendChild(st);
+    });
     window.__glctx = [];
     const orig = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (type, ...a) {
@@ -44,7 +50,7 @@ export async function ctx(browser, { phone = false, storage } = {}) {
 }
 export const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; // easeInOutCubic
 export const easeSine = t => -(Math.cos(Math.PI * t) - 1) / 2;
-export async function signIn(p, name = 'Yot') {
+export async function signIn(p, name = 'ChogFan') {
   await p.goto(BASE + '/', { waitUntil: 'networkidle' });
   await p.click('header >> text=Sign in');
   await p.fill('input[placeholder="Your name"]', name);

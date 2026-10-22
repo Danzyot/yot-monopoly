@@ -26,7 +26,7 @@ const NAMES = ['Lil Chog', 'Chogzilla', 'Monad Mike', 'Chogfather', 'PurpleRain'
 const AV = ['🐸', '🦄', '🐙', '🦊', '🐼', '🐯', '🐵', '🦁', '🐨', '🐻', '🐧', '👾', '🤖', '🍕', '🌶️', '💜', '🎩', '🍀', '🔥', '⚡'];
 const players = NAMES.map((n, i) => ({ id: `dc_trailer_${i}`, name: n, token: mint(`dc_trailer_${i}`, n, AV[i % AV.length]) }));
 const host = { id: 'dc_trailer_host', name: 'Chog Club', token: mint('dc_trailer_host', 'Chog Club', '💜') };
-const hero = { id: 'dc_trailer_yot', name: 'Yot', token: mint('dc_trailer_yot', 'Yot', '😎') };
+const hero = { id: 'dc_trailer_yot', name: 'ChogFan', token: mint('dc_trailer_yot', 'ChogFan', '😎') };
 
 function connect(p) {
   return new Promise(res => {

@@ -2,7 +2,7 @@
 <meta charset="utf-8">
 <!-- The trailer's closing card: the opening title again (same letter boxes, so the film
      ends where it began), the letters popping in one by one, then the call to play:
-     choggames.com on a purple pill, the three games under it and "Built by Yot". -->
+     choggames.com on a purple pill and the three games under it. -->
 <style>
   @font-face { font-family: 'Titan One'; src: url('titan-one-400.woff2') format('woff2'); }
   @font-face { font-family: 'Nunito'; font-weight: 800; src: url('nunito-800.woff2') format('woff2'); }
@@ -147,13 +147,5 @@ window.draw = (t) => {
     g.textBaseline = 'alphabetic';
     words('Monopoly  ·  Cards  ·  Poker', py + ph + 80, t, 1.45, '800 40px Nunito', '#3e2c86');
   }
-  const k = easeOut(seg(t, 1.9, 2.5));
-  g.save();
-  g.globalAlpha = 0.75 * k;
-  g.font = '700 26px Nunito';
-  g.fillStyle = '#5a4a9a';
-  const s = 'Built by Yot';
-  g.fillText(s, W / 2 - g.measureText(s).width / 2, H - 64);
-  g.restore();
 };
 </script>
