@@ -66,10 +66,10 @@ CAPTIONS = {
     'dailies': [(0.15, 2.9, 'Daily challenges, streaks and leaderboards.', 'top')],
 }
 
-# Shot 1's footfalls (film.Walk.footfalls for walk_in and walk_up).
-STEPS = [1.119, 1.25, 1.351, 1.445, 1.54, 1.634, 1.728, 1.822, 1.924, 2.018, 2.112, 2.207, 2.301, 2.395,
-         2.489, 2.584, 2.685, 2.779, 2.873, 2.968, 3.062, 3.156, 3.258, 3.388, 5.348, 5.438, 5.528, 5.618,
-         5.708, 5.795, 5.885, 5.975, 6.065, 6.155]
+# Shot 1's footfalls: the moments a foot touches down in film.Walk for walk_in and walk_up
+# (measured from the feet's lift, frame-exact; the last of each walk brings the feet together).
+STEPS = [1.238, 1.427, 1.61, 1.794, 1.977, 2.16, 2.342, 2.525, 2.708, 2.892, 3.075, 3.265, 3.69,
+         5.423, 5.588, 5.75, 5.915, 6.079, 6.344]
 
 
 SFX_DIR = os.environ.get('TRAILER_SFX', os.path.join(OUT, '..', 'audio', 'sfx'))   # real recordings (credits.md there)
@@ -79,7 +79,7 @@ def effects():
     """(segment, local time, sound file in SFX_DIR, gain in dB)."""
     ev = [('the-o', 0.0, 'room-tone', -26)]
     for i, t in enumerate(STEPS):
-        ev.append(('the-o', t, f'step-{1 + i % 5}', -9 - 2 * (i % 2)))
+        ev.append(('the-o', t, f'step-{1 + i % 5}', -8 - 2 * (i % 2) - 4 * (i in (12, 18))))
     for i, (up, down) in enumerate(zip([6.95, 7.5, 7.98, 8.46], [7.38, 7.86, 8.33, 8.84])):
         ev.append(('the-o', up - 0.02, 'hop', -8))
         ev.append(('the-o', down, 'flatten', -6 + 1.5 * i))

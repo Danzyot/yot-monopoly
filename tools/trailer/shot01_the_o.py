@@ -178,8 +178,8 @@ cam = film.camera(lens=42)
 CAM_POS = (0.0, 0.34, 3.45)
 CAM_AT = (0.0, 0.19, -0.35)
 
-walk_in = film.Walk([(-2.35, BEHIND), (-0.08, BEHIND)], 0.8, 3.7, step=0.09)
-walk_up = film.Walk([(-0.08, BEHIND), (xO, JUST_BEHIND)], 5.15, 6.35, step=0.085)
+walk_in = film.Walk([(-2.35, BEHIND), (-0.08, BEHIND)], 0.8, 3.7, step=0.17, lift=0.045, bob=0.012)
+walk_up = film.Walk([(-0.08, BEHIND), (xO, JUST_BEHIND)], 5.15, 6.35, step=0.15, lift=0.04, bob=0.012)
 HOPS = [6.95, 7.5, 7.98, 8.46]        # take-offs
 LAND = [7.38, 7.86, 8.33, 8.84]       # landings
 O_AFTER = [0.72, 0.46, 0.2, 0.0]      # the O's height after each landing
