@@ -177,7 +177,7 @@ def poker_phase(t):
             hide(c)
             continue
         p = seat_xyz(i, fwd=1.4, side=-0.35 + 0.7 * j)
-        tk.put(c, (p[0], tk.FELT_Y + 0.008, p[2]), (math.pi, math.radians(SEATS[i][2] + 90) + 0.1 * j, 0))
+        tk.put(c, (p[0], tk.FELT_Y + 0.008, p[2]), (math.pi, 0, math.radians(SEATS[i][2] + 90) + 0.1 * j))
 
 
 def theta(t):

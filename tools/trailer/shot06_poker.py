@@ -189,12 +189,12 @@ def frame(t):
         else:
             f = smoother(seg(t, 2.05, 2.5))
             lift = 0.5 * math.sin(math.pi * f)
-            put(c, (x, FELT_Y + 0.006 + lift, -0.3), (0, 0, math.pi * (1 - f)))
+            put(c, (x, FELT_Y + 0.006 + lift, -0.3), (math.pi * (1 - f), 0, 0))
     # The left Chog's two cards: the corners lift as it peeks.
     peek = math.sin(math.pi * seg(t, 0.35, 1.25))
     for k, c in enumerate(holes):
         p = seat_xyz('left', fwd=1.5, side=-0.35 + 0.7 * k)
-        put(c, (p[0], FELT_Y + 0.008 + 0.25 * peek, p[2]), (math.pi - 0.0, math.radians(90) + 0.12 * (k - 0.5), -0.6 * peek))
+        put(c, (p[0], FELT_Y + 0.008 + 0.12 * peek, p[2]), (math.pi - 0.5 * peek, 0.0, math.radians(90) + 0.12 * (k - 0.5)))
     # The push: a stack slides from the right Chog into the pot.
     pk = smoother(seg(t, 1.3, 1.85))
     a = Vector(seat_xyz('right', fwd=1.4, side=0.2))

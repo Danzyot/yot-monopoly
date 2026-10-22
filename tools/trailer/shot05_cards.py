@@ -131,7 +131,7 @@ for k in range(14):
 discard = []
 for k, face in enumerate(('red-7', 'green-9', 'blue-2')):
     c = card(face)
-    put_card(c, (DISCARD[0] + rnd.uniform(-0.1, 0.1), FELT_Y + 0.006 + 0.012 * k, DISCARD[1] + rnd.uniform(-0.1, 0.1)), (0, rnd.uniform(-0.5, 0.5), 0))
+    put_card(c, (DISCARD[0] + rnd.uniform(-0.1, 0.1), FELT_Y + 0.006 + 0.012 * k, DISCARD[1] + rnd.uniform(-0.1, 0.1)), (0, 0, rnd.uniform(-0.5, 0.5)))
     discard.append(c)
 TOP0 = FELT_Y + 0.006 + 0.012 * 3
 
