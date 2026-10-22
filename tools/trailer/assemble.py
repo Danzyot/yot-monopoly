@@ -61,7 +61,7 @@ CAPTIONS = {
     'poker': [(0.2, 1.9, 'Chog Poker', 'lower'), (2.4, 3.95, 'Read the table. Take the pot.', 'lower')],
     'monopoly-web': [(0.15, 2.9, 'Friends or bots, any time.', 'top')],
     'poker-web': [(0.15, 2.9, 'Pull up a seat.', 'top')],
-    'nft': [(0.15, 1.9, 'Hold a Chog?', 'top'), (2.0, 3.9, 'Play as it.', 'top')],
+    'nft': [(0.15, 1.9, 'Hold a Chog?', 'top'), (2.0, 3.9, 'Play as your Chog NFT.', 'top')],
     'nft-run': [(0.5, 3.8, 'Your Chog. In the game.', 'top')],
     'dailies': [(0.15, 2.9, 'Daily challenges, streaks and leaderboards.', 'top')],
 }
@@ -79,7 +79,7 @@ def effects():
     """(segment, local time, sound file in SFX_DIR, gain in dB)."""
     ev = [('the-o', 0.0, 'room-tone', -26)]
     for i, t in enumerate(STEPS):
-        ev.append(('the-o', t, f'squeak-{1 + i % 4}', -17 + 2 * (i % 3 == 0)))
+        ev.append(('the-o', t, f'step-{1 + i % 5}', -9 - 2 * (i % 2)))
     for i, (up, down) in enumerate(zip([6.95, 7.5, 7.98, 8.46], [7.38, 7.86, 8.33, 8.84])):
         ev.append(('the-o', up - 0.02, 'hop', -8))
         ev.append(('the-o', down, 'flatten', -6 + 1.5 * i))
@@ -101,7 +101,7 @@ def effects():
     ev += [(m, 7.35, 'pop-1', -3), (m, 7.38, 'ding', -6),
            (m, 8.0, 'siren', -10), (m, 8.3, 'skid', -6), (m, 9.2, 'grab', -6), (m, 9.45, 'whoosh-2', -12),
            (m, 10.0, 'siren', -18), (m, 11.15, 'whoosh-2', -8), (m, 11.55, 'land', -4), (m, 11.62, 'jail-door', -3)]
-    ev += [(m, 12.2 + 0.1 * k, f'squeak-{1 + k % 4}', -16) for k in range(4)]
+    ev += [(m, 12.2 + 0.1 * k, f'step-{1 + k % 5}', -12) for k in range(4)]
     c = 'cards'
     for k, t in enumerate((2.0, 3.2, 4.15)):
         ev += [(c, t - 0.35, 'card-flick', -9), (c, t, f'card-slap-{1 + k % 3}', -2)]
