@@ -17,7 +17,7 @@
   .url { margin-left: 28px; flex: 1; max-width: 560px; height: 36px; border-radius: 18px; background: rgba(255,255,255,0.08);
          color: #d9ccff; font: 800 20px Nunito; display: flex; align-items: center; padding-left: 22px; letter-spacing: 0.02em; }
   .browser img { display: block; width: 1500px; height: 843.75px; object-fit: cover; object-position: top; }
-  .win.phone { top: 56%; }
+  .win.phone { top: 61%; }
   .phone { width: 430px; height: 930px; border-radius: 64px; padding: 16px; background: #120a22;
            box-shadow: 0 60px 140px rgba(0,0,0,0.6), inset 0 0 0 3px #3b2a63, 0 0 120px rgba(139,92,246,0.4); }
   .phone img { display: block; width: 398px; height: 862px; border-radius: 50px; object-fit: cover; object-position: top; }
@@ -66,7 +66,7 @@ window.draw = async t => {
   const k = smooth(t / (M.dur || 3.5));
   const enter = easeOut(t / 0.6);
   const phone = M.kind === 'phone';
-  const s = (phone ? 0.9 : 0.86) * (0.9 + 0.1 * enter);
+  const s = (phone ? 0.8 : 0.86) * (0.9 + 0.1 * enter);
   const ry = phone ? 14 - 22 * k : -11 + 16 * k;
   const rx = 6 - 4 * k;
   const ty = 60 * (1 - enter);
