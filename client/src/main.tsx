@@ -17,6 +17,7 @@ import './styles/lobby.css';
 import './styles/trades.css';
 import './styles/home.css';
 import './styles/hub.css';
+import './styles/home-video.css';
 import './styles/season.css';
 import { installTooltips } from './tooltip.ts';
 import { bootContent } from './content.ts';

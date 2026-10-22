@@ -18,6 +18,7 @@ import ChogOfTheDay from '../components/ChogOfTheDay.tsx';
 import ChogRoamer from '../components/roamer/ChogRoamer.tsx';
 import { NextTournamentLink } from '../tournaments/NextTournament.tsx';
 import { Face } from '../components/CharacterFace.tsx';
+import { HeroLoop, TrailerSection } from '../components/HomeVideo.tsx';
 
 // The home page has no WebGL at all: the board behind the hero is a still
 // (client/public/home/, drifted by styles/home.css), so the page is up at once
@@ -136,8 +137,9 @@ export default function Home() {
 
   return (
     <div className="home">
-      {/* The board in its room behind the hero, drifting slowly: shows what the game is before a word is read. */}
-      <div className="home-bg home-still" aria-hidden />
+      {/* The board in its room behind the hero, drifting slowly, with the trailer's silent loop over it once
+          it can play: shows what the games are before a word is read. */}
+      <div className="home-bg home-still" aria-hidden><HeroLoop /></div>
 
       <section className="home-hero gd hub-hero">
         <h1>{BRAND.name}</h1>
@@ -222,6 +224,9 @@ export default function Home() {
           <span aria-hidden>📅</span> <b>Daily #{dailyNumber(dailyDate())}</b> <span className="hub-dailies-text">A puzzle for each game, one try each</span> <span aria-hidden>→</span>
         </Link>
       </section>
+
+      {/* The trailer: plays muted while on screen; sound and full screen on its buttons. */}
+      <TrailerSection />
 
       {/* The cast: the stars up front, everyone else a tap away on /characters. */}
       <section className="cast" aria-labelledby="cast-title">

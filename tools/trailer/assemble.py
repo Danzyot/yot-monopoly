@@ -281,7 +281,8 @@ def smear(a, r):
 
 def seg_frame(entry, local):
     name, src, dur, xf, extra = entry
-    n = int(round(dur * FPS))
+    local += extra.get('from', 0.0)
+    n = int(round((dur + extra.get('from', 0.0)) * FPS))
     i = min(max(int(round(local * FPS)), 0), n - 1)
     d = frame_dir(src)
     is3d = src[0] == 'frames' and src[1].startswith('shot')
@@ -346,6 +347,82 @@ def mix(starts, total):
     return path
 
 
+# ---- the home page loop ---------------------------------------------------------------------
+# A silent loop of the best 3D moments behind the site's hero: no captions, short crossfades,
+# and the end dissolves into the first shot so it wraps without a seam.
+LOOP = [
+    ('tour', ('frames', 'shot02', None), 2.6, 0.0, {'from': 0.5}),
+    ('monopoly', ('frames', 'shot03', None), 2.3, 0.35, {'from': 5.5}),
+    ('cards', ('frames', 'shot05', None), 2.0, 0.35, {'from': 1.55}),
+    ('poker', ('frames', 'shot06', None), 2.0, 0.35, {'from': 2.0}),
+    ('nft-run', ('frames', 'nft-run', None), 3.0, 0.35, {'from': 0.4}),
+    ('finale', ('frames', 'shot08', None), 2.6, 0.35, {'from': 1.0}),
+]
+LOOP_WRAP = 0.5
+
+
+def loop_main():
+    """Writes <out>/cut/hero-loop-{1080,720}.mp4 and hero-loop-poster.jpg."""
+    starts, t = {}, 0.0
+    for name, src, dur, xf, extra in LOOP:
+        t -= xf
+        starts[name] = t
+        t += dur
+    total = t - LOOP_WRAP
+    first = LOOP[0]
+    out = os.path.join(OUT, 'cut')
+    os.makedirs(out, exist_ok=True)
+    raw = os.path.join(out, 'hero-loop-raw.mp4')
+    enc = subprocess.Popen([FFMPEG, '-y', '-loglevel', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{W}x{H}', '-r', str(FPS),
+                            '-i', '-', '-c:v', 'libx264', '-crf', '12', '-preset', 'fast', '-pix_fmt', 'yuv420p', raw], stdin=subprocess.PIPE)
+    nf = int(round(total * FPS))
+    for f in range(nf):
+        # The loop starts LOOP_WRAP into the first shot; its last LOOP_WRAP seconds dissolve into the first shot's start.
+        tt = f / FPS + LOOP_WRAP
+        layers = [e for e in LOOP if starts[e[0]] - 1e-6 <= tt < starts[e[0]] + e[2] - 1e-6]
+        a = seg_frame(layers[0], tt - starts[layers[0][0]]) if layers else None
+        if len(layers) > 1:
+            b = layers[1]
+            k = (tt - starts[b[0]]) / b[3]
+            k = k * k * (3 - 2 * k)
+            a = a * (1 - k) + seg_frame(b, tt - starts[b[0]]) * k
+        wrap = (f / FPS) - (total - LOOP_WRAP)
+        if wrap > 0:
+            k = wrap / LOOP_WRAP
+            k = k * k * (3 - 2 * k)
+            a = a * (1 - k) + seg_frame(first, wrap) * k
+        enc.stdin.write(np.clip(a, 0, 255).astype(np.uint8).tobytes())
+    enc.stdin.close()
+    enc.wait()
+    for h, crf in ((1080, 25), (720, 27)):
+        subprocess.run([FFMPEG, '-y', '-loglevel', 'error', '-i', raw, '-vf', f'scale=-2:{h}:flags=lanczos', '-c:v', 'libx264',
+                        '-profile:v', 'high', '-crf', str(crf), '-preset', 'slow', '-pix_fmt', 'yuv420p', '-an',
+                        '-movflags', '+faststart', os.path.join(out, f'hero-loop-{h}.mp4')], check=True)
+        subprocess.run([FFMPEG, '-y', '-loglevel', 'error', '-i', raw, '-vf', f'scale=-2:{h}:flags=lanczos', '-c:v', 'libvpx-vp9',
+                        '-crf', str(crf + 10), '-b:v', '0', '-row-mt', '1', '-deadline', 'good', '-cpu-used', '3', '-an',
+                        os.path.join(out, f'hero-loop-{h}.webm')], check=True)
+    subprocess.run([FFMPEG, '-y', '-loglevel', 'error', '-i', raw, '-frames:v', '1', '-vf', 'scale=-2:1080', '-q:v', '3',
+                    os.path.join(out, 'hero-loop-poster.jpg')], check=True)
+    os.remove(raw)
+    print(f'loop {total:.2f}s ->', out)
+
+
+def web_main():
+    """The full trailer for the site: 1080p and 720p H.264 with AAC, and a poster."""
+    out = os.path.join(OUT, 'cut')
+    master = os.path.join(out, 'chog-games-trailer.mp4')
+    for h, crf, ab in ((1080, 24, '160k'), (720, 26, '128k')):
+        subprocess.run([FFMPEG, '-y', '-loglevel', 'error', '-i', master, '-vf', f'scale=-2:{h}:flags=lanczos', '-c:v', 'libx264',
+                        '-profile:v', 'high', '-crf', str(crf), '-preset', 'slow', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', ab,
+                        '-movflags', '+faststart', os.path.join(out, f'trailer-{h}.mp4')], check=True)
+        subprocess.run([FFMPEG, '-y', '-loglevel', 'error', '-i', master, '-vf', f'scale=-2:{h}:flags=lanczos', '-c:v', 'libvpx-vp9',
+                        '-crf', str(crf + 10), '-b:v', '0', '-row-mt', '1', '-deadline', 'good', '-cpu-used', '3',
+                        '-c:a', 'libopus', '-b:a', ab, os.path.join(out, f'trailer-{h}.webm')], check=True)
+    subprocess.run([FFMPEG, '-y', '-loglevel', 'error', '-ss', '11.5', '-i', master, '-frames:v', '1', '-vf', 'scale=-2:1080', '-q:v', '3',
+                    os.path.join(out, 'trailer-poster.jpg')], check=True)
+    print('web versions in', out)
+
+
 # ---- encode -------------------------------------------------------------------------------
 
 def main():
@@ -400,4 +477,9 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    if '--loop' in sys.argv:
+        loop_main()
+    elif '--web' in sys.argv:
+        web_main()
+    else:
+        main()

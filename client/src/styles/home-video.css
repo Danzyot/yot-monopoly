@@ -1,0 +1,31 @@
+/* The trailer on the home page (components/HomeVideo.tsx). */
+
+/* The loop sits over the board still inside .home-bg, under its dimming gradient (.home-bg::after),
+   and fades in once it is actually playing. */
+.home-loop {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  opacity: 0; transition: opacity 0.9s ease;
+}
+.home-loop.on { opacity: 1; }
+/* Moving pictures can show a little more than the still did, still under the hero's text. */
+.home-bg:has(.home-loop.on) { opacity: 0.72; }
+
+.trailer { position: relative; z-index: 1; max-width: 1000px; margin: 0 auto 26px; padding: 0 16px; }
+.trailer-frame {
+  position: relative; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 20px;
+  border: 4px solid #000; box-shadow: 0 6px 0 #000, 0 16px 30px rgba(0, 0, 0, 0.35); background: #120a22;
+}
+.trailer-frame video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.trailer-controls { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 8px; }
+.trailer-btn {
+  cursor: pointer; padding: 7px 14px 8px; border: 3px solid #000; border-radius: 99px; box-shadow: 0 3px 0 #000;
+  font: 400 15px/1 'Titan One', var(--display); color: #fff; background: rgba(42, 19, 107, 0.86);
+  -webkit-text-stroke: 1px #000; paint-order: stroke fill;
+}
+.trailer-btn:hover { background: rgba(93, 63, 189, 0.95); }
+.trailer-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #000; }
+@media (max-width: 640px) {
+  .trailer { margin-bottom: 18px; }
+  .trailer-frame { border-radius: 14px; border-width: 3px; }
+  .trailer-btn { font-size: 13px; padding: 6px 11px 7px; }
+}
