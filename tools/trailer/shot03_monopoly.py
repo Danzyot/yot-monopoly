@@ -1,6 +1,6 @@
 """Shot 3, Monopoly in the lounge, four beats on the Classic board in the Chog look:
 
-  0.0-2.6  the dice: a Chog on START shakes the dice over its head and throws;
+  0.0-2.6  the dice: a Chog on START shakes a die in each hand and throws;
            they tumble across the board past a low camera and land 4 and 2.
   2.6-5.0  the hop: it hops six spaces along the bottom row, the camera gliding
            alongside at knee height, and lands on Spade Street with a fist pump.
@@ -8,6 +8,8 @@
            squash together and a hotel pops up; the owner rubs its hands.
   7.6-10.0 busted: the police car skids in on the corner, two cops grab a Chog
            and lift it off its feet, legs kicking.
+  10.0-13.0 jail: the cops carry it to the cell on the jail corner, toss it in, the
+           barred door slams, and it ends up gripping the bars.
 
     tools/blender/run.sh ../trailer/shot03_monopoly.py [--draft] [--stills 1,3.5] [--every 6]
 """
@@ -24,7 +26,7 @@ import lounge
 from lounge import tile, FIG, BUILD
 
 SHOT = 'shot03'
-DUR = 10.0
+DUR = 13.0
 
 sc = film.setup_render(film.blib.reset())
 world = bpy.data.worlds.new('W')
@@ -46,6 +48,55 @@ houses = [lounge.building('house') for _ in range(4)]
 hotel = lounge.building('hotel')
 kit = lounge.cop_kit()
 cam = film.camera(lens=32)
+
+# The cell on the jail corner: a base, corner posts, bars on three sides, a top frame,
+# and a barred door on the +x side hinged at its back corner (an empty to swing).
+JC = (tile(10)[0] + 0.05, tile(10)[1] - 0.05)
+JA, JH = 0.58, 0.95
+metal = film.principled('JailMetal', '#b9b3d6', rough=0.3, metal=0.9)
+base = film.principled('JailBase', '#241d38', rough=0.6)
+
+
+def jail_part(kind, pos, size, parent=None):
+    if kind == 'bar':
+        bpy.ops.mesh.primitive_cylinder_add(vertices=12, radius=size[0], depth=size[1])
+    else:
+        bpy.ops.mesh.primitive_cube_add(size=1)
+        bpy.context.active_object.scale = size
+    ob = bpy.context.active_object
+    ob.data.materials.append(metal if kind != 'base' else base)
+    ob.location = V(*pos)
+    if parent:
+        ob.parent = parent
+        ob.matrix_parent_inverse = parent.matrix_world.inverted()
+    return ob
+
+
+cell = []
+cell.append(jail_part('base', (JC[0], 0.015, JC[1]), (2 * JA + 0.08, 2 * JA + 0.08, 0.03)))
+for cx in (-1, 1):
+    for cz in (-1, 1):
+        cell.append(jail_part('bar', (JC[0] + cx * JA, JH / 2, JC[1] + cz * JA), (0.035, JH)))
+for k in range(1, 7):
+    f = -1 + 2 * k / 7
+    cell.append(jail_part('bar', (JC[0] - JA, JH / 2, JC[1] + f * JA), (0.02, JH)))   # back (-x)
+    cell.append(jail_part('bar', (JC[0] + f * JA, JH / 2, JC[1] - JA), (0.02, JH)))   # far side (-z)
+    cell.append(jail_part('bar', (JC[0] + f * JA, JH / 2, JC[1] + JA), (0.02, JH)))   # front (+z)
+cell.append(jail_part('box', (JC[0], JH, JC[1] - JA), (2 * JA + 0.07, 0.07, 0.07)))
+cell.append(jail_part('box', (JC[0], JH, JC[1] + JA), (2 * JA + 0.07, 0.07, 0.07)))
+cell.append(jail_part('box', (JC[0] - JA, JH, JC[1]), (0.07, 2 * JA + 0.07, 0.07)))
+for k in range(1, 4):
+    cell.append(jail_part('box', (JC[0] - JA + 2 * JA * k / 4, JH, JC[1]), (0.03, 2 * JA, 0.03)))
+hinge = bpy.data.objects.new('JailDoor', None)
+film.blib.link(hinge)
+hinge.location = V(JC[0] + JA, 0, JC[1] - JA)
+for k in range(1, 7):
+    jail_part('bar', (JC[0] + JA, JH / 2, JC[1] - JA + 2 * JA * k / 7), (0.02, JH), hinge)
+for y in (0.08, JH):
+    jail_part('box', (JC[0] + JA, y, JC[1]), (0.06, 2 * JA, 0.06), hinge)
+jail_part('box', (JC[0] + JA + 0.04, JH * 0.5, JC[1] + JA * 0.8), (0.05, 0.1, 0.12), hinge)   # the lock
+jail_light = film.area_light('JailLight', V(JC[0] + 0.6, 2.4, JC[1] + 1.6), V(JC[0], 0.3, JC[1]), 0, 2.0, (1.0, 0.9, 0.8))
+jail_light.visible_glossy = False
 
 HIDE = (0, -20, 0)
 
@@ -77,6 +128,8 @@ HOTEL_AT = 7.35
 CAR_IN, CAR_STOP = 8.0, 8.75
 GRAB, LIFT = 9.2, 9.45
 BUSTED = tile(30)
+JAIL0 = 10.0
+TOSS, LANDS, SLAM = 11.15, 11.55, 11.62
 
 
 HOLD = (0.13, 0.1, 0.17)   # each hand under one die, in front of the chest (rig units)
@@ -233,6 +286,7 @@ def place_car(t):
 
 def frame(t):
     hide_all()
+    bpy.data.lights['JailLight'].energy = 0
     # The other players wait at the corners of the shot.
     if t < 7.95:
         extra.pose(film.rest(), (tile(13)[0], 0, tile(13)[1]), 90)
@@ -311,6 +365,9 @@ def frame(t):
         film.place_camera(cam, (cx + 0.9, 0.55, ts[1] + 1.7), (cx - 0.05, 0.22, ts[1] - 0.35), lens=40,
                           dof=(math.dist((cx + 0.9, 0.55, ts[1] + 1.7), (cx, 0.2, ts[1] - 0.45)), 2.4))
         return
+    if t >= JAIL0:
+        jail_beat(t)
+        return
     # Busted: the car skids in, the cops hop out, grab the Chog and lift it, legs kicking.
     bx, bz = BUSTED
     pos, yaw = place_car(t)
@@ -347,6 +404,70 @@ def frame(t):
 
 
 R_FOOT_Z = film.R.FOOT_REST[2]
+
+
+def jail_beat(t):
+    """Carried in from the right, tossed through the open door, the door slams; it ends at the front bars."""
+    cx, cz = JC
+    door = ease_in(seg(t, SLAM - 0.14, SLAM))
+    wobble = 7 * damped(t - SLAM, 1.0, 14.0) if t > SLAM else 0.0
+    hinge.rotation_euler = (0, 0, math.radians(-100 * (1 - door) + wobble))
+    q = film.rest()
+    yaw = -90
+    kick = math.sin(2 * math.pi * 6 * t)
+    if t < TOSS:
+        # Carried, legs kicking, then swung back for the throw.
+        walk = smooth(seg(t, JAIL0, 10.9))
+        back = math.sin(math.pi * seg(t, 10.9, TOSS))
+        at = (lerp(cx + 2.7, cx + 1.0, walk) + 0.12 * back, 0.3 + 0.06 * back, cz + 0.05)
+        for i, side in enumerate((1, -1)):
+            q['hands'][i] = [side * 0.15, 0.2, 0.0, 0, side * 0.9]
+            q['feet'][i][2] = R_FOOT_Z + 0.05 * kick * side
+            q['feet'][i][1] = 0.02 + 0.015 * kick * side
+        q['head'] = [-0.15, 0.3 * math.sin(2 * math.pi * 2 * t), 0]
+    elif t < LANDS:
+        u = seg(t, TOSS, LANDS)
+        a = Vector((cx + 1.0, 0.36, cz + 0.05))
+        b = Vector((cx - 0.08, 0.0, cz + 0.02))
+        p = a.lerp(b, u)
+        p.y += 0.42 * math.sin(math.pi * u)
+        at = tuple(p)
+        q['rot'][0] = -2 * math.pi * smooth(u)
+        for i, side in enumerate((1, -1)):
+            q['hands'][i] = [side * 0.17, 0.3, 0.02, 0, side * 0.9]
+    else:
+        # Landed: a squash, a dazed moment, then up to the front bars to grip them.
+        land = math.sin(math.pi * seg(t, LANDS, LANDS + 0.2))
+        q['squash'] = 1 - 0.18 * land
+        go = smooth(seg(t, 12.15, 12.6))
+        turn = smooth(seg(t, 11.95, 12.25))
+        yaw = lerp(-90, 0, turn)
+        at = (lerp(cx - 0.08, cx + 0.05, go), 0.03 * abs(math.sin(math.pi * 4 * seg(t, 12.15, 12.6))), lerp(cz + 0.02, cz + JA - 0.17, go))
+        daze = math.sin(2 * math.pi * 3 * t) * (1 - smooth(seg(t, 11.7, 12.1)))
+        q['head'] = [0.1, 0.25 * daze, 0.1 * daze]
+        grip = smooth(seg(t, 12.55, 12.75))
+        for i, side in enumerate((1, -1)):
+            q['hands'][i] = [side * lerp(0.115, 0.09, grip), lerp(0.115, 0.28, grip), lerp(0.015, 0.12, grip), 0, side * 0.3 * grip]
+        if t > 12.6:
+            q['head'] = [0.18 * grip, 0.08 * math.sin(2 * math.pi * 0.8 * t), 0]
+            q['lids'] = 0.45 * grip
+    rival.pose(q, at, yaw)
+    # The cops: carry it in on either side, throw, then dust off their hands and stroll away.
+    after = smooth(seg(t, 12.1, 13.0))
+    for k, c in enumerate(kit['cops']):
+        side = 1 if k == 0 else -1
+        if t < TOSS:
+            p = (at[0] + 0.32, 0.0, at[2] + 0.2 * side)
+            cop_pose(c, p, -90, t, carry=1.0, walk=1.0 if t < 10.9 else 0.0)
+        else:
+            p = (cx + 1.3 + 0.9 * after, 0.0, cz + 0.05 + 0.2 * side)
+            cop_pose(c, p, lerp(-90, 90, smooth(seg(t, 11.9, 12.2))), t, carry=0.0, walk=1.0 if t > 12.2 else 0.0)
+    shake = 0.025 * damped(t - SLAM, 6.0, 10.0) if t > SLAM else 0.0
+    bpy.data.lights['JailLight'].energy = 260
+    drift = smooth(seg(t, JAIL0, 13.0))
+    pos = (cx + lerp(1.0, 0.7, drift), 0.62 + shake, cz + lerp(3.1, 2.8, drift))
+    film.place_camera(cam, pos, (cx + lerp(0.75, 0.35, drift), 0.33, cz), lens=30,
+                      dof=(math.dist(pos, (cx + 0.3, 0.3, cz + 0.3)), 2.6))
 
 
 def hop_x(t):

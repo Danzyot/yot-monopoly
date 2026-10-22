@@ -40,7 +40,7 @@ EDL = [
     ('title', ('page', 'title2d.html'), 2.6, 0.5, {}),
     ('tour', ('frames', 'shot02', None), 7.5, 0.35, {'smear': [(2.32, 2.78), (4.82, 5.28)]}),
     ('site', ('page', 'screens.html#home'), 3.5, 0.0, {}),
-    ('monopoly', ('frames', 'shot03', None), 10.0, 0.0, {}),
+    ('monopoly', ('frames', 'shot03', None), 13.0, 0.0, {}),
     ('monopoly-web', ('page', 'screens.html#monopoly-game'), 3.0, 0.0, {}),
     ('cards', ('frames', 'shot05', None), 7.0, 0.0, {}),
     ('cards-web', ('page', 'screens.html#cards-table'), 3.0, 0.0, {}),
@@ -56,7 +56,7 @@ EDL = [
 CAPTIONS = {
     'tour': [(0.5, 2.25, 'MONOPOLY', 'game'), (2.9, 4.75, 'CARDS', 'game'), (5.4, 7.3, 'POKER', 'game')],
     'site': [(0.15, 3.35, 'Play free in your browser.', 'top')],
-    'monopoly': [(0.3, 2.5, 'Roll the dice', 'lower'), (5.5, 7.9, 'Build up to a hotel', 'lower'), (8.1, 9.9, 'Mind the cops', 'lower')],
+    'monopoly': [(0.3, 2.5, 'Roll the dice', 'lower'), (5.5, 7.9, 'Build up to a hotel', 'lower'), (8.1, 9.9, 'Mind the cops', 'lower'), (10.4, 12.8, 'Straight to jail', 'lower')],
     'cards': [(1.7, 3.8, 'Stack the Draw Fours', 'lower'), (5.0, 6.9, 'Last card. On fire.', 'lower')],
     'poker': [(0.2, 1.9, 'Chog Poker', 'lower'), (2.4, 3.95, 'Read the table. Take the pot.', 'lower')],
     'monopoly-web': [(0.15, 2.9, 'Friends or bots, any time.', 'top')],
