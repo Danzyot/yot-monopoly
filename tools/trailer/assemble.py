@@ -117,7 +117,7 @@ def effects():
         for n in (1, 2):
             ev.append((f, n / 2.2 * (1 + 0.15 * k), f'dice-hit-{1 + (k + n) % 3}', -6 - 4 * n))
     ev += [(f, 1.5, 'whoosh-1', -8), (f, 2.12, 'land', -4), (f, 2.0, 'cheer', -9)]
-    ev += [('end', 0.04 * i, 'ui-tick', -12) for i in range(9)]
+    ev += [('end', 0.04 * i, 'ui-tick', -20) for i in range(9)]
     ev += [('end', 1.1, 'pop-2', -5), ('end', 1.15, 'ding', -9)]
     return ev
 
