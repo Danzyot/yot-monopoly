@@ -18,7 +18,7 @@ interface NavItem {
   to: string;
   icon: string;
   label: string;
-  /** Spoken and hovered name, when longer than the label ("Daily puzzles"). */
+  /** Spoken and hovered name, when longer than the label. */
   title?: string;
   className?: string;
   /** A number on the icon (friend requests waiting). */
@@ -32,7 +32,7 @@ function navItems(opts: { leaderboard: boolean; admin: boolean; signedIn: boolea
     { to: GAMES.cards.path, icon: '🃏', label: GAMES.cards.name, className: 'nav-game nav-cards' },
     // Poker's home here (/poker) lists its tournaments; the games themselves are on poker's own site.
     { to: '/poker', icon: '♠️', label: GAMES.poker.name, className: 'nav-game nav-poker' },
-    { to: '/daily', icon: '📅', label: 'Daily', title: 'Daily puzzles' },
+    { to: '/daily', icon: '📅', label: 'Daily challenges' },
     { to: '/tournaments', icon: '🏟️', label: 'Tournaments' },
     { to: '/characters', icon: '🎭', label: 'Characters' },
     ...(opts.leaderboard ? [{ to: '/leaderboard', icon: '🏆', label: 'Leaderboard' }] : []),

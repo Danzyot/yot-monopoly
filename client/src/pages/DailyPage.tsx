@@ -1,4 +1,4 @@
-// /daily: today's three dailies on one page (Monopoly, Cards, Poker): each
+// /daily: today's three daily challenges on one page (Monopoly, Cards, Poker): each
 // one's status for you, Play, your streak and the day's top three, plus the
 // days in a row you played every daily there is. Each game's own endpoint
 // (GET /api/<game>/daily) answers in the same shape; one that is not there yet
@@ -168,12 +168,12 @@ export default function DailyPage() {
   return (
     <div className="page daily-page">
       <header className="dl-head">
-        <p className="dl-kicker">Daily #{dailyNumber(dailyDate())}</p>
-        <h1>Today’s dailies</h1>
+        <p className="dl-kicker">Daily challenge #{dailyNumber(dailyDate())}</p>
+        <h1>Today’s daily challenges</h1>
         <p className="dl-lede">One puzzle for each game. The same for everyone today, and you get one try at each.</p>
         <p className="muted small">New ones in {untilNext(nextDailyAt())}.</p>
         {combo !== null && combo > 0 && (
-          <p className="dl-combo" title="Days in a row you played every daily">🔥 {combo} day{combo === 1 ? '' : 's'} in a row with every daily</p>
+          <p className="dl-combo" title="Days in a row you played every daily challenge">🔥 {combo} day{combo === 1 ? '' : 's'} in a row with every daily challenge</p>
         )}
         {note && <p className="dl-note small">{note}</p>}
       </header>

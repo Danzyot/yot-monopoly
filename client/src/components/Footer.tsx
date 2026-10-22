@@ -43,7 +43,7 @@ export default function Footer() {
                   ? <Link to={POKER_PATH}>{GAMES.poker.name}</Link>
                   : <a href={POKER_URL} onClick={e => openPoker(e, !!profile)}>{GAMES.poker.name}</a>}
               </li>
-              <li><Link to="/daily">Daily</Link></li>
+              <li><Link to="/daily">Daily challenges</Link></li>
               <li><Link to="/tournaments">Tournaments</Link></li>
               <li><button type="button" className="ft-link" onClick={() => setHowTo(true)}>How to play</button></li>
               {profile && <li><button type="button" className="ft-link" onClick={() => window.dispatchEvent(new Event(WELCOME_EVENT))}>Replay the welcome tour</button></li>}

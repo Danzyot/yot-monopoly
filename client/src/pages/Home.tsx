@@ -219,9 +219,9 @@ export default function Home() {
             </div>
           </li>
         </ul>
-        {/* Today's dailies, all three games on one page (/daily). The number is worked out here, nothing is fetched. */}
+        {/* Today's daily challenges, all three games on one page (/daily). The number is worked out here, nothing is fetched. */}
         <Link className="hub-dailies" to="/daily">
-          <span aria-hidden>📅</span> <b>Daily #{dailyNumber(dailyDate())}</b> <span className="hub-dailies-text">A puzzle for each game, one try each</span> <span aria-hidden>→</span>
+          <span aria-hidden>📅</span> <b>Daily challenge #{dailyNumber(dailyDate())}</b> <span className="hub-dailies-text">A puzzle for each game, one try each</span> <span aria-hidden>→</span>
         </Link>
       </section>
 

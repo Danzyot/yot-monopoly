@@ -266,7 +266,7 @@ export default function Profile() {
               <>
                 <Link className="btn primary chunky" to={GAMES.monopoly.path}>Play {GAMES.monopoly.name}</Link>
                 <Link className="btn primary chunky" to={GAMES.cards.path}>Play {GAMES.cards.name}</Link>
-                <Link className="btn chunky" to="/daily">Daily puzzles</Link>
+                <Link className="btn chunky" to="/daily">Daily challenges</Link>
               </>
             ) : (
               <>
