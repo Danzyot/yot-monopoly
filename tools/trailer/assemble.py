@@ -28,6 +28,7 @@ FR = os.path.join(OUT, 'frames')
 CARD = os.path.join(OUT, '..', 'card')          # page working folder (fonts, layout, assets)
 FFMPEG = os.environ.get('FFMPEG', 'ffmpeg')
 MUSIC = os.environ.get('TRAILER_MUSIC', '')
+MUSIC_START, MUSIC_SPLICE, MUSIC_CUT = 5.13, 58.0, 88.89   # trailer time it starts; where in it to cut, and how much
 FPS = 24
 HALF = '--half' in sys.argv
 W, H = (960, 540) if HALF else (1920, 1080)
@@ -318,19 +319,25 @@ def read_wav(path):
 def mix(starts, total):
     n = int((total + 0.5) * sfx.SR)
     out = np.zeros((n, 2), np.float32)
-    title = starts['title']
     if MUSIC and os.path.exists(MUSIC):
         m = read_wav(MUSIC)
-        o = int(title * sfx.SR)
-        m = m[:n - o].copy()
-        fade_in = min(len(m), int(0.08 * sfx.SR))
-        m[:fade_in] *= np.linspace(0, 1, fade_in)[:, None]
-        end = int((total - 2.2 - title) * sfx.SR)
-        if end < len(m):
-            k = np.ones(len(m))
-            k[end:] = np.clip(1 - (np.arange(len(m) - end)) / (1.8 * sfx.SR), 0, 1)
-            m *= k[:, None]
-        out[o:o + len(m)] += 0.62 * m
+        sr = sfx.SR
+        # Spy Jazz (SergeQuadrado, Pixabay): it comes in as the Chog sneaks up behind the title, 30 bars
+        # (88.89 s, two beat-matched spots) are cut from its middle, and its closing button lands on the
+        # end card's "Play free" pop. Quieter under the opener's foley, full from the title on.
+        cut_from, cut_len = int(MUSIC_SPLICE * sr), int(MUSIC_CUT * sr)
+        xf = int(0.08 * sr)
+        ramp = np.linspace(0, 1, xf)[:, None]
+        head = m[:cut_from + xf].copy()
+        tail = m[cut_from + cut_len:].copy()
+        head[-xf:] = head[-xf:] * (1 - ramp) + tail[:xf] * ramp
+        m = np.concatenate([head, tail[xf:]])
+        o = int(MUSIC_START * sr)
+        m = m[:n - o]
+        t = (np.arange(len(m)) / sr + MUSIC_START)[:, None]
+        duck = np.where(t < starts['title'], 0.45, 1.0)
+        fade_in = np.clip((t - MUSIC_START) / 0.6, 0, 1)
+        out[o:o + len(m)] += 0.9 * m * duck * fade_in
     cache = {}
     for seg, t, name, gain in effects():
         if name not in cache:
@@ -438,7 +445,7 @@ def main():
     suffix = '-half' if HALF else ''
     master = os.path.join(OUT, 'cut', f'chog-games-trailer{suffix}.mp4')
     enc = subprocess.Popen([FFMPEG, '-y', '-loglevel', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{W}x{H}', '-r', str(FPS),
-                            '-i', '-', '-i', audio, '-vf', 'noise=alls=3:allf=t', '-c:v', 'libx264', '-preset', 'medium',
+                            '-i', '-', '-i', audio, '-vf', 'noise=alls=3:allf=t', '-af', 'loudnorm=I=-14:TP=-1.5:LRA=11', '-c:v', 'libx264', '-preset', 'medium',
                             '-crf', '23' if HALF else '16', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '256k', '-shortest',
                             '-movflags', '+faststart', master], stdin=subprocess.PIPE)
     nf = int(round(total * FPS))
