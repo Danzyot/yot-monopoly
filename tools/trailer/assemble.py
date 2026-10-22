@@ -72,52 +72,52 @@ STEPS = [1.119, 1.25, 1.351, 1.445, 1.54, 1.634, 1.728, 1.822, 1.924, 2.018, 2.1
          5.708, 5.795, 5.885, 5.975, 6.065, 6.155]
 
 
+SFX_DIR = os.environ.get('TRAILER_SFX', os.path.join(OUT, '..', 'audio', 'sfx'))   # real recordings (credits.md there)
+
+
 def effects():
-    """(segment, local time, effect name, kwargs, gain)."""
-    ev = [('the-o', 0.0, 'room', {}, 1.0)]
+    """(segment, local time, sound file in SFX_DIR, gain in dB)."""
+    ev = [('the-o', 0.0, 'room-tone', -26)]
     for i, t in enumerate(STEPS):
-        ev.append(('the-o', t, 'squeak', {'pitch': 1.0 + 0.12 * (i % 2)}, 0.22))
+        ev.append(('the-o', t, f'squeak-{1 + i % 4}', -17 + 2 * (i % 3 == 0)))
     for i, (up, down) in enumerate(zip([6.95, 7.5, 7.98, 8.46], [7.38, 7.86, 8.33, 8.84])):
-        ev.append(('the-o', up - 0.02, 'boing', {'pitch': 1.0 + 0.08 * i}, 0.45))
-        ev.append(('the-o', down, 'flatten', {}, 0.55 + 0.1 * i))
-    ev += [('the-o', 9.6, 'thump', {'pitch': 1.4}, 0.3), ('title', 0.0, 'hit', {}, 0.8), ('title', 0.05, 'chime', {}, 0.35)]
-    ev += [('tour', 2.18, 'whoosh', {'dur': 0.6}, 0.6), ('tour', 4.68, 'whoosh', {'dur': 0.6}, 0.6),
-           ('tour', 3.45, 'flick', {}, 0.4), ('tour', 3.9, 'slap', {}, 0.5)]
-    ev += [('site', 0.0, 'whoosh', {'dur': 0.4, 'f_from': 1200, 'f_to': 3000}, 0.35)]
+        ev.append(('the-o', up - 0.02, 'hop', -8))
+        ev.append(('the-o', down, 'flatten', -6 + 1.5 * i))
+    ev += [('the-o', 9.6, 'sit', -10), ('title', 0.0, 'impact', -2)]
+    ev += [('tour', 2.12, 'whoosh-1', -4), ('tour', 4.62, 'whoosh-3', -4),
+           ('tour', 3.45, 'card-flick', -10), ('tour', 3.9, 'card-slap-1', -8)]
+    for seg in ('site', 'monopoly-web', 'cards-web', 'poker-web', 'dailies'):
+        ev.append((seg, 0.0, 'whoosh-2', -9))
     m = 'monopoly'
-    ev += [(m, 0.2 + 0.12 * k, 'clack', {'seed': k}, 0.15) for k in range(6)]
-    ev += [(m, 0.95, 'whoosh', {'dur': 0.4}, 0.4), (m, 1.38, 'clack', {'seed': 11}, 0.8), (m, 1.42, 'clack', {'seed': 12}, 0.6),
-           (m, 1.7, 'clack', {'seed': 13}, 0.6), (m, 1.74, 'clack', {'seed': 14}, 0.5), (m, 2.0, 'clack', {'seed': 15}, 0.3)]
+    ev += [(m, 0.15, 'dice-shake', -6), (m, 0.95, 'whoosh-2', -10),
+           (m, 1.38, 'dice-hit-1', -3), (m, 1.41, 'dice-hit-2', -5), (m, 1.7, 'dice-hit-3', -6),
+           (m, 1.73, 'dice-hit-1', -8), (m, 1.98, 'dice-hit-2', -12)]
     for k in range(6):
-        ev.append((m, 2.75 + 0.34 * k, 'boing', {'pitch': 1.3 + 0.06 * k, 'dur': 0.3}, 0.25))
-        ev.append((m, 2.75 + 0.34 * (k + 1), 'thump', {'pitch': 1.3}, 0.35))
-    ev.append((m, 4.95, 'chime', {'notes': (0, 7), 'base': 660.0}, 0.3))
+        ev.append((m, 2.75 + 0.34 * k + 0.03, 'hop', -14))
+        ev.append((m, 2.75 + 0.34 * (k + 1), 'land', -9))
+    ev.append((m, 4.95, 'ding', -14))
     for k, t in enumerate([5.6, 6.05, 6.5, 6.95]):
-        ev.append((m, t, 'pop', {'pitch': 1.0 + 0.13 * k}, 0.7))
-    ev += [(m, 7.3, 'whoosh', {'dur': 0.3, 'f_from': 800, 'f_to': 3000}, 0.3), (m, 7.35, 'chime', {}, 0.55), (m, 7.37, 'thump', {}, 0.5),
-           (m, 8.0, 'siren', {'dur': 2.0}, 0.22), (m, 8.3, 'skid', {'dur': 0.55}, 0.5), (m, 9.2, 'thump', {'pitch': 1.6}, 0.4),
-           (m, 9.42, 'whoosh', {'dur': 0.35}, 0.3)]
+        ev.append((m, t, f'pop-{1 + k % 2}', -4))
+    ev += [(m, 7.35, 'pop-1', -3), (m, 7.38, 'ding', -6),
+           (m, 8.0, 'siren', -10), (m, 8.3, 'skid', -6), (m, 9.2, 'grab', -6), (m, 9.45, 'whoosh-2', -12),
+           (m, 10.0, 'siren', -18), (m, 11.15, 'whoosh-2', -8), (m, 11.55, 'land', -4), (m, 11.62, 'jail-door', -3)]
+    ev += [(m, 12.2 + 0.1 * k, f'squeak-{1 + k % 4}', -16) for k in range(4)]
     c = 'cards'
-    for t in (2.0, 3.2, 4.15):
-        ev += [(c, t - 0.35, 'flick', {}, 0.35), (c, t, 'slap', {}, 0.9), (c, t, 'thump', {'pitch': 0.8}, 0.35)]
-    ev += [(c, 4.25 + 0.07 * k, 'flick', {}, 0.25) for k in range(10)]
-    ev += [(c, 5.0, 'flame', {'dur': 2.0}, 0.45), (c, 5.0, 'whoosh', {'dur': 0.4, 'f_from': 300, 'f_to': 1200}, 0.4)]
+    for k, t in enumerate((2.0, 3.2, 4.15)):
+        ev += [(c, t - 0.35, 'card-flick', -9), (c, t, f'card-slap-{1 + k % 3}', -2)]
+    ev += [(c, 4.25, 'card-shuffle', -5), (c, 5.3, 'fire', -5)]
     p = 'poker'
-    ev += [(p, 1.3, 'chips', {'n_clicks': 8, 'dur': 0.5}, 0.6), (p, 2.05, 'flick', {}, 0.4), (p, 2.5, 'slap', {}, 0.6),
-           (p, 2.85, 'chime', {}, 0.4), (p, 3.2, 'chips', {'n_clicks': 16, 'dur': 0.7, 'seed': 3}, 0.7)]
-    ev += [('monopoly-web', 0.0, 'whoosh', {'dur': 0.4, 'f_from': 1200, 'f_to': 3000}, 0.3),
-           ('cards-web', 0.0, 'whoosh', {'dur': 0.4, 'f_from': 1200, 'f_to': 3000}, 0.3)]
-    ev += [('poker-web', 0.0, 'whoosh', {'dur': 0.4, 'f_from': 1200, 'f_to': 3000}, 0.3)]
-    ev += [('nft', 0.2 + 0.25 * k, 'pop', {'pitch': 1.2 + 0.1 * k}, 0.5) for k in range(4)]
-    ev += [('nft', 1.55, 'whoosh', {'dur': 0.5}, 0.4), ('nft', 2.05, 'chime', {'notes': (0, 4, 7, 12, 16)}, 0.45)]
-    ev += [('dailies', 0.0, 'whoosh', {'dur': 0.4, 'f_from': 1200, 'f_to': 3000}, 0.3)]
+    ev += [(p, 1.3, 'chips-1', -5), (p, 2.05, 'card-flick', -9), (p, 2.5, 'card-slap-2', -6),
+           (p, 2.85, 'ding', -10), (p, 3.2, 'chips-2', -4)]
+    ev += [('nft', 0.2 + 0.25 * k, f'pop-{1 + k % 2}', -6) for k in range(3)]
+    ev += [('nft', 1.5, 'whoosh-1', -8), ('nft', 2.05, 'ding', -8)]
     f = 'finale'
     for k in range(2):
         for n in (1, 2):
-            ev.append((f, n / 2.2 * (1 + 0.15 * k), 'clack', {'seed': 20 + 2 * k + n}, 0.4 / n))
-    ev += [(f, 1.5, 'whoosh', {'dur': 0.45, 'f_from': 400, 'f_to': 2000}, 0.4), (f, 2.12, 'thump', {}, 0.6), (f, 2.05, 'chime', {'notes': (0, 4, 7, 12, 16)}, 0.4)]
-    ev += [('end', 0.04 * i, 'tick', {}, 0.6) for i in range(9)]
-    ev += [('end', 1.1, 'pop', {'pitch': 0.9}, 0.6), ('end', 1.15, 'chime', {'notes': (0, 7, 12), 'base': 523.0}, 0.35)]
+            ev.append((f, n / 2.2 * (1 + 0.15 * k), f'dice-hit-{1 + (k + n) % 3}', -6 - 4 * n))
+    ev += [(f, 1.5, 'whoosh-1', -8), (f, 2.12, 'land', -4), (f, 2.0, 'cheer', -9)]
+    ev += [('end', 0.04 * i, 'ui-tick', -12) for i in range(9)]
+    ev += [('end', 1.1, 'pop-2', -5), ('end', 1.15, 'ding', -9)]
     return ev
 
 
@@ -330,13 +330,16 @@ def mix(starts, total):
             k[end:] = np.clip(1 - (np.arange(len(m) - end)) / (1.8 * sfx.SR), 0, 1)
             m *= k[:, None]
         out[o:o + len(m)] += 0.62 * m
-    for seg, t, name, kw, gain in effects():
-        x = getattr(sfx, name)(**kw) * gain
+    cache = {}
+    for seg, t, name, gain in effects():
+        if name not in cache:
+            cache[name] = read_wav(os.path.join(SFX_DIR, name + '.wav'))
+        x = cache[name] * 10 ** (gain / 20)
         o = int((starts[seg] + t) * sfx.SR)
         if o < 0 or o >= n:
             continue
         x = x[:n - o]
-        out[o:o + len(x)] += x[:, None]
+        out[o:o + len(x)] += x
     out = np.tanh(out * 1.1) / np.tanh(1.1)
     path = os.path.join(OUT, 'cut', 'mix.wav')
     sfx.write(path, out)
