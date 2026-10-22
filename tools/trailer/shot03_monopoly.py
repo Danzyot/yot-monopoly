@@ -39,8 +39,9 @@ hero = film.Chog(scale=FIG)
 rival = lounge.clone_chog(hero, shoe='#3b8cff')
 owner = lounge.clone_chog(hero, shoe='#ffd23f')
 extra = lounge.clone_chog(hero, shoe='#35c97a')
-d1 = lounge.die('DieA', top=4)
-d2 = lounge.die('DieB', top=2)
+DIE = 0.19
+d1 = lounge.die('DieA', top=4, size=DIE)
+d2 = lounge.die('DieB', top=2, size=DIE)
 houses = [lounge.building('house') for _ in range(4)]
 hotel = lounge.building('hotel')
 kit = lounge.cop_kit()
@@ -78,13 +79,16 @@ GRAB, LIFT = 9.2, 9.45
 BUSTED = tile(30)
 
 
+HOLD = (0.13, 0.1, 0.17)   # each hand under one die, in front of the chest (rig units)
+
+
 def shake_pose(t):
-    """Dice held over the head, shaken."""
+    """A die in each hand in front of the chest, shaken up and down."""
     q = film.rest()
     w = math.sin(2 * math.pi * 7 * t)
     for i, side in enumerate((1, -1)):
-        q['hands'][i] = [side * 0.055 + 0.012 * w, 0.36 + 0.012 * w * side, 0.03, 0.0, side * 0.3]
-    q['head'] = [-0.25, 0, 0.05 * w]
+        q['hands'][i] = [side * HOLD[0], HOLD[1] + 0.02 * w, HOLD[2], 0.0, side * 0.3]
+    q['head'] = [0.15, 0, 0.05 * w]
     q['rot'][2] = 0.04 * w
     q['squash'] = 1.0 + 0.02 * w
     return q
@@ -94,9 +98,9 @@ def throw_pose(k):
     """Arms swing from overhead to forward and down as the dice leave (k 0-1)."""
     q = film.rest()
     for i, side in enumerate((1, -1)):
-        q['hands'][i] = [side * lerp(0.055, 0.09, k), lerp(0.36, 0.16, ease_out(k)), lerp(0.03, 0.16, ease_out(k)), lerp(0, -0.6, k), side * 0.3 * (1 - k)]
+        q['hands'][i] = [side * HOLD[0], lerp(HOLD[1], 0.16, ease_out(k)), lerp(HOLD[2], 0.22, ease_out(k)), lerp(0, -0.6, k), side * 0.3 * (1 - k)]
     q['rot'][0] = 0.2 * math.sin(math.pi * k)
-    q['head'] = [lerp(-0.25, 0.05, k), 0, 0]
+    q['head'] = [lerp(0.15, 0.05, k), 0, 0]
     return q
 
 
@@ -137,29 +141,34 @@ def hop_pose(u):
 
 def die_state(d, i, t):
     """Thrown from over the Chog's head, two bounces, a short slide, then still with its value up."""
-    start = Vector((S0[0] - 0.05 + 0.08 * i, 0.98, S0[1] - 0.05))
-    end = Vector((LAND[i][0], 0.25, LAND[i][1]))
+    # Start in the hand: the hand's spot in the rig, turned to the thrower's facing.
+    r = math.radians(THROW_YAW)
+    fx, fz = math.sin(r), math.cos(r)
+    side = 1 if i == 0 else -1
+    hx, hz = side * HOLD[0] * FIG, (HOLD[2] + 0.03) * FIG
+    start = Vector((S0[0] + fx * hz + fz * hx, (HOLD[1] + 0.02) * FIG + DIE / 2, S0[1] + fz * hz - fx * hx))
+    end = Vector((LAND[i][0], DIE / 2, LAND[i][1]))
     rnd = random.Random(i * 7 + 3)
     spin = Vector((rnd.uniform(9, 14), rnd.uniform(6, 11), rnd.uniform(5, 9)))
     if t < DICE_UP:
         w = math.sin(2 * math.pi * 7 * t)
-        p = start + Vector((0.03 * w * (1 if i else -1), 0.02 * w, 0))
+        p = start + Vector((0, 0.02 * FIG * w, 0))
         lounge.set_die(d, tuple(p), (0.4 * i + 0.3 * w, 0.2 * w, 0.5 * i))
         return
     u = seg(t, DICE_UP, DICE_REST)
     # Horizontal travel eases out; height: an arc to the first hit, two smaller bounces, then flat.
     k = ease_out(u) if u < 1 else 1.0
     pos = start.lerp(end, k)
-    y = 0.25
+    y = DIE / 2
     if t < DICE_HIT1:
         a = seg(t, DICE_UP, DICE_HIT1)
-        y = lerp(start.y, 0.25, a) + 0.55 * math.sin(math.pi * a)
+        y = lerp(start.y, DIE / 2, a) + 0.55 * math.sin(math.pi * a)
     elif t < DICE_HIT2:
         a = seg(t, DICE_HIT1, DICE_HIT2)
-        y = 0.25 + 0.28 * math.sin(math.pi * a)
+        y = DIE / 2 + 0.2 * math.sin(math.pi * a)
     elif t < DICE_HIT2 + 0.16:
         a = seg(t, DICE_HIT2, DICE_HIT2 + 0.16)
-        y = 0.25 + 0.07 * math.sin(math.pi * a)
+        y = DIE / 2 + 0.05 * math.sin(math.pi * a)
     pos.y = y
     left = (1 - clamp(u)) ** 2
     yaw = 0.35 if i == 0 else -0.25
@@ -241,14 +250,17 @@ def frame(t):
         # The camera faces the thrower from the board; the dice fly past it and it swings round to watch them land.
         k = smoother(seg(t, 1.05, 1.9))
         pos = lerpv((3.05, 0.5, 3.35), (2.75, 0.55, 3.75), k)
-        at = lerpv((S0[0], 0.62, S0[1]), (1.25, 0.22, 2.6), k)
+        # Once thrown, the camera keeps the dice in frame (their midpoint, a little above).
+        mid = (d1.location + d2.location) / 2
+        follow = smooth(seg(t, DICE_UP, DICE_UP + 0.25))
+        at = lerpv(lerpv((S0[0], 0.45, S0[1]), (mid.x, mid.z + 0.08, -mid.y), follow), (1.25, 0.18, 2.6), smooth(seg(t, 1.9, 2.4)))
         focus = math.dist(pos, at)
         film.place_camera(cam, pos, at, lens=lerp(34, 40, k), dof=(focus, 2.8))
         return
     if t < 5.4:
         # The hop along the bottom row, six spaces; the dice still lie on the board.
-        lounge.set_die(d1, (LAND[0][0], 0.25, LAND[0][1]), (0, 0, 0.35))
-        lounge.set_die(d2, (LAND[1][0], 0.25, LAND[1][1]), (0, 0, -0.25))
+        lounge.set_die(d1, (LAND[0][0], DIE / 2, LAND[0][1]), (0, 0, 0.35))
+        lounge.set_die(d2, (LAND[1][0], DIE / 2, LAND[1][1]), (0, 0, -0.25))
         n = clamp((t - HOP0) / HOP_DT, 0, HOPS)
         i = min(int(n), HOPS - 1)
         u = n - i if n < HOPS else 1.0
@@ -275,8 +287,8 @@ def frame(t):
     if t < 7.95:
         # The street fills: four houses, then a hotel; the owner stands on its space rubbing its hands.
         ts = tile(HOPS)
-        lounge.set_die(d1, (LAND[0][0], 0.25, LAND[0][1]), (0, 0, 0.35))
-        lounge.set_die(d2, (LAND[1][0], 0.25, LAND[1][1]), (0, 0, -0.25))
+        lounge.set_die(d1, (LAND[0][0], DIE / 2, LAND[0][1]), (0, 0, 0.35))
+        lounge.set_die(d2, (LAND[1][0], DIE / 2, LAND[1][1]), (0, 0, -0.25))
         q = rub_hands(t) if t > HOTEL_AT + 0.05 else film.rest()
         if t <= HOTEL_AT + 0.05:
             q['head'] = [0.1, 0.5, 0]
