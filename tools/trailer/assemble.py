@@ -78,7 +78,7 @@ SFX_DIR = os.environ.get('TRAILER_SFX', os.path.join(OUT, '..', 'audio', 'sfx'))
 
 def effects():
     """(segment, local time, sound file in SFX_DIR, gain in dB)."""
-    ev = [('the-o', 0.0, 'room-tone', -26)]
+    ev = []
     for i, t in enumerate(STEPS):
         ev.append(('the-o', t, f'step-{1 + i % 5}', -16 - 2 * (i % 2) - 4 * (i in (12, 18))))
     for i, (up, down) in enumerate(zip([6.95, 7.5, 7.98, 8.46], [7.38, 7.86, 8.33, 8.84])):
@@ -316,11 +316,23 @@ def read_wav(path):
     return x
 
 
+def soften(path):
+    """The track's rim click ticks on every beat above 2 kHz: split there and squash only the high band's
+    peaks (bass, piano and melody untouched). Cached next to the track as <name>-soft.wav."""
+    out = path.replace('.wav', '-soft.wav')
+    if not os.path.exists(out):
+        subprocess.run([FFMPEG, '-y', '-loglevel', 'error', '-i', path, '-filter_complex',
+                        '[0]asplit[a][b];[a]lowpass=f=2000,lowpass=f=2000[lo];[b]highpass=f=2000,highpass=f=2000,'
+                        'acompressor=threshold=0.03:ratio=6:attack=0.1:release=80:makeup=2.2[hi];[lo][hi]amix=inputs=2:normalize=0',
+                        '-ar', '48000', '-c:a', 'pcm_s16le', out], check=True)
+    return out
+
+
 def mix(starts, total):
     n = int((total + 0.5) * sfx.SR)
     out = np.zeros((n, 2), np.float32)
     if MUSIC and os.path.exists(MUSIC):
-        m = read_wav(MUSIC)
+        m = read_wav(soften(MUSIC))
         sr = sfx.SR
         # Spy Jazz (SergeQuadrado, Pixabay): it comes in as the Chog sneaks up behind the title, 30 bars
         # (88.89 s, two beat-matched spots) are cut from its middle, and its closing button lands on the
