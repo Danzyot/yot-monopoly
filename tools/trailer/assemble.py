@@ -445,7 +445,7 @@ def main():
     suffix = '-half' if HALF else ''
     master = os.path.join(OUT, 'cut', f'chog-games-trailer{suffix}.mp4')
     enc = subprocess.Popen([FFMPEG, '-y', '-loglevel', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{W}x{H}', '-r', str(FPS),
-                            '-i', '-', '-i', audio, '-vf', 'noise=alls=3:allf=t', '-af', 'loudnorm=I=-14:TP=-1.5:LRA=11', '-c:v', 'libx264', '-preset', 'medium',
+                            '-i', '-', '-i', audio, '-vf', 'noise=alls=3:allf=t', '-af', 'loudnorm=I=-14:TP=-1.5:LRA=11', '-ar', '48000', '-c:v', 'libx264', '-preset', 'medium',
                             '-crf', '23' if HALF else '16', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '256k', '-shortest',
                             '-movflags', '+faststart', master], stdin=subprocess.PIPE)
     nf = int(round(total * FPS))

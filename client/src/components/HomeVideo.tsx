@@ -8,9 +8,10 @@
 import { useEffect, useRef, useState } from 'react';
 
 // Off until the final renders are in client/public/video (then both parts show).
-export const TRAILER_READY = false;
+export const TRAILER_READY = true;
 
-// Each video comes as H.264 MP4 (Safari, most phones) and VP9 WebM (Chromium builds without H.264).
+// Each video comes as H.264 MP4 (Safari, most phones), at 1080p or 720p, and as a 720p VP9 WebM for
+// Chromium builds without H.264.
 const MP4 = 'video/mp4; codecs="avc1.640028"';
 const WEBM = 'video/webm; codecs="vp9"';
 
@@ -27,7 +28,7 @@ export function HeroLoop() {
     <video className={`home-loop${on ? ' on' : ''}`} autoPlay muted loop playsInline preload="auto"
       aria-hidden tabIndex={-1} onPlaying={() => setOn(true)}>
       <source src={`${base}.mp4`} type={MP4} />
-      <source src={`${base}.webm`} type={WEBM} />
+      <source src={`${base.replace('1080', '720')}.webm`} type={WEBM} />
     </video>
   );
 }
@@ -77,7 +78,7 @@ export function TrailerSection() {
         <video ref={video} poster="/video/trailer-poster.jpg" muted loop playsInline preload="none"
           aria-label="Chog Games trailer" onVolumeChange={e => setMuted(e.currentTarget.muted)}>
           <source src={`${base}.mp4`} type={MP4} />
-          <source src={`${base}.webm`} type={WEBM} />
+          <source src={`${base.replace('1080', '720')}.webm`} type={WEBM} />
         </video>
         <div className="trailer-controls">
           <button type="button" className="trailer-btn" onClick={toggleSound} aria-pressed={!muted}
