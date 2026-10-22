@@ -80,7 +80,7 @@ def effects():
     """(segment, local time, sound file in SFX_DIR, gain in dB)."""
     ev = []
     for i, t in enumerate(STEPS):
-        ev.append(('the-o', t, f'step-{1 + i % 5}', -24 - 2 * (i % 2) - 4 * (i in (12, 18))))
+        ev.append(('the-o', t, f'step-{1 + i % 5}', -12 - 2 * (i % 2) - 4 * (i in (12, 18))))
     for i, (up, down) in enumerate(zip([6.95, 7.5, 7.98, 8.46], [7.38, 7.86, 8.33, 8.84])):
         ev.append(('the-o', up - 0.02, 'hop', -8))
         ev.append(('the-o', down, 'flatten', -6 + 1.5 * i))
@@ -102,7 +102,7 @@ def effects():
     ev += [(m, 7.35, 'pop-1', -3), (m, 7.38, 'ding', -6),
            (m, 8.0, 'siren', -10), (m, 8.3, 'skid', -6), (m, 9.2, 'grab', -6), (m, 9.45, 'whoosh-2', -12),
            (m, 10.0, 'siren', -18), (m, 11.15, 'whoosh-2', -8), (m, 11.55, 'land', -4), (m, 11.62, 'jail-door', -3)]
-    ev += [(m, 12.2 + 0.1 * k, f'step-{1 + k % 5}', -26) for k in range(4)]
+    ev += [(m, 12.2 + 0.1 * k, f'step-{1 + k % 5}', -16) for k in range(4)]
     c = 'cards'
     for k, t in enumerate((2.0, 3.2, 4.15)):
         ev += [(c, t - 0.35, 'card-flick', -9), (c, t, f'card-slap-{1 + k % 3}', -2)]
@@ -325,13 +325,14 @@ def level_filter(wav, target=-18.0):
 
 
 def soften(path):
-    """The track's rim click ticks on every beat above 2 kHz: split there and squash only the high band's
-    peaks (bass, piano and melody untouched). Cached next to the track as <name>-soft.wav."""
+    """The track's rim click ticks on every beat, and above ~2.5 kHz the track is almost nothing but that
+    click (25 dB over the rest there): split at 2.2 kHz, squash the high band's peaks and cut it 20 dB.
+    Bass, piano and melody are untouched. Cached next to the track as <name>-soft.wav."""
     out = path.replace('.wav', '-soft.wav')
     if not os.path.exists(out):
         subprocess.run([FFMPEG, '-y', '-loglevel', 'error', '-i', path, '-filter_complex',
-                        '[0]asplit[a][b];[a]lowpass=f=2000,lowpass=f=2000[lo];[b]highpass=f=2000,highpass=f=2000,'
-                        'acompressor=threshold=0.02:ratio=10:attack=0.1:release=80:makeup=2[hi];[lo][hi]amix=inputs=2:normalize=0',
+                        '[0]asplit[a][b];[a]lowpass=f=2200,lowpass=f=2200[lo];[b]highpass=f=2200,highpass=f=2200,'
+                        'acompressor=threshold=0.02:ratio=10:attack=0.1:release=80:makeup=2,volume=-20dB[hi];[lo][hi]amix=inputs=2:normalize=0',
                         '-ar', '48000', '-c:a', 'pcm_s16le', out], check=True)
     return out
 
