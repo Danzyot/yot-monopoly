@@ -80,7 +80,7 @@ def effects():
     """(segment, local time, sound file in SFX_DIR, gain in dB)."""
     ev = []
     for i, t in enumerate(STEPS):
-        ev.append(('the-o', t, f'step-{1 + i % 5}', -40 - 2 * (i % 2) - 4 * (i in (12, 18))))
+        ev.append(('the-o', t, f'step-{1 + i % 5}', -24 - 2 * (i % 2) - 4 * (i in (12, 18))))
     for i, (up, down) in enumerate(zip([6.95, 7.5, 7.98, 8.46], [7.38, 7.86, 8.33, 8.84])):
         ev.append(('the-o', up - 0.02, 'hop', -8))
         ev.append(('the-o', down, 'flatten', -6 + 1.5 * i))
@@ -102,7 +102,7 @@ def effects():
     ev += [(m, 7.35, 'pop-1', -3), (m, 7.38, 'ding', -6),
            (m, 8.0, 'siren', -10), (m, 8.3, 'skid', -6), (m, 9.2, 'grab', -6), (m, 9.45, 'whoosh-2', -12),
            (m, 10.0, 'siren', -18), (m, 11.15, 'whoosh-2', -8), (m, 11.55, 'land', -4), (m, 11.62, 'jail-door', -3)]
-    ev += [(m, 12.2 + 0.1 * k, f'step-{1 + k % 5}', -42) for k in range(4)]
+    ev += [(m, 12.2 + 0.1 * k, f'step-{1 + k % 5}', -26) for k in range(4)]
     c = 'cards'
     for k, t in enumerate((2.0, 3.2, 4.15)):
         ev += [(c, t - 0.35, 'card-flick', -9), (c, t, f'card-slap-{1 + k % 3}', -2)]
@@ -117,7 +117,7 @@ def effects():
         for n in (1, 2):
             ev.append((f, n / 2.2 * (1 + 0.15 * k), f'dice-hit-{1 + (k + n) % 3}', -6 - 4 * n))
     ev += [(f, 1.5, 'whoosh-1', -8), (f, 2.12, 'land', -4), (f, 2.0, 'cheer', -9)]
-    ev += [('end', 0.04 * i, 'ui-tick', -38) for i in range(9)]
+    ev += [('end', 0.04 * i, 'ui-tick', -26) for i in range(9)]
     ev += [('end', 1.1, 'pop-2', -5), ('end', 1.15, 'ding', -9)]
     return ev
 
@@ -316,6 +316,14 @@ def read_wav(path):
     return x
 
 
+def level_filter(wav, target=-18.0):
+    """One fixed gain to bring the whole mix to `target` LUFS, plus a peak limiter. (Not loudnorm: its
+    dynamic mode rides the gain and lifts quiet passages, like the opener's footsteps, by tens of dB.)"""
+    r = subprocess.run([FFMPEG, '-nostats', '-i', wav, '-af', 'ebur128', '-f', 'null', '-'], capture_output=True, text=True)
+    lufs = float(r.stderr.rsplit(' I:', 1)[1].split('LUFS')[0])
+    return f'volume={target - lufs:.2f}dB,alimiter=limit=0.8:level=false'
+
+
 def soften(path):
     """The track's rim click ticks on every beat above 2 kHz: split there and squash only the high band's
     peaks (bass, piano and melody untouched). Cached next to the track as <name>-soft.wav."""
@@ -457,7 +465,7 @@ def main():
     suffix = '-half' if HALF else ''
     master = os.path.join(OUT, 'cut', f'chog-games-trailer{suffix}.mp4')
     enc = subprocess.Popen([FFMPEG, '-y', '-loglevel', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{W}x{H}', '-r', str(FPS),
-                            '-i', '-', '-i', audio, '-vf', 'noise=alls=3:allf=t', '-af', 'loudnorm=I=-18:TP=-2:LRA=11', '-ar', '48000', '-c:v', 'libx264', '-preset', 'medium',
+                            '-i', '-', '-i', audio, '-vf', 'noise=alls=3:allf=t', '-af', level_filter(audio), '-ar', '48000', '-c:v', 'libx264', '-preset', 'medium',
                             '-crf', '23' if HALF else '16', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '256k', '-shortest',
                             '-movflags', '+faststart', master], stdin=subprocess.PIPE)
     nf = int(round(total * FPS))
