@@ -80,7 +80,7 @@ def effects():
     """(segment, local time, sound file in SFX_DIR, gain in dB)."""
     ev = []
     for i, t in enumerate(STEPS):
-        ev.append(('the-o', t, f'step-{1 + i % 5}', -30 - 2 * (i % 2) - 4 * (i in (12, 18))))
+        ev.append(('the-o', t, f'step-{1 + i % 5}', -40 - 2 * (i % 2) - 4 * (i in (12, 18))))
     for i, (up, down) in enumerate(zip([6.95, 7.5, 7.98, 8.46], [7.38, 7.86, 8.33, 8.84])):
         ev.append(('the-o', up - 0.02, 'hop', -8))
         ev.append(('the-o', down, 'flatten', -6 + 1.5 * i))
@@ -102,7 +102,7 @@ def effects():
     ev += [(m, 7.35, 'pop-1', -3), (m, 7.38, 'ding', -6),
            (m, 8.0, 'siren', -10), (m, 8.3, 'skid', -6), (m, 9.2, 'grab', -6), (m, 9.45, 'whoosh-2', -12),
            (m, 10.0, 'siren', -18), (m, 11.15, 'whoosh-2', -8), (m, 11.55, 'land', -4), (m, 11.62, 'jail-door', -3)]
-    ev += [(m, 12.2 + 0.1 * k, f'step-{1 + k % 5}', -32) for k in range(4)]
+    ev += [(m, 12.2 + 0.1 * k, f'step-{1 + k % 5}', -42) for k in range(4)]
     c = 'cards'
     for k, t in enumerate((2.0, 3.2, 4.15)):
         ev += [(c, t - 0.35, 'card-flick', -9), (c, t, f'card-slap-{1 + k % 3}', -2)]
@@ -117,7 +117,7 @@ def effects():
         for n in (1, 2):
             ev.append((f, n / 2.2 * (1 + 0.15 * k), f'dice-hit-{1 + (k + n) % 3}', -6 - 4 * n))
     ev += [(f, 1.5, 'whoosh-1', -8), (f, 2.12, 'land', -4), (f, 2.0, 'cheer', -9)]
-    ev += [('end', 0.04 * i, 'ui-tick', -28) for i in range(9)]
+    ev += [('end', 0.04 * i, 'ui-tick', -38) for i in range(9)]
     ev += [('end', 1.1, 'pop-2', -5), ('end', 1.15, 'ding', -9)]
     return ev
 
@@ -323,7 +323,7 @@ def soften(path):
     if not os.path.exists(out):
         subprocess.run([FFMPEG, '-y', '-loglevel', 'error', '-i', path, '-filter_complex',
                         '[0]asplit[a][b];[a]lowpass=f=2000,lowpass=f=2000[lo];[b]highpass=f=2000,highpass=f=2000,'
-                        'acompressor=threshold=0.03:ratio=6:attack=0.1:release=80:makeup=2.2[hi];[lo][hi]amix=inputs=2:normalize=0',
+                        'acompressor=threshold=0.02:ratio=10:attack=0.1:release=80:makeup=2[hi];[lo][hi]amix=inputs=2:normalize=0',
                         '-ar', '48000', '-c:a', 'pcm_s16le', out], check=True)
     return out
 
