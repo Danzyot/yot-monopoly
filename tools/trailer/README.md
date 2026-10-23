@@ -11,7 +11,7 @@ that cuts, captions, mixes and encodes.
 | Cards, chips and felts for the card tables | `tablekit.py` |
 | Shots | `shot01_the_o.py` (cold open), `shot02_tour.py`, `shot03_monopoly.py`, `shot05_cards.py`, `shot06_poker.py`, `shot08_finale.py` |
 | 2D pages | `card/title2d.html`, `card/endcard.html`, `card/captions.html`, `card/screens.html`, `card/nft.html` |
-| Sound effects (synthesised) | `sfx.py` |
+| Sound: music and recorded effects, with credits (`audio/README.md`); the old synthesised set | `audio/`, `sfx.py` |
 | Cut, captions, mix, encode | `assemble.py` |
 | Helpers | `render-canvas.mjs` (page → frames), `unpack-glb.mjs` (undo meshopt for Blender) |
 
