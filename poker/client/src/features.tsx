@@ -14,13 +14,14 @@ export interface Features {
   chat: boolean;
   leaderboard: boolean;
   rabbitHunting: boolean;
+  codeVerify: boolean;
 }
 
 // Until the config lands, assume everything is off. Showing a control for a
 // second and then snatching it away is worse than showing it a moment late.
 const ALL_OFF: Features = {
   music: false, handLog: false, replay: false,
-  chat: false, leaderboard: false, rabbitHunting: false,
+  chat: false, leaderboard: false, rabbitHunting: false, codeVerify: false,
 };
 
 // `null` means "not answered yet", which is a different thing from "off".

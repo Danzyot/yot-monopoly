@@ -11,6 +11,7 @@ import { BRAND } from '../../shared/brand.ts';
 import { createPublicKey, verify as edVerify } from 'node:crypto';
 import { registerIdentity } from './discord.ts';
 import { impliedGuildIds, looksLikeCode, normalizeCode, resolveCode } from './verifycode.ts';
+import { isOn } from './features.ts';
 
 const BUTTON_ID = 'mono_verify_button';
 const MODAL_ID = 'mono_verify_modal';
@@ -70,6 +71,13 @@ export interface InteractionOutcome {
 export function handleInteraction(interaction: Interaction): InteractionOutcome | null {
   // Endpoint validation ping.
   if (interaction.type === 1) return { status: 200, body: { type: 1 } };
+
+  // Code sign-in switched off on the dashboard: the button and the modal answer that, and nothing resolves.
+  if ((interaction.type === 3 && interaction.data?.custom_id === BUTTON_ID) || (interaction.type === 5 && interaction.data?.custom_id === MODAL_ID)) {
+    if (!isOn('codeVerify')) {
+      return { status: 200, body: ephemeral(`Verifying with a code is switched off right now. Use "Sign in with Discord" on the ${BRAND.name} site.`) };
+    }
+  }
 
   // "Verify" button → open the code modal.
   if (interaction.type === 3 && interaction.data?.custom_id === BUTTON_ID) {

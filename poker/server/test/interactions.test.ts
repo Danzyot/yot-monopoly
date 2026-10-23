@@ -2,15 +2,32 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign as edSign } from 'node:crypto';
 
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'poker-interactions-'));
 process.env.DISCORD_PUBLIC_KEY ??= '';
 const { handleInteraction, validSignature } = await import('../src/interactions.ts');
 const { startCode, codeStatus, normalizeCode, looksLikeCode } = await import('../src/verifycode.ts');
+const { setFeatures } = await import('../src/features.ts');
 
 const USER = { id: '340404007639973888', username: 'danzyot', global_name: 'Danz', avatar: 'abc' };
 
 test('PING is answered with a pong', () => {
   const out = handleInteraction({ type: 1 });
   assert.deepEqual(out, { status: 200, body: { type: 1 } });
+});
+
+test('with code sign-in switched off, the button and the modal only say so', () => {
+  setFeatures({ codeVerify: false });
+  for (const i of [{ type: 3, data: { custom_id: 'poker_verify_button' } }, { type: 5, data: { custom_id: 'poker_verify_modal' } }]) {
+    const body = handleInteraction(i)!.body as { type: number; data: { content: string; flags: number } };
+    assert.equal(body.type, 4);
+    assert.equal(body.data.flags, 64);
+    assert.match(body.data.content, /switched off/);
+  }
+  setFeatures({ codeVerify: true });
 });
 
 test('Verify button opens the code modal', () => {

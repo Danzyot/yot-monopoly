@@ -11,6 +11,7 @@ import { handleInteraction, interactionsConfigured, validSignature } from '../in
 import { answerLiveCommand, type CommandInteraction } from '../discordCommands.ts';
 import { codeStatus, startCode } from '../verifycode.ts';
 import { getAccount } from '../connections.ts';
+import { isOn } from '../features.ts';
 import { setChosenName, withChosenName } from '../displayNames.ts';
 import { authed, fail, rateLimit, requestBase } from '../http.ts';
 
@@ -137,10 +138,12 @@ export function authRoutes(): express.Router {
   });
 
   r.post('/code/start', (_req, res) => {
+    if (!isOn('codeVerify')) { res.status(404).json({ error: 'Verify with a code is switched off. Sign in with Discord instead.' }); return; }
     try { res.json(startCode()); } catch (e) { fail(res, e); }
   });
 
   r.get('/code/status', (req, res) => {
+    if (!isOn('codeVerify')) { res.status(404).json({ error: 'Verify with a code is switched off. Sign in with Discord instead.' }); return; }
     const { pending, resolution } = codeStatus(String(req.query.code ?? ''));
     if (!resolution) { res.json({ pending }); return; }
     const profile = withChosenName(makeDiscordProfile(resolution));

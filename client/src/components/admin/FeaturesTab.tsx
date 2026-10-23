@@ -16,12 +16,13 @@ const EXPLAIN: Record<keyof Features, [string, string]> = {
   leaderboard: ['Leaderboard', 'The public all-time leaderboard page and its link in the header.'],
   announceResults: ['Announce results on Discord', 'Post every finished game to DISCORD_ANNOUNCE_CHANNEL_ID.'],
   reactions: ['Reactions & pokes', 'Emoji reactions at the table and poking a slow player. Also off while chat is off.'],
+  codeVerify: ['Verify with a code', 'Sign-in by posting a code in the Discord verify channel (or its Verify button). Off: only "Sign in with Discord".'],
 };
 
 const GROUPS: { title: string; blurb: string; keys: (keyof Features)[] }[] = [
   { title: 'Rooms & play', blurb: 'Who can open a table and what happens at it.', keys: ['publicRooms', 'bots', 'minigames', 'music'] },
   { title: 'Social', blurb: 'Talking and reacting around the table.', keys: ['chat', 'reactions'] },
-  { title: 'Site & Discord', blurb: 'Public pages and what the bot posts.', keys: ['leaderboard', 'announceResults'] },
+  { title: 'Site & Discord', blurb: 'Public pages and what the bot posts.', keys: ['leaderboard', 'announceResults', 'codeVerify'] },
 ];
 
 export default function FeaturesTab() {

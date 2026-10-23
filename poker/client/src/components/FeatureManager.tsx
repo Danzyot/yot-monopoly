@@ -16,6 +16,7 @@ const ROWS: { key: keyof Features; label: string; hint: string }[] = [
   { key: 'music', label: 'Music player', hint: 'The in-page player and its library.' },
   { key: 'rabbitHunting', label: 'Rabbit hunting', hint: 'Let players see the board that never came.' },
   { key: 'leaderboard', label: 'Leaderboard', hint: 'The all-time standings page across tournaments.' },
+  { key: 'codeVerify', label: 'Verify with a code', hint: 'Sign-in by posting a code in the Discord verify channel. Off: only "Sign in with Discord".' },
 ];
 
 export default function FeatureManager() {

@@ -401,6 +401,8 @@ export interface Features {
   announceResults: boolean;
   /** Emoji reactions and pokes at the table. */
   reactions: boolean;
+  /** "Verify with a code" sign-in through the Discord verify channel (Discord sign-in itself stays on). */
+  codeVerify: boolean;
 }
 
 export const DEFAULT_FEATURES: Features = {
@@ -412,6 +414,7 @@ export const DEFAULT_FEATURES: Features = {
   leaderboard: true,
   announceResults: false,
   reactions: true,
+  codeVerify: false,
 };
 
 /** Public config the client reads at boot. */

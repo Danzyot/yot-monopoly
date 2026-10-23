@@ -182,7 +182,7 @@ app.get('/api/config', (_req, res) => {
     discordEnabled: discordEnabled(),
     demoMode: demoMode(),
     adminMode: adminModeConfigured(),
-    codeVerify: codeVerifyAvailable(),
+    codeVerify: codeVerifyAvailable() && isOn('codeVerify'),
     codeVerifyChannel: verifyChannelName(),
     codeVerifyButton: buttonFlowAvailable(),
     inviteUrl: defaultInviteUrl(),

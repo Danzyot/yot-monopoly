@@ -408,7 +408,7 @@ app.get('/api/config', (_req, res) => {
     discordEnabled: discordEnabled(),
     demoMode: demoMode(),
     adminMode: adminModeConfigured(),
-    codeVerify: codeVerifyAvailable(),
+    codeVerify: codeVerifyAvailable() && isOn('codeVerify'),
     codeVerifyChannel: verifyChannelName(),
     codeVerifyButton: buttonFlowAvailable(),
     // The Chog Games hub this room belongs to (null on a standalone deployment).
@@ -446,7 +446,9 @@ app.put('/api/admin/promo', (req, res) => {
 });
 
 // ---------- "verify with a code" sign-in (post a short code in Discord) ----------
+const CODE_OFF = 'Verify with a code is switched off. Sign in with Discord instead.';
 app.post('/api/auth/code/start', (_req, res) => {
+  if (!isOn('codeVerify')) { res.status(404).json({ error: CODE_OFF }); return; }
   try {
     res.json(startCode());
   } catch (e) {
@@ -455,6 +457,7 @@ app.post('/api/auth/code/start', (_req, res) => {
 });
 
 app.get('/api/auth/code/status', (req, res) => {
+  if (!isOn('codeVerify')) { res.status(404).json({ error: CODE_OFF }); return; }
   const status = codeStatus(String(req.query.code ?? ''));
   if (status.pending) { res.json({ pending: true }); return; }
   if (!status.resolution) { res.json({ pending: false, expired: true }); return; }

@@ -18,6 +18,7 @@ export interface Features {
   chat: boolean;         // table and lobby chat
   leaderboard: boolean;  // the all-time leaderboard page
   rabbitHunting: boolean; // offering the "what would have come" reveal
+  codeVerify: boolean;   // "Verify with a code" sign-in through the Discord verify channel
 }
 
 // Deliberately lean. A room that wants more turns it on; a room that never
@@ -35,6 +36,7 @@ const DEFAULT: Features = {
   chat: true,
   leaderboard: true,
   rabbitHunting: false,
+  codeVerify: false,
 };
 
 let features: Features = { ...DEFAULT };
