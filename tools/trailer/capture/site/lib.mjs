@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process';
 const root = execSync('npm root -g').toString().trim();
 const { chromium } = await import(root + '/playwright/index.mjs');
-export const S = '/tmp/claude-0/-home-user-yot-monopoly/3414c931-29b4-52d1-8383-09ec282bfda1/scratchpad';
+export const S = '/tmp/chog-trailer';
 export const OUT = S + '/bl/screens';
 export const BASE = 'http://localhost:8611';
 export const POKER = 'http://localhost:8612';

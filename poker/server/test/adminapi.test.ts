@@ -48,8 +48,8 @@ before(async () => {
   // withAdminFlag is what real sign-in applies; with no ADMIN_DISCORD_IDS set
   // every account is the operator, which is what a local server does anyway.
   token = signToken(withAdminFlag({
-    id: 'd_operator', name: 'Danz', avatar: '🙂', provider: 'discord',
-    discord: { id: '340404007639973888', username: 'danzyot' },
+    id: 'd_operator', name: 'Operator', avatar: '🙂', provider: 'discord',
+    discord: { id: '123456789012345678', username: 'tester' },
   }));
   assert.ok(token, 'signed in');
 });

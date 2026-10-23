@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 const SECRET = 'shared-across-chog-games';
 process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'chog-hub-'));
 process.env.CHOG_SECRET = SECRET;
-process.env.ADMIN_DISCORD_IDS = '340404007639973888';
+process.env.ADMIN_DISCORD_IDS = '123456789012345678';
 
 const { verifyToken } = await import('../src/auth.ts');
 const { hubOrigins, hubUrl, isHubOrigin, HUB_READABLE } = await import('../src/hub.ts');
@@ -38,8 +38,8 @@ function hubSignToken(profile: Record<string, unknown>, secret: string): string 
 }
 
 const OPERATOR = {
-  id: 'dc_340404007639973888', name: 'Danz', avatar: 'https://cdn.discordapp.com/avatars/x/y.png',
-  provider: 'discord', discord: { id: '340404007639973888', username: 'danzyot' },
+  id: 'dc_123456789012345678', name: 'Operator', avatar: 'https://cdn.discordapp.com/avatars/x/y.png',
+  provider: 'discord', discord: { id: '123456789012345678', username: 'tester' },
 };
 const PLAYER = {
   id: 'dc_999000111', name: 'Rando', avatar: '🎩',

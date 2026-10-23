@@ -7,7 +7,7 @@
 #   tools/blender/chog_examples.sh            # the tokens below
 #   tools/blender/chog_examples.sh 1,597,61   # others (add them to EXAMPLES in NftChogsInfo.tsx too)
 #
-# BLENDER_VENV is passed through to run.sh (see README.md). ~2 min.
+# BLENDER_VENV is passed through to run.sh. ~2 min.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)

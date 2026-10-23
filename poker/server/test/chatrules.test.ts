@@ -42,10 +42,10 @@ test('mentions resolve to real players', () => {
 // Both halves of the live complaint: four different things typed at a player
 // called Yot all lit up as tags on them.
 test('a tag stops at a space and has to match the whole name', () => {
-  const people = [{ id: 'y', name: 'Yot' }, { id: 'd', name: 'yotdanz' }];
+  const people = [{ id: 'y', name: 'Yot' }, { id: 'd', name: 'yotter' }];
   assert.deepEqual(resolveMentions('@Yot', people).ids, ['y']);
   // A longer name is a different person, not a match on the shorter one.
-  assert.deepEqual(resolveMentions('@yotdanz', people).ids, ['d']);
+  assert.deepEqual(resolveMentions('@yotter', people).ids, ['d']);
   // Spaces inside a tag used to be normalised away, so these pinged Yot.
   assert.deepEqual(resolveMentions('@yo t', people).ids, [], 'space ends the tag');
   assert.deepEqual(resolveMentions('@y ot', people).ids, []);

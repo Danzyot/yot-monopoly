@@ -3,8 +3,8 @@ Every output: lead trimmed so the sound starts within ~1-2 ms, tail trimmed + fa
 import subprocess, wave, os, sys
 import numpy as np
 
-FF = '/tmp/claude-0/-home-user-yot-monopoly/3414c931-29b4-52d1-8383-09ec282bfda1/scratchpad/video/node_modules/ffmpeg-static/ffmpeg'
-A = '/tmp/claude-0/-home-user-yot-monopoly/3414c931-29b4-52d1-8383-09ec282bfda1/scratchpad/bl/audio'
+FF = '/tmp/chog-trailer/video/node_modules/ffmpeg-static/ffmpeg'
+A = '/tmp/chog-trailer/bl/audio'
 D = A + '/dl'
 OUT = A + '/sfx'
 SR = 48000

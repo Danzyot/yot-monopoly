@@ -9,7 +9,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 # Only a change under poker/ is a reason to rebuild this service. Paths here
 # are relative to the repository root, not to poker/. (Auto-deploy should be
-# off anyway — deploy by hand, between tournaments. See docs/CHOGGAMES-DEPLOY.md.)
+# off anyway — deploy by hand, between tournaments.)
 watchPatterns = ["poker/**"]
 
 [deploy]

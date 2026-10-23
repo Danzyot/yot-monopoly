@@ -57,7 +57,7 @@ export function isBlocked(text: string): boolean {
 // A tag runs to the first space and has to match a name outright. Both halves
 // of that matter: allowing spaces inside a tag meant "@yo t" and "@y ot"
 // normalised to the same thing as "@yot" and pinged them, and matching on a
-// prefix meant "@yotdanz" — a different name entirely — pinged Yot too.
+// prefix meant "@yotter" — a different name entirely — pinged Yot too.
 // Names containing spaces are tagged without them ("@BigSlick"), which is
 // exactly what the picker in the compose box inserts.
 export function resolveMentions(

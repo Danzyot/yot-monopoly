@@ -13,10 +13,10 @@ const { loadFeatures, setFeatures } = await import('../src/features.ts');
 const { handleInteraction } = await import('../src/interactions.ts');
 const { startCode, codeStatus } = await import('../src/verifycode.ts');
 
-const USER = { id: '340404007639973888', username: 'someone', global_name: 'Someone', avatar: null };
+const USER = { id: '123456789012345678', username: 'someone', global_name: 'Someone', avatar: null };
 const button = { type: 3, data: { custom_id: 'mono_verify_button' } };
 const modal = (value: string) => ({
-  type: 5, guild_id: '1250589105033576508',
+  type: 5, guild_id: '876543210987654321',
   data: { custom_id: 'mono_verify_modal', components: [{ components: [{ custom_id: 'code', value }] }] },
   member: { user: USER },
 });

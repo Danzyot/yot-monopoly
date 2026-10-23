@@ -9,7 +9,7 @@ const { configReport } = await import('../src/startupcheck.ts');
 
 const OK_ENV: NodeJS.ProcessEnv = {
   DATA_DIR: '/data',
-  ADMIN_DISCORD_IDS: '340404007639973888',
+  ADMIN_DISCORD_IDS: '123456789012345678',
   PUBLIC_URL: 'https://poker.example.com',
   DISCORD_CLIENT_ID: '1274819260077576364',
   DISCORD_CLIENT_SECRET: 'shhh',
@@ -61,7 +61,7 @@ test('an empty operator list is a problem: it makes everyone an operator', () =>
 });
 
 test('an operator id that is not a snowflake is named, since it silently grants nothing', () => {
-  const r = report({ ...OK_ENV, ADMIN_DISCORD_IDS: '340404007639973888, cj_wawa' });
+  const r = report({ ...OK_ENV, ADMIN_DISCORD_IDS: '123456789012345678, cj_wawa' });
   assert.equal(r.ok, true, 'still usable — one id is valid');
   assert.ok(says(r.warnings, 'cj_wawa'));
 });
@@ -119,7 +119,7 @@ test('a variable set under a name that only looks right is named in the report',
     ['zero-width joiner', 'ADMIN_DISCORD_IDS‍'],
     ['wrong case', 'Admin_Discord_Ids'],
   ] as const) {
-    const r = report({ ...base, [key]: '340404007639973888' });
+    const r = report({ ...base, [key]: '123456789012345678' });
     assert.equal(r.ok, false, `${label}: must still be a problem`);
     const p = r.problems.find(x => /ADMIN_DISCORD_IDS is empty/.test(x))!;
     assert.ok(p, `${label}: the empty problem should be reported`);

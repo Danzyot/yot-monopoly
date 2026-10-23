@@ -12,7 +12,7 @@ const { handleInteraction, validSignature } = await import('../src/interactions.
 const { startCode, codeStatus, normalizeCode, looksLikeCode } = await import('../src/verifycode.ts');
 const { setFeatures } = await import('../src/features.ts');
 
-const USER = { id: '340404007639973888', username: 'danzyot', global_name: 'Danz', avatar: 'abc' };
+const USER = { id: '123456789012345678', username: 'tester', global_name: 'Operator', avatar: 'abc' };
 
 test('PING is answered with a pong', () => {
   const out = handleInteraction({ type: 1 });
@@ -45,7 +45,7 @@ test('another app\'s interaction is not claimed', () => {
 function submitModal(value: string) {
   return handleInteraction({
     type: 5,
-    guild_id: '1250589105033576508',
+    guild_id: '876543210987654321',
     data: { custom_id: 'poker_verify_modal', components: [{ components: [{ custom_id: 'code', value }] }] },
     member: { user: USER },
   });
@@ -55,12 +55,12 @@ test('a valid code is resolved for the clicking member', () => {
   process.env.DISCORD_PUBLIC_KEY = 'aa';
   const { code } = startCode();
   const out = submitModal(code);
-  assert.match(String((out!.body as { data: { content: string } }).data.content), /verified as \*\*Danz\*\*/);
+  assert.match(String((out!.body as { data: { content: string } }).data.content), /verified as \*\*Operator\*\*/);
 
   const status = codeStatus(code);
   assert.equal(status.pending, false);
   assert.equal(status.resolution?.id, USER.id);
-  assert.equal(status.resolution?.username, 'Danz');
+  assert.equal(status.resolution?.username, 'Operator');
   assert.match(String(status.resolution?.avatarUrl), /cdn\.discordapp\.com/);
 });
 

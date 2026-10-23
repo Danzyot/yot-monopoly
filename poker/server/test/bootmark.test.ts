@@ -57,7 +57,7 @@ test('a corrupt mark is treated as no mark rather than trusted', () => {
 
 test('the report warns on an unproven directory and confirms a proven one', () => {
   const env = {
-    DATA_DIR: '/data', ADMIN_DISCORD_IDS: '340404007639973888',
+    DATA_DIR: '/data', ADMIN_DISCORD_IDS: '123456789012345678',
     PUBLIC_URL: 'https://poker.example.com',
     DISCORD_CLIENT_ID: '1274819260077576364', DISCORD_CLIENT_SECRET: 's',
     DISCORD_BOT_TOKEN: 'b', DISCORD_GUILD_ID: '1274819260077576364',

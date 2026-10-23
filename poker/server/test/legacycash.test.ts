@@ -28,7 +28,7 @@ const CASH = join(DATA, 'cash-history.json');
 // stacks already rolled back to before any hand in progress.
 const oldCashTable = (id: string, name: string) => ({
   id, name, sb: 25, bb: 50, ante: 0, maxSeats: 6, minBuy: 1000, maxBuy: 5000,
-  hostId: 'dc_host', hostName: 'Danz', playerHosted: false,
+  hostId: 'dc_host', hostName: 'Operator', playerHosted: false,
   actionTimeMs: 22_000, timebankMs: 0, rabbitHunting: false, theme: null,
   buttonSeat: 2, handNumber: 41,
   seats: [
@@ -48,7 +48,7 @@ test('a cash table from an old snapshot settles the way a host closing it did', 
   const rec = settleCashSnapshot(oldCashTable('c0ffee01', 'Friday Cash'), 5_000)!;
   assert.equal(rec.id, 'c0ffee01');
   assert.equal(rec.name, 'Friday Cash');
-  assert.equal(rec.hostName, 'Danz');
+  assert.equal(rec.hostName, 'Operator');
   assert.deepEqual([rec.sb, rec.bb, rec.hands, rec.closedAt], [25, 50, 41, 5_000]);
   // Everyone cashed out at their stack, best result first.
   assert.deepEqual(rec.ledger.map(l => [l.name, l.buyIn, l.cashOut, l.stack, l.net]), [
@@ -70,7 +70,7 @@ test('whatever is in the file, settling never throws', () => {
 test('at boot: tournaments come back, cash tables are closed and filed, once', () => {
   // Past cash sessions already on disk must survive the new ones being added.
   writeFileSync(CASH, JSON.stringify([{
-    id: 'old00001', name: 'Long Gone', hostName: 'Danz', openedAt: 1, closedAt: 2, sb: 1, bb: 2, hands: 3, ledger: [],
+    id: 'old00001', name: 'Long Gone', hostName: 'Operator', openedAt: 1, closedAt: 2, sb: 1, bb: 2, hands: 3, ledger: [],
   }]));
   loadCashRecords();
 

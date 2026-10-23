@@ -118,14 +118,14 @@ test('a reversal is written to the session log', ctx => {
 
 test('stack edits are bounded, logged, and refused mid-hand', ctx => {
   const t = makeTable(ctx);
-  const r = t.setStack('a', 7_500, 'Danz');
+  const r = t.setStack('a', 7_500, 'Operator');
   assert.deepEqual(r, { name: 'Alice', from: 5_000, to: 7_500 });
   assert.equal(t.seats[0]!.stack, 7_500);
   assert.ok(t.eventLog.some(e => /adjusted Alice's stack: 5000 → 7500/.test(e.text)));
 
-  assert.equal(t.setStack('a', -100, 'Danz').to, 0, 'never negative');
+  assert.equal(t.setStack('a', -100, 'Operator').to, 0, 'never negative');
 
   startHand(t);
-  assert.throws(() => t.setStack('b', 1, 'Danz'), /live hand/, 'not while they are in a hand');
-  assert.throws(() => t.setStack('nobody', 1, 'Danz'), /not seated/);
+  assert.throws(() => t.setStack('b', 1, 'Operator'), /live hand/, 'not while they are in a hand');
+  assert.throws(() => t.setStack('nobody', 1, 'Operator'), /not seated/);
 });

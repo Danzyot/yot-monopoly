@@ -38,7 +38,7 @@ test('nonsense is left alone rather than guessed at', () => {
 });
 
 test('a ban follows the machine, not the spelling', () => {
-  addBan({ kind: 'ip', value: '198.51.100.9', name: '', reason: 'flooding', by: 'Danz' });
+  addBan({ kind: 'ip', value: '198.51.100.9', name: '', reason: 'flooding', by: 'Operator' });
   for (const spelling of [
     '198.51.100.9',
     '0198.051.100.009',
@@ -51,7 +51,7 @@ test('a ban follows the machine, not the spelling', () => {
 });
 
 test('an IPv6 ban survives being rewritten', () => {
-  addBan({ kind: 'ip', value: '2001:0DB8:0000:0000:0000:0000:0000:00AB', name: '', reason: '', by: 'Danz' });
+  addBan({ kind: 'ip', value: '2001:0DB8:0000:0000:0000:0000:0000:00AB', name: '', reason: '', by: 'Operator' });
   assert.equal(isBanned({ id: 'y', ip: '2001:db8::ab' }), true);
   assert.equal(isBanned({ id: 'y', ip: '[2001:db8::ab]' }), true);
   assert.equal(isBanned({ id: 'y', ip: '2001:db8::ac' }), false);

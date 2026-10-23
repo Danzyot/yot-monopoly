@@ -29,8 +29,7 @@ export default function RequirementsPicker({ room, canEdit }: { room: RoomView; 
   };
 
   if (!canEdit || !info?.available) {
-    // Nothing to show: no dead control, and no setup hint for players (the
-    // DISCORD_GUILD_ID setting is documented in DEPLOY.md for operators).
+    // Nothing to show: no dead control, and no setup hint for players.
     if (!req) return null;
     return (
       <div className="req-summary">

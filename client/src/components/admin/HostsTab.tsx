@@ -46,7 +46,7 @@ export default function HostsTab() {
         <form className="row wrap" onSubmit={e => { e.preventDefault(); if (id.trim()) void add(id.trim()); }}>
           <label className="grow">
             <span className="sr-only">Discord user id or player id</span>
-            <input className="grow" value={id} placeholder="Discord user id (e.g. 340404007639973888) or dc_…" onChange={e => setId(e.target.value)} />
+            <input className="grow" value={id} placeholder="Discord user id (e.g. 123456789012345678) or dc_…" onChange={e => setId(e.target.value)} />
           </label>
           <button className="btn small primary" disabled={!id.trim()}>Approve</button>
         </form>

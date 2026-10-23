@@ -56,7 +56,7 @@ test('a finished tournament keeps holding its name until deleted', () => {
 
 test('closed cash sessions hold names the same way', () => {
   addCashRecord({
-    id: 'c1', name: 'Friday Night Cash', hostName: 'Danz',
+    id: 'c1', name: 'Friday Night Cash', hostName: 'Operator',
     openedAt: 1, closedAt: 2, sb: 25, bb: 50, hands: 10, ledger: [],
   });
   assert.equal(taken('friday night cash', []), true);
@@ -66,7 +66,7 @@ test('closed cash sessions hold names the same way', () => {
 
 test('a cash session is only archived once', () => {
   const row = {
-    id: 'c2', name: 'Dupe Table', hostName: 'Danz',
+    id: 'c2', name: 'Dupe Table', hostName: 'Operator',
     openedAt: 1, closedAt: 2, sb: 1, bb: 2, hands: 3, ledger: [],
   };
   addCashRecord(row);

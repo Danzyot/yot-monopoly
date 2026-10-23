@@ -49,8 +49,8 @@ test('turning the demo off logs the demo visitors out', () => {
 
 test('a real Discord session is unaffected either way', () => {
   const discord = signToken({
-    id: 'dc_1', name: 'Danz', avatar: '♠️', provider: 'discord',
-    discord: { id: '340404007639973888', username: 'danzyot' },
+    id: 'dc_1', name: 'Operator', avatar: '♠️', provider: 'discord',
+    discord: { id: '123456789012345678', username: 'tester' },
   });
   delete process.env.DEMO_MODE;
   assert.equal(verifyToken(discord)?.provider, 'discord');

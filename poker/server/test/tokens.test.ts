@@ -13,13 +13,13 @@ import { join } from 'node:path';
 
 process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'chog-tok-'));
 process.env.CHOG_SECRET = 'token-test-secret';
-process.env.ADMIN_DISCORD_IDS = '340404007639973888';
+process.env.ADMIN_DISCORD_IDS = '123456789012345678';
 
 const { signToken, verifyToken, withAdminFlag } = await import('../src/auth.ts');
 
 const OPERATOR = {
-  id: 'dc_op', name: 'Danz', avatar: '♠️', provider: 'discord' as const,
-  discord: { id: '340404007639973888', username: 'danzyot' },
+  id: 'dc_op', name: 'Operator', avatar: '♠️', provider: 'discord' as const,
+  discord: { id: '123456789012345678', username: 'tester' },
 };
 const PLAYER = {
   id: 'dc_p', name: 'Rando', avatar: '♠️', provider: 'discord' as const,
@@ -52,7 +52,7 @@ test('dropping someone from the operator list takes their rights away now', () =
     verifyToken(token)?.isAdmin, false,
     'their existing token must stop carrying operator rights immediately',
   );
-  process.env.ADMIN_DISCORD_IDS = '340404007639973888';
+  process.env.ADMIN_DISCORD_IDS = '123456789012345678';
 });
 
 test('a session does not last forever', () => {

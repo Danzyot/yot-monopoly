@@ -1,7 +1,7 @@
 #!/bin/bash
 # Re-run every trailer screen capture from scratch: fresh local servers (seeded), then all sequences,
 # then the stills and the contact sheet. Takes ~25 min on a loaded 4-core box.
-S=/tmp/claude-0/-home-user-yot-monopoly/3414c931-29b4-52d1-8383-09ec282bfda1/scratchpad
+S=/tmp/chog-trailer
 cd $S/bl/cap
 ./servers.sh all && sleep 30
 node capture.mjs home hub dailies-phone home-phone poker-lobby poker-table monopoly-game cards-table

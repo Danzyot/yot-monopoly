@@ -1,7 +1,7 @@
 #!/bin/bash
 # Start (or restart) the local servers the captures use: the hub (8611, demo sign-in, the built client)
 # and Chog Poker (8612, signed with a local secret), each with throwaway data, then seed poker.
-S=/tmp/claude-0/-home-user-yot-monopoly/3414c931-29b4-52d1-8383-09ec282bfda1/scratchpad
+S=/tmp/chog-trailer
 CAP=$S/bl/cap; D=$S/bl/capdata
 what=${1:-all}
 if [ "$what" = stop ]; then
@@ -17,7 +17,7 @@ fi
 if [ "$what" = all ] || [ "$what" = poker ]; then
   for p in $(pgrep -f "^node poker-seed"); do kill $p; done
   fuser -k 8612/tcp 2>/dev/null; sleep 1; rm -rf $D/poker; mkdir -p $D/poker; rm -f $CAP/poker-go $CAP/poker-state.json $CAP/poker-speed
-  (cd /home/user/yot-monopoly/poker/server && DATA_DIR=$D/poker CHOG_SECRET=trailercap RATE_LIMIT_OFF=1 ADMIN_DISCORD_IDS=101726069516 PORT=8612 nohup npx tsx src/index.ts > $D/poker.log 2>&1 &)
+  (cd /home/user/yot-monopoly/poker/server && DATA_DIR=$D/poker CHOG_SECRET=trailercap RATE_LIMIT_OFF=1 ADMIN_DISCORD_IDS=123456789012 PORT=8612 nohup npx tsx src/index.ts > $D/poker.log 2>&1 &)
   for i in $(seq 1 60); do curl -s -o /dev/null localhost:8612/api/health && break; sleep 1; done
   (cd $CAP && nohup node poker-seed.mjs > $D/seed.log 2>&1 &)
   for i in $(seq 1 60); do [ -f $CAP/poker-state.json ] && break; sleep 1; done

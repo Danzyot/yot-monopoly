@@ -47,7 +47,7 @@ if [ ! -f "$APP/.env" ]; then
   cat > "$APP/.env" <<EOF
 PORT=8080
 PUBLIC_URL=https://$DOMAIN
-ADMIN_DISCORD_IDS=340404007639973888
+ADMIN_DISCORD_IDS=123456789012345678
 # Copy these from the Discord Developer Portal / the giveaway site's Vercel env:
 DISCORD_CLIENT_ID=
 DISCORD_CLIENT_SECRET=

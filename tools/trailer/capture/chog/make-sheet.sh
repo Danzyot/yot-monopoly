@@ -1,6 +1,6 @@
 #!/bin/bash
 # NFT art PNGs + the contact sheet (one headless browser each, sequentially).
-S=/tmp/claude-0/-home-user-yot-monopoly/3414c931-29b4-52d1-8383-09ec282bfda1/scratchpad
+S=/tmp/chog-trailer
 node -e '
 const S=process.argv[1], toks=[1798,824,285,1699];
 const fs=require("fs");

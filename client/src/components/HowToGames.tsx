@@ -3,7 +3,7 @@
 // the Cards home). Six steps each (Cards adds a seventh for its Chog Chaos
 // mode), quick to read. Keep them in step with:
 //   Cards: server/src/cards/game.ts, shared/cards/rules.ts and deck.ts (points, the Chaos cards);
-//   Poker: poker/README.md and poker/client (tournaments only, "Your Chog", sign-in).
+//   Poker: poker/client (tournaments only, "Your Chog", sign-in).
 import type { ReactNode } from 'react';
 import type { Card } from '../../../shared/cards/deck.ts';
 import { CARDS_CHAOS_DECK_SIZE, CARDS_HAND_SIZE, CARDS_MERCY_LIMIT, LAST_CARD_CALL } from '../../../shared/cards/meta.ts';
